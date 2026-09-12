@@ -1,14 +1,14 @@
 # 浅色主题全仓审计 · 2026-09-12
 
-本报告按 TASK.md §1 的方案执行。阶段一完成令牌层和会话列表；阶段二继续 P0 聊天与 P1 外壳/导航，P2+ 页面保持只读。视觉取舍由 Leader 验收。
+本报告按 TASK.md §1 的方案执行。阶段一完成令牌层和会话列表；阶段二完成 P0 聊天与 P1 外壳/导航，P2+ 页面保持只读。视觉取舍由 Leader 验收。
 
 ## 范围与复验方法
 
-- 扫描 `lib/` 全部 **231** 个 Dart 文件，记录 **1135** 个颜色引用/常量/别名透明度使用点。按实际目录补入下载、诊断和内置服务，不沿用旧目录快照假定覆盖。
+- 扫描 `lib/` 全部 **231** 个 Dart 文件，记录 **1159** 个颜色引用/常量/别名透明度使用点。按实际目录补入下载、诊断和内置服务，不沿用旧目录快照假定覆盖。
 - 语义色取自 Flutter **3.47.0** / Dart **3.13.0** 的 `packages/flutter/lib/src/cupertino/colors.dart` 普通浅色分支；增强对比度和暗色保留分支另标豁免。
 - WCAG：sRGB 通道 `c<=0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`；相对亮度 `0.2126R+0.7152G+0.0722B`；比值 `(L高+0.05)/(L低+0.05)`。先按实际 alpha 在 sRGB 合成，再线性化；中间值不取整，表格保留六位小数。
 - 正文 AA 门槛 4.5:1，功能图标/数据图形按 3:1；纯装饰面、边框、投影不套正文 AA。低对比度卡片面仍可存在视觉分层问题，不能用“装饰豁免”宣称已经分层充分。
-- 逐文件表三向列为：该色合成到**页面底 P**、**白卡 C**、**黑色 label L** 后各自的对比度。会话列表与聊天 P 用新 page，其他文件 P 用现行全局分组背景。它们是明确的承载面参考值；反色内容和已知彩色组合另列附录，不能拿白字对白卡的参考值误判反色 tooltip。
+- 逐文件表三向列为：该色合成到**页面底 P**、**白卡 C**、**黑色 label L** 后各自的对比度。会话列表、聊天及侧栏工具条 P 用新 page，空态详情 P 用白面，其余文件 P 用现行全局分组背景。它们是明确的承载面参考值；反色内容和已知彩色组合另列附录，不能拿白字对白卡的参考值误判反色 tooltip。
 - 静态审计列出所有可解析颜色及来源、透明度和组件默认色。运行时透明度/任意图片内容不能由单个基色证明 AA，表中明确保留限制；本轮没有逐页启动所有状态，也不声称全仓视觉验收通过。
 - `python tools/light_theme_contrast.py` 输出本报告全文；`--tokens` 复算令牌注释；`--write-report` 生成文件；`--check-report` 校验报告与当前源码/SDK 完全一致。无第三方 Python 依赖。没有 `.dart_tool/package_config.json` 时可传 `--flutter-sdk <SDK根目录>`。
 
@@ -26,11 +26,20 @@
 
 - 聊天页局部 page/bar 接 #EBEBF0；动作色 #005FB8，不改全局主题。次级文字、占位符、功能灰图标按各自承载面接令牌。
 - 审批/澄清/错误/绿色提示面固定为不透明 tint，输入框、工具卡、选中上下文、注入卡和媒体占位接白面/描边；模型/工作区/推理选择保留勾选并增加选中、按下面。
-- 用户主气泡 #007AFF + 白字按 Leader 决定保留（实算 4.016976，未达正文 AA）。白字降透明度或加字重不能达到 4.5:1；代码/链接/附件/引用的局部底 #005FB8 与白字为 6.308159。主气泡后续可选 #006FE8（白字 4.730779），待 Leader 裁决，未实施。
+- 用户主气泡 #007AFF + 白字按 Leader 决定保留（实算 4.016976:1，未达正文 AA）。白字降透明度或加字重不能达到 4.5:1；代码/链接/附件/引用的局部底 #005FB8 与白字为 6.308159:1。主气泡后续可选 #006FE8（白字 4.730779:1），待 Leader 裁决，未实施。
 - assistant Markdown 新样式由聊天调用点 useLightSurfaces 显式启用；记忆页和文件预览的共享默认保持不变。普通用户消息仍为原纯文本渲染，未改动 Markdown 触发条件。
 - 暗色语义色保留原 resolve；历史未解析图标保留原实际 ARGB。固定黑底媒体、Mermaid 深底配置、重复文字语义的状态圆点及装饰轨线保留且显式标注用途。
 - 本阶段截图目录 `C:/tmp/light-theme-shots-p2/before/`、`after/`；P0 单区留证另存 `after-p0/`。P0 验收：analyze 零告警，test 2710 passed / 8 skipped；13 张既有暗色金照、7 张 README 暗色截图和 24 张暗色状态图共 44/44 SHA256 一致。证据在 `after-p0-verification.json`，docs/screenshots 的 7 张原图未写入。
 - README 演示数据固定在 2026-09-12，原工装的分组时钟却读取系统日期；跨午夜后出现今天/昨天漂移。临时工装仅补 sessionListNowProvider 固定为演示日期，重录后与原始改码前暗色 PNG 字节一致；生产代码和原工装均未修改。
+
+## 阶段二 P1 结果及保留项
+
+- 侧栏工具条固定 page、inactive 图标接 textSecondary（对 page 4.527171:1），激活图标用 statusBlueText 配 selection。空态详情保持白面，副标题/图标接 textSecondary，新建按钮仅浅色改用可读深蓝底。分栏手柄复用 divider，命中区、拖拽和导航回调不变。
+- 通用 popover/dropdown 面接 card、1px cardBorder；菜单标题和普通/强调/危险文字分开校验。桌面菜单按下用 pressed；原生 ActionSheet 保留 SDK 面和遮罩，动作文字用 menuAction #004A94（既有状态调色板增强蓝），其半透明按下面另算，不只拿白卡证明 AA。
+- AdaptiveMenuItem 没有禁用项 API，未新增业务状态；现有空内容消息菜单的禁用文字在实际白卡/原生操作表普通面核验。AppBackButton 和快捷导航入口只有图标，继承主色对本区页面面色达图标 3:1，源码和路由保持不变。
+- 原生按钮的短暂透明反馈、遮罩与装饰阴影保留；不把任意图片作为背景或动画过渡每一帧宣称为已审计。固定反色退出 toast 的白字组合已达标，未改码；分隔线/投影明确按装饰层级处理。
+- 双主题菜单按下/禁用态与普通/增强对比度、base/elevated 外壳截图另存 before/shell、after/shell；P1 改码前先拍补充基线。最终共 43 张暗态截图和 13 张既有暗色金照，56/56 SHA256 一致；证据为 `C:/tmp/light-theme-shots-p2/after-verification.json`。12 张范围外浅色金照、7 张 docs 截图及 185 个范围外 lib 文件均与任务前散列相同。
+- P1 本地验收：analyze 零告警，test 2726 passed / 8 skipped，金照单独复跑 26 passed；fake gateway 15 项检查全部 PASS。浅色筛选重录曾产生范围外引导页金照差异，完整测试捕获图与原基线 SHA256 完全一致，因此恢复原基线并全量复验；引导页代码未改。
 
 ## 阶段二优先级
 
@@ -540,7 +549,7 @@
 
 ### P1 自适应外壳
 
-会话侧边栏中的列表已通过页面局部主题接入；侧边栏工具条、拖拽手柄、空态占位与导航仍沿用旧色。工具条 inactive 图标使用半透明 secondaryLabel，空态 tertiaryLabel 是弱装饰图标；可读提示使用相同次级色时不能套用装饰豁免。建议独立处理工具条/导航/空态，影响全部宽屏路由，不在阶段一改全局主题。
+侧栏工具条接 page、textSecondary、selection，空态详情使用白面和可读次级文字，新建按钮使用局部状态蓝。分栏手柄及工具条结构线复用 divider。固定反色退出 toast 保持原样，附录 P1 给出实算。导航/拖拽回调、外壳布局和所有暗色分支不变。
 
 #### `lib/app/shell/adaptive_shell.dart`
 
@@ -556,13 +565,17 @@
 
 默认控件：`CupertinoPageScaffold`、`CupertinoButton`。
 
-参考页面 P=#F2F2F7；C=#FFFFFF；L=#000000。
+参考页面 P=#FFFFFF；C=#FFFFFF；L=#000000。
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.tertiaryLabel` L30 | 图标/图形 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.label` L38 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L49 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.card` L24 | 面 | #FFFFFF | 1.000000 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.textSecondary` L37 | 图标/图形 | #6A6A6F | 5.379116 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.tertiaryLabel` L38 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.725396 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `CupertinoColors.label` L47 | 文字 | #000000 | 21.000000 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L60 | 文字 | #6A6A6F | 5.379116 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L61 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.438200 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `statusBlueText` L67 | 面 | #005FB8 | 6.308159 | 6.308159 | 3.329022 | 装饰面豁免；分层强弱见三向值 |
 
 #### `lib/app/shell/sidebar_resize_handle.dart`
 
@@ -570,41 +583,54 @@
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.separator` L43 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L49 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L50 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
 
 #### `lib/app/shell/sidebar_utility_toolbar.dart`
 
 默认控件：`CupertinoButton`。
 
-参考页面 P=#F2F2F7；C=#FFFFFF；L=#000000。
+参考页面 P=#EBEBF0；C=#FFFFFF；L=#000000。
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `theme.primaryColor` L93 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L94 | 复用色；按承载面判级 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `theme.primaryColor @ 0.12` L131 | 复用色；按承载面判级 | #007AFF / α=0.120000 | 1.159087 | 1.168124 | 1.085680 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.transparent` L132 | 复用色；按承载面判级 | #000000 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.separator` L150 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
+| `statusBlueText` L97 | 复用色；按承载面判级 | #005FB8 | 5.309073 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `theme.primaryColor` L98 | 复用色；按承载面判级 | #007AFF | 3.380767 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L101 | 复用色；按承载面判级 | #6A6A6F | 4.527171 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L102 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.214118 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.selection` L141 | 复用色；按承载面判级 | #E0ECFF | 1.003542 | 1.192393 | 17.611640 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.transparent` L143 | 复用色；按承载面判级 | #000000 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.divider` L164 | 面 | #C6C6C8 | 1.435417 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L165 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.645702 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `LightSurfaces.page` L171 | 面 | #EBEBF0 | 1.000000 | 1.188185 | 17.674020 | 装饰面豁免；分层强弱见三向值 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/app/shell/android_back_interceptor.dart`、`lib/app/shell/session_sidebar.dart`。
 
 ### P1 通用导航、菜单和浮层
 
-白浮层由 systemBackground 承载，separator / systemGrey4 做边框，systemGrey3 透明阴影。菜单副标题 secondaryLabel 与 destructiveRed 小字需处理；先定义可复用的面、正文及危险操作语义，再迁移调用点。预计覆盖所有弹层/菜单/导航入口；默认半透明遮罩和阴影须独立审计，不当成文字色。
+通用 popover/dropdown 接白面与 cardBorder，标题、副标、普通/强调/危险动作文字和按下面完成局部核验。原生操作表用更深动作蓝适配半透明按下面，保留原生面、遮罩和行为；阴影只作装饰豁免。导航代理本身无独立低对比文字，返回/下拉图标继承色按 3:1 验收。
 
 #### `lib/app/widgets/adaptive_action_menu.dart`
 
-默认控件：`CupertinoButton`、`CupertinoActionSheet`。
+默认控件：`CupertinoListTile`、`CupertinoButton`、`CupertinoActionSheet`。
 
 参考页面 P=#F2F2F7；C=#FFFFFF；L=#000000。
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.secondaryLabel` L82 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.separator` L89 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.destructiveRed` L154 | 复用色；按承载面判级 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.activeBlue` L156 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.label` L157 | 复用色；按承载面判级 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L86,128 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L87 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.divider` L98 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L99 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `statusRedText` L146 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L147,160 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L188 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.destructiveRed` L189 | 暗色保留豁免 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 暗色保留豁免 |
+| `statusBlueText` L194 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.activeBlue` L195 | 暗色保留豁免 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 暗色保留豁免 |
+| `CupertinoColors.label` L197 | 复用色；按承载面判级 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.card` L209 | 复用色；按承载面判级 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.pressed` L210 | 复用色；按承载面判级 | #EBEBF0 | 1.064805 | 1.188185 | 17.674020 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
 
 #### `lib/app/widgets/adaptive_popover.dart`
 
@@ -612,10 +638,12 @@
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `Color(0x00000000)` L361 | 面 | #000000 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemBackground` L393 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey4` L399 | 装饰线/投影豁免 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 装饰线/投影豁免 |
-| `CupertinoColors.systemGrey3 @ 0.5` L403 | 装饰线/投影豁免 | #C7C7CC / α=0.500000 | 1.218767 | 1.281204 | 3.531785 | 装饰线/投影豁免 |
+| `Color(0x00000000)` L371 | 面 | #000000 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.card` L405 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemBackground` L406 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `LightSurfaces.cardBorder` L415 | 装饰线/投影豁免 | #DDE0E8 | 1.183465 | 1.320594 | 15.901931 | 装饰线/投影豁免 |
+| `CupertinoColors.systemGrey4` L416 | 暗色保留豁免 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 暗色保留豁免 |
+| `CupertinoColors.systemGrey3 @ 0.5` L422 | 装饰线/投影豁免 | #C7C7CC / α=0.500000 | 1.218767 | 1.281204 | 3.531785 | 装饰线/投影豁免 |
 
 #### `lib/app/widgets/adaptive_sliver_navigation_bar.dart`
 
@@ -637,9 +665,11 @@
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemBackground` L19 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.separator` L20 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
-| `CupertinoColors.systemGrey3 @ 0.35` L29 | 装饰线/投影豁免 | #C7C7CC / α=0.350000 | 1.146727 | 1.186447 | 2.217171 | 装饰线/投影豁免 |
+| `LightSurfaces.card` L19 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemBackground` L20 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `LightSurfaces.cardBorder` L24 | 装饰线/投影豁免 | #DDE0E8 | 1.183465 | 1.320594 | 15.901931 | 装饰线/投影豁免 |
+| `CupertinoColors.separator` L25 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `CupertinoColors.systemGrey3 @ 0.35` L36 | 装饰线/投影豁免 | #C7C7CC / α=0.350000 | 1.146727 | 1.186447 | 2.217171 | 装饰线/投影豁免 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/app/widgets/cupertino_popover.dart`、`lib/app/widgets/hermes_page_route.dart`、`lib/app/widgets/narrow_navigation_dropdown.dart`。
 
@@ -1331,7 +1361,7 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 ### 共享组件
 
-AppBackButton / app_navigation 复用框架/通用导航，无独立颜色常量；继承导航动作色和禁用色，随 P1 验收。
+AppBackButton / app_navigation 无独立颜色常量；返回图标与 NarrowNavigationDropdownButton 的继承动作色已由 P1 widget 测试按实际背景验证，导航逻辑不改。
 
 #### `lib/features/shared/app_back_button.dart`
 
@@ -1457,6 +1487,7 @@ AppBackButton / app_navigation 复用框架/通用导航，无独立颜色常量
 | `Color(0xFFFFF4F3)` L52 | 复用色；按承载面判级 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
 | `Color(0xFFF3F2FF)` L55 | 复用色；按承载面判级 | #F3F2FF | 1.007248 | 1.107841 | 18.955790 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
 | `Color(0xFF005FB8)` L59 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF004A94)` L63 | 复用色；按承载面判级 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/app/theme/status_colors.dart`
 
@@ -1675,6 +1706,59 @@ Material 桥接把 Cupertino 的面和语义色传给依赖组件；错误页/�
 | P0/context warning ring · `chat/widgets/context_window_indicator.dart` | #B25000 | #EBEBF0 | 1.064805 | 4.657733 | 4.374260 | 非文本 达 |
 | P0/media inverse secondary · `chat/widgets/chat_media_view.dart: fixed black lightbox, unchanged` | #8E8E93 | #000000 | 18.819381 | 2.921958 | 6.440674 | 正文 AA 达 |
 | P0/green notice layering · `chat/chat_page.dart: paired with the explicit hairline` | #F0FAF2 | #EBEBF0 | 1.064805 | 1.044745 | 1.112450 | 装饰豁免 |
+| P1/readable secondary/page · `sidebar toolbar, empty detail, menu title and disabled-message menu` | #6A6A6F | #EBEBF0 | 1.064805 | 4.820554 | 4.527171 | 正文 AA 达 |
+| P1/structural divider/page · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #C6C6C8 | #EBEBF0 | 1.064805 | 1.528439 | 1.435417 | 装饰豁免 |
+| P1/popover hairline/page · `adaptive_popover + popover_dropdown: explicit 1px card boundary` | #DDE0E8 | #EBEBF0 | 1.064805 | 1.183465 | 1.111439 | 装饰豁免 |
+| P1/readable secondary/card · `sidebar toolbar, empty detail, menu title and disabled-message menu` | #6A6A6F | #FFFFFF | 1.115871 | 4.820554 | 5.379116 | 正文 AA 达 |
+| P1/structural divider/card · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #C6C6C8 | #FFFFFF | 1.115871 | 1.528439 | 1.705540 | 装饰豁免 |
+| P1/popover hairline/card · `adaptive_popover + popover_dropdown: explicit 1px card boundary` | #DDE0E8 | #FFFFFF | 1.115871 | 1.183465 | 1.320594 | 装饰豁免 |
+| P1/readable secondary/selection · `sidebar toolbar, empty detail, menu title and disabled-message menu` | #6A6A6F | #E0ECFF | 1.068576 | 4.820554 | 4.511193 | 正文 AA 达 |
+| P1/structural divider/selection · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #C6C6C8 | #E0ECFF | 1.068576 | 1.528439 | 1.430351 | 装饰豁免 |
+| P1/popover hairline/selection · `adaptive_popover + popover_dropdown: explicit 1px card boundary` | #DDE0E8 | #E0ECFF | 1.068576 | 1.183465 | 1.107516 | 装饰豁免 |
+| P1/readable secondary/pressed · `sidebar toolbar, empty detail, menu title and disabled-message menu` | #6A6A6F | #EBEBF0 | 1.064805 | 4.820554 | 4.527171 | 正文 AA 达 |
+| P1/structural divider/pressed · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #C6C6C8 | #EBEBF0 | 1.064805 | 1.528439 | 1.435417 | 装饰豁免 |
+| P1/popover hairline/pressed · `adaptive_popover + popover_dropdown: explicit 1px card boundary` | #DDE0E8 | #EBEBF0 | 1.064805 | 1.183465 | 1.111439 | 装饰豁免 |
+| P1/selected toolbar icon · `sidebar_utility_toolbar.dart` | #005FB8 | #E0ECFF | 1.068576 | 5.653126 | 5.290335 | 非文本 达 |
+| P1/empty detail filled action · `empty_detail_pane.dart: local button fill only` | #FFFFFF | #005FB8 | 5.653126 | 1.115871 | 6.308159 | 正文 AA 达 |
+| P1/popover action/statusBlueText/card · `adaptive_action_menu.dart: default/destructive rows` | #005FB8 | #FFFFFF | 1.115871 | 5.653126 | 6.308159 | 正文 AA 达 |
+| P1/popover action/statusRedText/card · `adaptive_action_menu.dart: default/destructive rows` | #B3001B | #FFFFFF | 1.115871 | 6.417374 | 7.160960 | 正文 AA 达 |
+| P1/popover action/statusBlueText/pressed · `adaptive_action_menu.dart: default/destructive rows` | #005FB8 | #EBEBF0 | 1.064805 | 5.653126 | 5.309073 | 正文 AA 达 |
+| P1/popover action/statusRedText/pressed · `adaptive_action_menu.dart: default/destructive rows` | #B3001B | #EBEBF0 | 1.064805 | 6.417374 | 6.026808 | 正文 AA 达 |
+| P1/native sheet/normal/LightSurfaces.menuAction/page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #EEEEEF | 1.037339 | 7.818165 | 7.536750 | 正文 AA 达 |
+| P1/native sheet/normal/statusRedText/page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #EEEEEF | 1.037339 | 6.417374 | 6.186380 | 正文 AA 达 |
+| P1/native sheet title + disabled message/page · `menu title and P0 empty-message labels, evaluated on the normal sheet surface` | #6A6A6F | #EEEEEF | 1.037339 | 4.820554 | 4.647038 | 正文 AA 达 |
+| P1/native sheet/pressed/LightSurfaces.menuAction/page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #D9D9D9 | 1.270151 | 7.818165 | 6.155303 | 正文 AA 达 |
+| P1/native sheet/pressed/statusRedText/page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #D9D9D9 | 1.270151 | 6.417374 | 5.052449 | 正文 AA 达 |
+| P1/native sheet/cancel/LightSurfaces.menuAction/page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #FFFFFF | 1.115871 | 7.818165 | 8.724063 | 正文 AA 达 |
+| P1/native sheet/cancel/statusRedText/page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #FFFFFF | 1.115871 | 6.417374 | 7.160960 | 正文 AA 达 |
+| P1/native sheet/cancel pressed/LightSurfaces.menuAction/page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #ECECEC | 1.058697 | 7.818165 | 7.384703 | 正文 AA 达 |
+| P1/native sheet/cancel pressed/statusRedText/page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #ECECEC | 1.058697 | 6.417374 | 6.061576 | 正文 AA 达 |
+| P1/inherited navigation icons/page · `AppBackButton + NarrowNavigationDropdownButton: icon-only, original primary retained` | #007AFF | #EBEBF0 | 1.064805 | 3.599857 | 3.380767 | 非文本 达 |
+| P1/inverse exit toast/page · `adaptive_shell.dart: retained fixed inverse content` | #FFFFFF | #2A2A2B | 12.799219 | 1.115871 | 14.282275 | 正文 AA 达 |
+| P1/native sheet/normal/LightSurfaces.menuAction/global page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #EFEFF0 | 1.026161 | 7.818165 | 7.618851 | 正文 AA 达 |
+| P1/native sheet/normal/statusRedText/global page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #EFEFF0 | 1.026161 | 6.417374 | 6.253771 | 正文 AA 达 |
+| P1/native sheet title + disabled message/global page · `menu title and P0 empty-message labels, evaluated on the normal sheet surface` | #6A6A6F | #EFEFF0 | 1.026161 | 4.820554 | 4.697660 | 正文 AA 达 |
+| P1/native sheet/pressed/LightSurfaces.menuAction/global page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #DADADB | 1.255914 | 7.818165 | 6.225079 | 正文 AA 达 |
+| P1/native sheet/pressed/statusRedText/global page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #DADADB | 1.255914 | 6.417374 | 5.109723 | 正文 AA 达 |
+| P1/native sheet/cancel/LightSurfaces.menuAction/global page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #FFFFFF | 1.115871 | 7.818165 | 8.724063 | 正文 AA 达 |
+| P1/native sheet/cancel/statusRedText/global page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #FFFFFF | 1.115871 | 6.417374 | 7.160960 | 正文 AA 达 |
+| P1/native sheet/cancel pressed/LightSurfaces.menuAction/global page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #ECECEC | 1.058697 | 7.818165 | 7.384703 | 正文 AA 达 |
+| P1/native sheet/cancel pressed/statusRedText/global page · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #ECECEC | 1.058697 | 6.417374 | 6.061576 | 正文 AA 达 |
+| P1/inherited navigation icons/global page · `AppBackButton + NarrowNavigationDropdownButton: icon-only, original primary retained` | #007AFF | #F2F2F7 | 1.000000 | 3.599857 | 3.599857 | 非文本 达 |
+| P1/inverse exit toast/global page · `adaptive_shell.dart: retained fixed inverse content` | #FFFFFF | #2C2C2C | 12.580032 | 1.115871 | 14.037691 | 正文 AA 达 |
+| P1/native sheet/normal/LightSurfaces.menuAction/card · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #F2F2F2 | 1.006397 | 7.818165 | 7.768472 | 正文 AA 达 |
+| P1/native sheet/normal/statusRedText/card · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #F2F2F2 | 1.006397 | 6.417374 | 6.376585 | 正文 AA 达 |
+| P1/native sheet title + disabled message/card · `menu title and P0 empty-message labels, evaluated on the normal sheet surface` | #6A6A6F | #F2F2F2 | 1.006397 | 4.820554 | 4.789914 | 正文 AA 达 |
+| P1/native sheet/pressed/LightSurfaces.menuAction/card · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #DCDCDC | 1.230761 | 7.818165 | 6.352303 | 正文 AA 达 |
+| P1/native sheet/pressed/statusRedText/card · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #DCDCDC | 1.230761 | 6.417374 | 5.214153 | 正文 AA 达 |
+| P1/native sheet/cancel/LightSurfaces.menuAction/card · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #FFFFFF | 1.115871 | 7.818165 | 8.724063 | 正文 AA 达 |
+| P1/native sheet/cancel/statusRedText/card · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #FFFFFF | 1.115871 | 6.417374 | 7.160960 | 正文 AA 达 |
+| P1/native sheet/cancel pressed/LightSurfaces.menuAction/card · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #004A94 | #ECECEC | 1.058697 | 7.818165 | 7.384703 | 正文 AA 达 |
+| P1/native sheet/cancel pressed/statusRedText/card · `adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop` | #B3001B | #ECECEC | 1.058697 | 6.417374 | 6.061576 | 正文 AA 达 |
+| P1/inherited navigation icons/card · `AppBackButton + NarrowNavigationDropdownButton: icon-only, original primary retained` | #007AFF | #FFFFFF | 1.115871 | 3.599857 | 4.016976 | 非文本 达 |
+| P1/inverse exit toast/card · `adaptive_shell.dart: retained fixed inverse content` | #FFFFFF | #2E2E2E | 12.186859 | 1.115871 | 13.598961 | 正文 AA 达 |
+| P1/popover shadow alpha=0.35 · `popover_dropdown/adaptive_popover: decorative elevation shadow retained` | #C7C7CC / α=0.350000 | #EBEBF0 | 1.064805 | 1.146727 | 1.124068 | 装饰豁免 |
+| P1/popover shadow alpha=0.5 · `popover_dropdown/adaptive_popover: decorative elevation shadow retained` | #C7C7CC / α=0.500000 | #EBEBF0 | 1.064805 | 1.218767 | 1.183771 | 装饰豁免 |
 | 看板选中标签/白字 · `kanban/kanban_page.dart` | #FFFFFF | #007AFF | 3.599857 | 1.115871 | 4.016976 | 正文 AA 不达标 |
 | 看板卡片/secondaryText · `kanban/kanban_page.dart` | #3C3C43 / α=0.600000 | #F2F2F7 | 1.000000 | 3.295321 | 3.295321 | 正文 AA 不达标 |
 | 看板黄色提醒/正文 · `kanban/kanban_page.dart` | #000000 | #F5EAC6 | 1.075725 | 18.819381 | 17.494610 | 正文 AA 达 |

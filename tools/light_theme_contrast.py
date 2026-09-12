@@ -330,8 +330,8 @@ def location(relative: str, needle: str) -> str:
 
 GROUPS = [
     ('features/chat', 'P0 聊天', '阶段二已接入局部 page/bar、可读次级文字及状态色、输入框/工具/审批/注入卡/媒体占位轮廓和选中按下面。assistant 正文仍直接落在页面底；共享 Markdown 默认不影响记忆和文件预览。用户主蓝气泡是 Leader 授权保留项；代码、链接、附件和引用局部底单独达 AA。确认弹窗仅调整浅色动作文字，保留 SDK 暗色默认。完整组合与限制见附录 P0。'),
-    ('app/shell', 'P1 自适应外壳', '会话侧边栏中的列表已通过页面局部主题接入；侧边栏工具条、拖拽手柄、空态占位与导航仍沿用旧色。工具条 inactive 图标使用半透明 secondaryLabel，空态 tertiaryLabel 是弱装饰图标；可读提示使用相同次级色时不能套用装饰豁免。建议独立处理工具条/导航/空态，影响全部宽屏路由，不在阶段一改全局主题。'),
-    ('app/widgets', 'P1 通用导航、菜单和浮层', '白浮层由 systemBackground 承载，separator / systemGrey4 做边框，systemGrey3 透明阴影。菜单副标题 secondaryLabel 与 destructiveRed 小字需处理；先定义可复用的面、正文及危险操作语义，再迁移调用点。预计覆盖所有弹层/菜单/导航入口；默认半透明遮罩和阴影须独立审计，不当成文字色。'),
+    ('app/shell', 'P1 自适应外壳', '侧栏工具条接 page、textSecondary、selection，空态详情使用白面和可读次级文字，新建按钮使用局部状态蓝。分栏手柄及工具条结构线复用 divider。固定反色退出 toast 保持原样，附录 P1 给出实算。导航/拖拽回调、外壳布局和所有暗色分支不变。'),
+    ('app/widgets', 'P1 通用导航、菜单和浮层', '通用 popover/dropdown 接白面与 cardBorder，标题、副标、普通/强调/危险动作文字和按下面完成局部核验。原生操作表用更深动作蓝适配半透明按下面，保留原生面、遮罩和行为；阴影只作装饰豁免。导航代理本身无独立低对比文字，返回/下拉图标继承色按 3:1 验收。'),
     ('features/kanban', 'P2 看板', '卡片 secondarySystemBackground 与旧分组页面底同为浅灰，不能形成卡片层级；灰色描边只提供弱轮廓。顶部选中标签为蓝底白字，详情/元数据 secondaryText，failed 状态仍返回 systemRed。建议白卡+轮廓、可读状态文字、选择状态和详情空占位一起迁移；预计涉及看板列/卡片/详情/创建弹层，不涉及 WS 或排序逻辑。'),
     ('features/insights', 'P2 洞察/用量', '分组统计卡继承白卡，secondaryText 用于时间、说明及坐标轴；蓝色柱本身可按非文本图形判级，但轴标签仍须正文 AA。#004999 是柱图触摸态，属于数据图形，不能当浅色卡片替换。建议卡片轮廓及轴标签优先，保留现有柱形高亮；预计影响统计总览、模型列表及日用量图。'),
     ('features/settings', 'P3 设置及全部子区', 'settings_page / settings_subpages / profile / extensions / MCP / auxiliary_models / webui_sidecar 都继承分组面。先修服务器地址、说明、辅助模型元数据以及输入框 placeholder；各状态色虽有 AA 版，仍要核对 resolve 与真实背景。新增面令牌按子区接入，影响全部设置表单、子页和弹层；不改持久化键或文案。'),
@@ -347,7 +347,7 @@ GROUPS = [
     ('features/downloads', '后续 下载', '灰色进度轨道、白卡和多类状态色共存；文件路径/字节进度 secondaryLabel 未达正文 AA。进度轨道属于非文本对照物，按钮白图标需按其真实底色判定。建议先修可读元数据，保留下载状态机。'),
     ('features/diagnostics', '后续 诊断及详情 Sheet', '日志级别、筛选标签、展开箭头、代码/复制区共享灰面，动态级别 tint 叠加透明底。建议逐级别测量真实 tint/background 组合，修时间、来源、正文灰。影响诊断列表及详情，不改日志采集。'),
     ('features/notifications', '后续 通知浮条与后台保活设置', '应用内通知白卡、次级消息和关闭图标需迁移；系统通知平台外观不属于 lib 静态页面面色。保活说明/错误状态仍按正文核对。影响 in-app 通知及保活设置，系统通知发送不动。'),
-    ('features/shared', '共享组件', 'AppBackButton / app_navigation 复用框架/通用导航，无独立颜色常量；继承导航动作色和禁用色，随 P1 验收。'),
+    ('features/shared', '共享组件', 'AppBackButton / app_navigation 无独立颜色常量；返回图标与 NarrowNavigationDropdownButton 的继承动作色已由 P1 widget 测试按实际背景验证，导航逻辑不改。'),
     ('features/desktop', '桌面能力', '本目录是窗口、托盘、快捷键及启动服务，没有 Flutter 页面面色；桌面设置的 UI 在 settings 中审计，托盘操作系统主题不由这里的 Dart Color 控制。'),
     ('features/webui_sidecar', '内置服务', '配置、状态模型、Provider 与服务，无独立 Flutter 面色；可见设置区在 settings/webui_sidecar_section.dart，引导入口在 onboarding/widgets/builtin_tab.dart。'),
     ('features/session_list', '阶段一 会话列表', '主列表、紧凑侧栏复用区、搜索框、菜单图标、副标题、选中/按下态、筛选弹层、批量栏和 FAB 工作区浮层按浅色令牌接入。session_list_header 不改源码，由页面局部 bar/page 主题消费；scheduled_session_disclosure 是弃用兼容组件，仍同步修正计数和标题。下面暗色原值/反色 tooltip 另有明确豁免，业务状态与分组逻辑不改。'),
@@ -440,6 +440,42 @@ def local_pairs(values: dict[str, Color]) -> list[tuple[str, Color, Color, str, 
         '文字', 'chat/widgets/chat_media_view.dart: fixed black lightbox, unchanged')
     add('P0/green notice layering', v['LightSurfaces.tintGreen'], v['LightSurfaces.page'],
         '装饰', 'chat/chat_page.dart: paired with the explicit hairline')
+    for surface in ('page', 'card', 'selection', 'pressed'):
+        bg = v['LightSurfaces.' + surface]
+        add(f'P1/readable secondary/{surface}', v['LightSurfaces.textSecondary'], bg,
+            '文字', 'sidebar toolbar, empty detail, menu title and disabled-message menu')
+        add(f'P1/structural divider/{surface}', v['LightSurfaces.divider'], bg,
+            '装饰', 'sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged')
+        add(f'P1/popover hairline/{surface}', v['LightSurfaces.cardBorder'], bg,
+            '装饰', 'adaptive_popover + popover_dropdown: explicit 1px card boundary')
+    add('P1/selected toolbar icon', v['statusBlueText'], v['LightSurfaces.selection'],
+        '图标', 'sidebar_utility_toolbar.dart')
+    add('P1/empty detail filled action', white, v['statusBlueText'],
+        '文字', 'empty_detail_pane.dart: local button fill only')
+    for surface in ('card', 'pressed'):
+        for fg in ('statusBlueText', 'statusRedText'):
+            add(f'P1/popover action/{fg}/{surface}', v[fg], v['LightSurfaces.' + surface],
+                '文字', 'adaptive_action_menu.dart: default/destructive rows')
+    for surface, underlying in [('page', v['LightSurfaces.page']), ('global page', page), ('card', white)]:
+        modal_backdrop = v['SDK/route.dart#kCupertinoModalBarrierColor'].over(underlying)
+        for state, token in [('normal', '_kActionSheetBackgroundColor'),
+                             ('pressed', '_kActionSheetPressedColor'),
+                             ('cancel', '_kActionSheetCancelColor'),
+                             ('cancel pressed', '_kActionSheetCancelPressedColor')]:
+            bg = v['SDK/dialog.dart#' + token].over(modal_backdrop)
+            for fg in ('LightSurfaces.menuAction', 'statusRedText'):
+                add(f'P1/native sheet/{state}/{fg}/{surface}', v[fg], bg, '文字',
+                    'adaptive_action_menu.dart + SDK/dialog.dart/route.dart; uniform local backdrop')
+            if state == 'normal':
+                add(f'P1/native sheet title + disabled message/{surface}', v['LightSurfaces.textSecondary'],
+                    bg, '文字', 'menu title and P0 empty-message labels, evaluated on the normal sheet surface')
+        add(f'P1/inherited navigation icons/{surface}', v['theme.primaryColor'], underlying,
+            '图标', 'AppBackButton + NarrowNavigationDropdownButton: icon-only, original primary retained')
+        add(f'P1/inverse exit toast/{surface}', white, black.alpha(0.82).over(underlying),
+            '文字', 'adaptive_shell.dart: retained fixed inverse content')
+    for alpha in (0.35, 0.5):
+        add(f'P1/popover shadow alpha={alpha}', v['CupertinoColors.systemGrey3'].alpha(alpha),
+            v['LightSurfaces.page'], '装饰', 'popover_dropdown/adaptive_popover: decorative elevation shadow retained')
     add('看板选中标签/白字', white, blue, '文字', 'kanban/kanban_page.dart')
     add('看板卡片/secondaryText', v['secondaryText'], v['CupertinoColors.secondarySystemBackground'], '文字', 'kanban/kanban_page.dart')
     add('看板黄色提醒/正文', black, v['CupertinoColors.systemYellow'].alpha(0.2).over(page), '文字', 'kanban/kanban_page.dart')
@@ -474,13 +510,13 @@ def render_report(values: dict[str, Color], flutter: Path) -> str:
     version = json.loads((flutter.parent.parent / 'bin/cache/flutter.version.json').read_text(encoding='utf-8'))
     lines = [
         '# 浅色主题全仓审计 · 2026-09-12', '',
-        '本报告按 TASK.md §1 的方案执行。阶段一完成令牌层和会话列表；阶段二继续 P0 聊天与 P1 外壳/导航，P2+ 页面保持只读。视觉取舍由 Leader 验收。', '',
+        '本报告按 TASK.md §1 的方案执行。阶段一完成令牌层和会话列表；阶段二完成 P0 聊天与 P1 外壳/导航，P2+ 页面保持只读。视觉取舍由 Leader 验收。', '',
         '## 范围与复验方法', '',
         f'- 扫描 `lib/` 全部 **{len(paths)}** 个 Dart 文件，记录 **{color_count}** 个颜色引用/常量/别名透明度使用点。按实际目录补入下载、诊断和内置服务，不沿用旧目录快照假定覆盖。',
         f'- 语义色取自 Flutter **{version["frameworkVersion"]}** / Dart **{version["dartSdkVersion"]}** 的 `packages/flutter/lib/src/cupertino/colors.dart` 普通浅色分支；增强对比度和暗色保留分支另标豁免。',
         '- WCAG：sRGB 通道 `c<=0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`；相对亮度 `0.2126R+0.7152G+0.0722B`；比值 `(L高+0.05)/(L低+0.05)`。先按实际 alpha 在 sRGB 合成，再线性化；中间值不取整，表格保留六位小数。',
         '- 正文 AA 门槛 4.5:1，功能图标/数据图形按 3:1；纯装饰面、边框、投影不套正文 AA。低对比度卡片面仍可存在视觉分层问题，不能用“装饰豁免”宣称已经分层充分。',
-        '- 逐文件表三向列为：该色合成到**页面底 P**、**白卡 C**、**黑色 label L** 后各自的对比度。会话列表与聊天 P 用新 page，其他文件 P 用现行全局分组背景。它们是明确的承载面参考值；反色内容和已知彩色组合另列附录，不能拿白字对白卡的参考值误判反色 tooltip。',
+        '- 逐文件表三向列为：该色合成到**页面底 P**、**白卡 C**、**黑色 label L** 后各自的对比度。会话列表、聊天及侧栏工具条 P 用新 page，空态详情 P 用白面，其余文件 P 用现行全局分组背景。它们是明确的承载面参考值；反色内容和已知彩色组合另列附录，不能拿白字对白卡的参考值误判反色 tooltip。',
         '- 静态审计列出所有可解析颜色及来源、透明度和组件默认色。运行时透明度/任意图片内容不能由单个基色证明 AA，表中明确保留限制；本轮没有逐页启动所有状态，也不声称全仓视觉验收通过。',
         '- `python tools/light_theme_contrast.py` 输出本报告全文；`--tokens` 复算令牌注释；`--write-report` 生成文件；`--check-report` 校验报告与当前源码/SDK 完全一致。无第三方 Python 依赖。没有 `.dart_tool/package_config.json` 时可传 `--flutter-sdk <SDK根目录>`。', '',
         '## 阶段一结果及保留项', '',
@@ -494,11 +530,18 @@ def render_report(values: dict[str, Color], flutter: Path) -> str:
         '## 阶段二 P0 结果及保留项', '',
         '- 聊天页局部 page/bar 接 #EBEBF0；动作色 #005FB8，不改全局主题。次级文字、占位符、功能灰图标按各自承载面接令牌。',
         '- 审批/澄清/错误/绿色提示面固定为不透明 tint，输入框、工具卡、选中上下文、注入卡和媒体占位接白面/描边；模型/工作区/推理选择保留勾选并增加选中、按下面。',
-        f'- 用户主气泡 #007AFF + 白字按 Leader 决定保留（实算 {ratio_string(card, values["CupertinoColors.activeBlue"]) }，未达正文 AA）。白字降透明度或加字重不能达到 4.5:1；代码/链接/附件/引用的局部底 #005FB8 与白字为 {ratio_string(card, values["LightSurfaces.userDetail"])}。主气泡后续可选 #006FE8（白字 {ratio_string(card, hex_color("006FE8"))}），待 Leader 裁决，未实施。',
+        f'- 用户主气泡 #007AFF + 白字按 Leader 决定保留（实算 {ratio_string(card, values["CupertinoColors.activeBlue"])}:1，未达正文 AA）。白字降透明度或加字重不能达到 4.5:1；代码/链接/附件/引用的局部底 #005FB8 与白字为 {ratio_string(card, values["LightSurfaces.userDetail"])}:1。主气泡后续可选 #006FE8（白字 {ratio_string(card, hex_color("006FE8"))}:1），待 Leader 裁决，未实施。',
         '- assistant Markdown 新样式由聊天调用点 useLightSurfaces 显式启用；记忆页和文件预览的共享默认保持不变。普通用户消息仍为原纯文本渲染，未改动 Markdown 触发条件。',
         '- 暗色语义色保留原 resolve；历史未解析图标保留原实际 ARGB。固定黑底媒体、Mermaid 深底配置、重复文字语义的状态圆点及装饰轨线保留且显式标注用途。',
         '- 本阶段截图目录 `C:/tmp/light-theme-shots-p2/before/`、`after/`；P0 单区留证另存 `after-p0/`。P0 验收：analyze 零告警，test 2710 passed / 8 skipped；13 张既有暗色金照、7 张 README 暗色截图和 24 张暗色状态图共 44/44 SHA256 一致。证据在 `after-p0-verification.json`，docs/screenshots 的 7 张原图未写入。',
         '- README 演示数据固定在 2026-09-12，原工装的分组时钟却读取系统日期；跨午夜后出现今天/昨天漂移。临时工装仅补 sessionListNowProvider 固定为演示日期，重录后与原始改码前暗色 PNG 字节一致；生产代码和原工装均未修改。', '',
+        '## 阶段二 P1 结果及保留项', '',
+        f'- 侧栏工具条固定 page、inactive 图标接 textSecondary（对 page {ratio_string(values["LightSurfaces.textSecondary"], new_page)}:1），激活图标用 statusBlueText 配 selection。空态详情保持白面，副标题/图标接 textSecondary，新建按钮仅浅色改用可读深蓝底。分栏手柄复用 divider，命中区、拖拽和导航回调不变。',
+        '- 通用 popover/dropdown 面接 card、1px cardBorder；菜单标题和普通/强调/危险文字分开校验。桌面菜单按下用 pressed；原生 ActionSheet 保留 SDK 面和遮罩，动作文字用 menuAction #004A94（既有状态调色板增强蓝），其半透明按下面另算，不只拿白卡证明 AA。',
+        '- AdaptiveMenuItem 没有禁用项 API，未新增业务状态；现有空内容消息菜单的禁用文字在实际白卡/原生操作表普通面核验。AppBackButton 和快捷导航入口只有图标，继承主色对本区页面面色达图标 3:1，源码和路由保持不变。',
+        '- 原生按钮的短暂透明反馈、遮罩与装饰阴影保留；不把任意图片作为背景或动画过渡每一帧宣称为已审计。固定反色退出 toast 的白字组合已达标，未改码；分隔线/投影明确按装饰层级处理。',
+        '- 双主题菜单按下/禁用态与普通/增强对比度、base/elevated 外壳截图另存 before/shell、after/shell；P1 改码前先拍补充基线。最终共 43 张暗态截图和 13 张既有暗色金照，56/56 SHA256 一致；证据为 `C:/tmp/light-theme-shots-p2/after-verification.json`。12 张范围外浅色金照、7 张 docs 截图及 185 个范围外 lib 文件均与任务前散列相同。',
+        '- P1 本地验收：analyze 零告警，test 2726 passed / 8 skipped，金照单独复跑 26 passed；fake gateway 15 项检查全部 PASS。浅色筛选重录曾产生范围外引导页金照差异，完整测试捕获图与原基线 SHA256 完全一致，因此恢复原基线并全量复验；引导页代码未改。', '',
         '## 阶段二优先级', '',
         '| 顺序 | 改法建议 | 预估影响面 |', '|---|---|---|',
         '| P0 聊天 | 蓝气泡白字/代码、可读次级文字、提示卡与工具卡轮廓 | chat_page + chat/widgets，历史/流式/输入/审批/媒体 |',
@@ -541,7 +584,7 @@ def render_report(values: dict[str, Color], flutter: Path) -> str:
             if not uses:
                 lines.extend(['无额外显式颜色，继承上表语义。', ''])
                 continue
-            page = new_page if group in ('features/session_list', 'features/chat') else old_page
+            page = card if path.name == 'empty_detail_pane.dart' else (new_page if group in ('features/session_list', 'features/chat') or path.name == 'sidebar_utility_toolbar.dart' else old_page)
             lines.extend([f'参考页面 P={page.display()}；C=#FFFFFF；L=#000000。', '',
                           '| 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |',
                           '|---|---|---|---:|---:|---:|---|'])

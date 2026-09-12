@@ -1,7 +1,9 @@
 import 'package:flutter/cupertino.dart';
 
-import '../../app/shell/adaptive_shell.dart';
-import '../../app/widgets/cupertino_popover.dart';
+import '../shell/adaptive_shell.dart';
+import '../theme/light_surfaces.dart';
+import '../theme/status_colors.dart';
+import 'cupertino_popover.dart';
 
 /// 单条菜单项（与两侧 ellipsis 的 ActionSheet 保持同语义）。
 class AdaptiveMenuItem {
@@ -54,6 +56,7 @@ class AdaptiveActionMenu {
     double? maxWidth,
   }) async {
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     if (isWide) {
       await showCupertinoPopover(
         context: context,
@@ -78,15 +81,23 @@ class AdaptiveActionMenu {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color:
-                            CupertinoColors.secondaryLabel.resolveFrom(context),
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: CupertinoColors.secondaryLabel,
+                        ),
                       ),
                     ),
                   ),
                 if (title != null && title.isNotEmpty)
                   Container(
                     height: 0.5,
-                    color: CupertinoColors.separator.resolveFrom(popoverContext),
+                    // Decorative separator between the menu title and actions.
+                    color: LightSurfaces.resolve(
+                      popoverContext,
+                      LightSurfaces.divider,
+                      dark: CupertinoColors.separator,
+                    ),
                   ),
                 for (final item in items)
                   _PopoverRow(
@@ -109,7 +120,14 @@ class AdaptiveActionMenu {
     await showCupertinoModalPopup<void>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
-        title: title == null || title.isEmpty ? null : Text(title),
+        title: title == null || title.isEmpty
+            ? null
+            : Text(
+                title,
+                style: isLight
+                    ? const TextStyle(color: LightSurfaces.textSecondary)
+                    : null,
+              ),
         actions: [
           for (final item in items)
             CupertinoActionSheetAction(
@@ -120,14 +138,28 @@ class AdaptiveActionMenu {
                 Navigator.pop(sheetContext);
                 item.onPressed();
               },
-              child: Text(item.label),
+              child: Text(
+                item.label,
+                style: isLight
+                    ? TextStyle(
+                        color: item.isDestructive
+                            ? statusRedText.resolveFrom(sheetContext)
+                            : LightSurfaces.menuAction,
+                      )
+                    : null,
+              ),
             ),
         ],
         cancelButton: CupertinoActionSheetAction(
           key: cancelKey,
           isDefaultAction: true,
           onPressed: () => Navigator.pop(sheetContext),
-          child: Text(cancelLabel),
+          child: Text(
+            cancelLabel,
+            style: isLight
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
+          ),
         ),
       ),
     );
@@ -151,22 +183,40 @@ class _PopoverRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isDestructive
-        ? CupertinoColors.destructiveRed.resolveFrom(context)
+        ? LightSurfaces.resolve(
+            context,
+            statusRedText.resolveFrom(context),
+            dark: CupertinoColors.destructiveRed,
+          )
         : isDefault
-            ? CupertinoColors.activeBlue.resolveFrom(context)
-            : CupertinoColors.label.resolveFrom(context);
+        ? LightSurfaces.resolve(
+            context,
+            statusBlueText.resolveFrom(context),
+            dark: CupertinoColors.activeBlue,
+          )
+        : CupertinoColors.label.resolveFrom(context);
+    final text = Text(
+      label,
+      style: TextStyle(
+        fontSize: 15,
+        color: color,
+        fontWeight: isDefault ? FontWeight.w600 : FontWeight.w400,
+      ),
+    );
+    if (CupertinoTheme.brightnessOf(context) == Brightness.light) {
+      return CupertinoListTile(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        backgroundColor: LightSurfaces.card,
+        backgroundColorActivated: LightSurfaces.pressed,
+        onTap: onTap,
+        title: text,
+      );
+    }
     return CupertinoButton(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       alignment: Alignment.centerLeft,
       onPressed: onTap,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 15,
-          color: color,
-          fontWeight: isDefault ? FontWeight.w600 : FontWeight.w400,
-        ),
-      ),
+      child: text,
     );
   }
 }

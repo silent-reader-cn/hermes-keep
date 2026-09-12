@@ -58,6 +58,10 @@ abstract final class LightSurfaces {
   /// White content reaches 6.308159:1; the main bubble stays #007AFF.
   static const Color userDetail = Color(0xFF005FB8);
 
+  /// Action-sheet blue from the existing high-contrast status palette.
+  /// Keeps native translucent pressed rows readable without changing their skin.
+  static const Color menuAction = Color(0xFF004A94);
+
   /// 浅色使用固定 [light]，深色显式解析调用点原有的 [dark] 语义色。
   ///
   /// 保留深色高对比度及 elevated 分支；原来直接绘制的未解析颜色应传

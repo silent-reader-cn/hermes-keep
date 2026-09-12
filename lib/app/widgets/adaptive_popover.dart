@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 
+import '../theme/light_surfaces.dart';
+
 /// 弹层弹出方向。
 enum PopoverPlacement {
   /// 锚点上方。
@@ -119,9 +121,13 @@ Future<void> showAdaptivePopover({
   final safeRight = screenW - safeMargin;
 
   final maxAllowedWidth = math.max(0.0, screenW - safeMargin * 2);
-  final effectiveMaxWidth = math.min(maxWidth ?? preferredWidth, maxAllowedWidth);
-  final effectiveMinWidth =
-      minWidth != null ? math.min(minWidth, effectiveMaxWidth) : null;
+  final effectiveMaxWidth = math.min(
+    maxWidth ?? preferredWidth,
+    maxAllowedWidth,
+  );
+  final effectiveMinWidth = minWidth != null
+      ? math.min(minWidth, effectiveMaxWidth)
+      : null;
   final effectiveWidth = math.min(preferredWidth, maxAllowedWidth);
 
   // 横向对齐：计算 left 并 clamp。
@@ -131,7 +137,8 @@ Future<void> showAdaptivePopover({
       left = resolvedAnchorRect.left + offset.dx;
       break;
     case PopoverAlign.center:
-      left = resolvedAnchorRect.left +
+      left =
+          resolvedAnchorRect.left +
           resolvedAnchorRect.width / 2 -
           effectiveWidth / 2 +
           offset.dx;
@@ -167,7 +174,9 @@ Future<void> showAdaptivePopover({
     }
   } else if (flipOnOverflow) {
     final need = (preferredHeight ?? maxHeight) + gap;
-    if (resolved == PopoverPlacement.top && spaceAbove < need && spaceBelow > spaceAbove) {
+    if (resolved == PopoverPlacement.top &&
+        spaceAbove < need &&
+        spaceBelow > spaceAbove) {
       resolved = PopoverPlacement.bottom;
     } else if (resolved == PopoverPlacement.bottom &&
         spaceBelow < need &&
@@ -285,6 +294,7 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
     widget.close();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
     final isTop = widget.placement == PopoverPlacement.top;
@@ -294,9 +304,9 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
         : widget.anchorRect.bottom + widget.gap + widget.verticalOffset;
     final bottom = isTop
         ? widget.screenHeight -
-            widget.anchorRect.top +
-            widget.gap -
-            widget.verticalOffset
+              widget.anchorRect.top +
+              widget.gap -
+              widget.verticalOffset
         : null;
 
     Widget positioned;
@@ -390,14 +400,23 @@ class _PopoverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = CupertinoColors.systemBackground.resolveFrom(context);
+    final bg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.card,
+      dark: CupertinoColors.systemBackground,
+    );
     return Container(
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: CupertinoColors.systemGrey4.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.systemGrey4,
+          ),
         ),
+        // Decorative elevation shadow, retained in both themes.
         boxShadow: [
           BoxShadow(
             color: CupertinoColors.systemGrey3

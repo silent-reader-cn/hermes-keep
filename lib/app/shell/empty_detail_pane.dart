@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/session_list/session_list_providers.dart';
 import '../../l10n/app_localizations.dart';
+import '../theme/light_surfaces.dart';
+import '../theme/status_colors.dart';
 
 /// 宽屏双栏模式下的空态详情占位页（蓝本 SessionListView.swift §regularWidthDetail）。
 ///
@@ -15,9 +17,12 @@ class EmptyDetailPane extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final theme = CupertinoTheme.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
 
     return CupertinoPageScaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: isLight
+          ? LightSurfaces.card
+          : theme.scaffoldBackgroundColor,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -27,7 +32,11 @@ class EmptyDetailPane extends ConsumerWidget {
               Icon(
                 CupertinoIcons.chat_bubble_2,
                 size: 64.0,
-                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.tertiaryLabel,
+                ),
               ),
               const SizedBox(height: 16.0),
               Text(
@@ -46,11 +55,16 @@ class EmptyDetailPane extends ConsumerWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14.0,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: CupertinoColors.secondaryLabel,
+                  ),
                 ),
               ),
               const SizedBox(height: 24.0),
               CupertinoButton.filled(
+                color: isLight ? statusBlueText.resolveFrom(context) : null,
                 key: const ValueKey('empty-detail-new-chat-button'),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20.0,
