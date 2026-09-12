@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show SelectableText;
 import 'package:flutter/services.dart';
 
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../core/utils/selected_context.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -12,11 +14,7 @@ import '../../../l10n/app_localizations.dart';
 /// quote SelectableText 12.5/1.45 secondaryLabel，max 400 可滚.
 /// 支持单块与多块 Column gap8；点击复制 quote.
 class SelectedContextCard extends StatelessWidget {
-  const SelectedContextCard({
-    super.key,
-    required this.block,
-    this.onCopied,
-  });
+  const SelectedContextCard({super.key, required this.block, this.onCopied});
 
   final SelectedContextBlock block;
   final VoidCallback? onCopied;
@@ -24,12 +22,26 @@ class SelectedContextCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final separator = CupertinoColors.separator.resolveFrom(context);
-    final bg =
-        CupertinoColors.secondarySystemBackground.resolveFrom(context);
-    final secondaryLabel =
-        CupertinoColors.secondaryLabel.resolveFrom(context);
-    final accent = CupertinoColors.activeBlue.resolveFrom(context);
+    final separator = LightSurfaces.resolve(
+      context,
+      LightSurfaces.cardBorder,
+      dark: CupertinoColors.separator,
+    );
+    final bg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.card,
+      dark: CupertinoColors.secondarySystemBackground,
+    );
+    final secondaryLabel = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
+    final accent = LightSurfaces.resolve(
+      context,
+      statusBlueText.resolveFrom(context),
+      dark: CupertinoColors.activeBlue,
+    );
     final label = block.label.trim().isEmpty
         ? (l10n.isEnglish ? 'Context' : '上下文')
         : block.label.trim();
@@ -116,10 +128,7 @@ class SelectedContextCard extends StatelessWidget {
 
 /// 多块容器 — 垂直 Column gap8.
 class SelectedContextCardGroup extends StatelessWidget {
-  const SelectedContextCardGroup({
-    super.key,
-    required this.blocks,
-  });
+  const SelectedContextCardGroup({super.key, required this.blocks});
 
   final List<SelectedContextBlock> blocks;
 
@@ -170,10 +179,7 @@ class _CopyButton extends StatelessWidget {
           children: [
             Icon(CupertinoIcons.doc_on_doc, size: 11, color: color),
             const SizedBox(width: 3),
-            Text(
-              l10n.copy,
-              style: TextStyle(fontSize: 11, color: color),
-            ),
+            Text(l10n.copy, style: TextStyle(fontSize: 11, color: color)),
           ],
         ),
       ),

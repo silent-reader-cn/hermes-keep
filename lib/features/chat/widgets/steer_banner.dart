@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -29,10 +30,18 @@ class SteerBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark
             ? const Color(0xFF2C2C2E)
-            : CupertinoColors.systemGrey6.resolveFrom(context),
+            : LightSurfaces.resolve(
+                context,
+                LightSurfaces.card,
+                dark: CupertinoColors.systemGrey6,
+              ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.separator,
+          ),
           width: 0.5,
         ),
       ),
@@ -41,7 +50,11 @@ class SteerBanner extends StatelessWidget {
           Icon(
             CupertinoIcons.arrow_turn_up_right,
             size: 14,
-            color: secondaryText.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -52,7 +65,11 @@ class SteerBanner extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ),
@@ -64,11 +81,7 @@ class SteerBanner extends StatelessWidget {
 
 /// 排队横幅 polish 版（Cupertino systemGrey6 圆角，保持与 steer 横幅同风格）。
 class QueuedBanner extends StatelessWidget {
-  const QueuedBanner({
-    super.key,
-    required this.count,
-    this.preview,
-  });
+  const QueuedBanner({super.key, required this.count, this.preview});
 
   final int count;
   final String? preview;
@@ -86,10 +99,18 @@ class QueuedBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark
             ? const Color(0xFF2C2C2E)
-            : CupertinoColors.systemGrey6.resolveFrom(context),
+            : LightSurfaces.resolve(
+                context,
+                LightSurfaces.card,
+                dark: CupertinoColors.systemGrey6,
+              ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.separator,
+          ),
           width: 0.5,
         ),
       ),
@@ -98,7 +119,11 @@ class QueuedBanner extends StatelessWidget {
           Icon(
             CupertinoIcons.tray,
             size: 14,
-            color: secondaryText.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -113,7 +138,11 @@ class QueuedBanner extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: secondaryText.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: secondaryText,
+                    ),
                   ),
                 ),
                 if (hasPreview)
@@ -125,7 +154,11 @@ class QueuedBanner extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
-                        color: secondaryText.resolveFrom(context),
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: secondaryText,
+                        ),
                       ),
                     ),
                   ),
@@ -136,15 +169,23 @@ class QueuedBanner extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
             decoration: BoxDecoration(
-              color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.selection,
+                dark: CupertinoColors.activeBlue.withValues(alpha: 0.12),
+              ),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
               '$count',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.activeBlue,
+                color: LightSurfaces.resolve(
+                  context,
+                  statusBlueText.resolveFrom(context),
+                  dark: CupertinoColors.activeBlue.color,
+                ),
               ),
             ),
           ),

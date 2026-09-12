@@ -2,10 +2,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hermes_ui/app/theme/status_colors.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/message_highlight.dart';
+
 import '../../helpers/fake_chat_api.dart';
 
 /// 搜索结果定位（深链 /chat/:id?q=&match=）与分支关系展示。
@@ -129,7 +130,9 @@ void main() {
 
       // 无高亮包裹（title 命中不定位）
       final highlighted = tester
-          .widgetList<SearchMessageHighlight>(find.byType(SearchMessageHighlight))
+          .widgetList<SearchMessageHighlight>(
+            find.byType(SearchMessageHighlight),
+          )
           .where((w) => w.highlight)
           .length;
       expect(highlighted, 0);
@@ -140,7 +143,9 @@ void main() {
   });
 
   group('分支关系展示', () {
-    testWidgets('parent_session_id 非空 → 分支 badge 显示；点击弹对话框；跳转父会话', (tester) async {
+    testWidgets('parent_session_id 非空 → 分支 badge 显示；点击弹对话框；跳转父会话', (
+      tester,
+    ) async {
       final api = _FakeChatApi();
       api.sessionResult = {
         'session': {
@@ -157,9 +162,8 @@ void main() {
         routes: [
           GoRoute(
             path: '/chat/:id',
-            builder: (context, state) => ChatPage(
-              sessionId: state.pathParameters['id']!,
-            ),
+            builder: (context, state) =>
+                ChatPage(sessionId: state.pathParameters['id']!),
           ),
         ],
       );
@@ -172,7 +176,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // badge 出现，且图标为 size 12、secondaryText 主题色
+      // badge 出现，且图标为 size 12、浅色次级文字令牌
       final badgeFinder = find.byKey(const ValueKey('chat-branch-badge'));
       expect(badgeFinder, findsOneWidget);
       final badgeIconFinder = find.descendant(
@@ -182,26 +186,19 @@ void main() {
       expect(badgeIconFinder, findsOneWidget);
       final badgeIcon = tester.widget<Icon>(badgeIconFinder);
       expect(badgeIcon.size, 12);
-      final chatContext = tester.element(find.byType(ChatPage));
-      expect(badgeIcon.color, secondaryText.resolveFrom(chatContext));
+      expect(badgeIcon.color, LightSurfaces.textSecondary);
 
       // 点击 → 对话框
       await tester.tap(badgeFinder);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(
-        find.byKey(const ValueKey('chat-branch-dialog')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('chat-branch-dialog')), findsOneWidget);
 
       // 跳转父会话 → 路由变化
       await tester.tap(find.byKey(const ValueKey('chat-goto-parent')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(
-        router.routeInformationProvider.value.uri.path,
-        '/chat/parent-1',
-      );
+      expect(router.routeInformationProvider.value.uri.path, '/chat/parent-1');
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();

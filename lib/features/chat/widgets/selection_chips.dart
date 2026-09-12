@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../l10n/app_localizations.dart';
 import '../selection_provider.dart';
 
@@ -46,8 +48,10 @@ class SelectionChipPanel extends ConsumerWidget {
                       l10n.clear,
                       style: TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                        color: LightSurfaces.resolve(
                           context,
+                          LightSurfaces.textSecondary,
+                          dark: CupertinoColors.secondaryLabel,
                         ),
                       ),
                     ),
@@ -55,10 +59,7 @@ class SelectionChipPanel extends ConsumerWidget {
                 ),
               for (var i = 0; i < pending.length; i++) ...[
                 if (i > 0 || pending.length > 1) const SizedBox(height: 8),
-                _SelectionChipCard(
-                  sessionId: sessionId,
-                  selection: pending[i],
-                ),
+                _SelectionChipCard(sessionId: sessionId, selection: pending[i]),
               ],
             ],
           ),
@@ -76,9 +77,21 @@ class _SelectionChipCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final separator = CupertinoColors.separator.resolveFrom(context);
-    final bg = CupertinoColors.secondarySystemBackground.resolveFrom(context);
-    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final separator = LightSurfaces.resolve(
+      context,
+      LightSurfaces.cardBorder,
+      dark: CupertinoColors.separator,
+    );
+    final bg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.card,
+      dark: CupertinoColors.secondarySystemBackground,
+    );
+    final secondary = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
     final preview = selectedContextPreview(selection.text);
 
     return Semantics(
@@ -106,7 +119,8 @@ class _SelectionChipCard extends ConsumerWidget {
                           key: ValueKey('selection-rename-${selection.id}'),
                           padding: EdgeInsets.zero,
                           minimumSize: Size.zero,
-                          onPressed: () => _showRenameDialog(context, ref, selection),
+                          onPressed: () =>
+                              _showRenameDialog(context, ref, selection),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
@@ -117,7 +131,11 @@ class _SelectionChipCard extends ConsumerWidget {
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.04 * 11,
-                                color: CupertinoColors.activeBlue.resolveFrom(context),
+                                color: LightSurfaces.resolve(
+                                  context,
+                                  statusBlueText.resolveFrom(context),
+                                  dark: CupertinoColors.activeBlue,
+                                ),
                               ),
                             ),
                           ),
@@ -136,7 +154,11 @@ class _SelectionChipCard extends ConsumerWidget {
                       onPressed: () => ref
                           .read(pendingSelectionsProvider(sessionId).notifier)
                           .remove(selection.id),
-                      child: Icon(CupertinoIcons.xmark, size: 12, color: secondary),
+                      child: Icon(
+                        CupertinoIcons.xmark,
+                        size: 12,
+                        color: secondary,
+                      ),
                     ),
                   ),
                 ],
@@ -148,7 +170,11 @@ class _SelectionChipCard extends ConsumerWidget {
                   preview,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12.5, height: 1.45, color: secondary),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: secondary,
+                  ),
                 ),
               ),
             ],
@@ -173,6 +199,23 @@ class _SelectionChipCard extends ConsumerWidget {
           padding: const EdgeInsets.only(top: 12),
           child: CupertinoTextField(
             key: const ValueKey('selection-rename-field'),
+            decoration: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? BoxDecoration(
+                    color: LightSurfaces.card,
+                    border: Border.all(
+                      color: LightSurfaces.cardBorder,
+                      width: 0.5,
+                    ),
+                    borderRadius: BorderRadius.circular(5),
+                  )
+                : const CupertinoTextField().decoration,
+            placeholderStyle:
+                CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? const TextStyle(
+                    fontWeight: FontWeight.w400,
+                    color: LightSurfaces.placeholder,
+                  )
+                : const CupertinoTextField().placeholderStyle,
             controller: controller,
             autofocus: true,
             maxLength: 120,
@@ -182,10 +225,16 @@ class _SelectionChipCard extends ConsumerWidget {
         ),
         actions: [
           CupertinoDialogAction(
+            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.userDetail)
+                : null,
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
+            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.userDetail)
+                : null,
             isDefaultAction: true,
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
             child: Text(l10n.confirm),

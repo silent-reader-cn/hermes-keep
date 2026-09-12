@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../core/models/upload_response.dart';
 import '../../../l10n/app_localizations.dart';
 import '../pending_attachments_provider.dart';
@@ -21,7 +22,11 @@ class AttachmentPendingBar extends ConsumerWidget {
     final attachments = ref.watch(pendingAttachmentsProvider(sessionId));
     if (attachments.isEmpty) return const SizedBox.shrink();
 
-    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final secondary = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -74,9 +79,21 @@ class _AttachmentThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
-    final separator = CupertinoColors.separator.resolveFrom(context);
-    final bg = CupertinoColors.secondarySystemBackground.resolveFrom(context);
+    final secondary = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
+    final separator = LightSurfaces.resolve(
+      context,
+      LightSurfaces.cardBorder,
+      dark: CupertinoColors.separator,
+    );
+    final bg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.card,
+      dark: CupertinoColors.secondarySystemBackground,
+    );
     final preview = attachment.thumbnailData;
 
     return Container(
@@ -102,8 +119,9 @@ class _AttachmentThumb extends StatelessWidget {
                   name: attachment.name,
                   isImage:
                       attachment.isImage && attachment.thumbnailData != null,
-                  resolvedUrl:
-                      attachment.path.isNotEmpty ? attachment.path : null,
+                  resolvedUrl: attachment.path.isNotEmpty
+                      ? attachment.path
+                      : null,
                 ),
                 child: Row(
                   children: [
@@ -128,7 +146,11 @@ class _AttachmentThumb extends StatelessWidget {
                         child: Icon(
                           CupertinoIcons.doc,
                           size: 22,
-                          color: CupertinoColors.systemGrey.resolveFrom(context),
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: CupertinoColors.systemGrey,
+                          ),
                         ),
                       ),
                     Expanded(

@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/popover_dropdown.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_client_server_panels.dart';
@@ -311,7 +313,11 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final currentWorkspace = ref
         .read(chatControllerProvider(widget.sessionId))
         .workspace;
-    final secondary = CupertinoColors.secondaryLabel.resolveFrom(menuContext);
+    final secondary = LightSurfaces.resolve(
+      menuContext,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
     return PopoverDropdownCard(
       child: _loadingWorkspaces
           ? const Center(
@@ -429,8 +435,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       for (final opt in liveOptions) {
         final id = opt.id.trim();
         if (id.isEmpty) continue;
-        final normKey =
-            id.toLowerCase().replaceAll(' ', '-').replaceAll('_', '-');
+        final normKey = id
+            .toLowerCase()
+            .replaceAll(' ', '-')
+            .replaceAll('_', '-');
         if (seen.add(normKey)) {
           modelIds.add(id);
         }
@@ -519,8 +527,16 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final isHigh = pctInt != null && pctInt >= 75;
     final isMid = pctInt != null && pctInt >= 50 && pctInt < 75;
 
-    final separator = CupertinoColors.separator.resolveFrom(context);
-    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final separator = LightSurfaces.resolve(
+      context,
+      LightSurfaces.cardBorder,
+      dark: CupertinoColors.separator,
+    );
+    final secondary = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
 
     final currentModel = widget.currentModel;
     final workspace = ref.watch(
@@ -658,8 +674,11 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                             onPressed: _toggleModelMenu,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: CupertinoColors.systemBackground
-                                    .resolveFrom(context),
+                                color: LightSurfaces.resolve(
+                                  context,
+                                  LightSurfaces.card,
+                                  dark: CupertinoColors.systemBackground,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: separator),
                               ),
@@ -673,16 +692,13 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                     child: Text(
                                       (currentModel == null ||
                                               currentModel.isEmpty)
-                                          ? l10n
-                                              .contextWindowFollowServerDefault
+                                          ? l10n.contextWindowFollowServerDefault
                                           : currentModel,
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
-                                        color:
-                                            CupertinoColors.label.resolveFrom(
-                                              context,
-                                            ),
+                                        color: CupertinoColors.label
+                                            .resolveFrom(context),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -690,9 +706,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                   const SizedBox(width: 8),
                                   AnimatedRotation(
                                     turns: _modelMenuEntry != null ? 0.5 : 0.0,
-                                    duration: const Duration(
-                                      milliseconds: 200,
-                                    ),
+                                    duration: const Duration(milliseconds: 200),
                                     child: Icon(
                                       CupertinoIcons.chevron_down,
                                       size: 14,
@@ -722,8 +736,11 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                             onPressed: _toggleReasoningMenu,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: CupertinoColors.systemBackground
-                                    .resolveFrom(context),
+                                color: LightSurfaces.resolve(
+                                  context,
+                                  LightSurfaces.card,
+                                  dark: CupertinoColors.systemBackground,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: separator),
                               ),
@@ -746,10 +763,8 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
-                                        color:
-                                            CupertinoColors.label.resolveFrom(
-                                              context,
-                                            ),
+                                        color: CupertinoColors.label
+                                            .resolveFrom(context),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                       maxLines: 1,
@@ -757,13 +772,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                   ),
                                   const SizedBox(width: 4),
                                   AnimatedRotation(
-                                    turns:
-                                        _reasoningMenuEntry != null
-                                            ? 0.5
-                                            : 0.0,
-                                    duration: const Duration(
-                                      milliseconds: 200,
-                                    ),
+                                    turns: _reasoningMenuEntry != null
+                                        ? 0.5
+                                        : 0.0,
+                                    duration: const Duration(milliseconds: 200),
                                     child: Icon(
                                       CupertinoIcons.chevron_down,
                                       size: 14,
@@ -833,8 +845,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                       onPressed: _toggleWorkspaceMenu,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: CupertinoColors.systemBackground.resolveFrom(
+                          color: LightSurfaces.resolve(
                             context,
+                            LightSurfaces.card,
+                            dark: CupertinoColors.systemBackground,
                           ),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: separator),
@@ -895,8 +909,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                             color: secondary,
                           ),
                           decoration: BoxDecoration(
-                            color: CupertinoColors.systemBackground.resolveFrom(
+                            color: LightSurfaces.resolve(
                               context,
+                              LightSurfaces.card,
+                              dark: CupertinoColors.systemBackground,
                             ),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: separator),
@@ -953,7 +969,11 @@ class _InfoRow extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: CupertinoColors.secondaryLabel,
+            ),
           ),
         ),
         const Spacer(),
@@ -1117,13 +1137,29 @@ class _CompressIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     Color? iconColor;
     if (!enabled) {
-      iconColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+      iconColor = LightSurfaces.resolve(
+        context,
+        LightSurfaces.textSecondary,
+        dark: CupertinoColors.secondaryLabel,
+      );
     } else if (isHigh) {
-      iconColor = CupertinoColors.systemRed.resolveFrom(context);
+      iconColor = LightSurfaces.resolve(
+        context,
+        statusRedText.resolveFrom(context),
+        dark: CupertinoColors.systemRed,
+      );
     } else if (isMid) {
-      iconColor = CupertinoColors.systemOrange.resolveFrom(context);
+      iconColor = LightSurfaces.resolve(
+        context,
+        statusOrangeText.resolveFrom(context),
+        dark: CupertinoColors.systemOrange,
+      );
     } else {
-      iconColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+      iconColor = LightSurfaces.resolve(
+        context,
+        LightSurfaces.textSecondary,
+        dark: CupertinoColors.secondaryLabel,
+      );
     }
 
     final child = compressing
@@ -1144,26 +1180,56 @@ class _CompressIconButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: enabled
                 ? (isHigh
-                      ? CupertinoColors.systemRed
-                            .resolveFrom(context)
-                            .withValues(alpha: 0.12)
+                      ? LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.tintError,
+                          dark: CupertinoColors.systemRed
+                              .resolveFrom(context)
+                              .withValues(alpha: 0.12),
+                        )
                       : isMid
-                      ? CupertinoColors.systemOrange
-                            .resolveFrom(context)
-                            .withValues(alpha: 0.12)
-                      : CupertinoColors.systemGrey5.resolveFrom(context))
-                : CupertinoColors.systemGrey5
-                      .resolveFrom(context)
-                      .withValues(alpha: 0.6),
+                      ? LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.tintWarning,
+                          dark: CupertinoColors.systemOrange
+                              .resolveFrom(context)
+                              .withValues(alpha: 0.12),
+                        )
+                      : LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.page,
+                          dark: CupertinoColors.systemGrey5,
+                        ))
+                : LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.page,
+                    dark: CupertinoColors.systemGrey5,
+                  ).withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: enabled
                   ? (isHigh
-                        ? CupertinoColors.systemRed.resolveFrom(context)
+                        ? LightSurfaces.resolve(
+                            context,
+                            statusRedText.resolveFrom(context),
+                            dark: CupertinoColors.systemRed,
+                          )
                         : isMid
-                        ? CupertinoColors.systemOrange.resolveFrom(context)
-                        : CupertinoColors.separator.resolveFrom(context))
-                  : CupertinoColors.separator.resolveFrom(context),
+                        ? LightSurfaces.resolve(
+                            context,
+                            statusOrangeText.resolveFrom(context),
+                            dark: CupertinoColors.systemOrange,
+                          )
+                        : LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.cardBorder,
+                            dark: CupertinoColors.separator,
+                          ))
+                  : LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.cardBorder,
+                      dark: CupertinoColors.separator,
+                    ),
               width: 0.5,
             ),
           ),
@@ -1188,9 +1254,10 @@ class _ModelRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoButton(
+    return _selectionMenuButton(
+      context,
+      selected: selected,
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-      alignment: Alignment.centerLeft,
       onPressed: onTap,
       child: Row(
         children: [
@@ -1200,7 +1267,11 @@ class _ModelRow extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 color: selected
-                    ? CupertinoColors.activeBlue.resolveFrom(context)
+                    ? LightSurfaces.resolve(
+                        context,
+                        statusBlueText.resolveFrom(context),
+                        dark: CupertinoColors.activeBlue,
+                      )
                     : CupertinoColors.label.resolveFrom(context),
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -1211,7 +1282,11 @@ class _ModelRow extends StatelessWidget {
             Icon(
               CupertinoIcons.check_mark,
               size: 16,
-              color: CupertinoColors.activeBlue.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                statusBlueText.resolveFrom(context),
+                dark: CupertinoColors.activeBlue,
+              ),
             ),
         ],
       ),
@@ -1236,9 +1311,10 @@ class _WorkspaceRow extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      child: CupertinoButton(
+      child: _selectionMenuButton(
+        context,
+        selected: selected,
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-        alignment: Alignment.centerLeft,
         onPressed: onTap,
         child: Row(
           children: [
@@ -1248,7 +1324,11 @@ class _WorkspaceRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   color: selected
-                      ? CupertinoColors.activeBlue.resolveFrom(context)
+                      ? LightSurfaces.resolve(
+                          context,
+                          statusBlueText.resolveFrom(context),
+                          dark: CupertinoColors.activeBlue,
+                        )
                       : CupertinoColors.label.resolveFrom(context),
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
@@ -1259,7 +1339,11 @@ class _WorkspaceRow extends StatelessWidget {
               Icon(
                 CupertinoIcons.check_mark,
                 size: 16,
-                color: CupertinoColors.activeBlue.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  statusBlueText.resolveFrom(context),
+                  dark: CupertinoColors.activeBlue,
+                ),
               ),
           ],
         ),
@@ -1285,9 +1369,10 @@ class _ReasoningRow extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      child: CupertinoButton(
+      child: _selectionMenuButton(
+        context,
+        selected: selected,
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-        alignment: Alignment.centerLeft,
         onPressed: onTap,
         child: Row(
           children: [
@@ -1297,7 +1382,11 @@ class _ReasoningRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   color: selected
-                      ? CupertinoColors.activeBlue.resolveFrom(context)
+                      ? LightSurfaces.resolve(
+                          context,
+                          statusBlueText.resolveFrom(context),
+                          dark: CupertinoColors.activeBlue,
+                        )
                       : CupertinoColors.label.resolveFrom(context),
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
@@ -1308,7 +1397,11 @@ class _ReasoningRow extends StatelessWidget {
               Icon(
                 CupertinoIcons.check_mark,
                 size: 16,
-                color: CupertinoColors.activeBlue.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  statusBlueText.resolveFrom(context),
+                  dark: CupertinoColors.activeBlue,
+                ),
               ),
           ],
         ),
@@ -1317,3 +1410,26 @@ class _ReasoningRow extends StatelessWidget {
   }
 }
 
+Widget _selectionMenuButton(
+  BuildContext context, {
+  required bool selected,
+  required EdgeInsetsGeometry padding,
+  required VoidCallback onPressed,
+  required Widget child,
+}) {
+  if (CupertinoTheme.brightnessOf(context) == Brightness.light) {
+    return CupertinoListTile(
+      padding: padding,
+      backgroundColor: selected ? LightSurfaces.selection : LightSurfaces.card,
+      backgroundColorActivated: LightSurfaces.pressed,
+      onTap: onPressed,
+      title: child,
+    );
+  }
+  return CupertinoButton(
+    padding: padding,
+    alignment: Alignment.centerLeft,
+    onPressed: onPressed,
+    child: child,
+  );
+}

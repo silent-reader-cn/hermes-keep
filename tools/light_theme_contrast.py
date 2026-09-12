@@ -286,6 +286,10 @@ def scan_file(path: Path, values: dict[str, Color]) -> tuple[list[Use], list[str
                 # Do not pretend an animation/state-dependent alpha is a constant.
                 note = '运行时 alpha；表中仅列未调制基色，不能据此声明实际帧达标'
         role = role_at(source, match.start(), enclosing, path.as_posix())
+        if path.name == 'chat_media_view.dart' and name == 'CupertinoColors.systemGrey':
+            note = '固定黑底媒体文字；实际组合见 P0/media inverse secondary'
+        if path.name == 'markdown_styles.dart' and name in ('CupertinoColors.systemGrey5', 'CupertinoColors.link'):
+            note = '非聊天共享默认/暗色分支；聊天浅色已显式传入令牌'
         key = name, role, note
         line = original.count('\n', 0, match.start()) + 1
         if key not in uses:
@@ -308,7 +312,8 @@ def token_table(values: dict[str, Color]) -> str:
     page, card, secondary = (values['LightSurfaces.' + name] for name in ('page', 'card', 'textSecondary'))
     lines = ['| token | 不透明 RGB | 对 page | 对 card | 对 textSecondary |',
              '|---|---|---:|---:|---:|']
-    for name in ('page', 'card', 'cardBorder', 'divider', 'textSecondary', 'selection', 'pressed', 'placeholder'):
+    for name in ('page', 'card', 'cardBorder', 'divider', 'textSecondary', 'selection', 'pressed', 'placeholder',
+                 'tintGreen', 'tintWarning', 'tintError', 'tintClarification', 'userDetail'):
         color = values['LightSurfaces.' + name]
         lines.append(f'| {name} | {color.display()} | {ratio_string(color, page)} | {ratio_string(color, card)} | {ratio_string(color, secondary)} |')
     return '\n'.join(lines)
@@ -324,7 +329,7 @@ def location(relative: str, needle: str) -> str:
 
 
 GROUPS = [
-    ('features/chat', 'P0 聊天', '优先处理用户蓝气泡白字及行内代码、流式/注入/工具/审批卡的次级文字，再接入卡片描边。assistant 正文当前直接落在页面底，不应凭空增加一层气泡。`chat_page.dart` 的绿色提示卡、输入栏、上下文浮层和媒体预览需分别核对实际承载面。预计影响聊天页与其 widgets，跨输入/历史/流式/选中文本/审批路径，须保留双主题金照及交互回归。'),
+    ('features/chat', 'P0 聊天', '阶段二已接入局部 page/bar、可读次级文字及状态色、输入框/工具/审批/注入卡/媒体占位轮廓和选中按下面。assistant 正文仍直接落在页面底；共享 Markdown 默认不影响记忆和文件预览。用户主蓝气泡是 Leader 授权保留项；代码、链接、附件和引用局部底单独达 AA。确认弹窗仅调整浅色动作文字，保留 SDK 暗色默认。完整组合与限制见附录 P0。'),
     ('app/shell', 'P1 自适应外壳', '会话侧边栏中的列表已通过页面局部主题接入；侧边栏工具条、拖拽手柄、空态占位与导航仍沿用旧色。工具条 inactive 图标使用半透明 secondaryLabel，空态 tertiaryLabel 是弱装饰图标；可读提示使用相同次级色时不能套用装饰豁免。建议独立处理工具条/导航/空态，影响全部宽屏路由，不在阶段一改全局主题。'),
     ('app/widgets', 'P1 通用导航、菜单和浮层', '白浮层由 systemBackground 承载，separator / systemGrey4 做边框，systemGrey3 透明阴影。菜单副标题 secondaryLabel 与 destructiveRed 小字需处理；先定义可复用的面、正文及危险操作语义，再迁移调用点。预计覆盖所有弹层/菜单/导航入口；默认半透明遮罩和阴影须独立审计，不当成文字色。'),
     ('features/kanban', 'P2 看板', '卡片 secondarySystemBackground 与旧分组页面底同为浅灰，不能形成卡片层级；灰色描边只提供弱轮廓。顶部选中标签为蓝底白字，详情/元数据 secondaryText，failed 状态仍返回 systemRed。建议白卡+轮廓、可读状态文字、选择状态和详情空占位一起迁移；预计涉及看板列/卡片/详情/创建弹层，不涉及 WS 或排序逻辑。'),
@@ -389,16 +394,52 @@ def local_pairs(values: dict[str, Color]) -> list[tuple[str, Color, Color, str, 
     for name in ('statusGreenText', 'statusOrangeText', 'statusBlueText', 'statusGreyText', 'statusTealText', 'statusRedText', 'secondaryText', '_statusDebugText'):
         for bg_name, bg in [('页面', page), ('白卡', white)]:
             add(f'{name}/{bg_name}', v[name], bg, '文字', 'status_colors.dart / diagnostics_models.dart')
-    add('聊天用户气泡/正文', white, blue, '文字', 'chat/widgets/message_bubble.dart + markdown_styles.dart')
+    add('聊天用户气泡/正文', white, blue, '品牌保留', 'chat/widgets/message_bubble.dart + markdown_styles.dart')
     for alpha in (0.22, 0.15, 0.12):
-        add(f'用户气泡/白色代码或引用底 α={alpha}', white, white.alpha(alpha).over(blue), '文字', 'chat/widgets/markdown_styles.dart')
-    add('assistant 代码/引用', black, v['CupertinoColors.systemGrey5'], '文字', 'chat/widgets/markdown_styles.dart')
-    add('绿色提示卡/正文', black, hex_color('F0FAF2'), '文字', 'chat/chat_page.dart bgColor')
-    add('绿色提示卡/装饰勾', v['CupertinoColors.systemGreen'], hex_color('F0FAF2'), '装饰', 'chat/chat_page.dart：已有文字重复语义')
-    add('绿色提示卡/灰色关闭图标', v['CupertinoColors.systemGrey'], hex_color('F0FAF2'), '图标', 'chat/chat_page.dart')
+        add(f'旧方案参考/用户白色代码或引用底 α={alpha}', white, white.alpha(alpha).over(blue), '文字', 'chat/widgets/markdown_styles.dart')
+    add('非聊天共享默认/assistant 代码引用', black, v['CupertinoColors.systemGrey5'], '文字', 'chat/widgets/markdown_styles.dart')
+    add('绿色提示卡/正文', black, v['LightSurfaces.tintGreen'], '文字', 'chat/chat_page.dart bgColor')
+    add('绿色提示卡/装饰勾', v['statusGreenText'], v['LightSurfaces.tintGreen'], '装饰', 'chat/chat_page.dart：已有文字重复语义')
+    add('绿色提示卡/灰色关闭图标', v['LightSurfaces.textSecondary'], v['LightSurfaces.tintGreen'], '图标', 'chat/chat_page.dart')
     for name, alpha in [('systemBlue', 0.1), ('systemRed', 0.1), ('systemIndigo', 0.12)]:
         c = v['CupertinoColors.' + name]
-        add(f'聊天提示条/{name}', c, c.alpha(alpha).over(page), '文字', 'chat/chat_page.dart')
+        add(f'旧方案参考/聊天提示条/{name}', c, c.alpha(alpha).over(page), '文字', 'chat/chat_page.dart')
+    # Phase-two assertions use the actual opaque local surfaces, not a generic white reference.
+    for surface in ('page', 'card', 'selection', 'pressed', 'tintGreen',
+                    'tintWarning', 'tintError', 'tintClarification'):
+        bg = v['LightSurfaces.' + surface]
+        add(f'P0/textSecondary/{surface}', v['LightSurfaces.textSecondary'], bg,
+            '文字', 'chat_page + chat/widgets: metadata, fields, cards, menu selections')
+        add(f'P0/cardBorder/{surface}', v['LightSurfaces.cardBorder'], bg,
+            '装饰', 'chat cards/fields: 0.5-1 logical pixel hairline')
+    for name in ('inline code', 'code block', 'link', 'attachment', 'blockquote'):
+        add(f'P0/user detail/{name}', white, v['LightSurfaces.userDetail'],
+            '文字', 'chat/widgets/markdown_styles.dart + chat_media_view.dart')
+    for fg, bg, name in (
+        ('statusOrangeText', 'tintWarning', 'approval + queued warning'),
+        ('statusOrangeText', 'tintClarification', 'urgent clarification timer'),
+        ('statusGreenText', 'tintGreen', 'success tool/notice'),
+        ('statusRedText', 'tintError', 'failed tool/error banner'),
+        ('statusBlueText', 'selection', 'offline banner/selected menu'),
+        ('statusBlueText', 'page', 'assistant link'),
+        ('statusBlueText', 'card', 'tool name + selected context title'),
+    ):
+        add(f'P0/{name}', v[fg], v['LightSurfaces.' + bg], '文字',
+            'chat_page + chat/widgets: light-only status colors')
+    dialog_backdrop = v['SDK/route.dart#kCupertinoModalBarrierColor'].over(v['LightSurfaces.page'])
+    for state, token in [('normal', '_kDialogColor'), ('pressed', '_kDialogPressedColor')]:
+        bg = v['SDK/dialog.dart#' + token].over(dialog_backdrop)
+        for fg in ('statusBlueText', 'statusRedText'):
+            add(f'P0/dialog {state}/{fg}', v[fg], bg, '文字',
+                'SDK dialog surface over modal scrim + uniform chat page; arbitrary backdrop is not certified')
+    add('P0/clarification title', v['CupertinoColors.systemIndigo'],
+        v['LightSurfaces.tintClarification'], '文字', 'chat/chat_page.dart')
+    add('P0/context warning ring', v['statusOrangeText'], v['LightSurfaces.page'],
+        '图标', 'chat/widgets/context_window_indicator.dart')
+    add('P0/media inverse secondary', v['CupertinoColors.systemGrey'], black,
+        '文字', 'chat/widgets/chat_media_view.dart: fixed black lightbox, unchanged')
+    add('P0/green notice layering', v['LightSurfaces.tintGreen'], v['LightSurfaces.page'],
+        '装饰', 'chat/chat_page.dart: paired with the explicit hairline')
     add('看板选中标签/白字', white, blue, '文字', 'kanban/kanban_page.dart')
     add('看板卡片/secondaryText', v['secondaryText'], v['CupertinoColors.secondarySystemBackground'], '文字', 'kanban/kanban_page.dart')
     add('看板黄色提醒/正文', black, v['CupertinoColors.systemYellow'].alpha(0.2).over(page), '文字', 'kanban/kanban_page.dart')
@@ -433,13 +474,13 @@ def render_report(values: dict[str, Color], flutter: Path) -> str:
     version = json.loads((flutter.parent.parent / 'bin/cache/flutter.version.json').read_text(encoding='utf-8'))
     lines = [
         '# 浅色主题全仓审计 · 2026-09-12', '',
-        '本报告按 TASK.md §1 的方案执行。阶段一仅新增浅色面令牌并改造会话列表的三个展示文件；其余功能页只读。视觉取舍由 Leader 验收。', '',
+        '本报告按 TASK.md §1 的方案执行。阶段一完成令牌层和会话列表；阶段二继续 P0 聊天与 P1 外壳/导航，P2+ 页面保持只读。视觉取舍由 Leader 验收。', '',
         '## 范围与复验方法', '',
         f'- 扫描 `lib/` 全部 **{len(paths)}** 个 Dart 文件，记录 **{color_count}** 个颜色引用/常量/别名透明度使用点。按实际目录补入下载、诊断和内置服务，不沿用旧目录快照假定覆盖。',
         f'- 语义色取自 Flutter **{version["frameworkVersion"]}** / Dart **{version["dartSdkVersion"]}** 的 `packages/flutter/lib/src/cupertino/colors.dart` 普通浅色分支；增强对比度和暗色保留分支另标豁免。',
         '- WCAG：sRGB 通道 `c<=0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`；相对亮度 `0.2126R+0.7152G+0.0722B`；比值 `(L高+0.05)/(L低+0.05)`。先按实际 alpha 在 sRGB 合成，再线性化；中间值不取整，表格保留六位小数。',
         '- 正文 AA 门槛 4.5:1，功能图标/数据图形按 3:1；纯装饰面、边框、投影不套正文 AA。低对比度卡片面仍可存在视觉分层问题，不能用“装饰豁免”宣称已经分层充分。',
-        '- 逐文件表三向列为：该色合成到**页面底 P**、**白卡 C**、**黑色 label L** 后各自的对比度。会话列表 P 用新 page，其他文件 P 用现行全局分组背景。它们是明确的承载面参考值；反色内容和已知彩色组合另列附录，不能拿白字对白卡的参考值误判反色 tooltip。',
+        '- 逐文件表三向列为：该色合成到**页面底 P**、**白卡 C**、**黑色 label L** 后各自的对比度。会话列表与聊天 P 用新 page，其他文件 P 用现行全局分组背景。它们是明确的承载面参考值；反色内容和已知彩色组合另列附录，不能拿白字对白卡的参考值误判反色 tooltip。',
         '- 静态审计列出所有可解析颜色及来源、透明度和组件默认色。运行时透明度/任意图片内容不能由单个基色证明 AA，表中明确保留限制；本轮没有逐页启动所有状态，也不声称全仓视觉验收通过。',
         '- `python tools/light_theme_contrast.py` 输出本报告全文；`--tokens` 复算令牌注释；`--write-report` 生成文件；`--check-report` 校验报告与当前源码/SDK 完全一致。无第三方 Python 依赖。没有 `.dart_tool/package_config.json` 时可传 `--flutter-sdk <SDK根目录>`。', '',
         '## 阶段一结果及保留项', '',
@@ -450,6 +491,14 @@ def render_report(values: dict[str, Color], flutter: Path) -> str:
         '- #EEFFFFFF 与 #B3FFFFFF 的普通浮层面归 card；#1F000000 作为普通浮层边框的调用归 cardBorder，作为投影的调用保留。#F0000000 是反色 tooltip，白字组合见附录，保留其语义。',
         '- 深色 helper 使用原语义色并显式 resolve；历史未 resolve 的灰图标和选中蓝图标保留原实际绘制 ARGB，避免顺手改变深色增强对比度像素。暗色路径无新增按下/选中填色。',
         '- README 截图工装原样调用，通过外部 comparator 重定向到 `C:/tmp/light-theme-shots/before/` 与 `after/`；没有写入 `docs/screenshots/`。该工装的 CupertinoApp 未接 buildCupertinoTheme，改造前页面使用其默认背景；全局主题数值以源码和正式金照为准。', '',
+        '## 阶段二 P0 结果及保留项', '',
+        '- 聊天页局部 page/bar 接 #EBEBF0；动作色 #005FB8，不改全局主题。次级文字、占位符、功能灰图标按各自承载面接令牌。',
+        '- 审批/澄清/错误/绿色提示面固定为不透明 tint，输入框、工具卡、选中上下文、注入卡和媒体占位接白面/描边；模型/工作区/推理选择保留勾选并增加选中、按下面。',
+        f'- 用户主气泡 #007AFF + 白字按 Leader 决定保留（实算 {ratio_string(card, values["CupertinoColors.activeBlue"]) }，未达正文 AA）。白字降透明度或加字重不能达到 4.5:1；代码/链接/附件/引用的局部底 #005FB8 与白字为 {ratio_string(card, values["LightSurfaces.userDetail"])}。主气泡后续可选 #006FE8（白字 {ratio_string(card, hex_color("006FE8"))}），待 Leader 裁决，未实施。',
+        '- assistant Markdown 新样式由聊天调用点 useLightSurfaces 显式启用；记忆页和文件预览的共享默认保持不变。普通用户消息仍为原纯文本渲染，未改动 Markdown 触发条件。',
+        '- 暗色语义色保留原 resolve；历史未解析图标保留原实际 ARGB。固定黑底媒体、Mermaid 深底配置、重复文字语义的状态圆点及装饰轨线保留且显式标注用途。',
+        '- 本阶段截图目录 `C:/tmp/light-theme-shots-p2/before/`、`after/`；P0 单区留证另存 `after-p0/`。P0 验收：analyze 零告警，test 2710 passed / 8 skipped；13 张既有暗色金照、7 张 README 暗色截图和 24 张暗色状态图共 44/44 SHA256 一致。证据在 `after-p0-verification.json`，docs/screenshots 的 7 张原图未写入。',
+        '- README 演示数据固定在 2026-09-12，原工装的分组时钟却读取系统日期；跨午夜后出现今天/昨天漂移。临时工装仅补 sessionListNowProvider 固定为演示日期，重录后与原始改码前暗色 PNG 字节一致；生产代码和原工装均未修改。', '',
         '## 阶段二优先级', '',
         '| 顺序 | 改法建议 | 预估影响面 |', '|---|---|---|',
         '| P0 聊天 | 蓝气泡白字/代码、可读次级文字、提示卡与工具卡轮廓 | chat_page + chat/widgets，历史/流式/输入/审批/媒体 |',
@@ -459,7 +508,7 @@ def render_report(values: dict[str, Color], flutter: Path) -> str:
         '| P4 引导 | 表单/步骤/日志优先，hero 装饰独立评估 | onboarding 宽/窄屏、连接及安装向导 |',
         '| 后续配套 | 按共用令牌修元数据与表单，预览反色 UI 单独验收 | 工作区、Git、技能、记忆、任务、下载、诊断、通知、项目、提示词库 |', '',
         '## 硬编码定位与代码可判定的发现', '',
-        f'- {location("features/chat/chat_page.dart", "0xFFF0FAF2")}：绿色提示/澄清回答卡硬编码浅绿面；主文字 label 可读，但与页面底分层弱，绿色勾与弱灰关闭图标须分别按装饰/操作语义核对，不能统归白卡。',
+        f'- {location("features/chat/chat_page.dart", "LightSurfaces.tintGreen")}：绿色提示卡已接 tintGreen + cardBorder；正文、状态图标和关闭图标的实际组合见附录 P0。暗色 #2C2C2E 及原描边、投影保留。',
         f'- {location("features/onboarding/widgets/onboarding_hero_motion.dart", "0xFFE5E5EA")}：品牌图标承载面；halo 的透明渐变、轨道线在同文件 _HaloPainter 中，属无交互装饰，按设计保留/后续整体评估。',
         f'- {location("features/chat/widgets/mermaid_block.dart", "0xffffffff")}：`core.Color` 是 Mermaid 深色 theme 的 primaryText/text/title 配置，不是浅色 Flutter 卡片面，归配置豁免。',
         '- 旧 secondaryText/secondaryLabel 实际浅色是 #3C3C43/153，不符合旧注释所述正文 AA；参见附录的逐背景实算。tertiaryLabel/placeholderText 更浅；输入占位属于可读信息，不能因为名字含 tertiary 就豁免。',
@@ -492,7 +541,7 @@ def render_report(values: dict[str, Color], flutter: Path) -> str:
             if not uses:
                 lines.extend(['无额外显式颜色，继承上表语义。', ''])
                 continue
-            page = new_page if group == 'features/session_list' else old_page
+            page = new_page if group in ('features/session_list', 'features/chat') else old_page
             lines.extend([f'参考页面 P={page.display()}；C=#FFFFFF；L=#000000。', '',
                           '| 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |',
                           '|---|---|---|---:|---:|---:|---|'])
@@ -515,6 +564,8 @@ def render_report(values: dict[str, Color], flutter: Path) -> str:
         threshold = 3 if role in ('图标', '图形') else 4.5
         result = ('装饰豁免' if role in ('装饰', '配置豁免')
                   else f'{"非文本" if threshold == 3 else "正文 AA"} {"达" if ratio >= threshold else "不达标"}')
+        if role == '品牌保留':
+            result = '正文 AA 不达标；Leader 指定保留主气泡'
         if role == '配置豁免':
             result = '深色图表配置豁免'
         lines.append(f'| {name} · `{source}` | {fg.display()} | {bg.display()} | {ratio_string(bg, old_page)} | {ratio_string(fg, old_page)} | {ratio:.6f} | {result} |')
@@ -552,6 +603,11 @@ def main() -> None:
         REPORT.write_bytes(report.encode('utf-8'))
         print(f'Wrote {REPORT} ({len(report.splitlines())} lines)')
     elif args.check_report:
+        for name, fg, bg, role, _ in local_pairs(values):
+            if name.startswith(('P0/', 'P1/')) and role not in ('装饰', '配置豁免'):
+                limit = 3 if role in ('图标', '图形') else 4.5
+                if contrast(fg, bg) < limit:
+                    raise SystemExit(f'FAIL: {name}: {contrast(fg, bg):.6f} < {limit}')
         if REPORT.read_text(encoding='utf-8') != report:
             raise SystemExit('Report differs from current source/SDK. Re-run --write-report.')
         print(f'PASS: all report text, source locations and ratios reproduced ({len(report.splitlines())} lines).')

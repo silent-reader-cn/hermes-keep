@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../core/models/context_window_snapshot.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -39,10 +41,12 @@ class ContextWindowIndicator extends StatelessWidget {
         : (percentage * 100).round().clamp(0, 100);
     // 无百分比时显示 '·'（WebUI hasPromptTok?String(pct):'·'），与百分比同样式。
     final label = pct != null ? '$pct' : '·';
-    final brightness = CupertinoTheme.of(context).brightness ??
+    final brightness =
+        CupertinoTheme.of(context).brightness ??
         MediaQuery.platformBrightnessOf(context);
     final isDark = brightness == Brightness.dark;
     // track 对齐 WebUI：light rgba(0,0,0,0.12) / dark rgba(255,255,255,0.12)
+    // Decorative empty track; the progress arc and percentage carry the value.
     final trackColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.12)
         : CupertinoColors.black.withValues(alpha: 0.12);
@@ -53,9 +57,17 @@ class ContextWindowIndicator extends StatelessWidget {
     if (pct == null) {
       progressColor = neutralProgress;
     } else if (pct > 75) {
-      progressColor = CupertinoColors.systemRed.resolveFrom(context);
+      progressColor = LightSurfaces.resolve(
+        context,
+        statusRedText.resolveFrom(context),
+        dark: CupertinoColors.systemRed,
+      );
     } else if (pct > 50) {
-      progressColor = CupertinoColors.systemOrange.resolveFrom(context);
+      progressColor = LightSurfaces.resolve(
+        context,
+        statusOrangeText.resolveFrom(context),
+        dark: CupertinoColors.systemOrange,
+      );
     } else {
       progressColor = neutralProgress;
     }
@@ -63,7 +75,11 @@ class ContextWindowIndicator extends StatelessWidget {
     final hasPct = pct != null;
     final textColor = hasPct
         ? CupertinoColors.label.resolveFrom(context)
-        : CupertinoColors.secondaryLabel.resolveFrom(context);
+        : LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: CupertinoColors.secondaryLabel,
+          );
     final l10n = AppLocalizations.of(context);
 
     final ring = SizedBox(

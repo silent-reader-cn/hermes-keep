@@ -16,7 +16,7 @@
 
 import 'package:flutter/cupertino.dart';
 
-/// 阶段一浅色面与文字令牌；深色由调用方传入原有颜色，逐字节保留。
+/// 浅色面与文字令牌；深色由调用方传入原有颜色，逐字节保留。
 abstract final class LightSurfaces {
   /// 页面与会话侧边栏列表区的分组背景。
   static const Color page = Color(0xFFEBEBF0);
@@ -41,6 +41,22 @@ abstract final class LightSurfaces {
 
   /// 会话行按下面，与白色静止行形成可见差异。
   static const Color pressed = page;
+
+  /// Success notices and clarification answers; secondary text 5.036250:1.
+  static const Color tintGreen = Color(0xFFF0FAF2);
+
+  /// Approval/warning surface; statusOrangeText 4.790918:1.
+  static const Color tintWarning = Color(0xFFFFF4E8);
+
+  /// Error surface; keeps the status label independent of the page beneath.
+  static const Color tintError = Color(0xFFFFF4F3);
+
+  /// Clarification surface; secondary text 4.855495:1.
+  static const Color tintClarification = Color(0xFFF3F2FF);
+
+  /// Local code/link/attachment surface inside the unchanged brand-blue bubble.
+  /// White content reaches 6.308159:1; the main bubble stays #007AFF.
+  static const Color userDetail = Color(0xFF005FB8);
 
   /// 浅色使用固定 [light]，深色显式解析调用点原有的 [dark] 语义色。
   ///

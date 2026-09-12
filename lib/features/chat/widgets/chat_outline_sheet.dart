@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../chat_providers.dart';
 
 /// 聊天大纲悬浮面板（active.md §7：标题栏点击展开用户轮次列表）。
@@ -111,10 +113,12 @@ class _ChatOutlineOverlay extends ConsumerWidget {
     // 垂直：向下，从锚点底部 + gapBelow 处开始。
     final downTop = anchorRect.bottom + _gapBelow;
     final downAvail = math.max(0.0, screenHeight - downTop - safeBottom);
-    final menuHeight = math.max(
-      math.min(estimatedHeight, downAvail),
-      46.0, // 保底：至少一行高
-    ).clamp(0.0, _maxHeight);
+    final menuHeight = math
+        .max(
+          math.min(estimatedHeight, downAvail),
+          46.0, // 保底：至少一行高
+        )
+        .clamp(0.0, _maxHeight);
 
     return SizedBox.expand(
       child: Stack(
@@ -171,10 +175,18 @@ class _OutlineCard extends ConsumerWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemBackground.resolveFrom(context),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.card,
+          dark: CupertinoColors.secondarySystemBackground,
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.divider,
+            dark: CupertinoColors.separator,
+          ),
           width: 0.5,
         ),
         boxShadow: [
@@ -197,7 +209,11 @@ class _OutlineCard extends ConsumerWidget {
                 if (i > 0)
                   Container(
                     height: 0.5,
-                    color: CupertinoColors.separator.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.divider,
+                      dark: CupertinoColors.separator,
+                    ),
                     margin: const EdgeInsets.only(left: 46),
                   ),
                 _OutlineRow(
@@ -231,9 +247,14 @@ class _OutlineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeBlue = CupertinoColors.activeBlue.resolveFrom(context);
-    final labelColor =
-        selected ? activeBlue : CupertinoColors.label.resolveFrom(context);
+    final activeBlue = LightSurfaces.resolve(
+      context,
+      statusBlueText.resolveFrom(context),
+      dark: CupertinoColors.activeBlue,
+    );
+    final labelColor = selected
+        ? activeBlue
+        : CupertinoColors.label.resolveFrom(context);
 
     return CupertinoButton(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
@@ -248,7 +269,11 @@ class _OutlineRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: selected
                   ? activeBlue.withValues(alpha: 0.15)
-                  : CupertinoColors.systemGrey5.resolveFrom(context),
+                  : LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.page,
+                      dark: CupertinoColors.systemGrey5,
+                    ),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -259,7 +284,11 @@ class _OutlineRow extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: selected
                       ? activeBlue
-                      : CupertinoColors.secondaryLabel.resolveFrom(context),
+                      : LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: CupertinoColors.secondaryLabel,
+                        ),
                 ),
               ),
             ),
@@ -273,8 +302,7 @@ class _OutlineRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight:
-                    selected ? FontWeight.w600 : FontWeight.w400,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 color: labelColor,
               ),
             ),
@@ -282,11 +310,7 @@ class _OutlineRow extends StatelessWidget {
           // 当前轮次指示点
           if (selected) ...[
             const SizedBox(width: 6),
-            Icon(
-              CupertinoIcons.circle_fill,
-              size: 7,
-              color: activeBlue,
-            ),
+            Icon(CupertinoIcons.circle_fill, size: 7, color: activeBlue),
           ],
         ],
       ),

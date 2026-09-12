@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show SelectableText;
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/utils/injected_message.dart';
 import '../../../l10n/app_localizations.dart';
@@ -29,12 +30,27 @@ class InjectedNoticeCard extends StatelessWidget {
     final summary = InjectedMessage.extractSummary(message, l10n);
     final kind = InjectedMessage.classify(message);
 
-    final separator = CupertinoColors.separator.resolveFrom(context);
-    final bg = CupertinoColors.secondarySystemBackground.resolveFrom(context);
+    final separator = LightSurfaces.resolve(
+      context,
+      LightSurfaces.cardBorder,
+      dark: CupertinoColors.separator,
+    );
+    final bg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.card,
+      dark: CupertinoColors.secondarySystemBackground,
+    );
     final labelColor = CupertinoColors.label.resolveFrom(context);
-    final secondaryLabel =
-        CupertinoColors.secondaryLabel.resolveFrom(context);
-    final codeBg = CupertinoColors.systemGrey6.resolveFrom(context);
+    final secondaryLabel = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
+    final codeBg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.page,
+      dark: CupertinoColors.systemGrey6,
+    );
 
     return Semantics(
       button: true,
@@ -86,8 +102,10 @@ class InjectedNoticeCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: codeBg,
                       border: Border.all(color: separator),

@@ -4,21 +4,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../chat/chat_providers.dart';
-import '../../chat/chat_draft_provider.dart';
-import '../../chat/chat_state.dart';
-import '../../chat/pending_attachments_provider.dart';
-import '../../chat/selection_provider.dart';
-import '../../chat/widgets/attachment_pending_bar.dart';
-import '../../chat/widgets/context_window_indicator.dart';
-import '../../chat/widgets/context_window_popover.dart';
-import '../../chat/widgets/selection_chips.dart';
 import '../../../app/shell/adaptive_shell.dart';
+import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/cupertino_popover.dart';
 import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
+import '../../../core/models/context_window_snapshot.dart';
 import '../../../core/models/upload_response.dart';
 import '../../../core/providers/clipboard_paste_provider.dart';
 import '../../../core/providers/file_picker_provider.dart';
@@ -26,13 +19,21 @@ import '../../../core/utils/accessibility.dart';
 import '../../../core/utils/clipboard_paste.dart';
 import '../../../core/utils/file_picker.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../chat/chat_draft_provider.dart';
+import '../../chat/chat_providers.dart';
+import '../../chat/chat_state.dart';
+import '../../chat/pending_attachments_provider.dart';
+import '../../chat/selection_provider.dart';
+import '../../chat/widgets/attachment_pending_bar.dart';
+import '../../chat/widgets/context_window_indicator.dart';
+import '../../chat/widgets/context_window_popover.dart';
+import '../../chat/widgets/perf_monitor_panel.dart';
+import '../../chat/widgets/selection_chips.dart';
+import '../../desktop/desktop_settings.dart';
 import '../../prompts/widgets/saved_prompts_sheet.dart';
 import '../../settings/chat_send_shortcut_settings.dart';
 import '../../settings/composer_settings.dart';
 import '../../settings/settings_providers.dart';
-import '../../chat/widgets/perf_monitor_panel.dart';
-import '../../desktop/desktop_settings.dart';
-import '../../../core/models/context_window_snapshot.dart';
 
 /// 触发附件/图片粘贴意图（快捷键或右键菜单触发）。
 class PasteAttachmentIntent extends Intent {
@@ -258,12 +259,18 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     // await 前一次性捕获全部 notifier（均无 autoDispose，随容器常驻）：
     // 发送途中切会话/退页导致本 widget dispose 后，`ref` 即不可再用
     // （platform_error: Cannot use "ref" after the widget was disposed）。
-    final controller = ref.read(chatControllerProvider(widget.sessionId).notifier);
+    final controller = ref.read(
+      chatControllerProvider(widget.sessionId).notifier,
+    );
     final selectionsRepo = repo;
-    final attachmentsRepo =
-        ref.read(pendingAttachmentsProvider(widget.sessionId).notifier);
+    final attachmentsRepo = ref.read(
+      pendingAttachmentsProvider(widget.sessionId).notifier,
+    );
     final draftRepo = ref.read(chatDraftProvider(widget.sessionId).notifier);
-    final sent = await controller.send(message, attachments: pendingAttachments);
+    final sent = await controller.send(
+      message,
+      attachments: pendingAttachments,
+    );
     if (sent) {
       if (extra != raw) {
         selectionsRepo.clear();
@@ -488,6 +495,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         ),
         actions: [
           CupertinoDialogAction(
+            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.userDetail)
+                : null,
             onPressed: () => Navigator.of(context).pop(),
             child: Text(l10n.ok),
           ),
@@ -515,10 +525,16 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         content: Text(l10n.stopGeneratingConfirmPrompt),
         actions: [
           CupertinoDialogAction(
+            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.userDetail)
+                : null,
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: Text(l10n.cancel),
           ),
           CupertinoDialogAction(
+            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? TextStyle(color: statusRedText.resolveFrom(context))
+                : null,
             isDestructiveAction: true,
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(l10n.stopGenerating),
@@ -569,7 +585,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             ),
             Container(
               height: 0.5,
-              color: CupertinoColors.separator.resolveFrom(popoverContext),
+              color: LightSurfaces.resolve(
+                popoverContext,
+                LightSurfaces.divider,
+                dark: CupertinoColors.separator,
+              ),
             ),
             SavedPromptsPanel(
               onInsert: _insertPromptText,
@@ -657,7 +677,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           decoration: BoxDecoration(
             border: Border(
               top: BorderSide(
-                color: CupertinoColors.systemGrey4.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.divider,
+                  dark: CupertinoColors.systemGrey4,
+                ),
                 width: 0.5,
               ),
             ),
@@ -687,10 +711,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                         padding: EdgeInsets.zero,
                         child: _uploading
                             ? const CupertinoActivityIndicator()
-                            : const Icon(
+                            : Icon(
                                 CupertinoIcons.plus_circle,
                                 size: 22,
-                                color: CupertinoColors.systemGrey,
+                                color: LightSurfaces.resolve(
+                                  context,
+                                  LightSurfaces.textSecondary,
+                                  dark: const Color(0xFF8E8E93),
+                                ),
                               ),
                       ),
                       Container(
@@ -702,10 +730,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                               ? null
                               : _showSavedPromptsSheet,
                           padding: EdgeInsets.zero,
-                          child: const Icon(
+                          child: Icon(
                             CupertinoIcons.bookmark,
                             size: 22,
-                            color: CupertinoColors.systemGrey,
+                            color: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.textSecondary,
+                              dark: const Color(0xFF8E8E93),
+                            ),
                           ),
                         ),
                       ),
@@ -765,6 +797,27 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                             },
                             child: CupertinoTextField(
                               key: const ValueKey('chat-input-field'),
+                              decoration:
+                                  CupertinoTheme.brightnessOf(context) ==
+                                      Brightness.light
+                                  ? BoxDecoration(
+                                      color: LightSurfaces.card,
+                                      border: Border.all(
+                                        color: LightSurfaces.cardBorder,
+                                        width: 0.5,
+                                      ),
+                                      borderRadius: BorderRadius.circular(5),
+                                    )
+                                  : const CupertinoTextField().decoration,
+                              placeholderStyle:
+                                  CupertinoTheme.brightnessOf(context) ==
+                                      Brightness.light
+                                  ? const TextStyle(
+                                      fontWeight: FontWeight.w400,
+                                      color: LightSurfaces.placeholder,
+                                    )
+                                  : const CupertinoTextField().placeholderStyle,
+
                               controller: _textController,
                               placeholder: !interactive
                                   ? l10n.readOnlySessionPlaceholder
@@ -821,12 +874,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                                 // 豁口一修复：
                                 // 1. ctrlEnter 模式：发送只走 Shortcuts 通道（Ctrl+Enter/Cmd+Enter），
                                 //    onSubmitted 绝不提交（桌面 IME/done 动作不发，裸 Enter 交引擎默认换行）。
-                                if (sendMode == ChatSendShortcutMode.ctrlEnter) {
+                                if (sendMode ==
+                                    ChatSendShortcutMode.ctrlEnter) {
                                   return;
                                 }
                                 // 2. enter 模式防双发：Ctrl+Enter/Cmd+Enter 同样走 Shortcuts 通道（SendMessageIntent），
                                 //    若修饰键按下则跳过，交给 Shortcuts 处理；裸 Enter 照常提交。
-                                if (HardwareKeyboard.instance.isControlPressed ||
+                                if (HardwareKeyboard
+                                        .instance
+                                        .isControlPressed ||
                                     HardwareKeyboard.instance.isMetaPressed) {
                                   return;
                                 }
@@ -965,6 +1021,25 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             },
             child: CupertinoTextField(
               key: const ValueKey('chat-input-field'),
+              decoration:
+                  CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? BoxDecoration(
+                      color: LightSurfaces.card,
+                      border: Border.all(
+                        color: LightSurfaces.cardBorder,
+                        width: 0.5,
+                      ),
+                      borderRadius: BorderRadius.circular(5),
+                    )
+                  : const CupertinoTextField().decoration,
+              placeholderStyle:
+                  CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? const TextStyle(
+                      fontWeight: FontWeight.w400,
+                      color: LightSurfaces.placeholder,
+                    )
+                  : const CupertinoTextField().placeholderStyle,
+
               controller: _textController,
               placeholder: !interactive
                   ? l10n.readOnlySessionPlaceholder
@@ -1022,10 +1097,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               padding: EdgeInsets.zero,
               child: _uploading
                   ? const CupertinoActivityIndicator()
-                  : const Icon(
+                  : Icon(
                       CupertinoIcons.plus_circle,
                       size: 22,
-                      color: CupertinoColors.systemGrey,
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: const Color(0xFF8E8E93),
+                      ),
                     ),
             ),
             Container(
@@ -1037,10 +1116,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     ? null
                     : _showSavedPromptsSheet,
                 padding: EdgeInsets.zero,
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.bookmark,
                   size: 22,
-                  color: CupertinoColors.systemGrey,
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: const Color(0xFF8E8E93),
+                  ),
                 ),
               ),
             ),

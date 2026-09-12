@@ -3,13 +3,14 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/cupertino_theme.dart' show kAppFontFamily;
+import '../../../app/theme/light_surfaces.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../core/models/tool_call.dart';
 import '../../../core/utils/injected_message.dart';
-import '../../chat/chat_models.dart';
 import '../../../core/utils/selected_context.dart';
+import '../../chat/chat_models.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
 import 'injected_notice_card.dart';
@@ -358,10 +359,14 @@ class _AssistantContent extends StatelessWidget {
           MarkdownBody(
             data: parsedContent,
             selectable: true,
-            styleSheet: buildAssistantMarkdownStyleSheet(context),
+            styleSheet: buildAssistantMarkdownStyleSheet(
+              context,
+              useLightSurfaces: true,
+            ),
             // #91 图片块级化：imageBuilder 同源注入 builders（img 独立成块）。
             builders: createAssistantMarkdownBuilders(
               context,
+              useLightSurfaces: true,
               imageBuilder: (uri, title, alt) {
                 return ChatInlineMediaWidget(
                   rawUri: uri.toString(),
@@ -426,7 +431,11 @@ class _AssistantContent extends StatelessWidget {
               metaSpans.join(' · '),
               style: TextStyle(
                 fontSize: 11,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
+                ),
               ),
             ),
           ],
@@ -500,7 +509,14 @@ class _NoticeCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: CupertinoColors.systemGrey6.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.card,
+                  dark: CupertinoColors.systemGrey6,
+                ),
+                border: CupertinoTheme.brightnessOf(context) == Brightness.light
+                    ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+                    : null,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
