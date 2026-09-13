@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_page_route.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/auxiliary_model.dart';
 import '../../l10n/app_localizations.dart';
 import 'settings_providers.dart';
-import '../../app/widgets/hermes_page_route.dart';
+import 'settings_surfaces.dart';
 
 /// 辅助模型分组（`_AuxiliaryModelsSection`，key: `settings-auxiliary-section`）。
 ///
@@ -22,56 +24,71 @@ class AuxiliaryModelsSection extends ConsumerWidget {
     final auxAsync = ref.watch(auxiliaryModelsControllerProvider);
 
     return auxAsync.when(
-      loading: () => CupertinoListSection(
-        key: const ValueKey('settings-auxiliary-section'),
-        header: Text(l10n.auxiliaryModelsSection),
-        children: [
-          CupertinoListTile(
-            title: Text(l10n.loadingAuxiliaryModels),
-            trailing: const CupertinoActivityIndicator(),
-          ),
-        ],
-      ),
-      error: (error, _) => CupertinoListSection(
-        key: const ValueKey('settings-auxiliary-section'),
-        header: Text(l10n.auxiliaryModelsSection),
-        children: [
-          CupertinoListTile(
-            title: Text(l10n.auxiliaryModelsLoadFailed),
-            subtitle: Text(_describeError(context, error)),
-          ),
-          CupertinoListTile(
-            key: const ValueKey('settings-aux-retry'),
-            title: Text(l10n.retry),
-            trailing: const Icon(CupertinoIcons.refresh),
-            onTap: () => unawaited(
-              ref.read(auxiliaryModelsControllerProvider.notifier).refresh(),
-            ),
-          ),
-        ],
-      ),
-      data: (state) => CupertinoListSection(
-        key: const ValueKey('settings-auxiliary-section'),
-        header: Text(l10n.auxiliaryModelsSection),
-        children: [
-          CupertinoListTile(
-            key: const ValueKey('settings-aux-reset'),
-            leading: const Icon(CupertinoIcons.arrow_counterclockwise),
-            title: Text(l10n.resetAuxiliary),
-            onTap: () => unawaited(_confirmResetAll(context, ref)),
-          ),
-          if (state.main.model.isNotEmpty)
+      loading: () => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          key: const ValueKey('settings-auxiliary-section'),
+          header: Text(l10n.auxiliaryModelsSection),
+          children: [
             CupertinoListTile(
-              key: const ValueKey('aux-main-model-info'),
-              title: Text(l10n.auxMainModel),
-              subtitle: Text(
-                '${state.main.provider.isNotEmpty ? state.main.provider : l10n.auto} / ${state.main.model}',
-                style: TextStyle(color: secondaryText.resolveFrom(context)),
+              title: Text(l10n.loadingAuxiliaryModels),
+              trailing: const CupertinoActivityIndicator(),
+            ),
+          ],
+        ),
+      ),
+      error: (error, _) => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          key: const ValueKey('settings-auxiliary-section'),
+          header: Text(l10n.auxiliaryModelsSection),
+          children: [
+            CupertinoListTile(
+              title: Text(l10n.auxiliaryModelsLoadFailed),
+              subtitle: Text(_describeError(context, error)),
+            ),
+            CupertinoListTile(
+              key: const ValueKey('settings-aux-retry'),
+              title: Text(l10n.retry),
+              trailing: const Icon(CupertinoIcons.refresh),
+              onTap: () => unawaited(
+                ref.read(auxiliaryModelsControllerProvider.notifier).refresh(),
               ),
             ),
-          for (final taskRow in state.tasks)
-            _buildTaskRow(context, ref, taskRow),
-        ],
+          ],
+        ),
+      ),
+      data: (state) => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          key: const ValueKey('settings-auxiliary-section'),
+          header: Text(l10n.auxiliaryModelsSection),
+          children: [
+            CupertinoListTile(
+              key: const ValueKey('settings-aux-reset'),
+              leading: const Icon(CupertinoIcons.arrow_counterclockwise),
+              title: Text(l10n.resetAuxiliary),
+              onTap: () => unawaited(_confirmResetAll(context, ref)),
+            ),
+            if (state.main.model.isNotEmpty)
+              CupertinoListTile(
+                key: const ValueKey('aux-main-model-info'),
+                title: Text(l10n.auxMainModel),
+                subtitle: Text(
+                  '${state.main.provider.isNotEmpty ? state.main.provider : l10n.auto} / ${state.main.model}',
+                  style: TextStyle(
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: secondaryText,
+                    ),
+                  ),
+                ),
+              ),
+            for (final taskRow in state.tasks)
+              _buildTaskRow(context, ref, taskRow),
+          ],
+        ),
       ),
     );
   }
@@ -82,8 +99,9 @@ class AuxiliaryModelsSection extends ConsumerWidget {
     AuxiliaryTaskRow taskRow,
   ) {
     final l10n = AppLocalizations.of(context);
-    final displayLabel =
-        taskRow.label.isNotEmpty ? taskRow.label : taskRow.task;
+    final displayLabel = taskRow.label.isNotEmpty
+        ? taskRow.label
+        : taskRow.task;
     final isAuto = taskRow.provider == 'auto' || taskRow.provider.isEmpty;
     final modelSubtitle = isAuto
         ? l10n.auto
@@ -94,29 +112,31 @@ class AuxiliaryModelsSection extends ConsumerWidget {
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Flexible(
-            child: Text(
-              displayLabel,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+          Flexible(child: Text(displayLabel, overflow: TextOverflow.ellipsis)),
           if (taskRow.apiKeySet) ...[
             const SizedBox(width: 6),
-            const Text(
-              '🔑',
-              style: TextStyle(fontSize: 12),
-            ),
+            const Text('🔑', style: TextStyle(fontSize: 12)),
           ],
         ],
       ),
       subtitle: Text(
         modelSubtitle,
-        style: TextStyle(color: secondaryText.resolveFrom(context)),
+        style: TextStyle(
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          ),
+        ),
       ),
-      trailing: const Icon(
+      trailing: Icon(
         CupertinoIcons.chevron_right,
         size: 16,
-        color: CupertinoColors.systemGrey,
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.textSecondary,
+          dark: const Color(0xFF8E8E93),
+        ),
       ),
       onTap: () => unawaited(_openAuxTaskPicker(context, ref, taskRow)),
     );
@@ -127,28 +147,31 @@ class AuxiliaryModelsSection extends ConsumerWidget {
 
     return showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.resetAuxiliary),
-        content: Text(l10n.confirmResetAuxiliary),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            key: const ValueKey('settings-aux-reset-confirm'),
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              unawaited(
-                ref
-                    .read(auxiliaryModelsControllerProvider.notifier)
-                    .resetAllToAuto(),
-              );
-            },
-            child: Text(l10n.resetAuxiliary),
-          ),
-        ],
+      builder: (dialogContext) => SettingsSurfaces.dialog(
+        context,
+        CupertinoAlertDialog(
+          title: Text(l10n.resetAuxiliary),
+          content: Text(l10n.confirmResetAuxiliary),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.cancel),
+            ),
+            CupertinoDialogAction(
+              key: const ValueKey('settings-aux-reset-confirm'),
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(
+                  ref
+                      .read(auxiliaryModelsControllerProvider.notifier)
+                      .resetAllToAuto(),
+                );
+              },
+              child: Text(l10n.resetAuxiliary),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -183,55 +206,80 @@ class AuxTaskPickerPage extends ConsumerWidget {
     final isAutoSelected =
         taskRow.provider == 'auto' || taskRow.provider.isEmpty;
 
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const _PopBackButton(),
-        middle: Text(displayTitle),
-      ),
-      child: SafeArea(
-        child: ListView(
-          children: [
-            CupertinoListSection(
-              header: Text(l10n.auto),
-              children: [
-                CupertinoListTile(
-                  key: const ValueKey('aux-model-option-auto'),
-                  title: Text(l10n.auto),
-                  subtitle: Text(
-                    'auto',
-                    style: TextStyle(color: secondaryText.resolveFrom(context)),
-                  ),
-                  trailing: isAutoSelected
-                      ? const Icon(CupertinoIcons.checkmark)
-                      : null,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    unawaited(
-                      ref
-                          .read(auxiliaryModelsControllerProvider.notifier)
-                          .setAuxiliaryModel(
-                            task: taskRow.task,
-                            provider: 'auto',
-                            model: '',
-                          ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            if (groups.isNotEmpty)
-              for (final group in groups)
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const _PopBackButton(),
+          middle: Text(displayTitle),
+        ),
+        child: SafeArea(
+          child: ListView(
+            children: [
+              SettingsSurfaces.section(
+                context,
                 CupertinoListSection(
-                  header: Text(group.name),
+                  header: Text(l10n.auto),
                   children: [
-                    for (final model in [
-                      ...group.models,
-                      ...group.extraModels,
-                    ])
-                      _buildModelOptionTile(context, ref, group.providerID ?? '', model),
+                    CupertinoListTile(
+                      key: const ValueKey('aux-model-option-auto'),
+                      backgroundColor: SettingsSurfaces.selection(
+                        context,
+                        isAutoSelected,
+                      ),
+                      title: Text(l10n.auto),
+                      subtitle: Text(
+                        'auto',
+                        style: TextStyle(
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: secondaryText,
+                          ),
+                        ),
+                      ),
+                      trailing: isAutoSelected
+                          ? const Icon(CupertinoIcons.checkmark)
+                          : null,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        unawaited(
+                          ref
+                              .read(auxiliaryModelsControllerProvider.notifier)
+                              .setAuxiliaryModel(
+                                task: taskRow.task,
+                                provider: 'auto',
+                                model: '',
+                              ),
+                        );
+                      },
+                    ),
                   ],
                 ),
-          ],
+              ),
+              if (groups.isNotEmpty)
+                for (final group in groups)
+                  SettingsSurfaces.section(
+                    context,
+                    CupertinoListSection(
+                      header: Text(group.name),
+                      children: [
+                        for (final model in [
+                          ...group.models,
+                          ...group.extraModels,
+                        ])
+                          _buildModelOptionTile(
+                            context,
+                            ref,
+                            group.providerID ?? '',
+                            model,
+                          ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
         ),
       ),
     );
@@ -250,10 +298,17 @@ class AuxTaskPickerPage extends ConsumerWidget {
 
     return CupertinoListTile(
       key: ValueKey('aux-model-option-$modelId'),
+      backgroundColor: SettingsSurfaces.selection(context, isSelected),
       title: Text(displayName),
       subtitle: Text(
         providerId,
-        style: TextStyle(color: secondaryText.resolveFrom(context)),
+        style: TextStyle(
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          ),
+        ),
       ),
       trailing: isSelected ? const Icon(CupertinoIcons.checkmark) : null,
       onTap: () {

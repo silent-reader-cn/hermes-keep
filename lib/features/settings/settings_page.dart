@@ -4,9 +4,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/locale/locale_provider.dart';
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/hermes_page_route.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_server_panels.dart';
 import '../../core/api/api_exception.dart';
@@ -14,6 +16,8 @@ import '../../core/api/custom_header.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../core/models/server_catalog.dart';
+import '../../core/update/update_checker_service.dart';
+import '../../core/update/update_providers.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
@@ -33,11 +37,9 @@ import 'injected_notice_settings.dart';
 import 'perf_monitor_settings.dart';
 import 'settings_providers.dart';
 import 'settings_subpages.dart';
+import 'settings_surfaces.dart';
 import 'smooth_streaming_settings.dart';
 import 'tool_group_settings.dart';
-import '../../app/widgets/hermes_page_route.dart';
-import '../../core/update/update_checker_service.dart';
-import '../../core/update/update_providers.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
@@ -74,26 +76,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
-      child: CustomScrollView(
-        key: const ValueKey('settings-scroll'),
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          AdaptiveSliverNavigationBar(
-            title: l10n.settingsTitle,
-            leading: const AppBackButton(),
-            onTitleDoubleTap: _scrollToTop,
-          ),
-          const SliverToBoxAdapter(child: _AppearanceSection()),
-          const SliverToBoxAdapter(child: _ChatSection()),
-          const SliverToBoxAdapter(child: _ServerSection()),
-          const SliverToBoxAdapter(child: _ModelSection()),
-          const SliverToBoxAdapter(child: _CronSection()),
-          const SliverToBoxAdapter(child: _NotificationSection()),
-          const SliverToBoxAdapter(child: _AdvancedSettingsSection()),
-          const SliverToBoxAdapter(child: _AboutSection()),
-        ],
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        child: CustomScrollView(
+          key: const ValueKey('settings-scroll'),
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            AdaptiveSliverNavigationBar(
+              title: l10n.settingsTitle,
+              leading: const AppBackButton(),
+              onTitleDoubleTap: _scrollToTop,
+            ),
+            const SliverToBoxAdapter(child: _AppearanceSection()),
+            const SliverToBoxAdapter(child: _ChatSection()),
+            const SliverToBoxAdapter(child: _ServerSection()),
+            const SliverToBoxAdapter(child: _ModelSection()),
+            const SliverToBoxAdapter(child: _CronSection()),
+            const SliverToBoxAdapter(child: _NotificationSection()),
+            const SliverToBoxAdapter(child: _AdvancedSettingsSection()),
+            const SliverToBoxAdapter(child: _AboutSection()),
+          ],
+        ),
       ),
     );
   }
@@ -112,79 +117,91 @@ class _AppearanceSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final mode = ref.watch(themeModeProvider);
     final localeMode = ref.watch(localeModeProvider);
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      header: Text(l10n.appearanceSection),
-      children: [
-        CupertinoListTile(
-          title: Text(l10n.themeLabel),
-          trailing: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: CupertinoSlidingSegmentedControl<AppThemeMode>(
-                groupValue: mode,
-                onValueChanged: (value) {
-                  if (value != null) {
-                    unawaited(
-                      ref.read(themeModeProvider.notifier).setMode(value),
-                    );
-                  }
-                },
-                children: {
-                  AppThemeMode.system: Text(l10n.themeSystem),
-                  AppThemeMode.light: Text(l10n.themeLight),
-                  AppThemeMode.dark: Text(l10n.themeDark),
+        header: Text(l10n.appearanceSection),
+        children: [
+          CupertinoListTile(
+            title: Text(l10n.themeLabel),
+            trailing: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SettingsSurfaces.segmented(
+                  context,
+                  CupertinoSlidingSegmentedControl<AppThemeMode>(
+                    groupValue: mode,
+                    onValueChanged: (value) {
+                      if (value != null) {
+                        unawaited(
+                          ref.read(themeModeProvider.notifier).setMode(value),
+                        );
+                      }
+                    },
+                    children: {
+                      AppThemeMode.system: Text(l10n.themeSystem),
+                      AppThemeMode.light: Text(l10n.themeLight),
+                      AppThemeMode.dark: Text(l10n.themeDark),
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            title: Text(l10n.languageSectionTitle),
+            trailing: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SettingsSurfaces.segmented(
+                  context,
+                  CupertinoSlidingSegmentedControl<AppLocaleMode>(
+                    key: const ValueKey('settings-locale-mode'),
+                    groupValue: localeMode,
+                    onValueChanged: (value) {
+                      if (value != null) {
+                        unawaited(
+                          ref.read(localeModeProvider.notifier).setMode(value),
+                        );
+                      }
+                    },
+                    children: {
+                      AppLocaleMode.system: Text(l10n.languageAuto),
+                      AppLocaleMode.zh: Text(l10n.languageZh),
+                      AppLocaleMode.en: Text(l10n.languageEn),
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-collapse-injected-notices'),
+            title: Text(l10n.collapseInjectedNoticesLabel),
+            subtitle: Text(l10n.collapseInjectedNoticesDescription),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                value: ref
+                    .watch(injectedNoticeSettingsProvider)
+                    .collapseInjectedNotices,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(injectedNoticeSettingsProvider.notifier)
+                        .setCollapse(value),
+                  );
                 },
               ),
             ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.languageSectionTitle),
-          trailing: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: CupertinoSlidingSegmentedControl<AppLocaleMode>(
-                key: const ValueKey('settings-locale-mode'),
-                groupValue: localeMode,
-                onValueChanged: (value) {
-                  if (value != null) {
-                    unawaited(
-                      ref.read(localeModeProvider.notifier).setMode(value),
-                    );
-                  }
-                },
-                children: {
-                  AppLocaleMode.system: Text(l10n.languageAuto),
-                  AppLocaleMode.zh: Text(l10n.languageZh),
-                  AppLocaleMode.en: Text(l10n.languageEn),
-                },
-              ),
-            ),
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-collapse-injected-notices'),
-          title: Text(l10n.collapseInjectedNoticesLabel),
-          subtitle: Text(l10n.collapseInjectedNoticesDescription),
-          trailing: CupertinoSwitch(
-            value: ref
-                .watch(injectedNoticeSettingsProvider)
-                .collapseInjectedNotices,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(injectedNoticeSettingsProvider.notifier)
-                    .setCollapse(value),
-              );
-            },
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -205,28 +222,31 @@ class _ChatSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     return showCupertinoModalPopup<void>(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(l10n.smoothStreamingSpeed),
-        actions: [
-          for (final preset in SmoothStreamingSpeedPreset.values)
+      builder: (context) => SettingsSurfaces.sheet(
+        context,
+        CupertinoActionSheet(
+          title: Text(l10n.smoothStreamingSpeed),
+          actions: [
+            for (final preset in SmoothStreamingSpeedPreset.values)
+              CupertinoActionSheetAction(
+                key: ValueKey('smooth-streaming-speed-${preset.id}'),
+                isDefaultAction: preset == currentSpeed,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  unawaited(
+                    ref
+                        .read(smoothStreamingSpeedProvider.notifier)
+                        .setSpeed(preset),
+                  );
+                },
+                child: Text(preset.localizedName(l10n)),
+              ),
             CupertinoActionSheetAction(
-              key: ValueKey('smooth-streaming-speed-${preset.id}'),
-              isDefaultAction: preset == currentSpeed,
-              onPressed: () {
-                Navigator.of(context).pop();
-                unawaited(
-                  ref
-                      .read(smoothStreamingSpeedProvider.notifier)
-                      .setSpeed(preset),
-                );
-              },
-              child: Text(preset.localizedName(l10n)),
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel),
             ),
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.cancel),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -242,227 +262,281 @@ class _ChatSection extends ConsumerWidget {
     final smoothStreaming = ref.watch(smoothStreamingProvider);
     final smoothStreamingSpeed = ref.watch(smoothStreamingSpeedProvider);
     final showPerfMonitor = ref.watch(perfMonitorProvider);
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      header: Text(l10n.chatSection),
-      children: [
-        CupertinoListTile(
-          key: const ValueKey('settings-send-message-shortcut'),
-          title: Text(l10n.sendMessageShortcutLabel),
-          trailing: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 240),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: CupertinoSlidingSegmentedControl<ChatSendShortcutMode>(
-                groupValue: sendShortcut,
-                onValueChanged: (value) {
-                  if (value != null) {
-                    unawaited(
-                      ref
-                          .read(chatSendShortcutSettingsProvider.notifier)
-                          .setMode(value),
-                    );
-                  }
-                },
-                children: {
-                  ChatSendShortcutMode.enter: Text(l10n.sendShortcutEnter),
-                  ChatSendShortcutMode.ctrlEnter: Text(
-                    l10n.sendShortcutCtrlEnter,
+        header: Text(l10n.chatSection),
+        children: [
+          CupertinoListTile(
+            key: const ValueKey('settings-send-message-shortcut'),
+            title: Text(l10n.sendMessageShortcutLabel),
+            trailing: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 240),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SettingsSurfaces.segmented(
+                  context,
+                  CupertinoSlidingSegmentedControl<ChatSendShortcutMode>(
+                    groupValue: sendShortcut,
+                    onValueChanged: (value) {
+                      if (value != null) {
+                        unawaited(
+                          ref
+                              .read(chatSendShortcutSettingsProvider.notifier)
+                              .setMode(value),
+                        );
+                      }
+                    },
+                    children: {
+                      ChatSendShortcutMode.enter: Text(l10n.sendShortcutEnter),
+                      ChatSendShortcutMode.ctrlEnter: Text(
+                        l10n.sendShortcutCtrlEnter,
+                      ),
+                    },
                   ),
+                ),
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-smooth-streaming'),
+            title: Text(l10n.smoothStreaming),
+            subtitle: Text(l10n.smoothStreamingDesc),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-smooth-streaming'),
+                value: smoothStreaming,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(smoothStreamingProvider.notifier)
+                        .setSmoothStreaming(value),
+                  );
                 },
               ),
             ),
           ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-smooth-streaming'),
-          title: Text(l10n.smoothStreaming),
-          subtitle: Text(l10n.smoothStreamingDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-smooth-streaming'),
-            value: smoothStreaming,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(smoothStreamingProvider.notifier)
-                    .setSmoothStreaming(value),
-              );
-            },
-          ),
-        ),
-        if (smoothStreaming)
-          CupertinoListTile(
-            key: const ValueKey('settings-smooth-streaming-speed'),
-            title: Text(l10n.smoothStreamingSpeed),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  smoothStreamingSpeed.localizedName(l10n),
-                  style: TextStyle(
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          if (smoothStreaming)
+            CupertinoListTile(
+              key: const ValueKey('settings-smooth-streaming-speed'),
+              title: Text(l10n.smoothStreamingSpeed),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    smoothStreamingSpeed.localizedName(l10n),
+                    style: TextStyle(
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: CupertinoColors.secondaryLabel,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  CupertinoIcons.chevron_right,
-                  size: 18,
-                  color: CupertinoColors.systemGrey.resolveFrom(context),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Icon(
+                    CupertinoIcons.chevron_right,
+                    size: 18,
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.systemGrey,
+                    ),
+                  ),
+                ],
+              ),
+              onTap: () =>
+                  _openSpeedPresetPicker(context, ref, smoothStreamingSpeed),
             ),
-            onTap: () =>
-                _openSpeedPresetPicker(context, ref, smoothStreamingSpeed),
-          ),
-        CupertinoListTile(
-          key: const ValueKey('settings-turn-collapse'),
-          title: Text(l10n.turn55TurnCollapseTitle),
-          subtitle: Text(l10n.turn55TurnCollapseDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-turn-collapse'),
-            value: turnCollapse,
-            onChanged: (value) {
-              unawaited(
-                ref.read(turnCollapseProvider.notifier).setTurnCollapse(value),
-              );
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-group-tools-by-turn'),
-          title: Text(l10n.groupToolsByTurn),
-          subtitle: Text(l10n.groupToolsByTurnDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-group-tools-by-turn'),
-            value: coalesce,
-            onChanged: (value) {
-              unawaited(
-                ref.read(toolGroupCoalesceProvider.notifier).setCoalesce(value),
-              );
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-hide-thinking'),
-          title: Text(l10n.hideThinking),
-          subtitle: Text(l10n.hideThinkingDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-hide-thinking'),
-            value: hideReasoning,
-            onChanged: (value) {
-              unawaited(
-                ref.read(hideReasoningProvider.notifier).setHide(value),
-              );
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-composer-two-pane'),
-          title: Text(l10n.composerTwoPane),
-          subtitle: Text(l10n.composerTwoPaneDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-composer-two-pane'),
-            value: composerTwoPane,
-            onChanged: (value) {
-              unawaited(
-                ref.read(composerTwoPaneProvider.notifier).setTwoPane(value),
-              );
-              // 联动：切到经典单行时自动关闭性能监控，保证事务性。
-              if (!value) {
-                unawaited(
-                  ref
-                      .read(perfMonitorProvider.notifier)
-                      .setShowPerfMonitor(false),
-                );
-              }
-            },
-          ),
-        ),
-        // 性能监控开关：仅两段式开启时显示。
-        if (composerTwoPane)
           CupertinoListTile(
-            key: const ValueKey('settings-perf-monitor'),
-            title: Text(l10n.perfMonitor),
-            subtitle: Text(l10n.perfMonitorDesc),
-            trailing: CupertinoSwitch(
-              key: const ValueKey('settings-switch-perf-monitor'),
-              value: showPerfMonitor,
-              onChanged: (value) {
-                unawaited(
-                  ref
-                      .read(perfMonitorProvider.notifier)
-                      .setShowPerfMonitor(value),
-                );
-              },
+            key: const ValueKey('settings-turn-collapse'),
+            title: Text(l10n.turn55TurnCollapseTitle),
+            subtitle: Text(l10n.turn55TurnCollapseDesc),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-turn-collapse'),
+                value: turnCollapse,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(turnCollapseProvider.notifier)
+                        .setTurnCollapse(value),
+                  );
+                },
+              ),
             ),
           ),
-        CupertinoListTile(
-          key: const ValueKey('settings-chat-status-line'),
-          title: Text(l10n.chatStatusLine),
-          subtitle: Text(l10n.chatStatusLineDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-chat-status-line'),
-            value: ref.watch(chatStatusLineProvider),
-            onChanged: (value) {
-              unawaited(
-                ref.read(chatStatusLineProvider.notifier).setEnabled(value),
-              );
-            },
+          CupertinoListTile(
+            key: const ValueKey('settings-group-tools-by-turn'),
+            title: Text(l10n.groupToolsByTurn),
+            subtitle: Text(l10n.groupToolsByTurnDesc),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-group-tools-by-turn'),
+                value: coalesce,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(toolGroupCoalesceProvider.notifier)
+                        .setCoalesce(value),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-auto-open-context'),
-          title: Text(l10n.autoOpenContextTitle),
-          subtitle: Text(l10n.autoOpenContextDesc),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-auto-open-context'),
-            value: ref.watch(autoOpenContextOnNewSessionProvider),
-            onChanged: (value) {
+          CupertinoListTile(
+            key: const ValueKey('settings-hide-thinking'),
+            title: Text(l10n.hideThinking),
+            subtitle: Text(l10n.hideThinkingDesc),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-hide-thinking'),
+                value: hideReasoning,
+                onChanged: (value) {
+                  unawaited(
+                    ref.read(hideReasoningProvider.notifier).setHide(value),
+                  );
+                },
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-composer-two-pane'),
+            title: Text(l10n.composerTwoPane),
+            subtitle: Text(l10n.composerTwoPaneDesc),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-composer-two-pane'),
+                value: composerTwoPane,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(composerTwoPaneProvider.notifier)
+                        .setTwoPane(value),
+                  );
+                  // 联动：切到经典单行时自动关闭性能监控，保证事务性。
+                  if (!value) {
+                    unawaited(
+                      ref
+                          .read(perfMonitorProvider.notifier)
+                          .setShowPerfMonitor(false),
+                    );
+                  }
+                },
+              ),
+            ),
+          ),
+          // 性能监控开关：仅两段式开启时显示。
+          if (composerTwoPane)
+            CupertinoListTile(
+              key: const ValueKey('settings-perf-monitor'),
+              title: Text(l10n.perfMonitor),
+              subtitle: Text(l10n.perfMonitorDesc),
+              trailing: SettingsSurfaces.toggle(
+                context,
+                CupertinoSwitch(
+                  key: const ValueKey('settings-switch-perf-monitor'),
+                  value: showPerfMonitor,
+                  onChanged: (value) {
+                    unawaited(
+                      ref
+                          .read(perfMonitorProvider.notifier)
+                          .setShowPerfMonitor(value),
+                    );
+                  },
+                ),
+              ),
+            ),
+          CupertinoListTile(
+            key: const ValueKey('settings-chat-status-line'),
+            title: Text(l10n.chatStatusLine),
+            subtitle: Text(l10n.chatStatusLineDesc),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-chat-status-line'),
+                value: ref.watch(chatStatusLineProvider),
+                onChanged: (value) {
+                  unawaited(
+                    ref.read(chatStatusLineProvider.notifier).setEnabled(value),
+                  );
+                },
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-auto-open-context'),
+            title: Text(l10n.autoOpenContextTitle),
+            subtitle: Text(l10n.autoOpenContextDesc),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-auto-open-context'),
+                value: ref.watch(autoOpenContextOnNewSessionProvider),
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(autoOpenContextOnNewSessionProvider.notifier)
+                        .setEnabled(value),
+                  );
+                },
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            title: Text(l10n.chatAutoLoadSetting),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-auto-load-images'),
+                value: ref.watch(autoLoadImagesProvider),
+                onChanged: (value) {
+                  unawaited(
+                    ref.read(autoLoadImagesProvider.notifier).setEnabled(value),
+                  );
+                },
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-mermaid-tile'),
+            title: Text(AppLocalizations.of(context).mermaidRenderToggleTitle),
+            subtitle: Text(
+              AppLocalizations.of(context).mermaidRenderToggleSubtitle,
+            ),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-mermaid-toggle'),
+                value: ref.watch(chatRenderMermaidProvider),
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(chatRenderMermaidProvider.notifier)
+                        .setEnabled(value),
+                  );
+                },
+              ),
+            ),
+            onTap: () {
+              final current = ref.read(chatRenderMermaidProvider);
               unawaited(
                 ref
-                    .read(autoOpenContextOnNewSessionProvider.notifier)
-                    .setEnabled(value),
+                    .read(chatRenderMermaidProvider.notifier)
+                    .setEnabled(!current),
               );
             },
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.chatAutoLoadSetting),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-auto-load-images'),
-            value: ref.watch(autoLoadImagesProvider),
-            onChanged: (value) {
-              unawaited(
-                ref.read(autoLoadImagesProvider.notifier).setEnabled(value),
-              );
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-mermaid-tile'),
-          title: Text(AppLocalizations.of(context).mermaidRenderToggleTitle),
-          subtitle: Text(
-            AppLocalizations.of(context).mermaidRenderToggleSubtitle,
-          ),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-mermaid-toggle'),
-            value: ref.watch(chatRenderMermaidProvider),
-            onChanged: (value) {
-              unawaited(
-                ref.read(chatRenderMermaidProvider.notifier).setEnabled(value),
-              );
-            },
-          ),
-          onTap: () {
-            final current = ref.read(chatRenderMermaidProvider);
-            unawaited(
-              ref.read(chatRenderMermaidProvider.notifier).setEnabled(!current),
-            );
-          },
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -478,115 +552,153 @@ class _AdvancedSettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      header: Text(l10n.advancedSettingsSection),
-      children: [
-        CupertinoListTile(
-          key: const ValueKey('settings-entry-auxiliary'),
-          title: Text(l10n.auxiliaryModelsSection),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
-          ),
-          onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(builder: (_) => const AuxiliaryModelsPage()),
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-entry-mcp'),
-          title: Text(l10n.mcpSection),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
-          ),
-          onTap: () =>
-              Navigator.of(context)
-                  .push(HermesPageRoute<void>(builder: (_) => const McpPage())),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-entry-extensions'),
-          title: Text(l10n.extensionsSection),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
-          ),
-          onTap: () => Navigator.of(
-            context,
-          ).push(HermesPageRoute<void>(builder: (_) => const ExtensionsPage())),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-entry-session-list-entries'),
-          title: Text(l10n.sessionListEntriesSection),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
-          ),
-          onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(
-              builder: (_) => const SessionListEntriesPage(),
+        header: Text(l10n.advancedSettingsSection),
+        children: [
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-auxiliary'),
+            title: Text(l10n.auxiliaryModelsSection),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () => Navigator.of(context).push(
+              HermesPageRoute<void>(
+                builder: (_) => const AuxiliaryModelsPage(),
+              ),
             ),
           ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-entry-session-row-subtitle'),
-          title: Text(l10n.sessionRowSubtitleSection),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-mcp'),
+            title: Text(l10n.mcpSection),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () => Navigator.of(context)
+                .push(HermesPageRoute<void>(builder: (_) => const McpPage())),
           ),
-          onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(
-              builder: (_) => const SessionRowSubtitlePage(),
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-extensions'),
+            title: Text(l10n.extensionsSection),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () => Navigator.of(context).push(
+              HermesPageRoute<void>(builder: (_) => const ExtensionsPage()),
             ),
           ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-entry-desktop'),
-          title: Text(l10n.desktopSection),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
-          ),
-          onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(builder: (_) => const DesktopSettingsPage()),
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-entry-bg-keepalive'),
-          title: Text(l10n.bgKeepAliveSection),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
-          ),
-          onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(
-              builder: (_) => const BackgroundKeepalivePage(),
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-session-list-entries'),
+            title: Text(l10n.sessionListEntriesSection),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () => Navigator.of(context).push(
+              HermesPageRoute<void>(
+                builder: (_) => const SessionListEntriesPage(),
+              ),
             ),
           ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-entry-diagnostics'),
-          title: Text(l10n.diagnosticsTitle),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-session-row-subtitle'),
+            title: Text(l10n.sessionRowSubtitleSection),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () => Navigator.of(context).push(
+              HermesPageRoute<void>(
+                builder: (_) => const SessionRowSubtitlePage(),
+              ),
+            ),
           ),
-          onTap: () => Navigator.of(context).push(
-            HermesPageRoute<void>(builder: (_) => const DiagnosticsPage()),
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-desktop'),
+            title: Text(l10n.desktopSection),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () => Navigator.of(context).push(
+              HermesPageRoute<void>(
+                builder: (_) => const DesktopSettingsPage(),
+              ),
+            ),
           ),
-        ),
-      ],
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-bg-keepalive'),
+            title: Text(l10n.bgKeepAliveSection),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () => Navigator.of(context).push(
+              HermesPageRoute<void>(
+                builder: (_) => const BackgroundKeepalivePage(),
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-diagnostics'),
+            title: Text(l10n.diagnosticsTitle),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () => Navigator.of(context).push(
+              HermesPageRoute<void>(builder: (_) => const DiagnosticsPage()),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -603,26 +715,34 @@ class _CronSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final showCron = ref.watch(cronVisibilityProvider).showCron;
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      children: [
-        CupertinoListTile(
-          key: const ValueKey('settings-show-cron-sessions'),
-          title: Text(l10n.showCronSessionsTitle),
-          subtitle: Text(l10n.showCronSessionsSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-show-cron'),
-            value: showCron,
-            onChanged: (value) {
-              unawaited(
-                ref.read(cronVisibilityProvider.notifier).setShowCron(value),
-              );
-            },
+        children: [
+          CupertinoListTile(
+            key: const ValueKey('settings-show-cron-sessions'),
+            title: Text(l10n.showCronSessionsTitle),
+            subtitle: Text(l10n.showCronSessionsSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-show-cron'),
+                value: showCron,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(cronVisibilityProvider.notifier)
+                        .setShowCron(value),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -745,15 +865,18 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
     unawaited(
       showCupertinoDialog<void>(
         context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.ok),
-            ),
-          ],
+        builder: (dialogContext) => SettingsSurfaces.dialog(
+          context,
+          CupertinoAlertDialog(
+            title: Text(title),
+            content: Text(message),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.ok),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -765,91 +888,110 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
     final settings = ref.watch(notificationSettingsProvider);
     final notifier = ref.read(notificationSettingsProvider.notifier);
 
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      header: Text(l10n.notificationsSection),
-      children: [
-        CupertinoListTile(
-          key: const ValueKey('settings-notify-turns'),
-          title: Text(l10n.notifyTurnsTitle),
-          subtitle: Text(l10n.notifyTurnsSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-notify-turns'),
-            value: settings.notifyTurnsEnabled,
-            onChanged: (value) {
-              unawaited(notifier.setNotifyTurnsEnabled(value));
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-notify-clarify'),
-          title: Text(l10n.notifyClarifyTitle),
-          subtitle: Text(l10n.notifyClarifySubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-notify-clarify'),
-            value: settings.notifyClarifyEnabled,
-            onChanged: (value) {
-              unawaited(notifier.setNotifyClarifyEnabled(value));
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-notify-errors'),
-          title: Text(l10n.notifyErrorsTitle),
-          subtitle: Text(l10n.notifyErrorsSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-switch-notify-errors'),
-            value: settings.notifyErrorsEnabled,
-            onChanged: (value) {
-              unawaited(notifier.setNotifyErrorsEnabled(value));
-            },
-          ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-notify-push-test'),
-          title: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 240),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: CupertinoSlidingSegmentedControl<PushTestType>(
-                key: const ValueKey('settings-notify-push-test-type'),
-                groupValue: _selectedType,
-                onValueChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _selectedType = value;
-                    });
-                  }
-                },
-                children: {
-                  PushTestType.turns: Text(l10n.pushTestTurns),
-                  PushTestType.clarify: Text(l10n.pushTestClarify),
-                  PushTestType.errors: Text(l10n.pushTestErrors),
+        header: Text(l10n.notificationsSection),
+        children: [
+          CupertinoListTile(
+            key: const ValueKey('settings-notify-turns'),
+            title: Text(l10n.notifyTurnsTitle),
+            subtitle: Text(l10n.notifyTurnsSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-notify-turns'),
+                value: settings.notifyTurnsEnabled,
+                onChanged: (value) {
+                  unawaited(notifier.setNotifyTurnsEnabled(value));
                 },
               ),
             ),
           ),
-          trailing: CupertinoButton.filled(
-            key: const ValueKey('settings-notify-push-test-button'),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            minimumSize: const Size(0, 28),
-            onPressed: _isLoading ? null : _handlePushTest,
-            child: _isLoading
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CupertinoActivityIndicator(radius: 7),
-                  )
-                : Text(
-                    l10n.pushTestButton,
-                    style: const TextStyle(fontSize: 14),
-                  ),
+          CupertinoListTile(
+            key: const ValueKey('settings-notify-clarify'),
+            title: Text(l10n.notifyClarifyTitle),
+            subtitle: Text(l10n.notifyClarifySubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-notify-clarify'),
+                value: settings.notifyClarifyEnabled,
+                onChanged: (value) {
+                  unawaited(notifier.setNotifyClarifyEnabled(value));
+                },
+              ),
+            ),
           ),
-        ),
-      ],
+          CupertinoListTile(
+            key: const ValueKey('settings-notify-errors'),
+            title: Text(l10n.notifyErrorsTitle),
+            subtitle: Text(l10n.notifyErrorsSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-notify-errors'),
+                value: settings.notifyErrorsEnabled,
+                onChanged: (value) {
+                  unawaited(notifier.setNotifyErrorsEnabled(value));
+                },
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-notify-push-test'),
+            title: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 240),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: SettingsSurfaces.segmented(
+                  context,
+                  CupertinoSlidingSegmentedControl<PushTestType>(
+                    key: const ValueKey('settings-notify-push-test-type'),
+                    groupValue: _selectedType,
+                    onValueChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _selectedType = value;
+                        });
+                      }
+                    },
+                    children: {
+                      PushTestType.turns: Text(l10n.pushTestTurns),
+                      PushTestType.clarify: Text(l10n.pushTestClarify),
+                      PushTestType.errors: Text(l10n.pushTestErrors),
+                    },
+                  ),
+                ),
+              ),
+            ),
+            trailing: CupertinoButton.filled(
+              color: SettingsSurfaces.isLight(context)
+                  ? statusBlueText.resolveFrom(context)
+                  : null,
+              pressedOpacity: SettingsSurfaces.pressedOpacity(context),
+              key: const ValueKey('settings-notify-push-test-button'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: const Size(0, 28),
+              onPressed: _isLoading ? null : _handlePushTest,
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CupertinoActivityIndicator(radius: 7),
+                    )
+                  : Text(
+                      l10n.pushTestButton,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -867,33 +1009,36 @@ class _ServerSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final connections = ref.watch(connectionsProvider);
     final active = ref.watch(activeConnectionProvider);
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      header: Text(
-        active == null ? l10n.serverSectionDisconnected : l10n.serverSection,
-      ),
-      children: [
-        if (connections.isEmpty)
-          CupertinoListTile(
-            title: Text(l10n.noServerConfigured),
-            subtitle: Text(l10n.noServerConfiguredSubtitle),
-          ),
-        for (final connection in connections)
-          _buildServerRow(
-            context,
-            ref,
-            connection,
-            connection.id == active?.id,
-          ),
-        CupertinoListTile(
-          key: const ValueKey('server-add'),
-          leading: const Icon(CupertinoIcons.add_circled),
-          title: Text(l10n.addServer),
-          onTap: () => unawaited(_openServerEditor(context, ref)),
+        header: Text(
+          active == null ? l10n.serverSectionDisconnected : l10n.serverSection,
         ),
-      ],
+        children: [
+          if (connections.isEmpty)
+            CupertinoListTile(
+              title: Text(l10n.noServerConfigured),
+              subtitle: Text(l10n.noServerConfiguredSubtitle),
+            ),
+          for (final connection in connections)
+            _buildServerRow(
+              context,
+              ref,
+              connection,
+              connection.id == active?.id,
+            ),
+          CupertinoListTile(
+            key: const ValueKey('server-add'),
+            leading: const Icon(CupertinoIcons.add_circled),
+            title: Text(l10n.addServer),
+            onTap: () => unawaited(_openServerEditor(context, ref)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -911,11 +1056,16 @@ class _ServerSection extends ConsumerWidget {
 
     return CupertinoListTile(
       key: ValueKey('server-row-${connection.id}'),
+      backgroundColor: SettingsSurfaces.selection(context, isActive),
       title: Text(
         name,
         style: TextStyle(
           color: (isBuiltin && !connection.enabled)
-              ? CupertinoColors.secondaryLabel.resolveFrom(context)
+              ? LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
+                )
               : null,
         ),
       ),
@@ -930,6 +1080,8 @@ class _ServerSection extends ConsumerWidget {
             ),
           if (isBuiltin)
             CupertinoButton(
+              foregroundColor: SettingsSurfaces.actionColor(context),
+              pressedOpacity: SettingsSurfaces.pressedOpacity(context),
               key: const ValueKey('server-toggle-builtin'),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               minimumSize: const Size(0, 28),
@@ -945,33 +1097,51 @@ class _ServerSection extends ConsumerWidget {
                 style: TextStyle(
                   fontSize: 13,
                   color: connection.enabled
-                      ? CupertinoColors.systemRed.resolveFrom(context)
-                      : CupertinoColors.activeBlue.resolveFrom(context),
+                      ? LightSurfaces.resolve(
+                          context,
+                          statusRedText.resolveFrom(context),
+                          dark: CupertinoColors.systemRed,
+                        )
+                      : LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.menuAction,
+                          dark: CupertinoColors.activeBlue,
+                        ),
                 ),
               ),
             )
           else ...[
-            AccessibleButton(
-              key: ValueKey('server-edit-${connection.id}'),
-              label: l10n.editServer,
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(32, 32),
-              onPressed: () => unawaited(
-                _openServerEditor(context, ref, connection: connection),
+            SettingsSurfaces.serverAction(
+              context,
+              AccessibleButton(
+                key: ValueKey('server-edit-${connection.id}'),
+                label: l10n.editServer,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(32, 32),
+                onPressed: () => unawaited(
+                  _openServerEditor(context, ref, connection: connection),
+                ),
+                child: const Icon(CupertinoIcons.pencil, size: 18),
               ),
-              child: const Icon(CupertinoIcons.pencil, size: 18),
             ),
-            AccessibleButton(
-              key: ValueKey('server-delete-${connection.id}'),
-              label: l10n.deleteServer,
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(32, 32),
-              onPressed: () =>
-                  unawaited(_confirmDeleteServer(context, ref, connection)),
-              child: const Icon(
-                CupertinoIcons.trash,
-                size: 18,
-                color: CupertinoColors.systemRed,
+            SettingsSurfaces.serverAction(
+              context,
+              AccessibleButton(
+                key: ValueKey('server-delete-${connection.id}'),
+                label: l10n.deleteServer,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(32, 32),
+                onPressed: () =>
+                    unawaited(_confirmDeleteServer(context, ref, connection)),
+                child: Icon(
+                  CupertinoIcons.trash,
+                  size: 18,
+                  color: LightSurfaces.resolve(
+                    context,
+                    statusRedText.resolveFrom(context),
+                    dark: const Color(0xFFFF3B30),
+                  ),
+                ),
               ),
             ),
           ],
@@ -1008,26 +1178,29 @@ class _ServerSection extends ConsumerWidget {
     final name = connection.name.isEmpty ? connection.baseUrl : connection.name;
     return showCupertinoDialog<void>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(l10n.deleteServer),
-        content: Text(l10n.confirmDeleteServer(name)),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            key: const ValueKey('server-delete-confirm'),
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(context).pop();
-              unawaited(
-                ref.read(connectionsProvider.notifier).remove(connection.id),
-              );
-            },
-            child: Text(l10n.delete),
-          ),
-        ],
+      builder: (context) => SettingsSurfaces.dialog(
+        context,
+        CupertinoAlertDialog(
+          title: Text(l10n.deleteServer),
+          content: Text(l10n.confirmDeleteServer(name)),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel),
+            ),
+            CupertinoDialogAction(
+              key: const ValueKey('server-delete-confirm'),
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.of(context).pop();
+                unawaited(
+                  ref.read(connectionsProvider.notifier).remove(connection.id),
+                );
+              },
+              child: Text(l10n.delete),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1137,18 +1310,21 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
     final l10n = AppLocalizations.of(context);
     return showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.profileSwitchFailed),
-        content: Text(
-          error is ApiException ? error.message : '$error',
-          style: TextStyle(color: statusRedText.resolveFrom(context)),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.ok),
+      builder: (dialogContext) => SettingsSurfaces.dialog(
+        context,
+        CupertinoAlertDialog(
+          title: Text(l10n.profileSwitchFailed),
+          content: Text(
+            error is ApiException ? error.message : '$error',
+            style: TextStyle(color: statusRedText.resolveFrom(context)),
           ),
-        ],
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.ok),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1157,18 +1333,21 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
     final l10n = AppLocalizations.of(context);
     final selected = await showCupertinoModalPopup<ProfileSummary>(
       context: context,
-      builder: (sheetContext) => CupertinoActionSheet(
-        title: Text(l10n.selectProfile),
-        actions: [
-          for (final profile in profiles)
-            CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(sheetContext, profile),
-              child: Text(profile.name ?? l10n.unnamed),
-            ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(sheetContext),
-          child: Text(l10n.cancel),
+      builder: (sheetContext) => SettingsSurfaces.sheet(
+        context,
+        CupertinoActionSheet(
+          title: Text(l10n.selectProfile),
+          actions: [
+            for (final profile in profiles)
+              CupertinoActionSheetAction(
+                onPressed: () => Navigator.pop(sheetContext, profile),
+                child: Text(profile.name ?? l10n.unnamed),
+              ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(sheetContext),
+            child: Text(l10n.cancel),
+          ),
         ),
       ),
     );
@@ -1266,153 +1445,194 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
     final l10n = AppLocalizations.of(context);
     final isEditing = widget.connection != null;
     final profiles = _profiles?.profiles ?? const <ProfileSummary>[];
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const _PopBackButton(),
-        middle: Text(isEditing ? l10n.editServer : l10n.addServer),
-        trailing: Align(
-          alignment: Alignment.centerRight,
-          child: CupertinoButton(
-            key: const ValueKey('server-editor-save'),
-            minimumSize: Size.zero,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            onPressed: _saving ? null : () => unawaited(_save()),
-            child: Text(
-              l10n.save,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const _PopBackButton(),
+          middle: Text(isEditing ? l10n.editServer : l10n.addServer),
+          trailing: Align(
+            alignment: Alignment.centerRight,
+            child: CupertinoButton(
+              foregroundColor: SettingsSurfaces.actionColor(
+                context,
+                disabled: _saving,
+              ),
+              pressedOpacity: SettingsSurfaces.pressedOpacity(context),
+              key: const ValueKey('server-editor-save'),
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              onPressed: _saving ? null : () => unawaited(_save()),
+              child: Text(
+                l10n.save,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ),
-      ),
-      child: SafeArea(
-        child: ListView(
-          children: [
-            CupertinoListSection(
-              dividerMargin: 0,
-              additionalDividerMargin: 0,
+        child: SafeArea(
+          child: ListView(
+            children: [
+              SettingsSurfaces.section(
+                context,
+                CupertinoListSection(
+                  dividerMargin: 0,
+                  additionalDividerMargin: 0,
 
-              header: Text(l10n.serverBasicInfoSection),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.serverNameLabel,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
+                  header: Text(l10n.serverBasicInfoSection),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
-                      const SizedBox(height: 6),
-                      CupertinoTextField(
-                        key: const ValueKey('server-editor-name'),
-                        controller: _nameController,
-                        placeholder: l10n.serverNamePlaceholder,
-                        autocorrect: false,
-                        padding: const EdgeInsets.all(12),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        l10n.serverUrlLabel,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      CupertinoTextField(
-                        key: const ValueKey('server-editor-url'),
-                        controller: _urlController,
-                        placeholder: 'https://hermes.example.com:8787',
-                        autocorrect: false,
-                        keyboardType: TextInputType.url,
-                        padding: const EdgeInsets.all(12),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        l10n.serverUrlExampleHint,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        l10n.serverPasswordLabel,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      CupertinoTextField(
-                        key: const ValueKey('server-editor-password'),
-                        controller: _passwordController,
-                        placeholder: l10n.serverPasswordPlaceholder,
-                        obscureText: true,
-                        padding: const EdgeInsets.all(12),
-                      ),
-                      if (_error.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                            _error,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.serverNameLabel,
                             style: TextStyle(
-                              color: statusRedText.resolveFrom(context),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.textSecondary,
+                                dark: CupertinoColors.secondaryLabel,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
+                          const SizedBox(height: 6),
+                          CupertinoTextField(
+                            decoration: SettingsSurfaces.fieldDecoration(
+                              context,
+                            ),
+                            placeholderStyle: SettingsSurfaces.placeholderStyle(
+                              context,
+                            ),
+                            key: const ValueKey('server-editor-name'),
+                            controller: _nameController,
+                            placeholder: l10n.serverNamePlaceholder,
+                            autocorrect: false,
+                            padding: const EdgeInsets.all(12),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.serverUrlLabel,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.textSecondary,
+                                dark: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          CupertinoTextField(
+                            decoration: SettingsSurfaces.fieldDecoration(
+                              context,
+                            ),
+                            placeholderStyle: SettingsSurfaces.placeholderStyle(
+                              context,
+                            ),
+                            key: const ValueKey('server-editor-url'),
+                            controller: _urlController,
+                            placeholder: 'https://hermes.example.com:8787',
+                            autocorrect: false,
+                            keyboardType: TextInputType.url,
+                            padding: const EdgeInsets.all(12),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.serverUrlExampleHint,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.textSecondary,
+                                dark: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.serverPasswordLabel,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.textSecondary,
+                                dark: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          CupertinoTextField(
+                            decoration: SettingsSurfaces.fieldDecoration(
+                              context,
+                            ),
+                            placeholderStyle: SettingsSurfaces.placeholderStyle(
+                              context,
+                            ),
+                            key: const ValueKey('server-editor-password'),
+                            controller: _passwordController,
+                            placeholder: l10n.serverPasswordPlaceholder,
+                            obscureText: true,
+                            padding: const EdgeInsets.all(12),
+                          ),
+                          if (_error.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Text(
+                                _error,
+                                style: TextStyle(
+                                  color: statusRedText.resolveFrom(context),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            CupertinoListSection(
-              dividerMargin: 0,
-              additionalDividerMargin: 0,
+              ),
+              SettingsSurfaces.section(
+                context,
+                CupertinoListSection(
+                  dividerMargin: 0,
+                  additionalDividerMargin: 0,
 
-              header: Text(l10n.profile),
-              children: [
-                CupertinoListTile(
-                  key: const ValueKey('server-editor-profile-tile'),
-                  title: Text(
-                    _profiles?.active ??
-                        (_loadingProfiles
-                            ? l10n.loadingEllipsis
-                            : l10n.notRead),
-                  ),
-                  leading: const Icon(CupertinoIcons.person_2),
-                  trailing: const CupertinoListTileChevron(),
-                  onTap: profiles.isEmpty
-                      ? _loadProfiles
-                      : () => _showProfilePicker(profiles),
+                  header: Text(l10n.profile),
+                  children: [
+                    CupertinoListTile(
+                      key: const ValueKey('server-editor-profile-tile'),
+                      title: Text(
+                        _profiles?.active ??
+                            (_loadingProfiles
+                                ? l10n.loadingEllipsis
+                                : l10n.notRead),
+                      ),
+                      leading: const Icon(CupertinoIcons.person_2),
+                      trailing: const CupertinoListTileChevron(),
+                      onTap: profiles.isEmpty
+                          ? _loadProfiles
+                          : () => _showProfilePicker(profiles),
+                    ),
+                    if (_profileError != null)
+                      CupertinoListTile(
+                        key: const ValueKey('server-editor-profile-retry'),
+                        title: Text(l10n.readFailed),
+                        subtitle: Text(l10n.clickToRetry),
+                        onTap: _loadProfiles,
+                      ),
+                  ],
                 ),
-                if (_profileError != null)
-                  CupertinoListTile(
-                    key: const ValueKey('server-editor-profile-retry'),
-                    title: Text(l10n.readFailed),
-                    subtitle: Text(l10n.clickToRetry),
-                    onTap: _loadProfiles,
-                  ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1437,61 +1657,71 @@ class _ModelSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(settingsControllerProvider);
     return settings.when(
-      loading: () => CupertinoListSection(
-        dividerMargin: 0,
-        additionalDividerMargin: 0,
+      loading: () => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
 
-        header: Text(l10n.models),
-        children: [
-          CupertinoListTile(
-            title: Text(l10n.loadingModels),
-            trailing: const CupertinoActivityIndicator(),
-          ),
-        ],
-      ),
-      error: (error, _) => CupertinoListSection(
-        dividerMargin: 0,
-        additionalDividerMargin: 0,
-
-        header: Text(l10n.models),
-        children: [
-          CupertinoListTile(
-            title: Text(l10n.modelsLoadFailed),
-            subtitle: Text(_describeError(context, error)),
-          ),
-          CupertinoListTile(
-            key: const ValueKey('settings-models-retry'),
-            title: Text(l10n.retry),
-            trailing: const Icon(CupertinoIcons.refresh),
-            onTap: () => unawaited(
-              ref.read(settingsControllerProvider.notifier).refresh(),
-            ),
-          ),
-        ],
-      ),
-      data: (state) => CupertinoListSection(
-        dividerMargin: 0,
-        additionalDividerMargin: 0,
-
-        header: Text(l10n.models),
-        children: [
-          CupertinoListTile(
-            key: const ValueKey('settings-default-model'),
-            title: Text(l10n.defaultModel),
-            subtitle: Text(state.defaultModelLabel ?? l10n.notSet),
-            trailing: const Icon(CupertinoIcons.chevron_right),
-            onTap: () => unawaited(_openModelPicker(context, ref, state)),
-          ),
-          if (state.supportsReasoningEffort &&
-              state.supportedEfforts.isNotEmpty)
+          header: Text(l10n.models),
+          children: [
             CupertinoListTile(
-              key: const ValueKey('settings-reasoning'),
-              title: Text(l10n.reasoningEffort),
-              subtitle: Text(state.reasoningEffort ?? l10n.notSet),
-              trailing: const Icon(CupertinoIcons.chevron_right),
-              onTap: () => unawaited(_openReasoningPicker(context, ref, state)),
+              title: Text(l10n.loadingModels),
+              trailing: const CupertinoActivityIndicator(),
             ),
-        ],
+          ],
+        ),
+      ),
+      error: (error, _) => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
+          header: Text(l10n.models),
+          children: [
+            CupertinoListTile(
+              title: Text(l10n.modelsLoadFailed),
+              subtitle: Text(_describeError(context, error)),
+            ),
+            CupertinoListTile(
+              key: const ValueKey('settings-models-retry'),
+              title: Text(l10n.retry),
+              trailing: const Icon(CupertinoIcons.refresh),
+              onTap: () => unawaited(
+                ref.read(settingsControllerProvider.notifier).refresh(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      data: (state) => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          dividerMargin: 0,
+          additionalDividerMargin: 0,
+
+          header: Text(l10n.models),
+          children: [
+            CupertinoListTile(
+              key: const ValueKey('settings-default-model'),
+              title: Text(l10n.defaultModel),
+              subtitle: Text(state.defaultModelLabel ?? l10n.notSet),
+              trailing: const Icon(CupertinoIcons.chevron_right),
+              onTap: () => unawaited(_openModelPicker(context, ref, state)),
+            ),
+            if (state.supportsReasoningEffort &&
+                state.supportedEfforts.isNotEmpty)
+              CupertinoListTile(
+                key: const ValueKey('settings-reasoning'),
+                title: Text(l10n.reasoningEffort),
+                subtitle: Text(state.reasoningEffort ?? l10n.notSet),
+                trailing: const Icon(CupertinoIcons.chevron_right),
+                onTap: () =>
+                    unawaited(_openReasoningPicker(context, ref, state)),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1516,28 +1746,31 @@ class _ModelSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     return showCupertinoModalPopup<void>(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: Text(l10n.reasoningEffort),
-        actions: [
-          for (final effort in state.supportedEfforts)
+      builder: (context) => SettingsSurfaces.sheet(
+        context,
+        CupertinoActionSheet(
+          title: Text(l10n.reasoningEffort),
+          actions: [
+            for (final effort in state.supportedEfforts)
+              CupertinoActionSheetAction(
+                key: ValueKey('reasoning-$effort'),
+                isDefaultAction: effort == state.reasoningEffort,
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  unawaited(
+                    ref
+                        .read(settingsControllerProvider.notifier)
+                        .setReasoningEffort(effort),
+                  );
+                },
+                child: Text(effort),
+              ),
             CupertinoActionSheetAction(
-              key: ValueKey('reasoning-$effort'),
-              isDefaultAction: effort == state.reasoningEffort,
-              onPressed: () {
-                Navigator.of(context).pop();
-                unawaited(
-                  ref
-                      .read(settingsControllerProvider.notifier)
-                      .setReasoningEffort(effort),
-                );
-              },
-              child: Text(effort),
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel),
             ),
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.cancel),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1557,131 +1790,180 @@ class _ModelPickerPage extends ConsumerWidget {
     final groups = currentState.modelGroups;
     final isRefreshing = currentState.isRefreshingModels;
 
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const _PopBackButton(),
-        middle: Text(l10n.defaultModel),
-        trailing: CupertinoButton(
-          key: const ValueKey('model-picker-refresh-button'),
-          padding: EdgeInsets.zero,
-          onPressed: isRefreshing
-              ? null
-              : () => unawaited(
-                  ref.read(settingsControllerProvider.notifier).refreshModels(),
-                ),
-          child: isRefreshing
-              ? const CupertinoActivityIndicator(radius: 8)
-              : const Icon(CupertinoIcons.arrow_clockwise, size: 20),
-        ),
-      ),
-      child: SafeArea(
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            CupertinoSliverRefreshControl(
-              onRefresh: () =>
-                  ref.read(settingsControllerProvider.notifier).refreshModels(),
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const _PopBackButton(),
+          middle: Text(l10n.defaultModel),
+          trailing: CupertinoButton(
+            foregroundColor: SettingsSurfaces.actionColor(
+              context,
+              disabled: isRefreshing,
             ),
-            if (currentState.refreshError != null)
-              SliverToBoxAdapter(
-                child: Container(
-                  key: const ValueKey('model-picker-refresh-error'),
-                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+            pressedOpacity: SettingsSurfaces.pressedOpacity(context),
+            key: const ValueKey('model-picker-refresh-button'),
+            padding: EdgeInsets.zero,
+            onPressed: isRefreshing
+                ? null
+                : () => unawaited(
+                    ref
+                        .read(settingsControllerProvider.notifier)
+                        .refreshModels(),
                   ),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.destructiveRed.withValues(
-                      alpha: 0.12,
+            child: isRefreshing
+                ? const CupertinoActivityIndicator(radius: 8)
+                : const Icon(CupertinoIcons.arrow_clockwise, size: 20),
+          ),
+        ),
+        child: SafeArea(
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              CupertinoSliverRefreshControl(
+                onRefresh: () => ref
+                    .read(settingsControllerProvider.notifier)
+                    .refreshModels(),
+              ),
+              if (currentState.refreshError != null)
+                SliverToBoxAdapter(
+                  child: Container(
+                    key: const ValueKey('model-picker-refresh-error'),
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: CupertinoColors.destructiveRed.withValues(
-                        alpha: 0.3,
+                    decoration: BoxDecoration(
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.tintError,
+                        dark: CupertinoColors.destructiveRed.withValues(
+                          alpha: 0.12,
+                        ),
                       ),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        CupertinoIcons.exclamationmark_circle_fill,
-                        size: 16,
-                        color: CupertinoColors.destructiveRed,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          currentState.refreshError!,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: CupertinoColors.destructiveRed,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.divider,
+                          dark: CupertinoColors.destructiveRed.withValues(
+                            alpha: 0.3,
                           ),
                         ),
                       ),
-                      CupertinoButton(
-                        key: const ValueKey('model-picker-clear-refresh-error'),
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(20, 20),
-                        onPressed: () => ref
-                            .read(settingsControllerProvider.notifier)
-                            .clearRefreshError(),
-                        child: const Icon(
-                          CupertinoIcons.clear_circled_solid,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.exclamationmark_circle_fill,
                           size: 16,
-                          color: CupertinoColors.destructiveRed,
+                          color: LightSurfaces.resolve(
+                            context,
+                            statusRedText.resolveFrom(context),
+                            dark: const Color(0xFFFF3B30),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (groups.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Text(
-                    l10n.noAvailableModels,
-                    style: TextStyle(
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
-                        context,
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            currentState.refreshError!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: LightSurfaces.resolve(
+                                context,
+                                statusRedText.resolveFrom(context),
+                                dark: const Color(0xFFFF3B30),
+                              ),
+                            ),
+                          ),
+                        ),
+                        CupertinoButton(
+                          foregroundColor: SettingsSurfaces.actionColor(
+                            context,
+                          ),
+                          pressedOpacity: SettingsSurfaces.pressedOpacity(
+                            context,
+                          ),
+                          key: const ValueKey(
+                            'model-picker-clear-refresh-error',
+                          ),
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(20, 20),
+                          onPressed: () => ref
+                              .read(settingsControllerProvider.notifier)
+                              .clearRefreshError(),
+                          child: Icon(
+                            CupertinoIcons.clear_circled_solid,
+                            size: 16,
+                            color: LightSurfaces.resolve(
+                              context,
+                              statusRedText.resolveFrom(context),
+                              dark: const Color(0xFFFF3B30),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              )
-            else
-              for (final group in groups)
-                SliverToBoxAdapter(
-                  child: CupertinoListSection(
-                    dividerMargin: 0,
-                    additionalDividerMargin: 0,
-
-                    header: Text(group.name),
-                    children: [
-                      for (final model in [
-                        ...group.models,
-                        ...group.extraModels,
-                      ])
-                        CupertinoListTile(
-                          key: ValueKey('model-option-${model.id}'),
-                          title: Text(model.displayName),
-                          trailing: model.id == currentState.defaultModel
-                              ? const Icon(CupertinoIcons.checkmark)
-                              : null,
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            unawaited(
-                              ref
-                                  .read(settingsControllerProvider.notifier)
-                                  .setDefaultModel(model.id),
-                            );
-                          },
+              if (groups.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      l10n.noAvailableModels,
+                      style: TextStyle(
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: CupertinoColors.secondaryLabel,
                         ),
-                    ],
+                      ),
+                    ),
                   ),
-                ),
-          ],
+                )
+              else
+                for (final group in groups)
+                  SliverToBoxAdapter(
+                    child: SettingsSurfaces.section(
+                      context,
+                      CupertinoListSection(
+                        dividerMargin: 0,
+                        additionalDividerMargin: 0,
+
+                        header: Text(group.name),
+                        children: [
+                          for (final model in [
+                            ...group.models,
+                            ...group.extraModels,
+                          ])
+                            CupertinoListTile(
+                              key: ValueKey('model-option-${model.id}'),
+                              backgroundColor: SettingsSurfaces.selection(
+                                context,
+                                model.id == currentState.defaultModel,
+                              ),
+                              title: Text(model.displayName),
+                              trailing: model.id == currentState.defaultModel
+                                  ? const Icon(CupertinoIcons.checkmark)
+                                  : null,
+                              onTap: () {
+                                Navigator.of(context).pop();
+                                unawaited(
+                                  ref
+                                      .read(settingsControllerProvider.notifier)
+                                      .setDefaultModel(model.id),
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+            ],
+          ),
         ),
       ),
     );
@@ -1742,51 +2024,60 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
 
       await showCupertinoDialog<void>(
         context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(l10n.updateDialogTitle(release.tagName)),
-          content: Text(releaseNotes),
-          actions: [
-            CupertinoDialogAction(
-              child: Text(l10n.cancel),
-              onPressed: () => Navigator.of(ctx).pop(),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: Text(l10n.updateGoToDownload),
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                unawaited(handleDownloadOrOpenRelease(context, ref, release));
-              },
-            ),
-          ],
+        builder: (ctx) => SettingsSurfaces.dialog(
+          context,
+          CupertinoAlertDialog(
+            title: Text(l10n.updateDialogTitle(release.tagName)),
+            content: Text(releaseNotes),
+            actions: [
+              CupertinoDialogAction(
+                child: Text(l10n.cancel),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                child: Text(l10n.updateGoToDownload),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  unawaited(handleDownloadOrOpenRelease(context, ref, release));
+                },
+              ),
+            ],
+          ),
         ),
       );
     } else if (result.status == UpdateCheckStatus.upToDate) {
       await showCupertinoDialog<void>(
         context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(l10n.updateSectionTitle),
-          content: Text(l10n.updateAlreadyLatest),
-          actions: [
-            CupertinoDialogAction(
-              child: Text(l10n.ok),
-              onPressed: () => Navigator.of(ctx).pop(),
-            ),
-          ],
+        builder: (ctx) => SettingsSurfaces.dialog(
+          context,
+          CupertinoAlertDialog(
+            title: Text(l10n.updateSectionTitle),
+            content: Text(l10n.updateAlreadyLatest),
+            actions: [
+              CupertinoDialogAction(
+                child: Text(l10n.ok),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ],
+          ),
         ),
       );
     } else {
       await showCupertinoDialog<void>(
         context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(l10n.updateSectionTitle),
-          content: Text(l10n.updateCheckFailed),
-          actions: [
-            CupertinoDialogAction(
-              child: Text(l10n.ok),
-              onPressed: () => Navigator.of(ctx).pop(),
-            ),
-          ],
+        builder: (ctx) => SettingsSurfaces.dialog(
+          context,
+          CupertinoAlertDialog(
+            title: Text(l10n.updateSectionTitle),
+            content: Text(l10n.updateCheckFailed),
+            actions: [
+              CupertinoDialogAction(
+                child: Text(l10n.ok),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -1800,46 +2091,58 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
     final version = ref.watch(appVersionProvider).value ?? appVersionFallback;
     final autoCheckEnabled = ref.watch(autoCheckUpdateEnabledProvider);
 
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
-      header: Text(l10n.aboutSection),
-      children: [
-        CupertinoListTile(
-          title: const Text('Hermes UI'),
-          subtitle: Text(l10n.hermesWebUIClient),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-version-tile'),
-          title: Text(l10n.version),
-          trailing: Text(
-            version,
-            style: TextStyle(color: secondaryText.resolveFrom(context)),
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+        header: Text(l10n.aboutSection),
+        children: [
+          CupertinoListTile(
+            title: const Text('Hermes UI'),
+            subtitle: Text(l10n.hermesWebUIClient),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.autoCheckUpdateLabel),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-auto-check-update-switch'),
-            value: autoCheckEnabled,
-            onChanged: (val) {
-              unawaited(
-                ref
-                    .read(autoCheckUpdateEnabledProvider.notifier)
-                    .setEnabled(val),
-              );
-            },
+          CupertinoListTile(
+            key: const ValueKey('settings-version-tile'),
+            title: Text(l10n.version),
+            trailing: Text(
+              version,
+              style: TextStyle(
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          key: const ValueKey('settings-check-update-tile'),
-          title: Text(l10n.checkUpdateNowLabel),
-          trailing: _isChecking
-              ? const CupertinoActivityIndicator()
-              : const CupertinoListTileChevron(),
-          onTap: _isChecking ? null : _checkUpdate,
-        ),
-      ],
+          CupertinoListTile(
+            title: Text(l10n.autoCheckUpdateLabel),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-auto-check-update-switch'),
+                value: autoCheckEnabled,
+                onChanged: (val) {
+                  unawaited(
+                    ref
+                        .read(autoCheckUpdateEnabledProvider.notifier)
+                        .setEnabled(val),
+                  );
+                },
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-check-update-tile'),
+            title: Text(l10n.checkUpdateNowLabel),
+            trailing: _isChecking
+                ? const CupertinoActivityIndicator()
+                : const CupertinoListTileChevron(),
+            onTap: _isChecking ? null : _checkUpdate,
+          ),
+        ],
+      ),
     );
   }
 }

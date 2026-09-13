@@ -11,6 +11,7 @@ import '../session_list/session_row_subtitle_settings.dart';
 import 'auxiliary_models_section.dart';
 import 'extensions_section.dart';
 import 'mcp_section.dart';
+import 'settings_surfaces.dart';
 import 'webui_sidecar_section.dart';
 
 /// 返回按钮：显式 [CupertinoNavigationBarBackButton.onPressed]，
@@ -36,12 +37,16 @@ class AuxiliaryModelsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const PopBackButton(),
-        middle: Text(l10n.auxiliaryModelsSection),
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const PopBackButton(),
+          middle: Text(l10n.auxiliaryModelsSection),
+        ),
+        child: ListView(children: const [AuxiliaryModelsSection()]),
       ),
-      child: ListView(children: const [AuxiliaryModelsSection()]),
     );
   }
 }
@@ -56,12 +61,16 @@ class McpPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const PopBackButton(),
-        middle: Text(l10n.mcpSection),
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const PopBackButton(),
+          middle: Text(l10n.mcpSection),
+        ),
+        child: ListView(children: const [McpSection()]),
       ),
-      child: ListView(children: const [McpSection()]),
     );
   }
 }
@@ -76,12 +85,16 @@ class ExtensionsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const PopBackButton(),
-        middle: Text(l10n.extensionsSection),
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const PopBackButton(),
+          middle: Text(l10n.extensionsSection),
+        ),
+        child: ListView(children: const [ExtensionsSection()]),
       ),
-      child: ListView(children: const [ExtensionsSection()]),
     );
   }
 }
@@ -96,12 +109,16 @@ class SessionListEntriesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const PopBackButton(),
-        middle: Text(l10n.sessionListEntriesSection),
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const PopBackButton(),
+          middle: Text(l10n.sessionListEntriesSection),
+        ),
+        child: ListView(children: const [SessionListEntriesSection()]),
       ),
-      child: ListView(children: const [SessionListEntriesSection()]),
     );
   }
 }
@@ -116,83 +133,107 @@ class SessionListEntriesSection extends ConsumerWidget {
     final visibility = ref.watch(sessionEntryVisibilityProvider);
     final controller = ref.read(sessionEntryVisibilityProvider.notifier);
 
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      header: Text(l10n.sessionListEntriesSection),
-      children: [
-        CupertinoListTile(
-          title: Text(l10n.tasksTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-tasks'),
-            value: visibility.tasks,
-            onChanged: (value) {
-              unawaited(controller.setVisible('tasks', value));
-            },
+        header: Text(l10n.sessionListEntriesSection),
+        children: [
+          CupertinoListTile(
+            title: Text(l10n.tasksTitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-visibility-tasks'),
+                value: visibility.tasks,
+                onChanged: (value) {
+                  unawaited(controller.setVisible('tasks', value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.kanbanTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-kanban'),
-            value: visibility.kanban,
-            onChanged: (value) {
-              unawaited(controller.setVisible('kanban', value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.kanbanTitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-visibility-kanban'),
+                value: visibility.kanban,
+                onChanged: (value) {
+                  unawaited(controller.setVisible('kanban', value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.workspacesTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-workspaces'),
-            value: visibility.workspaces,
-            onChanged: (value) {
-              unawaited(controller.setVisible('workspaces', value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.workspacesTitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-visibility-workspaces'),
+                value: visibility.workspaces,
+                onChanged: (value) {
+                  unawaited(controller.setVisible('workspaces', value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.skillsTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-skills'),
-            value: visibility.skills,
-            onChanged: (value) {
-              unawaited(controller.setVisible('skills', value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.skillsTitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-visibility-skills'),
+                value: visibility.skills,
+                onChanged: (value) {
+                  unawaited(controller.setVisible('skills', value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.insightsTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-insights'),
-            value: visibility.insights,
-            onChanged: (value) {
-              unawaited(controller.setVisible('insights', value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.insightsTitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-visibility-insights'),
+                value: visibility.insights,
+                onChanged: (value) {
+                  unawaited(controller.setVisible('insights', value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.memoryTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-memory'),
-            value: visibility.memory,
-            onChanged: (value) {
-              unawaited(controller.setVisible('memory', value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.memoryTitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-visibility-memory'),
+                value: visibility.memory,
+                onChanged: (value) {
+                  unawaited(controller.setVisible('memory', value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.downloadsTitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-visibility-downloads'),
-            value: visibility.downloads,
-            onChanged: (value) {
-              unawaited(controller.setVisible('downloads', value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.downloadsTitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-visibility-downloads'),
+                value: visibility.downloads,
+                onChanged: (value) {
+                  unawaited(controller.setVisible('downloads', value));
+                },
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -207,12 +248,16 @@ class SessionRowSubtitlePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const PopBackButton(),
-        middle: Text(l10n.sessionRowSubtitleSection),
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const PopBackButton(),
+          middle: Text(l10n.sessionRowSubtitleSection),
+        ),
+        child: ListView(children: const [SessionRowSubtitleSection()]),
       ),
-      child: ListView(children: const [SessionRowSubtitleSection()]),
     );
   }
 }
@@ -228,63 +273,81 @@ class SessionRowSubtitleSection extends ConsumerWidget {
     final settings = ref.watch(sessionRowSubtitleSettingsProvider);
     final controller = ref.read(sessionRowSubtitleSettingsProvider.notifier);
 
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      header: Text(l10n.sessionRowSubtitleSection),
-      children: [
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowMessageCount),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-message-count'),
-            value: settings.messageCount,
-            onChanged: (value) {
-              unawaited(controller.setMessageCount(value));
-            },
+        header: Text(l10n.sessionRowSubtitleSection),
+        children: [
+          CupertinoListTile(
+            title: Text(l10n.sessionRowShowMessageCount),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-subtitle-message-count'),
+                value: settings.messageCount,
+                onChanged: (value) {
+                  unawaited(controller.setMessageCount(value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowProjectName),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-project-name'),
-            value: settings.projectName,
-            onChanged: (value) {
-              unawaited(controller.setProjectName(value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.sessionRowShowProjectName),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-subtitle-project-name'),
+                value: settings.projectName,
+                onChanged: (value) {
+                  unawaited(controller.setProjectName(value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowWorkspace),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-workspace'),
-            value: settings.workspace,
-            onChanged: (value) {
-              unawaited(controller.setWorkspace(value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.sessionRowShowWorkspace),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-subtitle-workspace'),
+                value: settings.workspace,
+                onChanged: (value) {
+                  unawaited(controller.setWorkspace(value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowChannel),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-channel'),
-            value: settings.channel,
-            onChanged: (value) {
-              unawaited(controller.setChannel(value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.sessionRowShowChannel),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-subtitle-channel'),
+                value: settings.channel,
+                onChanged: (value) {
+                  unawaited(controller.setChannel(value));
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.sessionRowShowEstimatedCost),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-subtitle-estimated-cost'),
-            value: settings.estimatedCost,
-            onChanged: (value) {
-              unawaited(controller.setEstimatedCost(value));
-            },
+          CupertinoListTile(
+            title: Text(l10n.sessionRowShowEstimatedCost),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-subtitle-estimated-cost'),
+                value: settings.estimatedCost,
+                onChanged: (value) {
+                  unawaited(controller.setEstimatedCost(value));
+                },
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -299,16 +362,20 @@ class DesktopSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const PopBackButton(),
-        middle: Text(l10n.desktopSection),
-      ),
-      child: ListView(
-        children: [
-          const DesktopSection(),
-          if (Platform.isWindows) const WebuiSidecarSection(),
-        ],
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const PopBackButton(),
+          middle: Text(l10n.desktopSection),
+        ),
+        child: ListView(
+          children: [
+            const DesktopSection(),
+            if (Platform.isWindows) const WebuiSidecarSection(),
+          ],
+        ),
       ),
     );
   }
@@ -322,88 +389,106 @@ class DesktopSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(desktopSettingsProvider);
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
 
-      header: Text(l10n.desktopSection),
-      children: [
-        CupertinoListTile(
-          title: Text(l10n.minimizeToTray),
-          subtitle: Text(l10n.minimizeToTraySubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-desktop-minimize-to-tray'),
-            value: settings.minimizeToTray,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setMinimizeToTray(value),
-              );
-            },
+        header: Text(l10n.desktopSection),
+        children: [
+          CupertinoListTile(
+            title: Text(l10n.minimizeToTray),
+            subtitle: Text(l10n.minimizeToTraySubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-desktop-minimize-to-tray'),
+                value: settings.minimizeToTray,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(desktopSettingsProvider.notifier)
+                        .setMinimizeToTray(value),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.globalShortcuts),
-          subtitle: Text(l10n.globalShortcutsSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-desktop-global-shortcuts'),
-            value: settings.globalShortcutsEnabled,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setGlobalShortcutsEnabled(value),
-              );
-            },
+          CupertinoListTile(
+            title: Text(l10n.globalShortcuts),
+            subtitle: Text(l10n.globalShortcutsSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-desktop-global-shortcuts'),
+                value: settings.globalShortcutsEnabled,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(desktopSettingsProvider.notifier)
+                        .setGlobalShortcutsEnabled(value),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.rememberWindowPosition),
-          subtitle: Text(l10n.rememberWindowPositionSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-desktop-remember-window'),
-            value: settings.rememberWindowPosition,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setRememberWindowPosition(value),
-              );
-            },
+          CupertinoListTile(
+            title: Text(l10n.rememberWindowPosition),
+            subtitle: Text(l10n.rememberWindowPositionSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-desktop-remember-window'),
+                value: settings.rememberWindowPosition,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(desktopSettingsProvider.notifier)
+                        .setRememberWindowPosition(value),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.startOnLogin),
-          subtitle: Text(l10n.startOnLoginSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-desktop-start-on-login'),
-            value: settings.startOnLogin,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setStartOnLogin(value),
-              );
-            },
+          CupertinoListTile(
+            title: Text(l10n.startOnLogin),
+            subtitle: Text(l10n.startOnLoginSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-desktop-start-on-login'),
+                value: settings.startOnLogin,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(desktopSettingsProvider.notifier)
+                        .setStartOnLogin(value),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.silentStart),
-          subtitle: Text(l10n.silentStartSubtitle),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('settings-desktop-silent-start'),
-            value: settings.silentStart,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setSilentStart(value),
-              );
-            },
+          CupertinoListTile(
+            title: Text(l10n.silentStart),
+            subtitle: Text(l10n.silentStartSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-desktop-silent-start'),
+                value: settings.silentStart,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(desktopSettingsProvider.notifier)
+                        .setSilentStart(value),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

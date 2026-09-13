@@ -5,9 +5,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import '../webui_sidecar/webui_sidecar_providers.dart';
+import 'settings_surfaces.dart';
 
 /// 设置页「内置 WebUI 服务」配置与状态分组。
 class WebuiSidecarSection extends ConsumerStatefulWidget {
@@ -140,44 +142,47 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
     await showCupertinoDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return CupertinoAlertDialog(
-          key: const ValueKey('settings-webui-missing-agent-dialog'),
-          title: Text(l10n.agentGateNeedInstallTitle),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Text(l10n.agentGateNeedInstallDesc),
+        return SettingsSurfaces.dialog(
+          context,
+          CupertinoAlertDialog(
+            key: const ValueKey('settings-webui-missing-agent-dialog'),
+            title: Text(l10n.agentGateNeedInstallTitle),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(l10n.agentGateNeedInstallDesc),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                key: const ValueKey('settings-webui-dialog-cancel-btn'),
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+                child: Text(l10n.agentGateCancel),
+              ),
+              CupertinoDialogAction(
+                key: const ValueKey('settings-webui-dialog-guide-btn'),
+                onPressed: () async {
+                  Navigator.of(dialogContext).pop();
+                  try {
+                    await launchUrl(
+                      Uri.parse(hermesAgentDocsUrl),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  } catch (_) {}
+                },
+                child: Text(l10n.agentGateGoToInstallGuide),
+              ),
+              CupertinoDialogAction(
+                key: const ValueKey('settings-webui-dialog-recheck-btn'),
+                isDefaultAction: true,
+                onPressed: () async {
+                  Navigator.of(dialogContext).pop();
+                  await ref.read(agentEnvPresentProvider.notifier).refresh();
+                },
+                child: Text(l10n.agentGateRecheck),
+              ),
+            ],
           ),
-          actions: [
-            CupertinoDialogAction(
-              key: const ValueKey('settings-webui-dialog-cancel-btn'),
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-              },
-              child: Text(l10n.agentGateCancel),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('settings-webui-dialog-guide-btn'),
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                try {
-                  await launchUrl(
-                    Uri.parse(hermesAgentDocsUrl),
-                    mode: LaunchMode.externalApplication,
-                  );
-                } catch (_) {}
-              },
-              child: Text(l10n.agentGateGoToInstallGuide),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('settings-webui-dialog-recheck-btn'),
-              isDefaultAction: true,
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                await ref.read(agentEnvPresentProvider.notifier).refresh();
-              },
-              child: Text(l10n.agentGateRecheck),
-            ),
-          ],
         );
       },
     );
@@ -251,110 +256,132 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
 
     final isMissingBundle = !fs.isWindows || !isBundleAvailable;
 
-    return CupertinoListSection(
-      dividerMargin: 0,
-      additionalDividerMargin: 0,
-      header: Text(l10n.webuiSectionTitle),
-      children: [
-        if (isMissingBundle)
-          CupertinoListTile(
-            key: const ValueKey('settings-webui-missing-bundle-hint'),
-            leading: Icon(
-              CupertinoIcons.info_circle,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              size: 20,
-            ),
-            title: Text(
-              l10n.webuiBundleMissingHint,
-              style: TextStyle(
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                fontSize: 13,
-              ),
-            ),
-          ),
-        CupertinoListTile(
-          title: Text(l10n.webuiEnableTitle),
-          subtitle: Text(l10n.webuiEnableSubtitle),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_isToggling)
-                const Padding(
-                  padding: EdgeInsets.only(right: 8),
-                  child: CupertinoActivityIndicator(),
+    return SettingsSurfaces.section(
+      context,
+      CupertinoListSection(
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+        header: Text(l10n.webuiSectionTitle),
+        children: [
+          if (isMissingBundle)
+            CupertinoListTile(
+              key: const ValueKey('settings-webui-missing-bundle-hint'),
+              leading: Icon(
+                CupertinoIcons.info_circle,
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
                 ),
-              CupertinoSwitch(
-                key: const ValueKey('settings-webui-enable-switch'),
-                value: config.enabled,
-                onChanged: _isToggling ? null : _handleToggle,
+                size: 20,
               ),
-            ],
-          ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.webuiListeningHost),
-          subtitle: _hostError != null
-              ? Text(
-                  _hostError!,
-                  style: TextStyle(
-                    color: statusRedText.resolveFrom(context),
-                    fontSize: 12,
+              title: Text(
+                l10n.webuiBundleMissingHint,
+                style: TextStyle(
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: CupertinoColors.secondaryLabel,
                   ),
-                )
-              : null,
-          trailing: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 140),
-            child: CupertinoTextField(
-              key: const ValueKey('settings-webui-host-input'),
-              controller: _hostController,
-              focusNode: _hostFocusNode,
-              textAlign: TextAlign.end,
-              placeholder: SidecarConfig.defaultHost,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              onSubmitted: (_) => _submitHost(),
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          CupertinoListTile(
+            title: Text(l10n.webuiEnableTitle),
+            subtitle: Text(l10n.webuiEnableSubtitle),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isToggling)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: CupertinoActivityIndicator(),
+                  ),
+                SettingsSurfaces.toggle(
+                  context,
+                  CupertinoSwitch(
+                    key: const ValueKey('settings-webui-enable-switch'),
+                    value: config.enabled,
+                    onChanged: _isToggling ? null : _handleToggle,
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        CupertinoListTile(
-          title: Text(l10n.webuiListeningPort),
-          subtitle: _portError != null
-              ? Text(
-                  _portError!,
-                  style: TextStyle(
-                    color: statusRedText.resolveFrom(context),
-                    fontSize: 12,
-                  ),
-                )
-              : null,
-          trailing: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 140),
-            child: CupertinoTextField(
-              key: const ValueKey('settings-webui-port-input'),
-              controller: _portController,
-              focusNode: _portFocusNode,
-              textAlign: TextAlign.end,
-              keyboardType: TextInputType.number,
-              placeholder: SidecarConfig.defaultPort.toString(),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              onSubmitted: (_) => _submitPort(),
+          CupertinoListTile(
+            title: Text(l10n.webuiListeningHost),
+            subtitle: _hostError != null
+                ? Text(
+                    _hostError!,
+                    style: TextStyle(
+                      color: statusRedText.resolveFrom(context),
+                      fontSize: 12,
+                    ),
+                  )
+                : null,
+            trailing: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
+              child: CupertinoTextField(
+                decoration: SettingsSurfaces.fieldDecoration(context),
+                placeholderStyle: SettingsSurfaces.placeholderStyle(context),
+                key: const ValueKey('settings-webui-host-input'),
+                controller: _hostController,
+                focusNode: _hostFocusNode,
+                textAlign: TextAlign.end,
+                placeholder: SidecarConfig.defaultHost,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                onSubmitted: (_) => _submitHost(),
+              ),
             ),
           ),
-        ),
-        _buildPasswordTile(context, l10n, config),
-        _buildStatusTile(context, l10n, sidecarState),
-        CupertinoListTile(
-          key: const ValueKey('settings-webui-open-logs'),
-          title: Text(l10n.webuiOpenLogs),
-          trailing: const Icon(
-            CupertinoIcons.chevron_right,
-            size: 18,
-            color: CupertinoColors.systemGrey,
+          CupertinoListTile(
+            title: Text(l10n.webuiListeningPort),
+            subtitle: _portError != null
+                ? Text(
+                    _portError!,
+                    style: TextStyle(
+                      color: statusRedText.resolveFrom(context),
+                      fontSize: 12,
+                    ),
+                  )
+                : null,
+            trailing: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
+              child: CupertinoTextField(
+                decoration: SettingsSurfaces.fieldDecoration(context),
+                placeholderStyle: SettingsSurfaces.placeholderStyle(context),
+                key: const ValueKey('settings-webui-port-input'),
+                controller: _portController,
+                focusNode: _portFocusNode,
+                textAlign: TextAlign.end,
+                keyboardType: TextInputType.number,
+                placeholder: SidecarConfig.defaultPort.toString(),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                onSubmitted: (_) => _submitPort(),
+              ),
+            ),
           ),
-          onTap: () {
-            unawaited(_openLogDirectory());
-          },
-        ),
-      ],
+          _buildPasswordTile(context, l10n, config),
+          _buildStatusTile(context, l10n, sidecarState),
+          CupertinoListTile(
+            key: const ValueKey('settings-webui-open-logs'),
+            title: Text(l10n.webuiOpenLogs),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
+            ),
+            onTap: () {
+              unawaited(_openLogDirectory());
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -384,6 +411,8 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
           children: [
             Expanded(
               child: CupertinoTextField(
+                decoration: SettingsSurfaces.fieldDecoration(context),
+                placeholderStyle: SettingsSurfaces.placeholderStyle(context),
                 key: const ValueKey('settings-webui-password-input'),
                 controller: _passwordController,
                 focusNode: _passwordFocusNode,
@@ -400,6 +429,8 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
               ),
             ),
             CupertinoButton(
+              foregroundColor: SettingsSurfaces.actionColor(context),
+              pressedOpacity: SettingsSurfaces.pressedOpacity(context),
               key: const ValueKey('settings-webui-password-visibility-btn'),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               minimumSize: const Size(0, 28),
@@ -411,7 +442,11 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
                     ? CupertinoIcons.eye
                     : CupertinoIcons.eye_slash,
                 size: 18,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
+                ),
               ),
             ),
           ],
@@ -479,18 +514,20 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
           ? Text(
               subtitle,
               style: TextStyle(
-                color: subtitleColor ??
-                    CupertinoColors.secondaryLabel.resolveFrom(context),
+                color:
+                    subtitleColor ??
+                    LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.secondaryLabel,
+                    ),
                 fontSize: 12,
               ),
             )
           : null,
       trailing: Text(
         statusText,
-        style: TextStyle(
-          color: statusColor,
-          fontWeight: FontWeight.w500,
-        ),
+        style: TextStyle(color: statusColor, fontWeight: FontWeight.w500),
       ),
     );
   }
