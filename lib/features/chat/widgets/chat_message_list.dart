@@ -23,6 +23,7 @@ import '../../settings/injected_notice_settings.dart';
 import '../../settings/tool_group_settings.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
+import 'chat_text_selection.dart';
 import 'collapsible_process_capsule.dart';
 import 'markdown_styles.dart';
 import 'message_action_menu.dart';
@@ -218,6 +219,8 @@ class _SafeMarkdownBody extends StatelessWidget {
       return MarkdownBody(
         data: data,
         selectable: selectable,
+        // #81：右键正文不叠原生「全选」工具条（自定义消息菜单承载操作）。
+        contextMenuBuilder: chatMessageTextContextMenu,
         styleSheet: styleSheet,
         builders: builders,
         inlineSyntaxes: inlineSyntaxes,

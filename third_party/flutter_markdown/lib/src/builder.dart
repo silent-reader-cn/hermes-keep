@@ -148,6 +148,9 @@ class MarkdownBuilder implements md.NodeVisitor {
     required this.listItemCrossAxisAlignment,
     this.fitContent = false,
     this.onSelectionChanged,
+    // PATCH(hermes-ui): forwarded to SelectableText in _buildRichText; see
+    // PATCH_NOTES.md section 4.
+    this.contextMenuBuilder,
     this.onTapText,
     this.softLineBreak = false,
   }) : assert(imageBuilder == null || sizedImageBuilder == null,
@@ -226,6 +229,10 @@ class MarkdownBuilder implements md.NodeVisitor {
 
   /// Called when the user changes selection when [selectable] is set to true.
   final MarkdownOnSelectionChangedCallback? onSelectionChanged;
+
+  // PATCH(hermes-ui): see PATCH_NOTES.md section 4.
+  /// {@macro flutter.widgets.EditableText.contextMenuBuilder}
+  final EditableTextContextMenuBuilder? contextMenuBuilder;
 
   /// Default tap handler used when [selectable] is set to true
   final VoidCallback? onTapText;
@@ -1078,6 +1085,27 @@ class MarkdownBuilder implements md.NodeVisitor {
     //Adding a unique key prevents the problem of using the same link handler for text spans with the same text
     final Key k = key == null ? UniqueKey() : Key(key);
     if (selectable) {
+      // PATCH(hermes-ui): forward the caller's selection context-menu builder
+      // so hosts can suppress/replace the native toolbar that pops on
+      // right-click (Windows/Linux) and stacks over custom menus. Passing
+      // null keeps the SelectableText default (upstream behaviour); the
+      // explicit branch avoids sending `contextMenuBuilder: null`, which
+      // would otherwise override the named-default with "no menu".
+      // See PATCH_NOTES.md section 4.
+      if (contextMenuBuilder != null) {
+        return SelectableText.rich(
+          text,
+          textScaler: styleSheet.textScaler,
+          textAlign: textAlign ?? TextAlign.start,
+          onSelectionChanged: onSelectionChanged != null
+              ? (TextSelection selection, SelectionChangedCause? cause) =>
+                  onSelectionChanged!(text.text, selection, cause)
+              : null,
+          contextMenuBuilder: contextMenuBuilder,
+          onTap: onTapText,
+          key: k,
+        );
+      }
       return SelectableText.rich(
         text,
         textScaler: styleSheet.textScaler,

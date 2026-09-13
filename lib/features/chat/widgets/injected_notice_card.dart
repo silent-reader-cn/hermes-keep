@@ -5,6 +5,7 @@ import '../../../app/theme/light_surfaces.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/utils/injected_message.dart';
 import '../../../l10n/app_localizations.dart';
+import 'chat_text_selection.dart';
 
 /// Agent injected notice fold card (spec §3.1).
 ///
@@ -116,6 +117,8 @@ class InjectedNoticeCard extends StatelessWidget {
                       child: SingleChildScrollView(
                         child: SelectableText(
                           message.content ?? '',
+                          // #81：右键不叠原生「全选」工具条。
+                          contextMenuBuilder: chatMessageTextContextMenu,
                           style: TextStyle(
                             fontFamily: 'monospace',
                             fontFamilyFallback: const ['MiSans'],

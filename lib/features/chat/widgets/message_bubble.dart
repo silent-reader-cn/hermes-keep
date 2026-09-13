@@ -13,6 +13,7 @@ import '../../../core/utils/selected_context.dart';
 import '../../chat/chat_models.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
+import 'chat_text_selection.dart';
 import 'injected_notice_card.dart';
 import 'markdown_styles.dart';
 import 'selected_context_card.dart';
@@ -223,6 +224,8 @@ class _UserContent extends StatelessWidget {
             MarkdownBody(
               data: parsedDisplay,
               selectable: true,
+              // #81：右键正文不叠原生「全选」工具条（自定义消息菜单承载操作）。
+              contextMenuBuilder: chatMessageTextContextMenu,
               styleSheet: buildUserMarkdownStyleSheet(context),
               // #91 图片块级化：imageBuilder 同源注入 builders（img 独立成块）。
               builders: createUserMarkdownBuilders(
@@ -359,6 +362,8 @@ class _AssistantContent extends StatelessWidget {
           MarkdownBody(
             data: parsedContent,
             selectable: true,
+            // #81：右键正文不叠原生「全选」工具条（自定义消息菜单承载操作）。
+            contextMenuBuilder: chatMessageTextContextMenu,
             styleSheet: buildAssistantMarkdownStyleSheet(
               context,
               useLightSurfaces: true,

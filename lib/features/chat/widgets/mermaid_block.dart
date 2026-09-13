@@ -12,6 +12,7 @@ import 'package:mermaid_flutter/mermaid_flutter.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../settings/settings_providers.dart';
+import 'chat_text_selection.dart';
 import 'mermaid_fullscreen_page.dart';
 
 /// 匹配 Mermaid 图表类型起始关键字的正则表达式（大小写敏感，照 mermaid 惯例）。
@@ -132,6 +133,8 @@ class _CodeBlockFallbackState extends State<CodeBlockFallback> {
               padding: padding,
               child: SelectableText.rich(
                 TextSpan(text: cleanText, style: textStyle),
+                // #81：右键代码块不叠原生「全选」工具条（与正文一致）。
+                contextMenuBuilder: chatMessageTextContextMenu,
               ),
             ),
           ),

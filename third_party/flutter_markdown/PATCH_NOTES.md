@@ -34,7 +34,27 @@
   rendering). Block tags are now a per-builder list initialised from
   `_kDefaultBlockTags` and rebuilt on each `build()`.
 
+## 4. contextMenuBuilder passthrough (#81 double right-click menu)
+On Windows/Linux a right-click on `SelectableText` always toggles the
+native text-selection toolbar (a lone "Select all" entry when there is
+no selection). In the chat window this stacked on top of the custom
+message context menu, producing two menus from one right-click.
+
+- `lib/src/widget.dart`: `MarkdownWidget` gains an optional
+  `contextMenuBuilder` (`EditableTextContextMenuBuilder?`, forwarded to
+  `MarkdownBuilder`; `MarkdownBody` / `Markdown` expose it via
+  `super.contextMenuBuilder`).
+- `lib/src/builder.dart`: `MarkdownBuilder` stores it and, in
+  `_buildRichText`, passes it to `SelectableText.rich` **only when
+  non-null** (upstream default preserved otherwise; a null explicit
+  pass-through would fall back to the legacy controls path).
+
+Hosts that want to suppress/replace the native selection toolbar pass
+their own builder (see `lib/features/chat/widgets/chat_text_selection.dart`).
+
 ## Regression tests
 - test/features/chat/widgets/markdown_image_link_crash_test.dart
+- test/features/chat/message_context_menu_native_toolbar_test.dart (#81;
+  baseline without the fix renders the native toolbar with "Select all")
 
-Patch author: hermes-ui maintainers, 2026-09-07.
+Patch author: hermes-ui maintainers, 2026-09-07; section 4 added 2026-09-13.

@@ -245,6 +245,9 @@ abstract class MarkdownWidget extends StatefulWidget {
     this.listItemCrossAxisAlignment =
         MarkdownListItemCrossAxisAlignment.baseline,
     this.softLineBreak = false,
+    // PATCH(hermes-ui): forward a selection context-menu builder down to the
+    // SelectableText widgets; see PATCH_NOTES.md section 4.
+    this.contextMenuBuilder,
   });
 
   /// The Markdown to display.
@@ -275,6 +278,14 @@ abstract class MarkdownWidget extends StatefulWidget {
 
   /// Called when the user changes selection when [selectable] is set to true.
   final MarkdownOnSelectionChangedCallback? onSelectionChanged;
+
+  // PATCH(hermes-ui): forwarded to the SelectableText widgets built when
+  // [selectable] is true. Passing an empty builder suppresses the platform
+  // text-selection context toolbar (Windows/Linux right-click "Select all"
+  // popup) that would otherwise stack on top of custom message menus.
+  // See PATCH_NOTES.md section 4.
+  /// {@macro flutter.widgets.EditableText.contextMenuBuilder}
+  final EditableTextContextMenuBuilder? contextMenuBuilder;
 
   /// Default tap handler used when [selectable] is set to true
   final VoidCallback? onTapText;
@@ -419,6 +430,8 @@ class _MarkdownWidgetState extends State<MarkdownWidget>
       fitContent: widget.fitContent,
       listItemCrossAxisAlignment: widget.listItemCrossAxisAlignment,
       onSelectionChanged: widget.onSelectionChanged,
+      // PATCH(hermes-ui): see PATCH_NOTES.md section 4.
+      contextMenuBuilder: widget.contextMenuBuilder,
       onTapText: widget.onTapText,
       softLineBreak: widget.softLineBreak,
     );
@@ -506,6 +519,7 @@ class MarkdownBody extends MarkdownWidget {
     super.styleSheetTheme = null,
     super.syntaxHighlighter,
     super.onSelectionChanged,
+    super.contextMenuBuilder,
     super.onTapLink,
     super.onTapText,
     super.imageDirectory,
@@ -562,6 +576,7 @@ class Markdown extends MarkdownWidget {
     super.styleSheetTheme = null,
     super.syntaxHighlighter,
     super.onSelectionChanged,
+    super.contextMenuBuilder,
     super.onTapLink,
     super.onTapText,
     super.imageDirectory,

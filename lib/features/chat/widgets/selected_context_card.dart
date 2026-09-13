@@ -6,6 +6,7 @@ import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../core/utils/selected_context.dart';
 import '../../../l10n/app_localizations.dart';
+import 'chat_text_selection.dart';
 
 /// 已发送选中上下文卡片 — 对齐 WebUI `style.css:1399-1401` + 参照 `InjectedNoticeCard`.
 ///
@@ -108,6 +109,8 @@ class SelectedContextCard extends StatelessWidget {
                       const SizedBox(height: 5),
                       SelectableText(
                         quote,
+                        // #81：右键引用卡不叠原生「全选」工具条。
+                        contextMenuBuilder: chatMessageTextContextMenu,
                         style: TextStyle(
                           fontSize: 12.5,
                           height: 1.45,
