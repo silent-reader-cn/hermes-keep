@@ -717,8 +717,10 @@ void main() {
     });
   });
 
-  group('暗色模式像素一致性与默认行为保留', () {
-    testWidgets('暗色任务列表保留原始默认面、未解析语义色与原生交互', (tester) async {
+  group('Dark surfaces, icon contrast and native behavior', () {
+    testWidgets('Dark task list preserves surfaces and readable actions', (
+      tester,
+    ) async {
       final api = FakeTasksApi(
         jobs: [
           _buildJob(
@@ -754,14 +756,23 @@ void main() {
         secondaryText.resolveFrom(subElement).toARGB32(),
       );
 
-      // 验证操作按钮图标保持 CupertinoColors.systemGrey 原有语义色
+      // Functional actions use the resolved dark secondary label.
       final actionFinder = find.byKey(const ValueKey('tasks-actions-j1'));
       final actionIcon = tester.widget<Icon>(
         find.descendant(of: actionFinder, matching: find.byType(Icon)),
       );
       expect(
         actionIcon.color?.toARGB32(),
-        CupertinoColors.systemGrey.resolveFrom(subElement).toARGB32(),
+        CupertinoColors.secondaryLabel.resolveFrom(subElement).toARGB32(),
+      );
+      expect(
+        contrastRatio(
+          actionIcon.color!,
+          CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+            subElement,
+          ),
+        ),
+        greaterThanOrEqualTo(3),
       );
 
       // 验证暗色模式下 GestureDetector 无按下态包裹层，直接透传 child
@@ -849,7 +860,11 @@ void main() {
       );
       expect(
         closeIcon.color?.toARGB32(),
-        CupertinoColors.tertiaryLabel.resolveFrom(element).toARGB32(),
+        CupertinoColors.secondaryLabel.resolveFrom(element).toARGB32(),
+      );
+      expect(
+        contrastRatio(closeIcon.color!, sheetDec.color!),
+        greaterThanOrEqualTo(3),
       );
 
       final darkContentFinder = find.text('dark content');
@@ -912,9 +927,9 @@ void main() {
       );
       expect(
         actionIcon.color?.toARGB32(),
-        CupertinoColors.systemGrey.resolveFrom(element).toARGB32(),
+        CupertinoColors.secondaryLabel.resolveFrom(element).toARGB32(),
       );
-      expect(actionIcon.color?.toARGB32(), const Color(0xFFAEAEB2).toARGB32());
+      expect(actionIcon.color?.toARGB32(), const Color(0xADEBEBF5).toARGB32());
     });
 
     testWidgets('暗色模式实心按钮、弹窗动作与表单保留原生暗色主题解析与环境选区样式', (tester) async {

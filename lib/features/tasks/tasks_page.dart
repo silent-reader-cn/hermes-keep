@@ -236,7 +236,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: CupertinoColors.systemGrey,
+                dark: CupertinoColors.secondaryLabel,
               ),
             ),
             const SizedBox(height: 12),
@@ -280,7 +280,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: CupertinoColors.systemGrey,
+                dark: CupertinoColors.secondaryLabel,
               ),
             ),
             const SizedBox(height: 12),
@@ -575,7 +575,7 @@ class _TaskRowState extends State<_TaskRow> {
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
-                    dark: CupertinoColors.systemGrey,
+                    dark: CupertinoColors.secondaryLabel,
                   ),
                 ),
               ),
@@ -639,7 +639,7 @@ class _TaskOutputSheet extends StatelessWidget {
     final tertiaryLabelColor = LightSurfaces.resolve(
       context,
       LightSurfaces.textSecondary,
-      dark: CupertinoColors.tertiaryLabel,
+      dark: CupertinoColors.secondaryLabel,
     );
     final separatorColor = LightSurfaces.resolve(
       context,
