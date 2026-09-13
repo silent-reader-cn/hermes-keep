@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -247,7 +248,11 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
                         style: TextStyle(
                           fontSize: 15,
                           height: 1.4,
-                          color: secondaryText.resolveFrom(context),
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: secondaryText,
+                          ),
                         ),
                       ),
                     ),
@@ -261,6 +266,7 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
     );
   }
 
+  // The logo tile is part of the decorative hero; its black/white H is legible.
   Widget _buildFallbackLogo(BuildContext context) {
     return Container(
       width: 88,
@@ -299,6 +305,8 @@ class _BreathCurve extends Curve {
   double transformInternal(double t) => (1 - math.cos(math.pi * t)) / 2;
 }
 
+// The halo, orbit and guide lines are non-interactive brand decoration.
+// Keep their palette and motion independent of readable form surfaces.
 class _HaloPainter extends CustomPainter {
   _HaloPainter({required this.isDark, required this.breath})
     : super(repaint: breath) {

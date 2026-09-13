@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/git_workspace.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
@@ -89,6 +90,7 @@ class _GitPageState extends ConsumerState<GitPage> {
         color: isError
             ? CupertinoColors.systemRed
             : CupertinoColors.systemGreen,
+        isError: isError,
         onDismiss: () {
           final controller = ref.read(
             gitControllerProvider(widget.sessionId).notifier,
@@ -164,7 +166,11 @@ class _GitPageState extends ConsumerState<GitPage> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ),
@@ -176,6 +182,7 @@ class _GitPageState extends ConsumerState<GitPage> {
 
   Widget _buildSummarySliver(WidgetRef ref, GitState state) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final branches = state.branches;
     final current = branches?.current ?? state.status?.branch;
     final ahead = state.status?.ahead ?? 0;
@@ -188,12 +195,21 @@ class _GitPageState extends ConsumerState<GitPage> {
       child: CupertinoListSection.insetGrouped(
         dividerMargin: 0,
         additionalDividerMargin: 0,
-
+        decoration: isDark
+            ? null
+            : BoxDecoration(
+                color: LightSurfaces.card,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+              ),
+        separatorColor: isDark ? null : LightSurfaces.divider,
         children: [
           CupertinoListTile(
-            leading: const Icon(
+            leading: Icon(
               CupertinoIcons.arrow_branch,
-              color: CupertinoColors.systemBlue,
+              color: isDark
+                  ? CupertinoColors.systemBlue
+                  : statusBlueText.resolveFrom(context),
             ),
             title: Text(
               current?.isNotEmpty == true ? current! : l10n.unknownBranch,
@@ -202,6 +218,9 @@ class _GitPageState extends ConsumerState<GitPage> {
               ahead > 0 || behind > 0
                   ? l10n.aheadBehind(ahead, behind)
                   : l10n.syncedWithRemote,
+              style: isDark
+                  ? null
+                  : const TextStyle(color: LightSurfaces.textSecondary),
             ),
             trailing: CupertinoButton(
               key: const ValueKey('git-branch-picker'),
@@ -209,12 +228,26 @@ class _GitPageState extends ConsumerState<GitPage> {
               onPressed: branches == null || state.isActionRunning
                   ? null
                   : () => unawaited(_showBranchPicker(ref, state)),
-              child: Text(l10n.switchBranch),
+              child: Text(
+                l10n.switchBranch,
+                style: TextStyle(
+                  color: isDark
+                      ? null
+                      : (branches == null || state.isActionRunning
+                            ? LightSurfaces.textSecondary
+                            : LightSurfaces.userDetail),
+                ),
+              ),
             ),
           ),
           CupertinoListTile(
             title: Text(l10n.changesLabel),
-            subtitle: Text(l10n.changesSummary(additions, deletions, changed)),
+            subtitle: Text(
+              l10n.changesSummary(additions, deletions, changed),
+              style: isDark
+                  ? null
+                  : const TextStyle(color: LightSurfaces.textSecondary),
+            ),
           ),
         ],
       ),
@@ -247,11 +280,19 @@ class _GitPageState extends ConsumerState<GitPage> {
     final controller = ref.read(
       gitControllerProvider(widget.sessionId).notifier,
     );
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
         dividerMargin: 0,
         additionalDividerMargin: 0,
-
+        decoration: isDark
+            ? null
+            : BoxDecoration(
+                color: LightSurfaces.card,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+              ),
+        separatorColor: isDark ? null : LightSurfaces.divider,
         header: Text(header),
         children: [
           for (final file in files) ...[
@@ -277,11 +318,19 @@ class _GitPageState extends ConsumerState<GitPage> {
     final controller = ref.read(
       gitControllerProvider(widget.sessionId).notifier,
     );
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
         dividerMargin: 0,
         additionalDividerMargin: 0,
-
+        decoration: isDark
+            ? null
+            : BoxDecoration(
+                color: LightSurfaces.card,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+              ),
+        separatorColor: isDark ? null : LightSurfaces.divider,
         header: Text(l10n.commitSection),
         children: [
           Padding(
@@ -294,6 +343,14 @@ class _GitPageState extends ConsumerState<GitPage> {
                     key: const ValueKey('git-commit-message'),
                     controller: _messageController,
                     placeholder: l10n.commitMessagePlaceholder,
+                    placeholderStyle: TextStyle(
+                      fontWeight: FontWeight.w400,
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.placeholder,
+                        dark: CupertinoColors.placeholderText,
+                      ),
+                    ),
                     minLines: 1,
                     maxLines: 3,
                     enabled: !state.isActionRunning,
@@ -302,6 +359,7 @@ class _GitPageState extends ConsumerState<GitPage> {
                 const SizedBox(width: 8),
                 CupertinoButton.filled(
                   key: const ValueKey('git-commit-button'),
+                  color: isDark ? null : LightSurfaces.userDetail,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   onPressed: state.isActionRunning
                       ? null
@@ -332,10 +390,19 @@ class _GitPageState extends ConsumerState<GitPage> {
       gitControllerProvider(widget.sessionId).notifier,
     );
     final running = state.isActionRunning;
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SliverToBoxAdapter(
       child: CupertinoListSection.insetGrouped(
         dividerMargin: 0,
         additionalDividerMargin: 0,
+        decoration: isDark
+            ? null
+            : BoxDecoration(
+                color: LightSurfaces.card,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+              ),
+        separatorColor: isDark ? null : LightSurfaces.divider,
 
         header: Text(l10n.remoteOperations),
         children: [
@@ -346,6 +413,7 @@ class _GitPageState extends ConsumerState<GitPage> {
                 Expanded(
                   child: CupertinoButton.filled(
                     key: const ValueKey('git-fetch'),
+                    color: isDark ? null : LightSurfaces.userDetail,
                     onPressed: running
                         ? null
                         : () => unawaited(controller.fetchRemote()),
@@ -356,6 +424,7 @@ class _GitPageState extends ConsumerState<GitPage> {
                 Expanded(
                   child: CupertinoButton.filled(
                     key: const ValueKey('git-pull'),
+                    color: isDark ? null : LightSurfaces.userDetail,
                     onPressed: running
                         ? null
                         : () => unawaited(controller.pullRemote()),
@@ -366,6 +435,7 @@ class _GitPageState extends ConsumerState<GitPage> {
                 Expanded(
                   child: CupertinoButton.filled(
                     key: const ValueKey('git-push'),
+                    color: isDark ? null : LightSurfaces.userDetail,
                     onPressed: running
                         ? null
                         : () => unawaited(controller.pushRemote()),
@@ -382,6 +452,7 @@ class _GitPageState extends ConsumerState<GitPage> {
 
   Widget _buildErrorSliver(WidgetRef ref, Object? error) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -389,10 +460,12 @@ class _GitPageState extends ConsumerState<GitPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: isDark
+                  ? CupertinoColors.systemGrey
+                  : LightSurfaces.textSecondary,
             ),
             const SizedBox(height: 12),
             Text(
@@ -411,6 +484,7 @@ class _GitPageState extends ConsumerState<GitPage> {
             const SizedBox(height: 20),
             CupertinoButton.filled(
               key: const ValueKey('git-retry'),
+              color: isDark ? null : LightSurfaces.userDetail,
               onPressed: () => unawaited(
                 ref
                     .read(gitControllerProvider(widget.sessionId).notifier)
@@ -425,6 +499,7 @@ class _GitPageState extends ConsumerState<GitPage> {
   }
 
   Widget _buildEmptySliver(String title, String detail) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -432,10 +507,12 @@ class _GitPageState extends ConsumerState<GitPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.folder_open,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: isDark
+                  ? CupertinoColors.systemGrey
+                  : LightSurfaces.textSecondary,
             ),
             const SizedBox(height: 12),
             Text(
@@ -448,7 +525,11 @@ class _GitPageState extends ConsumerState<GitPage> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -471,22 +552,41 @@ class _GitPageState extends ConsumerState<GitPage> {
     final current = state.branches?.current;
     final selected = await showCupertinoModalPopup<String>(
       context: context,
-      builder: (modalContext) => CupertinoActionSheet(
-        title: Text(l10n.switchBranch),
-        actions: [
-          for (final branch in local)
-            CupertinoActionSheetAction(
-              key: ValueKey('git-branch-${branch.name}'),
-              isDefaultAction: branch.name == current,
-              onPressed: () => Navigator.pop(modalContext, branch.name),
-              child: Text(branch.name!),
+      builder: (modalContext) {
+        final isDark =
+            CupertinoTheme.brightnessOf(modalContext) == Brightness.dark;
+        return CupertinoActionSheet(
+          title: Text(
+            l10n.switchBranch,
+            style: isDark
+                ? null
+                : const TextStyle(color: LightSurfaces.textSecondary),
+          ),
+          actions: [
+            for (final branch in local)
+              CupertinoActionSheetAction(
+                key: ValueKey('git-branch-${branch.name}'),
+                isDefaultAction: branch.name == current,
+                onPressed: () => Navigator.pop(modalContext, branch.name),
+                child: Text(
+                  branch.name!,
+                  style: isDark
+                      ? null
+                      : const TextStyle(color: LightSurfaces.menuAction),
+                ),
+              ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(modalContext),
+            child: Text(
+              l10n.cancel,
+              style: isDark
+                  ? null
+                  : const TextStyle(color: LightSurfaces.menuAction),
             ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(modalContext),
-          child: Text(l10n.cancel),
-        ),
-      ),
+          ),
+        );
+      },
     );
     if (selected != null && selected != current && mounted) {
       unawaited(
@@ -532,10 +632,11 @@ class _FileTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final kind = file.changeKind;
     return CupertinoListTile(
       key: ValueKey('git-file-${file.id}'),
-      leading: Icon(_kindIcon(kind), color: _kindColor(kind)),
+      leading: Icon(_kindIcon(kind), color: _kindColor(context, kind)),
       title: Text(
         file.displayPath,
         maxLines: 1,
@@ -545,6 +646,9 @@ class _FileTile extends StatelessWidget {
         '${_kindLabel(context, kind)}'
         '${(file.additions ?? 0) > 0 ? ' +${file.additions}' : ''}'
         '${(file.deletions ?? 0) > 0 ? ' −${file.deletions}' : ''}',
+        style: isDark
+            ? null
+            : const TextStyle(color: LightSurfaces.textSecondary),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -559,7 +663,14 @@ class _FileTile extends StatelessWidget {
             onPressed: isActionRunning ? null : onStage,
             child: Text(
               file.staged == true ? l10n.unstageAction : l10n.stageAction,
-              style: const TextStyle(fontSize: 13),
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark
+                    ? null
+                    : (isActionRunning
+                          ? LightSurfaces.textSecondary
+                          : LightSurfaces.userDetail),
+              ),
             ),
           ),
           AccessibleButton(
@@ -567,10 +678,12 @@ class _FileTile extends StatelessWidget {
             label: l10n.discardChanges,
             padding: const EdgeInsets.symmetric(horizontal: 6),
             onPressed: isActionRunning ? null : onDiscard,
-            child: const Icon(
+            child: Icon(
               CupertinoIcons.trash,
               size: 16,
-              color: CupertinoColors.systemRed,
+              color: isDark
+                  ? CupertinoColors.systemRed
+                  : statusRedText.resolveFrom(context),
             ),
           ),
         ],
@@ -599,22 +712,41 @@ class _FileTile extends StatelessWidget {
     }
   }
 
-  static Color _kindColor(GitFileChangeKind kind) {
+  static Color _kindColor(BuildContext context, GitFileChangeKind kind) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    if (isDark) {
+      switch (kind) {
+        case GitFileChangeKind.added:
+        case GitFileChangeKind.renamed:
+          return CupertinoColors.systemGreen;
+        case GitFileChangeKind.deleted:
+          return CupertinoColors.systemRed;
+        case GitFileChangeKind.conflict:
+          return CupertinoColors.systemOrange;
+        case GitFileChangeKind.untracked:
+          return CupertinoColors.systemGrey;
+        case GitFileChangeKind.ignored:
+          return CupertinoColors.systemGrey2;
+        case GitFileChangeKind.modified:
+        case GitFileChangeKind.unknown:
+          return CupertinoColors.systemBlue;
+      }
+    }
     switch (kind) {
       case GitFileChangeKind.added:
       case GitFileChangeKind.renamed:
-        return CupertinoColors.systemGreen;
+        return statusGreenText.resolveFrom(context);
       case GitFileChangeKind.deleted:
-        return CupertinoColors.systemRed;
+        return statusRedText.resolveFrom(context);
       case GitFileChangeKind.conflict:
-        return CupertinoColors.systemOrange;
+        return statusOrangeText.resolveFrom(context);
       case GitFileChangeKind.untracked:
-        return CupertinoColors.systemGrey;
+        return LightSurfaces.textSecondary;
       case GitFileChangeKind.ignored:
-        return CupertinoColors.systemGrey2;
+        return LightSurfaces.placeholder;
       case GitFileChangeKind.modified:
       case GitFileChangeKind.unknown:
-        return CupertinoColors.systemBlue;
+        return statusBlueText.resolveFrom(context);
     }
   }
 
@@ -652,6 +784,7 @@ class _DiffExpansion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     if (state.isDiffLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
@@ -677,7 +810,10 @@ class _DiffExpansion extends StatelessWidget {
     return Container(
       key: const ValueKey('git-diff'),
       width: double.infinity,
-      color: CupertinoColors.secondarySystemBackground,
+      // 暗色保持原 raw 绘制值 CupertinoColors.secondarySystemBackground（实际 #F2F2F7，旧暗问题待裁）；浅色接 page
+      color: isDark
+          ? CupertinoColors.secondarySystemBackground
+          : LightSurfaces.page,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: Text(
         content,
@@ -695,14 +831,17 @@ class _CleanWorkspacePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 36),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             CupertinoIcons.checkmark_circle,
             size: 44,
-            color: CupertinoColors.systemGreen,
+            color: isDark
+                ? CupertinoColors.systemGreen
+                : statusGreenText.resolveFrom(context),
           ),
           const SizedBox(height: 10),
           Text(
@@ -714,7 +853,11 @@ class _CleanWorkspacePlaceholder extends StatelessWidget {
             l10n.noPendingChanges,
             style: TextStyle(
               fontSize: 13,
-              color: secondaryText.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
             ),
           ),
         ],
@@ -733,27 +876,52 @@ class _ActionBanner extends StatelessWidget {
     required this.text,
     required this.color,
     required this.onDismiss,
+    this.isError = false,
   });
 
   final String text;
   final Color color;
   final VoidCallback onDismiss;
+  final bool isError;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
+    // 暗色逐字节保留原 raw 绘制值（未 resolve 的 systemRed/systemGreen 及其 alpha 0.12 底色）
+    final Color bgColor;
+    final Color textColor;
+    final Border? border;
+
+    if (isDark) {
+      bgColor = color.withValues(alpha: 0.12);
+      textColor = color;
+      border = null;
+    } else {
+      bgColor = isError ? LightSurfaces.tintError : LightSurfaces.tintGreen;
+      textColor = isError
+          ? statusRedText.resolveFrom(context)
+          : statusGreenText.resolveFrom(context);
+      border = Border.all(color: LightSurfaces.cardBorder, width: 0.5);
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
+          color: bgColor,
           borderRadius: BorderRadius.circular(8),
+          border: border,
         ),
         child: Row(
           children: [
             Expanded(
-              child: Text(text, style: TextStyle(fontSize: 13, color: color)),
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 13, color: textColor),
+              ),
             ),
             AccessibleButton(
               key: const ValueKey('git-banner-dismiss'),
@@ -762,7 +930,7 @@ class _ActionBanner extends StatelessWidget {
               child: Icon(
                 CupertinoIcons.xmark_circle_fill,
                 size: 16,
-                color: color,
+                color: textColor,
               ),
             ),
           ],

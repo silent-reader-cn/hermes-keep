@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import 'workspace_manager_providers.dart';
@@ -97,16 +98,25 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final viewInsets = MediaQuery.viewInsetsOf(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final canSubmit = _pathController.text.trim().isNotEmpty && !_submitting;
     final accent = canSubmit
-        ? CupertinoColors.systemBlue.resolveFrom(context)
-        : CupertinoColors.inactiveGray.resolveFrom(context);
+        ? (isDark
+              ? CupertinoColors.systemBlue.resolveFrom(context)
+              : statusBlueText.resolveFrom(context))
+        : (isDark
+              ? CupertinoColors.inactiveGray.resolveFrom(context)
+              : LightSurfaces.placeholder);
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
       child: Container(
-        // 不透明面板：彻底隔离背景列表，修复「半透明看不清」。
-        color: CupertinoColors.systemBackground.resolveFrom(context),
+        // 不透明面板：浅色使用 page，深色使用 systemBackground 隔离背景列表
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.page,
+          dark: CupertinoColors.systemBackground,
+        ),
         child: AnimatedPadding(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
@@ -117,7 +127,7 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildGrabber(context),
-                _buildHeader(context, l10n, accent, canSubmit),
+                _buildHeader(context, l10n, accent, canSubmit, isDark),
                 Flexible(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -158,6 +168,7 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
           width: 36,
           height: 4,
           decoration: BoxDecoration(
+            // grabber 是非交互装饰，保留系统 tertiaryLabel 且深浅色保留（无拖动手势）
             color: CupertinoColors.tertiaryLabel.resolveFrom(context),
             borderRadius: BorderRadius.circular(2),
           ),
@@ -172,6 +183,7 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
     AppLocalizations l10n,
     Color accent,
     bool canSubmit,
+    bool isDark,
   ) {
     return SizedBox(
       height: 44,
@@ -187,7 +199,9 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
                 l10n.cancel,
                 style: TextStyle(
                   fontSize: 17,
-                  color: CupertinoColors.systemBlue.resolveFrom(context),
+                  color: isDark
+                      ? CupertinoColors.systemBlue.resolveFrom(context)
+                      : statusBlueText.resolveFrom(context),
                 ),
               ),
             ),
@@ -224,13 +238,16 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
 
   /// inset-grouped 圆角卡片：路径行 + 补全列表 + 名称行 + 开关行。
   Widget _buildGroupedCard(BuildContext context, AppLocalizations l10n) {
-    final cardColor = CupertinoColors.secondarySystemBackground.resolveFrom(
-      context,
-    );
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: cardColor,
+        color: isDark
+            ? CupertinoColors.secondarySystemBackground.resolveFrom(context)
+            : LightSurfaces.card,
         borderRadius: BorderRadius.circular(10),
+        border: isDark
+            ? null
+            : Border.all(color: LightSurfaces.cardBorder, width: 0.5),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -244,7 +261,11 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               placeholder: l10n.workspacePathHint,
               placeholderStyle: TextStyle(
                 fontSize: 17,
-                color: CupertinoColors.placeholderText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.placeholder,
+                  dark: CupertinoColors.placeholderText,
+                ),
               ),
               style: const TextStyle(fontSize: 17),
               autocorrect: false,
@@ -277,7 +298,11 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               placeholder: l10n.workspaceNamePlaceholder,
               placeholderStyle: TextStyle(
                 fontSize: 17,
-                color: CupertinoColors.placeholderText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.placeholder,
+                  dark: CupertinoColors.placeholderText,
+                ),
               ),
               style: const TextStyle(fontSize: 17),
               autocorrect: false,
@@ -330,7 +355,11 @@ class _LabeledFieldRow extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.secondaryLabel,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -350,7 +379,11 @@ class _RowSeparator extends StatelessWidget {
     return Container(
       height: 0.5,
       margin: const EdgeInsets.only(left: 16),
-      color: CupertinoColors.separator.resolveFrom(context),
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.divider,
+        dark: CupertinoColors.separator,
+      ),
     );
   }
 }
@@ -366,7 +399,11 @@ class _SuggestionList extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(maxHeight: 180),
-      color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.pressed,
+        dark: CupertinoColors.tertiarySystemFill,
+      ),
       child: ListView.separated(
         shrinkWrap: true,
         padding: EdgeInsets.zero,
@@ -374,7 +411,11 @@ class _SuggestionList extends StatelessWidget {
         separatorBuilder: (context, index) => Container(
           height: 0.5,
           margin: const EdgeInsets.only(left: 16),
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.divider,
+            dark: CupertinoColors.separator,
+          ),
         ),
         itemBuilder: (context, index) {
           final suggestion = suggestions[index];
@@ -389,7 +430,13 @@ class _SuggestionList extends StatelessWidget {
                 suggestion,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 15),
+                style: TextStyle(
+                  fontSize: 15,
+                  color:
+                      CupertinoTheme.brightnessOf(context) == Brightness.light
+                      ? LightSurfaces.userDetail
+                      : null,
+                ),
               ),
             ),
           );

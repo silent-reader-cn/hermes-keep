@@ -3,16 +3,29 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import 'diagnostics_models.dart';
 
+Color _levelTint(DiagnosticsLogLevel level) {
+  switch (level) {
+    case DiagnosticsLogLevel.warn:
+      return LightSurfaces.tintWarning;
+    case DiagnosticsLogLevel.error:
+      return LightSurfaces.tintError;
+    case DiagnosticsLogLevel.info:
+      return LightSurfaces.selection;
+    case DiagnosticsLogLevel.debug:
+      return LightSurfaces.tintClarification;
+    case DiagnosticsLogLevel.verbose:
+      return LightSurfaces.page;
+  }
+}
+
 /// 单条诊断日志详情查看弹层（纯 Cupertino）。
 class DiagnosticsDetailSheet extends StatelessWidget {
-  const DiagnosticsDetailSheet({
-    super.key,
-    required this.entry,
-  });
+  const DiagnosticsDetailSheet({super.key, required this.entry});
 
   final DiagnosticsLogEntry entry;
 
@@ -29,7 +42,12 @@ class DiagnosticsDetailSheet extends StatelessWidget {
           actions: [
             CupertinoDialogAction(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(l10n.ok),
+              child: Text(
+                l10n.ok,
+                style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                    ? const TextStyle(color: LightSurfaces.menuAction)
+                    : null,
+              ),
             ),
           ],
         ),
@@ -40,15 +58,30 @@ class DiagnosticsDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final color = entry.level.textColor.resolveFrom(context);
 
     return CupertinoPageScaffold(
+      backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
+        backgroundColor: isLight ? LightSurfaces.page : null,
+        border: isLight
+            ? const Border(
+                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
+              )
+            : const Border(
+                bottom: BorderSide(color: Color(0x4D000000), width: 0.0),
+              ),
         middle: Text(l10n.diagnosticsDetailsTitle),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
           onPressed: () => unawaited(_copyEntry(context)),
-          child: Text(l10n.copy),
+          child: Text(
+            l10n.copy,
+            style: isLight
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
+          ),
         ),
       ),
       child: SafeArea(
@@ -59,9 +92,15 @@ class DiagnosticsDetailSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CupertinoColors.secondarySystemGroupedBackground
-                    .resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.card,
+                  dark: CupertinoColors.secondarySystemGroupedBackground,
+                ),
                 borderRadius: BorderRadius.circular(10),
+                border: isLight
+                    ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+                    : null,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,7 +113,9 @@ class DiagnosticsDetailSheet extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.15),
+                          color: isLight
+                              ? _levelTint(entry.level)
+                              : color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                             color: color.withValues(alpha: 0.4),
@@ -96,8 +137,10 @@ class DiagnosticsDetailSheet extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.systemGrey5.resolveFrom(
+                          color: LightSurfaces.resolve(
                             context,
+                            LightSurfaces.page,
+                            dark: CupertinoColors.systemGrey5,
                           ),
                           borderRadius: BorderRadius.circular(6),
                         ),
@@ -106,7 +149,11 @@ class DiagnosticsDetailSheet extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: secondaryText.resolveFrom(context),
+                            color: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.textSecondary,
+                              dark: secondaryText,
+                            ),
                           ),
                         ),
                       ),
@@ -116,7 +163,11 @@ class DiagnosticsDetailSheet extends StatelessWidget {
                           '${entry.durationMs}ms',
                           style: TextStyle(
                             fontSize: 12,
-                            color: secondaryText.resolveFrom(context),
+                            color: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.textSecondary,
+                              dark: secondaryText,
+                            ),
                           ),
                         ),
                       ],
@@ -127,7 +178,11 @@ class DiagnosticsDetailSheet extends StatelessWidget {
                     formatLogTimestamp(entry.timestamp),
                     style: TextStyle(
                       fontSize: 13,
-                      color: secondaryText.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: secondaryText,
+                      ),
                     ),
                   ),
                   if (entry.errorKind != null) ...[
@@ -152,7 +207,11 @@ class DiagnosticsDetailSheet extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -160,16 +219,19 @@ class DiagnosticsDetailSheet extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CupertinoColors.secondarySystemGroupedBackground
-                    .resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.card,
+                  dark: CupertinoColors.secondarySystemGroupedBackground,
+                ),
                 borderRadius: BorderRadius.circular(10),
+                border: isLight
+                    ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+                    : null,
               ),
               child: Text(
                 entry.message,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontFamily: 'monospace',
-                ),
+                style: const TextStyle(fontSize: 14, fontFamily: 'monospace'),
               ),
             ),
             const SizedBox(height: 16),
@@ -181,7 +243,11 @@ class DiagnosticsDetailSheet extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: secondaryText.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
                 ),
               ),
               const SizedBox(height: 6),
@@ -189,16 +255,19 @@ class DiagnosticsDetailSheet extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: CupertinoColors.secondarySystemGroupedBackground
-                    .resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.card,
+                    dark: CupertinoColors.secondarySystemGroupedBackground,
+                  ),
                   borderRadius: BorderRadius.circular(10),
+                  border: isLight
+                      ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+                      : null,
                 ),
                 child: Text(
                   entry.detailsJson,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                  ),
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                 ),
               ),
             ],

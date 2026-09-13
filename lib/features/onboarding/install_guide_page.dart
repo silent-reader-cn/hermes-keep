@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
@@ -13,32 +14,17 @@ import '../../core/install/llm_onboarding.dart';
 import '../../core/install/powershell_installer.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
+import 'widgets/onboarding_field_style.dart';
 import 'widgets/wide_dual_pane.dart';
 
 /// 安装步骤定义。
-enum InstallStageKey {
-  prereqs,
-  agent,
-  agentDeps,
-  llmConfig,
-}
+enum InstallStageKey { prereqs, agent, agentDeps, llmConfig }
 
 /// 步骤执行状态。
-enum StageStatus {
-  pending,
-  running,
-  success,
-  failed,
-}
+enum StageStatus { pending, running, success, failed }
 
 /// 引导页整体运行阶段。
-enum GuidePhase {
-  idle,
-  installing,
-  failed,
-  configuringModel,
-  done,
-}
+enum GuidePhase { idle, installing, failed, configuringModel, done }
 
 /// Windows 本机一键安装部署引导页。
 class InstallGuidePage extends ConsumerStatefulWidget {
@@ -74,10 +60,12 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
   void initState() {
     super.initState();
     _apiKeyController = TextEditingController();
-    _baseUrlController =
-        TextEditingController(text: _selectedProvider.defaultBaseUrl);
-    _modelController =
-        TextEditingController(text: _selectedProvider.defaultModel);
+    _baseUrlController = TextEditingController(
+      text: _selectedProvider.defaultBaseUrl,
+    );
+    _modelController = TextEditingController(
+      text: _selectedProvider.defaultModel,
+    );
   }
 
   @override
@@ -143,8 +131,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
     });
 
     final stages = InstallStageKey.values;
-    final startIndex =
-        fromStage != null ? stages.indexOf(fromStage) : 0;
+    final startIndex = fromStage != null ? stages.indexOf(fromStage) : 0;
 
     for (var i = startIndex; i < stages.length; i++) {
       final stage = stages[i];
@@ -293,8 +280,9 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         createdAt: DateTime.now().toUtc(),
       );
 
-      final saved =
-          await ref.read(connectionsProvider.notifier).upsert(connection);
+      final saved = await ref
+          .read(connectionsProvider.notifier)
+          .upsert(connection);
       await ref.read(activeConnectionProvider.notifier).setActive(saved.id);
 
       if (!mounted) return;
@@ -314,56 +302,75 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       showCupertinoModalPopup<void>(
         context: context,
         builder: (ctx) => CupertinoActionSheet(
-        title: Text(AppLocalizations.of(ctx).installGuideSelectProvider),
-        actions: LlmProviderOption.builtinProviders.map((p) {
-          return CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _selectedProvider = p;
-                _baseUrlController.text = p.defaultBaseUrl;
-                _modelController.text = p.defaultModel;
-              });
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      p.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+          title: Text(
+            AppLocalizations.of(ctx).installGuideSelectProvider,
+            style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.textSecondary)
+                : null,
+          ),
+          actions: LlmProviderOption.builtinProviders.map((p) {
+            return CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _selectedProvider = p;
+                  _baseUrlController.text = p.defaultBaseUrl;
+                  _modelController.text = p.defaultModel;
+                });
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color:
+                              CupertinoTheme.brightnessOf(ctx) ==
+                                  Brightness.light
+                              ? LightSurfaces.menuAction
+                              : null,
+                        ),
                       ),
-                    ),
-                    Text(
-                      p.description,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: secondaryText.resolveFrom(context),
+                      Text(
+                        p.description,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: LightSurfaces.resolve(
+                            context,
+                            statusGreyText.resolveFrom(ctx),
+                            dark: secondaryText,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                if (_selectedProvider.id == p.id)
-                  Icon(
-                    CupertinoIcons.checkmark_alt,
-                    color: statusGreenText.resolveFrom(context),
+                    ],
                   ),
-              ],
+                  if (_selectedProvider.id == p.id)
+                    Icon(
+                      CupertinoIcons.checkmark_alt,
+                      color: statusGreenText.resolveFrom(context),
+                    ),
+                ],
+              ),
+            );
+          }).toList(),
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              AppLocalizations.of(ctx).cancel,
+              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
             ),
-          );
-        }).toList(),
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.pop(ctx),
-          child: Text(AppLocalizations.of(ctx).cancel),
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -376,7 +383,19 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
     final isWindows = ref.read(installDetectorProvider).isWindows;
 
     return CupertinoPageScaffold(
+      backgroundColor: CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? LightSurfaces.page
+          : null,
       navigationBar: CupertinoNavigationBar(
+        border: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? const Border(
+                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
+              )
+            : const CupertinoNavigationBar().border,
+        backgroundColor:
+            CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? LightSurfaces.page
+            : null,
         middle: Text(l10n.installGuideTitle),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
@@ -399,10 +418,14 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle_fill,
               size: 56,
-              color: CupertinoColors.systemYellow,
+              color: LightSurfaces.resolve(
+                context,
+                statusOrangeText.resolveFrom(context),
+                dark: Color(CupertinoColors.systemYellow.toARGB32()),
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -412,6 +435,9 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             ),
             const SizedBox(height: 24),
             CupertinoButton.filled(
+              color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? LightSurfaces.userDetail
+                  : null,
               onPressed: () => context.go('/onboarding'),
               child: Text(l10n.installGuideBackToConnect),
             ),
@@ -487,7 +513,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           l10n.installGuideSubtitle,
           style: TextStyle(
             fontSize: 14,
-            color: secondaryText.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
           ),
         ),
       ],
@@ -511,7 +541,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
               '进度: $completedCount / $total 步骤',
               style: TextStyle(
                 fontSize: 12,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
             Text(
@@ -519,7 +553,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -528,7 +566,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         Container(
           height: 6,
           decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey5.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.divider,
+              dark: CupertinoColors.systemGrey5,
+            ),
             borderRadius: BorderRadius.circular(3),
           ),
           child: Align(
@@ -551,11 +593,18 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
   Widget _buildStageList(AppLocalizations l10n) {
     return Container(
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground
-            .resolveFrom(context),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.card,
+          dark: CupertinoColors.secondarySystemGroupedBackground,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.divider,
+            dark: CupertinoColors.separator,
+          ),
           width: 0.5,
         ),
       ),
@@ -565,7 +614,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             if (i > 0)
               Container(
                 height: 0.5,
-                color: CupertinoColors.separator.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.divider,
+                  dark: CupertinoColors.separator,
+                ),
               ),
             _buildStageTile(InstallStageKey.values[i], l10n),
           ],
@@ -585,7 +638,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         trailingIcon = Icon(
           CupertinoIcons.circle,
           size: 18,
-          color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: CupertinoColors.tertiaryLabel,
+          ),
         );
         break;
       case StageStatus.running:
@@ -631,7 +688,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                   desc,
                   style: TextStyle(
                     fontSize: 12,
-                    color: secondaryText.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: secondaryText,
+                    ),
                   ),
                 ),
               ],
@@ -646,10 +707,18 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: statusRedText.resolveFrom(context).withValues(alpha: 0.08),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintError,
+          dark: statusRedText.resolveFrom(context).withValues(alpha: 0.08),
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: statusRedText.resolveFrom(context).withValues(alpha: 0.3),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: statusRedText.resolveFrom(context).withValues(alpha: 0.3),
+          ),
         ),
       ),
       child: Column(
@@ -691,7 +760,10 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
               onPressed: () => _startOrResumeInstallation(_failedStage),
               child: Text(
                 l10n.installGuideRetryStage,
-                style: const TextStyle(fontSize: 13, color: CupertinoColors.white),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: CupertinoColors.white,
+                ),
               ),
             ),
           ),
@@ -704,11 +776,18 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground
-            .resolveFrom(context),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.card,
+          dark: CupertinoColors.secondarySystemGroupedBackground,
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.divider,
+            dark: CupertinoColors.separator,
+          ),
           width: 0.5,
         ),
       ),
@@ -724,7 +803,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             l10n.installGuideStageModelDesc,
             style: TextStyle(
               fontSize: 13,
-              color: secondaryText.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -742,6 +825,8 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             ),
             const SizedBox(height: 6),
             CupertinoTextField(
+              decoration: OnboardingFieldStyle.decoration(context),
+              placeholderStyle: OnboardingFieldStyle.placeholder(context),
               key: const ValueKey('install-guide-apikey-input'),
               controller: _apiKeyController,
               placeholder: _selectedProvider.keyPlaceholder,
@@ -756,6 +841,8 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           ),
           const SizedBox(height: 6),
           CupertinoTextField(
+            decoration: OnboardingFieldStyle.decoration(context),
+            placeholderStyle: OnboardingFieldStyle.placeholder(context),
             key: const ValueKey('install-guide-baseurl-input'),
             controller: _baseUrlController,
             placeholder: l10n.installGuideBaseUrlHint,
@@ -768,6 +855,8 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           ),
           const SizedBox(height: 6),
           CupertinoTextField(
+            decoration: OnboardingFieldStyle.decoration(context),
+            placeholderStyle: OnboardingFieldStyle.placeholder(context),
             key: const ValueKey('install-guide-model-input'),
             controller: _modelController,
             placeholder: l10n.installGuideModelNameHint,
@@ -795,8 +884,15 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.card,
+            dark: CupertinoColors.tertiarySystemFill,
+          ),
           borderRadius: BorderRadius.circular(8),
+          border: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+              : null,
         ),
         child: Row(
           children: [
@@ -816,16 +912,24 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                     _selectedProvider.description,
                     style: TextStyle(
                       fontSize: 12,
-                      color: secondaryText.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: secondaryText,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               CupertinoIcons.chevron_up_chevron_down,
               size: 16,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
           ],
         ),
@@ -833,13 +937,19 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
     );
   }
 
+  // The terminal remains an inverse surface in both themes. Its grey/green
+  // content is readable on the fixed dark background; do not apply light grey.
   Widget _buildLogConsole(AppLocalizations l10n) {
     return Container(
       decoration: BoxDecoration(
         color: CupertinoColors.darkBackgroundGray,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.divider,
+            dark: CupertinoColors.separator,
+          ),
           width: 0.5,
         ),
       ),
@@ -882,7 +992,14 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                       },
                       child: Text(
                         l10n.installGuideCopyLogs,
-                        style: const TextStyle(fontSize: 12),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color:
+                              CupertinoTheme.brightnessOf(context) ==
+                                  Brightness.light
+                              ? CupertinoColors.white
+                              : null,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -895,7 +1012,14 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                         _showLogs
                             ? l10n.installGuideHideLogs
                             : l10n.installGuideShowLogs,
-                        style: const TextStyle(fontSize: 12),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color:
+                              CupertinoTheme.brightnessOf(context) ==
+                                  Brightness.light
+                              ? CupertinoColors.white
+                              : null,
+                        ),
                       ),
                     ),
                   ],
@@ -947,12 +1071,21 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             SizedBox(
               width: double.infinity,
               child: CupertinoButton.filled(
+                color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                    ? LightSurfaces.userDetail
+                    : null,
                 key: const ValueKey('install-guide-save-model-btn'),
                 onPressed: _savingModel
                     ? null
                     : () => _submitModelConfigAndComplete(skip: false),
                 child: _savingModel
-                    ? const CupertinoActivityIndicator()
+                    ? CupertinoActivityIndicator(
+                        color:
+                            CupertinoTheme.brightnessOf(context) ==
+                                Brightness.light
+                            ? LightSurfaces.textSecondary
+                            : null,
+                      )
                     : Text(l10n.installGuideSaveAndContinue),
               ),
             ),
@@ -967,7 +1100,11 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                 l10n.installGuideSkipModelConfig,
                 style: TextStyle(
                   fontSize: 13,
-                  color: secondaryText.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
                 ),
               ),
             ),
@@ -982,6 +1119,9 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         child: SizedBox(
           width: double.infinity,
           child: CupertinoButton.filled(
+            color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? LightSurfaces.userDetail
+                : null,
             key: const ValueKey('install-guide-start-btn'),
             onPressed: () => _startOrResumeInstallation(),
             child: Text(l10n.installGuideStartInstall),
@@ -1020,6 +1160,9 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         child: SizedBox(
           width: double.infinity,
           child: CupertinoButton.filled(
+            color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? LightSurfaces.userDetail
+                : null,
             onPressed: () => context.go('/'),
             child: Text(l10n.installGuideEnterChat),
           ),

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/models/git_workspace.dart';
 import '../../l10n/app_localizations.dart';
@@ -77,10 +78,19 @@ class _GitBranchTreeState extends State<GitBranchTree> {
 
     final currentList = _mode == GitBranchMode.local ? localList : remoteList;
 
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+
     return CupertinoListSection.insetGrouped(
       dividerMargin: 0,
       additionalDividerMargin: 0,
-
+      decoration: isDark
+          ? null
+          : BoxDecoration(
+              color: LightSurfaces.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+            ),
+      separatorColor: isDark ? null : LightSurfaces.divider,
       key: const ValueKey('git-branch-tree-section'),
       header: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -153,6 +163,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
     required bool isRemote,
   }) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final isCurrent = !isRemote && (branch.name == currentBranch);
     final isFirst = index == 0;
     final isLast = index == totalCount - 1;
@@ -173,9 +184,11 @@ class _GitBranchTreeState extends State<GitBranchTree> {
     return Container(
       key: ValueKey('git-branch-node-${branch.name}'),
       color: isCurrent
-          ? CupertinoColors.systemBlue
-                .resolveFrom(context)
-                .withValues(alpha: 0.07)
+          ? (isDark
+                ? CupertinoColors.systemBlue
+                      .resolveFrom(context)
+                      .withValues(alpha: 0.07)
+                : LightSurfaces.selection)
           : null,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
@@ -191,10 +204,14 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                 isFirst: isFirst,
                 isLast: isLast,
                 laneColor: isCurrent
-                    ? CupertinoColors.systemBlue.resolveFrom(context)
+                    ? (isDark
+                          ? CupertinoColors.systemBlue.resolveFrom(context)
+                          : statusBlueText.resolveFrom(context))
                     : laneColor,
                 isBranchOff: index > 0,
-                trackColor: CupertinoColors.separator.resolveFrom(context),
+                trackColor: isDark
+                    ? CupertinoColors.separator.resolveFrom(context)
+                    : LightSurfaces.divider,
               ),
             ),
           ),
@@ -219,7 +236,11 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                             ? FontWeight.w700
                             : FontWeight.w600,
                         color: isCurrent
-                            ? CupertinoColors.systemBlue.resolveFrom(context)
+                            ? (isDark
+                                  ? CupertinoColors.systemBlue.resolveFrom(
+                                      context,
+                                    )
+                                  : statusBlueText.resolveFrom(context))
                             : CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
@@ -230,9 +251,11 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           vertical: 1.5,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.systemBlue
-                              .resolveFrom(context)
-                              .withValues(alpha: 0.16),
+                          color: isDark
+                              ? CupertinoColors.systemBlue
+                                    .resolveFrom(context)
+                                    .withValues(alpha: 0.16)
+                              : LightSurfaces.selection,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -251,10 +274,16 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           vertical: 1.5,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.systemGrey5.resolveFrom(
-                            context,
-                          ),
+                          color: isDark
+                              ? CupertinoColors.systemGrey5.resolveFrom(context)
+                              : LightSurfaces.page,
                           borderRadius: BorderRadius.circular(4),
+                          border: isDark
+                              ? null
+                              : Border.all(
+                                  color: LightSurfaces.cardBorder,
+                                  width: 0.5,
+                                ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -262,14 +291,18 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                             Icon(
                               CupertinoIcons.cloud,
                               size: 10,
-                              color: secondaryText.resolveFrom(context),
+                              color: isDark
+                                  ? secondaryText.resolveFrom(context)
+                                  : LightSurfaces.textSecondary,
                             ),
                             const SizedBox(width: 3),
                             Text(
                               upstream,
                               style: TextStyle(
                                 fontSize: 9.5,
-                                color: secondaryText.resolveFrom(context),
+                                color: isDark
+                                    ? secondaryText.resolveFrom(context)
+                                    : LightSurfaces.textSecondary,
                               ),
                             ),
                           ],
@@ -306,13 +339,15 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           vertical: 1,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.secondarySystemBackground
-                              .resolveFrom(context),
+                          color: isDark
+                              ? CupertinoColors.secondarySystemBackground
+                                    .resolveFrom(context)
+                              : LightSurfaces.page,
                           borderRadius: BorderRadius.circular(3),
                           border: Border.all(
-                            color: CupertinoColors.separator.resolveFrom(
-                              context,
-                            ),
+                            color: isDark
+                                ? CupertinoColors.separator.resolveFrom(context)
+                                : LightSurfaces.cardBorder,
                             width: 0.5,
                           ),
                         ),
@@ -321,7 +356,9 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 10.5,
-                            color: secondaryText.resolveFrom(context),
+                            color: isDark
+                                ? secondaryText.resolveFrom(context)
+                                : LightSurfaces.textSecondary,
                           ),
                         ),
                       ),
@@ -335,7 +372,9 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 11.5,
-                            color: secondaryText.resolveFrom(context),
+                            color: isDark
+                                ? secondaryText.resolveFrom(context)
+                                : LightSurfaces.textSecondary,
                           ),
                         ),
                       ),
@@ -346,7 +385,9 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                         updatedRelative,
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: secondaryText.resolveFrom(context),
+                          color: isDark
+                              ? secondaryText.resolveFrom(context)
+                              : LightSurfaces.textSecondary,
                         ),
                       ),
                     ],
@@ -361,16 +402,20 @@ class _GitBranchTreeState extends State<GitBranchTree> {
             Icon(
               CupertinoIcons.checkmark_alt,
               size: 20,
-              color: CupertinoColors.systemGreen.resolveFrom(context),
+              color: isDark
+                  ? CupertinoColors.systemGreen.resolveFrom(context)
+                  : statusGreenText.resolveFrom(context),
             )
           else if (!isRemote && branch.name != null)
             CupertinoButton(
               key: ValueKey('git-branch-switch-${branch.name}'),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               minimumSize: const Size(0, 26),
-              color: CupertinoColors.systemBlue
-                  .resolveFrom(context)
-                  .withValues(alpha: 0.12),
+              color: isDark
+                  ? CupertinoColors.systemBlue
+                        .resolveFrom(context)
+                        .withValues(alpha: 0.12)
+                  : LightSurfaces.selection,
               borderRadius: BorderRadius.circular(6),
               onPressed: widget.isActionRunning
                   ? null
@@ -380,7 +425,11 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: CupertinoColors.activeBlue.resolveFrom(context),
+                  color: isDark
+                      ? CupertinoColors.activeBlue.resolveFrom(context)
+                      : (widget.isActionRunning
+                            ? LightSurfaces.textSecondary
+                            : LightSurfaces.userDetail),
                 ),
               ),
             ),
@@ -390,6 +439,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
   }
 
   Widget _buildEmptyTile(AppLocalizations l10n) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       child: Center(
@@ -397,7 +447,9 @@ class _GitBranchTreeState extends State<GitBranchTree> {
           l10n.noBranches,
           style: TextStyle(
             fontSize: 13,
-            color: secondaryText.resolveFrom(context),
+            color: isDark
+                ? secondaryText.resolveFrom(context)
+                : LightSurfaces.textSecondary,
           ),
         ),
       ),
@@ -429,7 +481,17 @@ class _GitBranchTreeState extends State<GitBranchTree> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               minimumSize: const Size(0, 24),
               onPressed: widget.isActionRunning ? null : widget.onReload,
-              child: Text(l10n.retry, style: const TextStyle(fontSize: 12)),
+              child: Text(
+                l10n.retry,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: CupertinoTheme.brightnessOf(context) == Brightness.dark
+                      ? null
+                      : (widget.isActionRunning
+                            ? LightSurfaces.textSecondary
+                            : LightSurfaces.userDetail),
+                ),
+              ),
             ),
         ],
       ),
@@ -440,6 +502,9 @@ class _GitBranchTreeState extends State<GitBranchTree> {
 /// 分支拓扑轨线绘制器（CustomPainter）。
 ///
 /// 绘制垂直主干通道、节点圆点（当前分支带光晕外环）以及曲线分支叉。
+/// 注：本组件绘制内容属于拓扑数据图形，评价门槛为 3:1。
+/// 透明轨线、多彩 lane 轨道及外光晕 halo 本轮维持原绘制算法，列入待裁决项，
+/// 不宣称全图达标 3:1；当前分支功能性标识通过右侧 checkmark（>=3:1）单独达标确保辨识。
 class BranchRailPainter extends CustomPainter {
   const BranchRailPainter({
     required this.isCurrent,

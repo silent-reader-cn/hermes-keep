@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
@@ -15,6 +16,7 @@ import '../../l10n/app_localizations.dart';
 import '../webui_sidecar/webui_sidecar_providers.dart';
 import 'onboarding_providers.dart';
 import 'widgets/builtin_tab.dart';
+import 'widgets/onboarding_field_style.dart';
 import 'widgets/wide_dual_pane.dart';
 
 /// 引导页 Tab 枚举（形态 A 两段：内置服务 | 连接服务器）。
@@ -347,7 +349,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.ok),
+            child: Text(
+              l10n.ok,
+              style:
+                  CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
           ),
         ],
       ),
@@ -366,8 +374,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
     // 停用回退（风险②）：active 从 builtin 被清 → 停留内置 Tab
     if (useBuiltinPane) {
-      ref.listen<ServerConnection?>(activeConnectionProvider,
-          (previous, current) {
+      ref.listen<ServerConnection?>(activeConnectionProvider, (
+        previous,
+        current,
+      ) {
         if (previous?.id == ServerConnection.builtinId && current == null) {
           if (mounted) {
             setState(() {
@@ -381,7 +391,22 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     if (!useBuiltinPane) {
       // 形态 B（非 Windows / dev 无内置包）：现状远程表单逐像素不变
       return CupertinoPageScaffold(
-        navigationBar: CupertinoNavigationBar(middle: Text(l10n.connectServer)),
+        backgroundColor:
+            CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? LightSurfaces.page
+            : null,
+        navigationBar: CupertinoNavigationBar(
+          border: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const Border(
+                  bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
+                )
+              : const CupertinoNavigationBar().border,
+          backgroundColor:
+              CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? LightSurfaces.page
+              : null,
+          middle: Text(l10n.connectServer),
+        ),
         child: SafeArea(
           child: WideDualPane(
             wideChild: _buildWideForm(l10n),
@@ -404,12 +429,22 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
     // 形态 A（Windows 打包版）：标题下 CupertinoSlidingSegmentedControl 两段「内置服务 | 连接服务器」
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(middle: Text(l10n.connectServer)),
-      child: SafeArea(
-        child: WideDualPane(
-          child: _buildFormA(l10n),
-        ),
+      backgroundColor: CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? LightSurfaces.page
+          : null,
+      navigationBar: CupertinoNavigationBar(
+        border: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? const Border(
+                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
+              )
+            : const CupertinoNavigationBar().border,
+        backgroundColor:
+            CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? LightSurfaces.page
+            : null,
+        middle: Text(l10n.connectServer),
       ),
+      child: SafeArea(child: WideDualPane(child: _buildFormA(l10n))),
     );
   }
 
@@ -436,13 +471,17 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               },
               children: {
                 OnboardingTab.builtin: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Text(l10n.onboardingTabBuiltin),
                 ),
                 OnboardingTab.remote: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Text(l10n.onboardingTabRemote),
                 ),
               },
@@ -452,10 +491,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         Expanded(
           child: IndexedStack(
             index: _currentTab == OnboardingTab.builtin ? 0 : 1,
-            children: [
-              const BuiltinTab(),
-              _buildRemoteFormA(l10n),
-            ],
+            children: [const BuiltinTab(), _buildRemoteFormA(l10n)],
           ),
         ),
       ],
@@ -471,11 +507,17 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           l10n.inputServerAddressHint,
           style: TextStyle(
             fontSize: 15,
-            color: secondaryText.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
           ),
         ),
         const SizedBox(height: 24),
         CupertinoTextField(
+          decoration: OnboardingFieldStyle.decoration(context),
+          placeholderStyle: OnboardingFieldStyle.placeholder(context),
           key: const ValueKey('onboarding-url'),
           controller: _urlController,
           placeholder: 'https://hermes.example.com:8787',
@@ -490,20 +532,24 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           _buildAuthSection(),
         ],
         const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: _buildSubmitButton(l10n),
-        ),
+        SizedBox(width: double.infinity, child: _buildSubmitButton(l10n)),
       ],
     );
   }
 
   Widget _buildSubmitButton(AppLocalizations l10n) {
     return CupertinoButton.filled(
+      color: CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? LightSurfaces.userDetail
+          : null,
       key: const ValueKey('onboarding-connect'),
       onPressed: _busy ? null : () => unawaited(_onSubmit()),
       child: _busy
-          ? const CupertinoActivityIndicator()
+          ? CupertinoActivityIndicator(
+              color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? LightSurfaces.textSecondary
+                  : null,
+            )
           : Text(l10n.connectAndSave),
     );
   }
@@ -515,10 +561,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       children: [
         ..._buildFormFields(l10n),
         const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: _buildSubmitButton(l10n),
-        ),
+        SizedBox(width: double.infinity, child: _buildSubmitButton(l10n)),
       ],
     );
   }
@@ -542,11 +585,17 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         l10n.inputServerAddressHint,
         style: TextStyle(
           fontSize: 15,
-          color: secondaryText.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          ),
         ),
       ),
       const SizedBox(height: 24),
       CupertinoTextField(
+        decoration: OnboardingFieldStyle.decoration(context),
+        placeholderStyle: OnboardingFieldStyle.placeholder(context),
         key: const ValueKey('onboarding-url'),
         controller: _urlController,
         placeholder: 'https://hermes.example.com:8787',
@@ -578,7 +627,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               l10n.checking,
               style: TextStyle(
                 fontSize: 14,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -616,7 +669,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               l10n.detectingServerAuth,
               style: TextStyle(
                 fontSize: 14,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -650,11 +707,17 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               l10n.serverPasswordRequired,
               style: TextStyle(
                 fontSize: 15,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
             const SizedBox(height: 12),
             CupertinoTextField(
+              decoration: OnboardingFieldStyle.decoration(context),
+              placeholderStyle: OnboardingFieldStyle.placeholder(context),
               key: const ValueKey('onboarding-password'),
               controller: _passwordController,
               focusNode: _passwordFocusNode,
@@ -684,7 +747,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               l10n.verifyingPassword,
               style: TextStyle(
                 fontSize: 14,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
