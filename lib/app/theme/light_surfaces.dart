@@ -1,16 +1,18 @@
 // 浅色面令牌：固定不透明 sRGB；仅由选择接入的页面消费，不改全局主题。
 // Python WCAG 2.x 实算（tools/light_theme_contrast.py --tokens）：
 // token         RGB       对 page   对 card   对 textSecondary
-// page          #EBEBF0   1.000000  1.188185  4.527171
-// card          #FFFFFF   1.188185  1.000000  5.379116
-// cardBorder    #DDE0E8   1.111439  1.320594  4.073254
-// divider       #C6C6C8   1.435417  1.705540  3.153907
-// textSecondary #6A6A6F   4.527171  5.379116  1.000000
-// selection     #E0ECFF   1.003542  1.192393  4.511193
+// page          #F2F2F7   1.000000  1.115871  4.820554
+// card          #FFFFFF   1.115871  1.000000  5.379116
+// cardBorder    #CCD0DA   1.383553  1.543866  3.484185
+// divider       #C6C6C8   1.528439  1.705540  3.153907
+// textSecondary #6A6A6F   4.820554  5.379116  1.000000
+// selection     #E0ECFF   1.068576  1.192393  4.511193
 // pressed = page；placeholder = textSecondary，三向数值同对应令牌。
 // 面/分隔线为装饰层级，不以正文 AA 判级；选中态另有勾选图标标识。
-// #6E6E73 对 page 仅 4.268126；保持 R=G、B=R+5，#6A6A6F 是
-// 同时满足 page/card 正文 AA 的最浅整字节值（#6B6B70 仅 4.460649）。
+// v2（2026-09-13 主人实机反馈「灰底太深」回调）：page 从 #EBEBF0 退回
+// iOS 标准 #F2F2F7，分层主力移交加深一档的 cardBorder（#DDE0E8→#CCD0DA，
+// 对白卡 1.543866:1，接近 GitHub Primer #d0d7de 的可见 hairline 档位）。
+// page 变浅后 textSecondary 对 page 余量增大（4.527→4.821），维持不变。
 // tertiaryLabel/placeholderText 合成到 page/card 后仅 1.683235/1.725396，
 // 可读占位文案使用 placeholder，不通过降低透明度制造文字层级。
 
@@ -19,13 +21,13 @@ import 'package:flutter/cupertino.dart';
 /// 浅色面与文字令牌；深色由调用方传入原有颜色，逐字节保留。
 abstract final class LightSurfaces {
   /// 页面与会话侧边栏列表区的分组背景。
-  static const Color page = Color(0xFFEBEBF0);
+  static const Color page = Color(0xFFF2F2F7);
 
   /// 分组卡片、输入框及普通浮层的白色面。
   static const Color card = Color(0xFFFFFFFF);
 
   /// 分组卡片轮廓（0.5–1 逻辑像素 hairline）。
-  static const Color cardBorder = Color(0xFFDDE0E8);
+  static const Color cardBorder = Color(0xFFCCD0DA);
 
   /// iOS 浅色 opaqueSeparator，避免透明分隔线随承载面漂移。
   static const Color divider = Color(0xFFC6C6C8);
