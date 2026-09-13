@@ -4,7 +4,7 @@
 
 ## 范围与复验方法
 
-- 扫描 `lib/` 全部 **231** 个 Dart 文件，记录 **1158** 个颜色引用/常量/别名透明度使用点。按实际目录补入下载、诊断和内置服务，不沿用旧目录快照假定覆盖。
+- 扫描 `lib/` 全部 **234** 个 Dart 文件，记录 **1774** 个颜色引用/常量/别名透明度使用点。按实际目录补入下载、诊断和内置服务，不沿用旧目录快照假定覆盖。
 - 语义色取自 Flutter **3.47.0** / Dart **3.13.0** 的 `packages/flutter/lib/src/cupertino/colors.dart` 普通浅色分支；增强对比度和暗色保留分支另标豁免。
 - WCAG：sRGB 通道 `c<=0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`；相对亮度 `0.2126R+0.7152G+0.0722B`；比值 `(L高+0.05)/(L低+0.05)`。先按实际 alpha 在 sRGB 合成，再线性化；中间值不取整，表格保留六位小数。
 - 正文 AA 门槛 4.5:1，功能图标/数据图形按 3:1；纯装饰面、边框、投影不套正文 AA。低对比度卡片面仍可存在视觉分层问题，不能用“装饰豁免”宣称已经分层充分。
@@ -55,7 +55,7 @@
 ## 硬编码定位与代码可判定的发现
 
 - `lib/features/chat/chat_page.dart:1496,1628,1729`：绿色提示卡已接 tintGreen + cardBorder；正文、状态图标和关闭图标的实际组合见附录 P0。暗色 #2C2C2E 及原描边、投影保留。
-- `lib/features/onboarding/widgets/onboarding_hero_motion.dart:271`：品牌图标承载面；halo 的透明渐变、轨道线在同文件 _HaloPainter 中，属无交互装饰，按设计保留/后续整体评估。
+- `lib/features/onboarding/widgets/onboarding_hero_motion.dart:277`：品牌图标承载面；halo 的透明渐变、轨道线在同文件 _HaloPainter 中，属无交互装饰，按设计保留/后续整体评估。
 - `lib/features/chat/widgets/mermaid_block.dart:57,62,67`：`core.Color` 是 Mermaid 深色 theme 的 primaryText/text/title 配置，不是浅色 Flutter 卡片面，归配置豁免。
 - 旧 secondaryText/secondaryLabel 实际浅色是 #3C3C43/153，不符合旧注释所述正文 AA；参见附录的逐背景实算。tertiaryLabel/placeholderText 更浅；输入占位属于可读信息，不能因为名字含 tertiary 就豁免。
 - 主色 #007AFF 的小字号白字/蓝字也不自动满足正文 AA。阶段一保持品牌/全局按钮语义；会话搜索命中改用 statusBlueText，批量栏危险文字使用 statusRedText 的浅色分支。其他品牌动作/禁用态列入后续，不宣称会话页所有文字已全域达标。
@@ -545,7 +545,7 @@
 | `CupertinoColors.systemPurple @ 0.08` L854 | 暗色保留豁免 | #AF52DE / α=0.080000 | 1.098178 | 1.103836 | 1.055732 | 暗色保留豁免 |
 | `CupertinoColors.systemPurple` L874 | 图标/图形 | #AF52DE | 3.701328 | 4.130204 | 5.084495 | 非文本：页面达 / 白卡达；反色见局部组合 |
 
-无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/chat/chat_controller.dart`、`lib/features/chat/chat_diff_merge.dart`、`lib/features/chat/chat_draft_provider.dart`、`lib/features/chat/chat_models.dart`、`lib/features/chat/chat_providers.dart`、`lib/features/chat/chat_server_api.dart`、`lib/features/chat/chat_state.dart`、`lib/features/chat/pending_attachments_provider.dart`、`lib/features/chat/selection_provider.dart`、`lib/features/chat/widgets/chat_media_parser.dart`。
+无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/chat/chat_controller.dart`、`lib/features/chat/chat_diff_merge.dart`、`lib/features/chat/chat_draft_provider.dart`、`lib/features/chat/chat_models.dart`、`lib/features/chat/chat_providers.dart`、`lib/features/chat/chat_server_api.dart`、`lib/features/chat/chat_state.dart`、`lib/features/chat/pending_attachments_provider.dart`、`lib/features/chat/selection_provider.dart`、`lib/features/chat/widgets/chat_media_parser.dart`、`lib/features/chat/widgets/chat_text_selection.dart`。
 
 ### P1 自适应外壳
 
@@ -685,26 +685,47 @@
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `statusGreyText` L71 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusBlueText` L73 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusTealText` L75 | 复用色；按承载面判级 | #0E7C86 | 4.432283 | 4.945856 | 4.245979 | 正文 AA：页面不达 / 白卡达；反色见局部组合 |
-| `statusOrangeText` L77 | 复用色；按承载面判级 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemRed` L79 | 复用色；按承载面判级 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusGreenText` L81 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L83 | 复用色；按承载面判级 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemPurple` L85 | 复用色；按承载面判级 | #AF52DE | 3.701328 | 4.130204 | 5.084495 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.activeBlue` L199 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondarySystemFill` L200,774 | 复用色；按承载面判级 | #787880 / α=0.156863 | 1.191278 | 1.203984 | 1.129452 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.white` L207 | 文字 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.label` L207,589,707 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L264,294,324,953 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `secondaryText` L273,303,438,454,543,706,751,817,838,1043,1074,1109 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusRedText` L337,968 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondarySystemBackground` L510 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey @ 0.25` L513 | 装饰线/投影豁免 | #8E8E93 / α=0.250000 | 1.260485 | 1.285296 | 1.345967 | 装饰线/投影豁免 |
-| `CupertinoColors.secondaryLabel` L533 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemYellow @ 0.2` L568 | 面 | #FFCC00 / α=0.200000 | 1.075725 | 1.095993 | 1.455177 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemOrange` L577 | 图标/图形 | #FF9500 | 1.970414 | 2.198728 | 9.550978 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
+| `statusGreyText` L72 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusBlueText` L74,966,1419,1423 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusOrangeText` L78 | 复用色；按承载面判级 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreenText` L82 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusTealText` L93,94 | 复用色；按承载面判级 | #0E7C86 | 4.432283 | 4.945856 | 4.245979 | 正文 AA：页面不达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemRed` L97 | 复用色；按承载面判级 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusRedText` L98,99 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L102 | 复用色；按承载面判级 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L103 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemPurple` L106,107 | 复用色；按承载面判级 | #AF52DE | 3.701328 | 4.130204 | 5.084495 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.selection` L246,254,969,1351,1422 | 复用色；按承载面判级 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.pressed` L248,969 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.card` L249,1350 | 复用色；按承载面判级 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.activeBlue` L251 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.secondarySystemFill` L252,970 | 复用色；按承载面判级 | #787880 / α=0.156863 | 1.191278 | 1.203984 | 1.129452 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.quaternarySystemFill` L255 | 复用色；按承载面判级 | #747480 / α=0.078431 | 1.092772 | 1.098258 | 1.055643 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusBlueText` L266 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.label` L267,270,664,749,882 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.white` L269 | 文字 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.cardBorder` L283,648,1344,1441,1451 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L317 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.textSecondary` L359,397,435,678,1183 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L360,398,436,1184 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L372,410,556,576,692,879,937,1034,1059,1278,1313,1372 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L373,411,557,577,693,880,938,1035,1060,1279,1314,1373 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `statusRedText` L450,1200 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L492,1156 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.pressed` L640 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.card` L640,1437,1449 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondarySystemBackground` L641 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `CupertinoColors.systemGrey @ 0.25` L649 | 暗色保留豁免 | #8E8E93 / α=0.250000 | 1.260485 | 1.285296 | 1.345967 | 暗色保留豁免 |
+| `CupertinoColors.secondaryLabel` L679 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.tintWarning` L722 | 面 | #FFF4E8 | 1.028595 | 1.084850 | 19.357512 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemYellow @ 0.2` L723 | 暗色保留豁免 | #FFCC00 / α=0.200000 | 1.075725 | 1.095993 | 1.455177 | 暗色保留豁免 |
+| `statusOrangeText` L735 | 图标/图形 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemOrange` L736 | 暗色保留豁免 | #FF9500 | 1.970414 | 2.198728 | 9.550978 | 暗色保留豁免 |
+| `LightSurfaces.page` L858,908,986,1012,1417,1418 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGroupedBackground` L859,909,987,1013 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.divider` L863,913,991,1017 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.divider` L1431 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.placeholder` L1459 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/kanban/kanban_api.dart`、`lib/features/kanban/kanban_providers.dart`。
 
@@ -720,12 +741,24 @@
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `secondaryText` L199,213,243,318,591 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L263,305 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusRedText` L276 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemBlue` L433,554 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemBlue` L467 | 文字 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `Color(0xFF004999)` L553 | 图标/图形 | #004999 | 7.799167 | 8.702863 | 2.412999 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L61,62 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.page` L99 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGroupedBackground` L100 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.divider` L104 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `CupertinoColors.separator` L105 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `LightSurfaces.card` L110 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L112 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.textSecondary` L237,255,292,384,528,669 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L238,256,293,385,670 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L316,366 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF8E8E93)` L318,368 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusRedText` L332 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusBlueText` L339 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemBlue` L501,630 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusBlueText` L540 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF007AFF)` L542 | 暗色保留豁免 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 暗色保留豁免 |
+| `Color(0xFF004999)` L629 | 图标/图形 | #004999 | 7.799167 | 8.702863 | 2.412999 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L741 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/insights/insights_api.dart`、`lib/features/insights/insights_providers.dart`。
 
@@ -741,8 +774,10 @@ settings_page / settings_subpages / profile / extensions / MCP / auxiliary_model
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `secondaryText` L69,114,202,256 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L119 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L82,127,237,308 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L83,128,238,309 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L137 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF8E8E93)` L138 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
 
 #### `lib/features/settings/extensions_section.dart`
 
@@ -752,10 +787,12 @@ settings_page / settings_subpages / profile / extensions / MCP / auxiliary_model
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `secondaryText` L64,95,308 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusGreenText` L95 | 文字 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L313 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusRedText` L350 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L77,119,355 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L78,120,356 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `statusGreenText` L116 | 文字 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L365 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF8E8E93)` L366 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusRedText` L411 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/settings/mcp_section.dart`
 
@@ -765,10 +802,11 @@ settings_page / settings_subpages / profile / extensions / MCP / auxiliary_model
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `statusGreenText` L98 | 文字 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusGreyText` L98 | 文字 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L415 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L450,466 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusGreenText` L106 | 文字 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreyText` L106 | 文字 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L458 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L496,520 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L497,521 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
 
 #### `lib/features/settings/profile_section.dart`
 
@@ -778,7 +816,7 @@ settings_page / settings_subpages / profile / extensions / MCP / auxiliary_model
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `statusRedText` L71 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L77 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/settings/settings_page.dart`
 
@@ -788,24 +826,63 @@ settings_page / settings_subpages / profile / extensions / MCP / auxiliary_model
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.secondaryLabel` L305,918,1309,1328,1347,1358,1646 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L312,493,505,517,529,543,557,569,583 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemBlue` L929 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemRed` L948 | 文字 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.activeBlue` L949 | 文字 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemRed` L974 | 图标/图形 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L1144,1377 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.destructiveRed` L1595 | 面 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 运行时 alpha；表中仅列未调制基色，不能据此声明实际帧达标 |
-| `CupertinoColors.destructiveRed` L1600 | 装饰线/投影豁免 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 装饰线/投影豁免 |
-| `CupertinoColors.destructiveRed` L1610,1632 | 图标/图形 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.destructiveRed` L1618 | 文字 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `secondaryText` L1817 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L335,1066,1500,1527,1554,1567,1920,2113 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L336,1067,1501,1528,1555,1568,1921 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L346,571,589,604,620,638,656,674,692 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L347 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `Color(0xFF8E8E93)` L572,590,605,621,639,657,675,693 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusBlueText` L974 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemBlue` L1079 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L1102,1319,1592,1876 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemRed` L1103 | 暗色保留豁免 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 暗色保留豁免 |
+| `LightSurfaces.menuAction` L1107 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.activeBlue` L1108 | 暗色保留豁免 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 暗色保留豁免 |
+| `statusRedText` L1141,1864,1902 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFFFF3B30)` L1142,1865,1877,1903 | 暗色保留豁免 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 暗色保留豁免 |
+| `LightSurfaces.tintError` L1841 | 面 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.destructiveRed` L1842,1851 | 暗色保留豁免 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 暗色保留豁免 |
+| `LightSurfaces.divider` L1850 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `secondaryText` L2114 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
 
 #### `lib/features/settings/settings_subpages.dart`
 
 默认控件：`CupertinoPageScaffold`、`CupertinoListSection`、`CupertinoListTile`、`CupertinoNavigationBar`。
 
 无额外显式颜色，继承上表语义。
+
+#### `lib/features/settings/settings_surfaces.dart`
+
+默认控件：`CupertinoListSection`、`CupertinoListTile`、`CupertinoButton`、`CupertinoAlertDialog`、`CupertinoActionSheet`。
+
+参考页面 P=#F2F2F7；C=#FFFFFF；L=#000000。
+
+| 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
+|---|---|---|---:|---:|---:|---|
+| `LightSurfaces.page` L21,22,45,286 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.selection` L25,151,287 | 复用色；按承载面判级 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.divider` L49 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L57,106,362 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.card` L63,156 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L78,157 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L89 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.pressed` L125 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L133,143 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.white` L162 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.black` L163 | 其他主题定义豁免 | #000000 | 18.819381 | 21.000000 | 1.000000 | 其他主题定义豁免 |
+| `Color(0x33000000)` L168 | 装饰线/投影豁免 | #000000 / α=0.200000 | 1.598086 | 1.605929 | 1.000000 | 装饰线/投影豁免 |
+| `Color(0x33FFFFFF)` L169 | 其他主题定义豁免 | #FFFFFF / α=0.200000 | 1.022544 | 1.000000 | 1.662095 | 其他主题定义豁免 |
+| `LightSurfaces.placeholder` L182 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.placeholderText` L183 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L190,262,352 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L190,355 | 复用色；按承载面判级 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.divider` L237 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `Color(0x4D000000)` L238 | 暗色保留豁免 | #000000 / α=0.301961 | 2.101806 | 2.120350 | 1.000000 | 暗色保留豁免 |
+| `CupertinoColors.black` L258,261 | 复用色；按承载面判级 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreenText` L259 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.card` L263,264 | 复用色；按承载面判级 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusRedText` L307 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L308 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L354 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/settings/webui_sidecar_section.dart`
 
@@ -815,14 +892,15 @@ settings_page / settings_subpages / profile / extensions / MCP / auxiliary_model
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.secondaryLabel` L264,414 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L270,483 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusRedText` L300,324,375 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L351 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusGreenText` L436 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusBlueText` L456 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L459,469 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusGreyText` L472 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L273,375,447 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L274,284,448,522 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L283,521 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L318,344,402 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF8E8E93)` L376 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusGreenText` L471 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusBlueText` L491 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L494,504 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreyText` L507 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/settings/chat_send_shortcut_settings.dart`、`lib/features/settings/composer_settings.dart`、`lib/features/settings/cron_visibility_settings.dart`、`lib/features/settings/injected_notice_settings.dart`、`lib/features/settings/perf_monitor_settings.dart`、`lib/features/settings/settings_providers.dart`、`lib/features/settings/smooth_streaming_settings.dart`、`lib/features/settings/tool_group_settings.dart`。
 
@@ -838,29 +916,41 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `secondaryText` L345,490,514,522,634,727,819,970 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusGreenText` L353,598 | 图标/图形 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemYellow` L405 | 图标/图形 | #FFCC00 | 1.354970 | 1.511972 | 13.889146 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey5` L531 | 面 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
-| `statusGreenText` L540 | 面 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.secondarySystemGroupedBackground` L554,707 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.separator` L558,711,842 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
-| `CupertinoColors.separator` L568 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.tertiaryLabel` L588 | 图标/图形 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `statusRedText` L605,663 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText @ 0.08` L649 | 面 | #B3001B / α=0.080000 | 1.157968 | 1.161333 | 1.020135 | 装饰面豁免；分层强弱见三向值 |
-| `statusRedText @ 0.3` L652 | 装饰线/投影豁免 | #B3001B / α=0.300000 | 1.790104 | 1.816604 | 1.158749 | 装饰线/投影豁免 |
-| `statusRedText` L671,681,782 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L690 | 面 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.white` L694 | 文字 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.tertiarySystemFill` L798 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey` L828,859 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.darkBackgroundGray` L839 | 面 | #171717 | 16.066232 | 17.927840 | 1.171363 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey` L866,916 | 文字 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.black` L910 | 面 | #000000 | 18.819381 | 21.000000 | 1.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGreen` L928 | 文字 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey4` L999 | 复用色；按承载面判级 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.black` L1008 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L308,518,546,558,693,808,917,1105 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L335,367 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreyText` L345 | 文字 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L346,519,547,559,694,809,918,1106 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `statusGreenText` L355,655 | 图标/图形 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L387,397 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L392,605,788,950 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `statusOrangeText` L426 | 图标/图形 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemYellow` L427 | 暗色保留豁免 | #FFCC00 | 1.354970 | 1.511972 | 13.889146 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L439,1075,1123,1164 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.divider` L571,619 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGrey5` L572 | 暗色保留豁免 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 暗色保留豁免 |
+| `statusGreenText` L582 | 面 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.card` L598,781,889 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondarySystemGroupedBackground` L599,782 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `CupertinoColors.separator` L606,620,789,951 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L643,930,1086 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.tertiaryLabel` L644 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `statusRedText` L662,732 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.tintError` L712 | 面 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 装饰面豁免；分层强弱见三向值 |
+| `statusRedText @ 0.08` L713 | 暗色保留豁免 | #B3001B / α=0.080000 | 1.157968 | 1.161333 | 1.020135 | 暗色保留豁免 |
+| `LightSurfaces.cardBorder` L719,894 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `statusRedText @ 0.3` L720 | 暗色保留豁免 | #B3001B / α=0.300000 | 1.790104 | 1.816604 | 1.158749 | 暗色保留豁免 |
+| `statusRedText` L740,750,871 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L759 | 面 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.white` L765,1000,1020 | 文字 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.tertiarySystemFill` L890 | 暗色保留豁免 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 暗色保留豁免 |
+| `CupertinoColors.systemGrey` L931 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `CupertinoColors.darkBackgroundGray` L945 | 面 | #171717 | 16.066232 | 17.927840 | 1.171363 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGrey` L969 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L976,1040 | 文字 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.black` L1034 | 面 | #000000 | 18.819381 | 21.000000 | 1.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGreen` L1052 | 文字 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGrey4` L1139 | 复用色；按承载面判级 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.black` L1148 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/onboarding/onboarding_page.dart`
 
@@ -870,10 +960,16 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `statusRedText` L344,600,706 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L474,545,581,619,653,687 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusGreenText` L591,638,697 | 文字 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusGreenText` L630 | 图标/图形 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L346,653,773 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L356 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L396,406,433,443 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L401,438 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.textSecondary` L512,590,632,674,712,752 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L513,591,633,675,713,753 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L543 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L550 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusGreenText` L644,695,764 | 文字 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreenText` L687 | 图标/图形 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 非文本：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/onboarding/widgets/builtin_tab.dart`
 
@@ -883,31 +979,57 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `secondaryText` L362,437,676,797 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemOrange @ 0.12` L398 | 面 | #FF9500 / α=0.120000 | 1.091038 | 1.101384 | 1.142773 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemOrange @ 0.35` L403 | 装饰线/投影豁免 | #FF9500 / α=0.350000 | 1.287731 | 1.327518 | 1.921126 | 装饰线/投影豁免 |
-| `statusOrangeText` L416 | 图标/图形 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `statusOrangeText` L426 | 文字 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.activeOrange` L447 | 面 | #FF9500 | 1.970414 | 2.198728 | 9.550978 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.white` L457 | 文字 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey5` L468 | 面 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.label` L478 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusOrangeText` L506 | 复用色；按承载面判级 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemOrange @ 0.12` L507 | 复用色；按承载面判级 | #FF9500 / α=0.120000 | 1.091038 | 1.101384 | 1.142773 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusGreenText` L518 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGreen @ 0.12` L519 | 复用色；按承载面判级 | #34C759 / α=0.120000 | 1.091985 | 1.102490 | 1.142405 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusBlueText` L524 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemBlue @ 0.12` L525 | 复用色；按承载面判级 | #007AFF / α=0.120000 | 1.159087 | 1.168124 | 1.085680 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusRedText` L530 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemRed @ 0.12` L531 | 复用色；按承载面判级 | #FF3B30 / α=0.120000 | 1.166066 | 1.174456 | 1.090290 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusGreyText` L536 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey @ 0.12` L537 | 复用色；按承载面判级 | #8E8E93 / α=0.120000 | 1.114697 | 1.124644 | 1.112837 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusRedText @ 0.08` L576 | 面 | #B3001B / α=0.080000 | 1.157968 | 1.161333 | 1.020135 | 装饰面豁免；分层强弱见三向值 |
-| `statusRedText @ 0.25` L579 | 装饰线/投影豁免 | #B3001B / α=0.250000 | 1.614942 | 1.633458 | 1.113405 | 装饰线/投影豁免 |
-| `statusRedText` L591,715,755,831 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusBlueText` L608 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L685 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L860 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L376,459,760,903 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L377,460,761,774,904 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.tintWarning` L412 | 面 | #FFF4E8 | 1.028595 | 1.084850 | 19.357512 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemOrange @ 0.12` L413,549 | 暗色保留豁免 | #FF9500 / α=0.120000 | 1.091038 | 1.101384 | 1.142773 | 暗色保留豁免 |
+| `LightSurfaces.cardBorder` L421,612,649,798 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `CupertinoColors.systemOrange @ 0.35` L422 | 暗色保留豁免 | #FF9500 / α=0.350000 | 1.287731 | 1.327518 | 1.921126 | 暗色保留豁免 |
+| `statusOrangeText` L436 | 图标/图形 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusOrangeText` L446 | 文字 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusOrangeText` L476 | 面 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.activeOrange` L477 | 暗色保留豁免 | #FF9500 | 1.970414 | 2.198728 | 9.550978 | 暗色保留豁免 |
+| `CupertinoColors.white` L488 | 文字 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.pressed` L504 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGrey5` L505 | 暗色保留豁免 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 暗色保留豁免 |
+| `CupertinoColors.label` L516 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusOrangeText` L545 | 复用色；按承载面判级 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.tintWarning` L548 | 复用色；按承载面判级 | #FFF4E8 | 1.028595 | 1.084850 | 19.357512 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusGreenText` L562 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.tintGreen` L565 | 复用色；按承载面判级 | #F0FAF2 | 1.044745 | 1.068080 | 19.661457 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGreen @ 0.12` L566 | 暗色保留豁免 | #34C759 / α=0.120000 | 1.091985 | 1.102490 | 1.142405 | 暗色保留豁免 |
+| `statusBlueText` L572 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.selection` L575 | 复用色；按承载面判级 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemBlue @ 0.12` L576 | 暗色保留豁免 | #007AFF / α=0.120000 | 1.159087 | 1.168124 | 1.085680 | 暗色保留豁免 |
+| `statusRedText` L582 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.tintError` L585 | 复用色；按承载面判级 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemRed @ 0.12` L586 | 暗色保留豁免 | #FF3B30 / α=0.120000 | 1.166066 | 1.174456 | 1.090290 | 暗色保留豁免 |
+| `statusGreyText` L592 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L595 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGrey @ 0.12` L596 | 暗色保留豁免 | #8E8E93 / α=0.120000 | 1.114697 | 1.124644 | 1.112837 | 暗色保留豁免 |
+| `LightSurfaces.tintError` L642 | 面 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 装饰面豁免；分层强弱见三向值 |
+| `statusRedText @ 0.08` L643 | 暗色保留豁免 | #B3001B / α=0.080000 | 1.157968 | 1.161333 | 1.020135 | 暗色保留豁免 |
+| `statusRedText @ 0.25` L650 | 暗色保留豁免 | #B3001B / α=0.250000 | 1.614942 | 1.633458 | 1.113405 | 暗色保留豁免 |
+| `statusRedText` L663,817,857,939 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusBlueText` L680 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L699,722 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L729,773,968 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.card` L796 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L803 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.separator` L804 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `CupertinoColors.secondaryLabel` L969 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+
+#### `lib/features/onboarding/widgets/onboarding_field_style.dart`
+
+默认控件：`CupertinoTextField`。
+
+参考页面 P=#F2F2F7；C=#FFFFFF；L=#000000。
+
+| 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
+|---|---|---|---:|---:|---:|---|
+| `LightSurfaces.card` L12 | 复用色；按承载面判级 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.cardBorder` L13 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.placeholder` L22 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/onboarding/widgets/onboarding_hero_motion.dart`
 
@@ -915,27 +1037,28 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.label` L139 | 复用色；按承载面判级 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L250 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `Color(0xFF1C1C1E)` L270 | 暗色保留豁免 | #1C1C1E | 15.247942 | 17.014735 | 1.234224 | 暗色保留豁免 |
-| `Color(0xFFE5E5EA)` L271 | 面 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.separator` L274 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
-| `CupertinoColors.white` L285 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
-| `CupertinoColors.black` L286 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `Color(0x384F6076)` L311 | 纯装饰豁免 | #4F6076 / α=0.219608 | 1.357617 | 1.375907 | 1.147194 | 纯装饰豁免 |
-| `Color(0x18546983)` L311 | 纯装饰豁免 | #546983 / α=0.094118 | 1.126773 | 1.133098 | 1.058581 | 纯装饰豁免 |
-| `Color(0x00546983)` L311 | 纯装饰豁免 | #546983 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 纯装饰豁免 |
-| `Color(0xE6FFFFFF)` L312 | 纯装饰豁免 | #FFFFFF / α=0.901961 | 1.104161 | 1.000000 | 16.825959 | 纯装饰豁免 |
-| `Color(0x1895A4B9)` L312 | 纯装饰豁免 | #95A4B9 / α=0.094118 | 1.069922 | 1.078070 | 1.097879 | 纯装饰豁免 |
-| `Color(0x0095A4B9)` L312 | 纯装饰豁免 | #95A4B9 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 纯装饰豁免 |
-| `Color(0x26CCD4DF)` L316 | 纯装饰豁免 | #CCD4DF / α=0.149020 | 1.042478 | 1.057795 | 1.280875 | 纯装饰豁免 |
-| `Color(0x22596879)` L317 | 纯装饰豁免 | #596879 / α=0.133333 | 1.186782 | 1.196394 | 1.085103 | 纯装饰豁免 |
-| `Color(0x466F8299)` L319 | 纯装饰豁免 | #6F8299 / α=0.274510 | 1.342829 | 1.370545 | 1.338633 | 纯装饰豁免 |
-| `Color(0x3864788E)` L320 | 纯装饰豁免 | #64788E / α=0.219608 | 1.290641 | 1.310354 | 1.204910 | 纯装饰豁免 |
-| `Color(0x405F6C7D)` L322 | 纯装饰豁免 | #5F6C7D / α=0.250980 | 1.378437 | 1.401588 | 1.216382 | 纯装饰豁免 |
-| `Color(0x305D626B)` L323 | 纯装饰豁免 | #5D626B / α=0.188235 | 1.288334 | 1.303141 | 1.124429 | 纯装饰豁免 |
-| `Color(0x998CA4BC)` L325 | 纯装饰豁免 | #8CA4BC / α=0.600000 | 1.604304 | 1.698227 | 3.376596 | 纯装饰豁免 |
-| `Color(0x80778CA1)` L326 | 纯装饰豁免 | #778CA1 / α=0.501961 | 1.672526 | 1.746116 | 2.191687 | 纯装饰豁免 |
+| `CupertinoColors.label` L140 | 复用色；按承载面判级 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L253 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L254 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `Color(0xFF1C1C1E)` L276 | 暗色保留豁免 | #1C1C1E | 15.247942 | 17.014735 | 1.234224 | 暗色保留豁免 |
+| `Color(0xFFE5E5EA)` L277 | 面 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L280 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
+| `CupertinoColors.white` L291 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `CupertinoColors.black` L292 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0x384F6076)` L319 | 纯装饰豁免 | #4F6076 / α=0.219608 | 1.357617 | 1.375907 | 1.147194 | 纯装饰豁免 |
+| `Color(0x18546983)` L319 | 纯装饰豁免 | #546983 / α=0.094118 | 1.126773 | 1.133098 | 1.058581 | 纯装饰豁免 |
+| `Color(0x00546983)` L319 | 纯装饰豁免 | #546983 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 纯装饰豁免 |
+| `Color(0xE6FFFFFF)` L320 | 纯装饰豁免 | #FFFFFF / α=0.901961 | 1.104161 | 1.000000 | 16.825959 | 纯装饰豁免 |
+| `Color(0x1895A4B9)` L320 | 纯装饰豁免 | #95A4B9 / α=0.094118 | 1.069922 | 1.078070 | 1.097879 | 纯装饰豁免 |
+| `Color(0x0095A4B9)` L320 | 纯装饰豁免 | #95A4B9 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 纯装饰豁免 |
+| `Color(0x26CCD4DF)` L324 | 纯装饰豁免 | #CCD4DF / α=0.149020 | 1.042478 | 1.057795 | 1.280875 | 纯装饰豁免 |
+| `Color(0x22596879)` L325 | 纯装饰豁免 | #596879 / α=0.133333 | 1.186782 | 1.196394 | 1.085103 | 纯装饰豁免 |
+| `Color(0x466F8299)` L327 | 纯装饰豁免 | #6F8299 / α=0.274510 | 1.342829 | 1.370545 | 1.338633 | 纯装饰豁免 |
+| `Color(0x3864788E)` L328 | 纯装饰豁免 | #64788E / α=0.219608 | 1.290641 | 1.310354 | 1.204910 | 纯装饰豁免 |
+| `Color(0x405F6C7D)` L330 | 纯装饰豁免 | #5F6C7D / α=0.250980 | 1.378437 | 1.401588 | 1.216382 | 纯装饰豁免 |
+| `Color(0x305D626B)` L331 | 纯装饰豁免 | #5D626B / α=0.188235 | 1.288334 | 1.303141 | 1.124429 | 纯装饰豁免 |
+| `Color(0x998CA4BC)` L333 | 纯装饰豁免 | #8CA4BC / α=0.600000 | 1.604304 | 1.698227 | 3.376596 | 纯装饰豁免 |
+| `Color(0x80778CA1)` L334 | 纯装饰豁免 | #778CA1 / α=0.501961 | 1.672526 | 1.746116 | 2.191687 | 纯装饰豁免 |
 
 #### `lib/features/onboarding/widgets/wide_dual_pane.dart`
 
@@ -943,9 +1066,10 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.separator` L52 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
-| `Color(0xFF0A0A0C)` L83 | 暗色保留豁免 | #0A0A0C | 17.726852 | 19.780878 | 1.061631 | 暗色保留豁免 |
-| `CupertinoColors.systemGroupedBackground` L84 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L55 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L56 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `Color(0xFF0A0A0C)` L88 | 暗色保留豁免 | #0A0A0C | 17.726852 | 19.780878 | 1.061631 | 暗色保留豁免 |
+| `CupertinoColors.systemGroupedBackground` L89 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/onboarding/onboarding_providers.dart`。
 
@@ -961,22 +1085,33 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemGrey` L272,318 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusRedText` L285 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L328,628,758,782,868 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.quaternaryLabel` L653,673,728 | 复用色；按承载面判级 | #3C3C43 / α=0.176471 | 1.351231 | 1.362437 | 1.064897 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.tertiaryLabel` L718,882 | 图标/图形 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemRed` L772 | 图标/图形 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L897 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.tertiarySystemFill` L923 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.secondarySystemFill` L924 | 面 | #787880 / α=0.156863 | 1.191278 | 1.203984 | 1.129452 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.label` L934 | 复用色；按承载面判级 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemBlue` L940,975 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemPurple` L942,980 | 复用色；按承载面判级 | #AF52DE | 3.701328 | 4.130204 | 5.084495 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemPink` L944,983 | 复用色；按承载面判级 | #FF2D55 | 3.268088 | 3.646764 | 5.758530 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGreen` L948,967 | 复用色；按承载面判级 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemTeal` L952,957 | 复用色；按承载面判级 | #5AC8FA | 1.698980 | 1.895843 | 11.076868 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L985 | 复用色；按承载面判级 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.card` L248 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L251 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L258 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L289,342,701,739,788,977,996 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L290,343 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusRedText` L304 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L311 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L356,661,712,750,811,838,866,959 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L357,662,839,867,960 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `CupertinoColors.quaternaryLabel` L688,726,799 | 复用色；按承载面判级 | #3C3C43 / α=0.176471 | 1.351231 | 1.362437 | 1.064897 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.userDetail` L702,740 | 图标/图形 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L713,751,812,880 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.tertiaryLabel` L789,978 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `CupertinoColors.systemRed` L854 | 图标/图形 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L997 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `CupertinoColors.tertiarySystemFill` L1029 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondarySystemFill` L1030 | 面 | #787880 / α=0.156863 | 1.191278 | 1.203984 | 1.129452 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondaryLabel` L1042,1107 | 复用色；按承载面判级 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L1043 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGreen` L1045,1070,1089 | 复用色；按承载面判级 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusGreenText` L1046 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemTeal` L1048,1074,1079 | 复用色；按承载面判级 | #5AC8FA | 1.698980 | 1.895843 | 11.076868 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusTealText` L1049 | 复用色；按承载面判级 | #0E7C86 | 4.432283 | 4.945856 | 4.245979 | 正文 AA：页面不达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.label` L1056 | 复用色；按承载面判级 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemBlue` L1062,1097 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemPurple` L1064,1102 | 复用色；按承载面判级 | #AF52DE | 3.701328 | 4.130204 | 5.084495 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemPink` L1066,1105 | 复用色；按承载面判级 | #FF2D55 | 3.268088 | 3.646764 | 5.758530 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/workspace/workspace_api.dart`、`lib/features/workspace/workspace_providers.dart`。
 
@@ -992,18 +1127,28 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemBlue` L102 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.inactiveGray` L103 | 复用色；按承载面判级 | #999999 | 2.553188 | 2.849028 | 7.370936 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemBackground` L109 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `statusRedText` L136 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.tertiaryLabel` L161 | 面 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemBlue` L190 | 文字 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondarySystemBackground` L227 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.placeholderText` L247,280 | 文字 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.transparent` L252,285 | 面 | #000000 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.secondaryLabel` L333 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.separator` L353,377 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.tertiarySystemFill` L369 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemBlue` L105,203 | 暗色保留豁免 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 暗色保留豁免 |
+| `statusBlueText` L106 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.inactiveGray` L108 | 暗色保留豁免 | #999999 | 2.553188 | 2.849028 | 7.370936 | 暗色保留豁免 |
+| `LightSurfaces.placeholder` L109 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L117 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemBackground` L118 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `statusRedText` L146 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.tertiaryLabel` L172 | 面 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 装饰面豁免；分层强弱见三向值 |
+| `statusBlueText` L204 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondarySystemBackground` L245 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.card` L246 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L250 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.placeholder` L266,303 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.placeholderText` L267,304 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `CupertinoColors.transparent` L273,310 | 面 | #000000 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.textSecondary` L360 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L361 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.divider` L384,416 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L385,417 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `LightSurfaces.pressed` L404 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.tertiarySystemFill` L405 | 暗色保留豁免 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L437 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/workspace_manager/file_preview_body.dart`
 
@@ -1013,15 +1158,21 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemGrey` L683,1061,1109 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemBackground` L718 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.separator` L861 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.secondarySystemBackground` L868 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.tertiarySystemFill` L882 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
-| `secondaryText` L892,929,978,1046,1074,1264,1271 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.separator` L948 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
-| `statusRedText` L1122 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.activeBlue` L1233 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L686,1104,1163 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L687,1105,1164 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `CupertinoColors.systemBackground` L723 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L869 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L870,974 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `CupertinoColors.secondarySystemBackground` L879 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.card` L882 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L886 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `CupertinoColors.tertiarySystemFill` L897 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.textSecondary` L909,950,1009,1084,1121,1326,1337 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L910,951,1010,1085,1122,1327,1338 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.divider` L973 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.userDetail` L1134,1189 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L1178 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.activeBlue` L1293 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/workspace_manager/file_preview_page.dart`
 
@@ -1037,15 +1188,23 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `secondaryText` L142,231,548 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L176,218 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusRedText` L189,397,514 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `Color(0x99000000)` L307 | 复用色；按承载面判级 | #000000 / α=0.600000 | 5.554744 | 5.741836 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L571 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.tertiarySystemFill` L591 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.label` L597 | 图标/图形 | #000000 | 18.819381 | 21.000000 | 1.000000 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemBlue @ 0.15` L612 | 面 | #007AFF / α=0.150000 | 1.203594 | 1.215577 | 1.116793 | 装饰面豁免；分层强弱见三向值 |
-| `statusBlueText` L621 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.card` L141 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L144 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L151 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L158,262,603 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L159,263,604 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L196,245,630 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L197,246 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusRedText` L211,445,567 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L218 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0x99000000)` L340 | 复用色；按承载面判级 | #000000 / α=0.600000 | 5.554744 | 5.741836 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L370,395,424,468 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L631 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `CupertinoColors.tertiarySystemFill` L653 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.label` L659 | 图标/图形 | #000000 | 18.819381 | 21.000000 | 1.000000 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemBlue @ 0.15` L676 | 暗色保留豁免 | #007AFF / α=0.150000 | 1.203594 | 1.215577 | 1.116793 | 暗色保留豁免 |
+| `LightSurfaces.selection` L679 | 面 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 装饰面豁免；分层强弱见三向值 |
+| `statusBlueText` L686 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/workspace_manager/office_document.dart`、`lib/features/workspace_manager/workspace_manager_api.dart`、`lib/features/workspace_manager/workspace_manager_providers.dart`。
 
@@ -1061,33 +1220,41 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemBlue` L57 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemTeal` L58 | 复用色；按承载面判级 | #5AC8FA | 1.698980 | 1.895843 | 11.076868 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemPurple` L59 | 复用色；按承载面判级 | #AF52DE | 3.701328 | 4.130204 | 5.084495 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemOrange` L60 | 复用色；按承载面判级 | #FF9500 | 1.970414 | 2.198728 | 9.550978 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemIndigo` L61 | 复用色；按承载面判级 | #5856D6 | 5.062968 | 5.649619 | 3.717065 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemPink` L62 | 复用色；按承载面判级 | #FF2D55 | 3.268088 | 3.646764 | 5.758530 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemBlue @ 0.07` L176 | 面 | #007AFF / α=0.070000 | 1.089269 | 1.094052 | 1.045714 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemBlue` L194 | 面 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.separator` L197 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemBlue` L222 | 文字 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.label` L223 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemBlue @ 0.16` L233 | 面 | #007AFF / α=0.160000 | 1.218886 | 1.231923 | 1.128448 | 装饰面豁免；分层强弱见三向值 |
-| `statusBlueText` L243 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey5` L254 | 面 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
-| `secondaryText` L265 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L272,324,338,349,400 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusGreenText` L284 | 文字 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusOrangeText` L293 | 文字 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondarySystemBackground` L309 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.separator` L313 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
-| `CupertinoColors.systemGreen` L364 | 图标/图形 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemBlue @ 0.12` L371 | 面 | #007AFF / α=0.120000 | 1.159087 | 1.168124 | 1.085680 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.activeBlue` L383 | 文字 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusRedText` L415 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L423 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.white` L518 | 复用色；按承载面判级 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.white @ 0.8` L529 | 装饰线/投影豁免 | #FFFFFF / α=0.800000 | 1.092065 | 1.000000 | 13.076547 | 装饰线/投影豁免 |
+| `CupertinoColors.systemBlue` L58 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemTeal` L59 | 复用色；按承载面判级 | #5AC8FA | 1.698980 | 1.895843 | 11.076868 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemPurple` L60 | 复用色；按承载面判级 | #AF52DE | 3.701328 | 4.130204 | 5.084495 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemOrange` L61 | 复用色；按承载面判级 | #FF9500 | 1.970414 | 2.198728 | 9.550978 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemIndigo` L62 | 复用色；按承载面判级 | #5856D6 | 5.062968 | 5.649619 | 3.717065 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemPink` L63 | 复用色；按承载面判级 | #FF2D55 | 3.268088 | 3.646764 | 5.758530 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.card` L89 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L91,284,350 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L93 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemBlue @ 0.07` L188 | 暗色保留豁免 | #007AFF / α=0.070000 | 1.089269 | 1.094052 | 1.045714 | 暗色保留豁免 |
+| `LightSurfaces.selection` L191,258,418 | 面 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemBlue` L208,240 | 暗色保留豁免 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 暗色保留豁免 |
+| `statusBlueText` L209 | 面 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L213,349 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `LightSurfaces.divider` L214 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `statusBlueText` L243,266 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.label` L244 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemBlue @ 0.16` L255 | 暗色保留豁免 | #007AFF / α=0.160000 | 1.218886 | 1.231923 | 1.128448 | 暗色保留豁免 |
+| `CupertinoColors.systemGrey5` L278 | 暗色保留豁免 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 暗色保留豁免 |
+| `LightSurfaces.page` L279,345 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `secondaryText` L295,304,360,376,389,451 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L296 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L305,361,377,390,431,452,491 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreenText` L317 | 文字 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusOrangeText` L326 | 文字 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondarySystemBackground` L343 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `CupertinoColors.systemGreen` L406 | 暗色保留豁免 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 暗色保留豁免 |
+| `statusGreenText` L407 | 图标/图形 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemBlue @ 0.12` L415 | 暗色保留豁免 | #007AFF / α=0.120000 | 1.159087 | 1.168124 | 1.085680 | 暗色保留豁免 |
+| `CupertinoColors.activeBlue` L429 | 暗色保留豁免 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L432,492 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L467 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L475 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.white` L583 | 复用色；按承载面判级 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.white @ 0.8` L594 | 装饰线/投影豁免 | #FFFFFF / α=0.800000 | 1.092065 | 1.000000 | 13.076547 | 装饰线/投影豁免 |
 
 #### `lib/features/git/git_page.dart`
 
@@ -1097,19 +1264,41 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemRed` L90,608 | 复用色；按承载面判级 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGreen` L91,606 | 复用色；按承载面判级 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `secondaryText` L167,451,717 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemBlue` L196 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L395,438 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusRedText` L408 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemRed` L573 | 图标/图形 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemOrange` L610 | 复用色；按承载面判级 | #FF9500 | 1.970414 | 2.198728 | 9.550978 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L612 | 复用色；按承载面判级 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey2` L614 | 复用色；按承载面判级 | #AEAEB2 | 1.981608 | 2.211219 | 9.497025 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemBlue` L617 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondarySystemBackground` L680 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGreen` L705 | 图标/图形 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemRed` L91,723 | 复用色；按承载面判级 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGreen` L92,721 | 复用色；按承载面判级 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L171,223,237,249,530,563,651,671,858 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L172,531,859 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.card` L201,291,329,401 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L203,293,331,403,906 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L205,295,333,405 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemBlue` L211 | 暗色保留豁免 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 暗色保留豁免 |
+| `statusBlueText` L212 | 图标/图形 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L238,672 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.placeholder` L350 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.placeholderText` L351 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L362,416,427,438,487 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L467,514 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L468,515 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L481 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L575,585 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemRed` L685 | 暗色保留豁免 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 暗色保留豁免 |
+| `statusRedText` L686 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemOrange` L725 | 复用色；按承载面判级 | #FF9500 | 1.970414 | 2.198728 | 9.550978 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L727 | 复用色；按承载面判级 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGrey2` L729 | 复用色；按承载面判级 | #AEAEB2 | 1.981608 | 2.211219 | 9.497025 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemBlue` L732 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusGreenText` L738,905 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L740,904 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusOrangeText` L742 | 复用色；按承载面判级 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L744 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.placeholder` L746 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusBlueText` L749 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondarySystemBackground` L815 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.page` L816 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGreen` L843 | 暗色保留豁免 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 暗色保留豁免 |
+| `statusGreenText` L844 | 图标/图形 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.tintError` L902 | 复用色；按承载面判级 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.tintGreen` L902 | 复用色；按承载面判级 | #F0FAF2 | 1.044745 | 1.068080 | 19.661457 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/git/git_api.dart`、`lib/features/git/git_providers.dart`。
 
@@ -1125,13 +1314,25 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemGrey` L161,203 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusRedText` L174 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L217,344,373,477 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.label` L345,481,512 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.tertiaryLabel` L358 | 图标/图形 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondarySystemFill` L503 | 面 | #787880 / α=0.156863 | 1.191278 | 1.203984 | 1.129452 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.tertiarySystemFill` L504 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.card` L98,156 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L100,159 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.placeholder` L104 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L108 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L109 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.page` L150 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGroupedBackground` L151 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.divider` L153 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L197,245,420 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L199,247 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusRedText` L213 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L219 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L264,402,437,546 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L265,403,438,547 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L302 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.label` L405,553,585 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.tertiaryLabel` L421 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `CupertinoColors.secondarySystemFill` L576 | 面 | #787880 / α=0.156863 | 1.191278 | 1.203984 | 1.129452 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.tertiarySystemFill` L577 | 面 | #767680 / α=0.117647 | 1.141332 | 1.150191 | 1.087601 | 装饰面豁免；分层强弱见三向值 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/skills/skills_api.dart`、`lib/features/skills/skills_providers.dart`。
 
@@ -1147,14 +1348,24 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemGrey` L405,447 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusRedText` L418,628 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L454,681,710,864,874 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `secondaryText` L517,792 | 复用色；按承载面判级 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.label` L530,805 | 图标/图形 | #000000 | 18.819381 | 21.000000 | 1.000000 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.label` L752 | 文字/复用 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey5` L753 | 面/复用 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.secondaryLabel` L836 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L270 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGroupedBackground` L271 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.card` L275,674 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L277,676 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L280 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.textSecondary` L436,484,924 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L438,486 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusRedText` L452,695 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L458,724 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L497,756,789 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L498,566,757,790,877,948 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L565,876,947 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.label` L580,891 | 图标/图形 | #000000 | 18.819381 | 21.000000 | 1.000000 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.placeholder` L685 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L713 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.label` L834 | 文字/复用 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey5` L835 | 面/复用 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondaryLabel` L925 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/memory/memory_api.dart`、`lib/features/memory/memory_providers.dart`。
 
@@ -1170,21 +1381,36 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `statusGreenText` L58 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusBlueText` L61 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusOrangeText` L63,69 | 复用色；按承载面判级 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusGreyText` L65 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L67 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L202,242,515 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusRedText` L215 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L251,489,826 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.label` L470 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondarySystemBackground` L536 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.tertiarySystemBackground` L539 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.label` L542 | 文字/复用 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `secondaryText` L543 | 文字/复用 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.tertiaryLabel` L544 | 文字/复用 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.separator` L547 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
+| `statusGreenText` L59 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusBlueText` L62,131,946 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusOrangeText` L64,70 | 复用色；按承载面判级 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreyText` L66 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L68 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L105,890,892 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.page` L132,133,179,947,948 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGroupedBackground` L180 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.divider` L181 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.card` L184,988 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L187,991 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.textSecondary` L198,295,547,975 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L238,282,577 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey` L239,283,578 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
+| `statusRedText` L253,405 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L296,548,637,976 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.menuAction` L396,430 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.label` L526 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.pressed` L603 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.page` L625 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondarySystemBackground` L626 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.card` L630 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.tertiarySystemBackground` L631 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `CupertinoColors.label` L633 | 文字/复用 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L636,641 | 文字/复用 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.tertiaryLabel` L642 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `LightSurfaces.divider` L646,895 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `CupertinoColors.separator` L647 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `LightSurfaces.selection` L951 | 复用色；按承载面判级 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.placeholder` L999 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/tasks/tasks_api.dart`、`lib/features/tasks/tasks_providers.dart`。
 
@@ -1200,7 +1426,15 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.secondaryLabel` L158 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L38 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L51,84,96,204 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.card` L126 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L128 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.placeholder` L137 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L145,153,274 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L214 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L215 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `statusRedText` L284 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/projects/project_providers.dart`。
 
@@ -1216,13 +1450,21 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `statusRedText` L111,276 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.separator` L147,193,351 | 面 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.white` L159 | 图标/图形 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L181,218 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusRedText` L234 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey6` L319 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey3` L339 | 面 | #C7C7CC | 1.509207 | 1.684080 | 12.469719 | 装饰面豁免；分层强弱见三向值 |
+| `statusRedText` L115,314 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L121,298,325 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.divider` L157,214,405 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.separator` L158,215,406 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L168 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.white` L174 | 图标/图形 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L198,247 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L199,248 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.card` L233 | 复用色；按承载面判级 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.pressed` L234 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusRedText` L265 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.card` L365 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGrey6` L366 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.cardBorder` L374 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `CupertinoColors.systemGrey3` L391 | 面 | #C7C7CC | 1.509207 | 1.684080 | 12.469719 | 装饰面豁免；分层强弱见三向值 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/prompts/prompts_providers.dart`。
 
@@ -1234,7 +1476,11 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 默认控件：`CupertinoAlertDialog`。
 
-无额外显式颜色，继承上表语义。
+参考页面 P=#F2F2F7；C=#FFFFFF；L=#000000。
+
+| 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
+|---|---|---|---:|---:|---:|---|
+| `LightSurfaces.menuAction` L66,76 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/downloads/download_page.dart`
 
@@ -1244,23 +1490,33 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.systemGrey5` L302 | 复用色；按承载面判级 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `theme.primaryColor` L304,531,598,643 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGroupedBackground` L358 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `theme.primaryColor` L375 | 文字 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.tertiaryLabel` L409 | 图标/图形 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L416 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusGreyText` L452,495 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusBlueText` L474 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusGreenText` L480 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L483,491 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey4` L508 | 复用色；按承载面判级 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.label` L518,715 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.white` L555,615,653 | 文字 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L589,632,669 | 图标/图形 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondarySystemGroupedBackground` L680 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey6` L694 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.activeBlue` L700 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L87,97,183,244 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey5` L323 | 复用色；按承载面判级 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `theme.primaryColor` L325,580,653,704 | 复用色；按承载面判级 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.page` L382,386,766 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGroupedBackground` L383 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.divider` L389 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `Color(0x4D000000)` L392 | 装饰线/投影豁免 | #000000 / α=0.301961 | 2.101806 | 2.120350 | 1.000000 | 装饰线/投影豁免 |
+| `LightSurfaces.userDetail` L408 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `theme.primaryColor` L409 | 文字 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L445,640,689,732 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.tertiaryLabel` L446 | 暗色保留豁免 | #3C3C43 / α=0.298039 | 1.698832 | 1.725396 | 1.121334 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L456 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L457,641,690,733 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `statusGreyText` L495,538 | 复用色；按承载面判级 | #595959 | 6.277365 | 7.004729 | 2.997975 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusBlueText` L517 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreenText` L523 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L526,534 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.pressed` L553 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGrey4` L554 | 暗色保留豁免 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 暗色保留豁免 |
+| `CupertinoColors.label` L565,789 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L579,652,703 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.white` L604,670,714 | 文字 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.card` L747 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondarySystemGroupedBackground` L748 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `LightSurfaces.cardBorder` L752 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `CupertinoColors.systemGrey6` L767 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `CupertinoColors.activeBlue` L774 | 图标/图形 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非文本：页面达 / 白卡达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/downloads/download_controller.dart`、`lib/features/downloads/download_models.dart`、`lib/features/downloads/download_providers.dart`、`lib/features/downloads/download_repository.dart`、`lib/features/downloads/download_save_service.dart`。
 
@@ -1276,10 +1532,22 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `CupertinoColors.secondarySystemGroupedBackground` L62,163,192 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey5` L99 | 面 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
-| `secondaryText` L109,119,130,155,184 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `statusRedText` L140 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.tintWarning` L14 | 复用色；按承载面判级 | #FFF4E8 | 1.028595 | 1.084850 | 19.357512 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.tintError` L16 | 复用色；按承载面判级 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.selection` L18 | 复用色；按承载面判级 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.tintClarification` L20 | 复用色；按承载面判级 | #F3F2FF | 1.007248 | 1.107841 | 18.955790 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.page` L22 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.menuAction` L48,82 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L65,67,142 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L70 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `Color(0x4D000000)` L73 | 装饰线/投影豁免 | #000000 / α=0.301961 | 2.101806 | 2.120350 | 1.000000 | 装饰线/投影豁免 |
+| `LightSurfaces.card` L97,224,260 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondarySystemGroupedBackground` L98,225,261 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `LightSurfaces.cardBorder` L102,229,265 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `CupertinoColors.systemGrey5` L143 | 暗色保留豁免 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L154,168,183,212,248 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L155,169,184,213,249 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `statusRedText` L195 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/diagnostics/diagnostics_models.dart`
 
@@ -1305,19 +1573,45 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `secondaryText` L202,291,455,508,540,554,566,694,703,712 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.secondarySystemGroupedBackground` L364 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.separator` L368,628 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
-| `CupertinoColors.systemGrey6` L441,492 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey4` L446,497 | 装饰线/投影豁免 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 装饰线/投影豁免 |
-| `statusBlueText` L481 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `activeColor @ 0.15` L491 | 面 | #005FB8 / α=0.150000 | 1.248206 | 1.258718 | 1.080556 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey` L533,645 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
-| `statusBlueText @ 0.1` L624 | 面 | #005FB8 / α=0.100000 | 1.157261 | 1.163506 | 1.050244 | 装饰面豁免；分层强弱见三向值 |
-| `statusBlueText` L644 | 图标/图形 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey5` L684 | 面 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 装饰面豁免；分层强弱见三向值 |
-| `statusRedText` L723 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey3` L746 | 图标/图形 | #C7C7CC | 1.509207 | 1.684080 | 12.469719 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.tintWarning` L19 | 复用色；按承载面判级 | #FFF4E8 | 1.028595 | 1.084850 | 19.357512 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.tintError` L21 | 复用色；按承载面判级 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.selection` L23 | 复用色；按承载面判级 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.tintClarification` L25 | 复用色；按承载面判级 | #F3F2FF | 1.007248 | 1.107841 | 18.955790 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.page` L27 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `Color(0xFFB3001B)` L116 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.menuAction` L126,152,211,227,516 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L183,185,242,853 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L188,484,789 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `Color(0x4D000000)` L191 | 装饰线/投影豁免 | #000000 / α=0.301961 | 2.101806 | 2.120350 | 1.000000 | 装饰线/投影豁免 |
+| `CupertinoColors.systemGroupedBackground` L243 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.divider` L245 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.card` L248,300,477 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L251,303,559,618 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.textSecondary` L267,378,684,702,718,865,878,891 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L268,379,685,703,719,866,879,892 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.placeholder` L309 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L313 | 面 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondaryLabel` L314 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L400,432 | 图标/图形 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.userDetail` L409,441 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondarySystemGroupedBackground` L478 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `CupertinoColors.separator` L485,790 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
+| `LightSurfaces.userDetail` L527 | 面 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.page` L556,615 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGrey6` L557,616 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.systemGrey4` L560,619 | 装饰线/投影豁免 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 装饰线/投影豁免 |
+| `LightSurfaces.textSecondary` L562,621 | 文字/复用 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `secondaryText` L563,622 | 文字/复用 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `statusBlueText` L613 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.selection` L633,780 | 面 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 装饰面豁免；分层强弱见三向值 |
+| `activeColor @ 0.15` L634 | 面 | #005FB8 / α=0.150000 | 1.248206 | 1.258718 | 1.080556 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.textSecondary` L674,809,928 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF8E8E93)` L675,810 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
+| `statusBlueText @ 0.1` L781 | 面 | #005FB8 / α=0.100000 | 1.157261 | 1.163506 | 1.050244 | 装饰面豁免；分层强弱见三向值 |
+| `statusBlueText` L807 | 图标/图形 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemGrey5` L854 | 暗色保留豁免 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 暗色保留豁免 |
+| `statusRedText` L904 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFFC7C7CC)` L929 | 图标/图形 | #C7C7CC | 1.509207 | 1.684080 | 12.469719 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/diagnostics/diagnostics_interceptor.dart`、`lib/features/diagnostics/diagnostics_providers.dart`、`lib/features/diagnostics/diagnostics_service.dart`。
 
@@ -1333,12 +1627,23 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `statusRedText` L67 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L73,79 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGreen` L89 | 图标/图形 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
-| `statusOrangeText` L114 | 图标/图形 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `statusOrangeText` L120 | 文字 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L127,144,156,170,182 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.page` L25,27 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L30 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `Color(0x4D000000)` L33 | 装饰线/投影豁免 | #000000 / α=0.301961 | 2.101806 | 2.120350 | 1.000000 | 装饰线/投影豁免 |
+| `LightSurfaces.textSecondary` L55 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF8E8E93)` L56 | 复用色；按承载面判级 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.page` L65,147 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `CupertinoColors.systemGroupedBackground` L66,148 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
+| `LightSurfaces.card` L70,152 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.cardBorder` L72,154 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L77,159 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L83,94,128,165,196 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L110 | 图标/图形 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L115,119 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusGreenText` L134 | 图标/图形 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF34C759)` L135 | 图标/图形 | #34C759 | 1.989440 | 2.219959 | 9.459636 | 非文本：页面不达 / 白卡不达；反色见局部组合 |
+| `statusOrangeText` L183 | 图标/图形 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `statusOrangeText` L189 | 文字 | #B25000 | 4.657733 | 5.197428 | 4.040460 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/features/notifications/notification_lifecycle_observer.dart`
 
@@ -1348,14 +1653,18 @@ hero 中 #E5E5EA 是品牌图标承载面，柔光/轨道/配准线为 ExcludeSe
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `statusGreenText` L152 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.systemIndigo` L155 | 复用色；按承载面判级 | #5856D6 | 5.062968 | 5.649619 | 3.717065 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `statusRedText` L158 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondarySystemGroupedBackground` L164 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `CupertinoColors.systemGrey @ 0.25` L170 | 装饰线/投影豁免 | #8E8E93 / α=0.250000 | 1.260485 | 1.285296 | 1.345967 | 装饰线/投影豁免 |
-| `CupertinoColors.label` L195 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `CupertinoColors.secondaryLabel` L206 | 文字 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `CupertinoColors.systemGrey` L224 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
+| `statusGreenText` L154 | 复用色；按承载面判级 | #1E7A34 | 4.839624 | 5.400396 | 3.888604 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.systemIndigo` L157 | 复用色；按承载面判级 | #5856D6 | 5.062968 | 5.649619 | 3.717065 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `statusRedText` L160 | 复用色；按承载面判级 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.card` L168 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `CupertinoColors.secondarySystemGroupedBackground` L169 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
+| `LightSurfaces.cardBorder` L173 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `CupertinoColors.systemGrey @ 0.25` L178 | 装饰线/投影豁免 | #8E8E93 / α=0.250000 | 1.260485 | 1.285296 | 1.345967 | 装饰线/投影豁免 |
+| `CupertinoColors.label` L203 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `LightSurfaces.textSecondary` L216 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `CupertinoColors.secondaryLabel` L217 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
+| `LightSurfaces.textSecondary` L235 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF8E8E93)` L236 | 图标/图形 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 非文本：页面不达 / 白卡达；反色见局部组合 |
 
 无自有颜色/标准页面构造的文件（Provider/模型/路由/工具或纯委托组件）：`lib/features/notifications/background_keepalive_service.dart`、`lib/features/notifications/notification_providers.dart`、`lib/features/notifications/turn_notification_service.dart`。
 
