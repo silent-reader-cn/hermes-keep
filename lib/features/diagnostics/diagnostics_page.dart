@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../core/utils/safe_clipboard.dart';
@@ -11,6 +12,21 @@ import 'diagnostics_detail_sheet.dart';
 import 'diagnostics_models.dart';
 import 'diagnostics_providers.dart';
 import 'diagnostics_service.dart';
+
+Color _levelTint(DiagnosticsLogLevel level) {
+  switch (level) {
+    case DiagnosticsLogLevel.warn:
+      return LightSurfaces.tintWarning;
+    case DiagnosticsLogLevel.error:
+      return LightSurfaces.tintError;
+    case DiagnosticsLogLevel.info:
+      return LightSurfaces.selection;
+    case DiagnosticsLogLevel.debug:
+      return LightSurfaces.tintClarification;
+    case DiagnosticsLogLevel.verbose:
+      return LightSurfaces.page;
+  }
+}
 
 /// 诊断日志主页面（纯 Cupertino 风格，零 Material 组件）。
 class DiagnosticsPage extends ConsumerStatefulWidget {
@@ -78,10 +94,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
       case SafeClipboardSuccess():
         _showAlert(l10n.copy, l10n.copiedToClipboard);
       case SafeClipboardFileSaved(:final filePath):
-        _showAlert(
-          l10n.copy,
-          l10n.diagnosticsExportTooLargeSaved(filePath),
-        );
+        _showAlert(l10n.copy, l10n.diagnosticsExportTooLargeSaved(filePath));
     }
   }
 
@@ -97,12 +110,22 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
             isDestructiveAction: true,
             key: const ValueKey('diagnostics-clear-confirm'),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.clear),
+            child: Text(
+              l10n.clear,
+              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                  ? const TextStyle(color: Color(0xFFB3001B))
+                  : null,
+            ),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.cancel),
+            child: Text(
+              l10n.cancel,
+              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
           ),
         ],
       ),
@@ -123,7 +146,12 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
           actions: [
             CupertinoDialogAction(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(l10n.ok),
+              child: Text(
+                l10n.ok,
+                style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                    ? const TextStyle(color: LightSurfaces.menuAction)
+                    : null,
+              ),
             ),
           ],
         ),
@@ -143,6 +171,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final enabled = ref.watch(diagnosticsEnabledProvider);
     final allLogs = ref.watch(diagnosticsLogsProvider);
     final filteredLogs = ref.watch(filteredDiagnosticsLogsProvider);
@@ -151,7 +180,16 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     final selectedIds = ref.watch(diagnosticsSelectedIdsProvider);
 
     return CupertinoPageScaffold(
+      backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
+        backgroundColor: isLight ? LightSurfaces.page : null,
+        border: isLight
+            ? const Border(
+                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
+              )
+            : const Border(
+                bottom: BorderSide(color: Color(0x4D000000), width: 0.0),
+              ),
         middle: Text(
           isSelectionMode
               ? l10n.diagnosticsSelectedCount(selectedIds.length)
@@ -167,7 +205,12 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                       .setMode(false);
                   ref.read(diagnosticsSelectedIdsProvider.notifier).clear();
                 },
-                child: Text(l10n.diagnosticsExitSelectMode),
+                child: Text(
+                  l10n.diagnosticsExitSelectMode,
+                  style: isLight
+                      ? const TextStyle(color: LightSurfaces.menuAction)
+                      : null,
+                ),
               )
             : (allLogs.isNotEmpty
                   ? CupertinoButton(
@@ -178,7 +221,12 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                             .read(diagnosticsIsSelectionModeProvider.notifier)
                             .setMode(true);
                       },
-                      child: Text(l10n.diagnosticsSelectMode),
+                      child: Text(
+                        l10n.diagnosticsSelectMode,
+                        style: isLight
+                            ? const TextStyle(color: LightSurfaces.menuAction)
+                            : null,
+                      ),
                     )
                   : null),
       ),
@@ -189,7 +237,22 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
             CupertinoListSection.insetGrouped(
               dividerMargin: 0,
               additionalDividerMargin: 0,
-
+              backgroundColor: LightSurfaces.resolve(
+                context,
+                LightSurfaces.page,
+                dark: CupertinoColors.systemGroupedBackground,
+              ),
+              separatorColor: isLight ? LightSurfaces.divider : null,
+              decoration: isLight
+                  ? BoxDecoration(
+                      color: LightSurfaces.card,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: LightSurfaces.cardBorder,
+                        width: 0.5,
+                      ),
+                    )
+                  : null,
               margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               children: [
                 CupertinoListTile(
@@ -199,7 +262,11 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                     l10n.diagnosticsEnabledDesc,
                     style: TextStyle(
                       fontSize: 12,
-                      color: secondaryText.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: secondaryText,
+                      ),
                     ),
                   ),
                   trailing: CupertinoSwitch(
@@ -228,6 +295,24 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                   key: const ValueKey('diagnostics-search-field'),
                   controller: _searchController,
                   placeholder: l10n.diagnosticsSearchPlaceholder,
+                  decoration: isLight
+                      ? BoxDecoration(
+                          color: LightSurfaces.card,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: LightSurfaces.cardBorder,
+                            width: 0.5,
+                          ),
+                        )
+                      : null,
+                  placeholderStyle: isLight
+                      ? const TextStyle(color: LightSurfaces.placeholder)
+                      : null,
+                  itemColor: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: CupertinoColors.secondaryLabel,
+                  ),
                   onChanged: _onSearchChanged,
                 ),
               ),
@@ -288,7 +373,11 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                       '${filteredLogs.length} / ${allLogs.length}',
                       style: TextStyle(
                         fontSize: 12,
-                        color: secondaryText.resolveFrom(context),
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: secondaryText,
+                        ),
                       ),
                     ),
                     const Spacer(),
@@ -304,11 +393,22 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(CupertinoIcons.share, size: 16),
+                          Icon(
+                            CupertinoIcons.share,
+                            size: 16,
+                            color: isLight && allLogs.isNotEmpty
+                                ? LightSurfaces.userDetail
+                                : null,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             l10n.diagnosticsExport,
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isLight && allLogs.isNotEmpty
+                                  ? LightSurfaces.userDetail
+                                  : null,
+                            ),
                           ),
                         ],
                       ),
@@ -325,11 +425,22 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(CupertinoIcons.trash, size: 16),
+                          Icon(
+                            CupertinoIcons.trash,
+                            size: 16,
+                            color: isLight && allLogs.isNotEmpty
+                                ? LightSurfaces.userDetail
+                                : null,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             l10n.diagnosticsClear,
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isLight && allLogs.isNotEmpty
+                                  ? LightSurfaces.userDetail
+                                  : null,
+                            ),
                           ),
                         ],
                       ),
@@ -361,11 +472,18 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: CupertinoColors.secondarySystemGroupedBackground
-                      .resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.card,
+                    dark: CupertinoColors.secondarySystemGroupedBackground,
+                  ),
                   border: Border(
                     top: BorderSide(
-                      color: CupertinoColors.separator.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.divider,
+                        dark: CupertinoColors.separator,
+                      ),
                       width: 0.5,
                     ),
                   ),
@@ -393,7 +511,10 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                                 filteredLogs.isNotEmpty
                             ? l10n.cancel
                             : l10n.selectAll,
-                        style: const TextStyle(fontSize: 14),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isLight ? LightSurfaces.menuAction : null,
+                        ),
                       ),
                     ),
                     const Spacer(),
@@ -403,6 +524,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                         vertical: 8,
                       ),
                       key: const ValueKey('diagnostics-copy-selected-btn'),
+                      color: isLight ? LightSurfaces.userDetail : null,
                       onPressed: selectedIds.isEmpty
                           ? null
                           : () => unawaited(
@@ -428,7 +550,18 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final color = level.textColor.resolveFrom(context);
+    final unselectedBg = isLight
+        ? LightSurfaces.page
+        : CupertinoColors.systemGrey6.resolveFrom(context);
+    final unselectedBorder = isLight
+        ? LightSurfaces.cardBorder
+        : CupertinoColors.systemGrey4.resolveFrom(context);
+    final unselectedText = isLight
+        ? LightSurfaces.textSecondary
+        : secondaryText.resolveFrom(context);
+
     return GestureDetector(
       key: ValueKey('diagnostics-filter-level-${level.code}'),
       onTap: onTap,
@@ -437,13 +570,11 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected
-              ? color.withValues(alpha: 0.2)
-              : CupertinoColors.systemGrey6.resolveFrom(context),
+              ? (isLight ? _levelTint(level) : color.withValues(alpha: 0.2))
+              : unselectedBg,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected
-                ? color
-                : CupertinoColors.systemGrey4.resolveFrom(context),
+            color: isSelected ? color : unselectedBorder,
             width: 1,
           ),
         ),
@@ -452,7 +583,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: isSelected ? color : secondaryText.resolveFrom(context),
+            color: isSelected ? color : unselectedText,
           ),
         ),
       ),
@@ -465,6 +596,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final l10n = AppLocalizations.of(context);
     String label;
     switch (filter) {
@@ -479,6 +611,15 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     }
 
     final activeColor = statusBlueText.resolveFrom(context);
+    final unselectedBg = isLight
+        ? LightSurfaces.page
+        : CupertinoColors.systemGrey6.resolveFrom(context);
+    final unselectedBorder = isLight
+        ? LightSurfaces.cardBorder
+        : CupertinoColors.systemGrey4.resolveFrom(context);
+    final unselectedText = isLight
+        ? LightSurfaces.textSecondary
+        : secondaryText.resolveFrom(context);
 
     return GestureDetector(
       key: ValueKey('diagnostics-filter-time-${filter.name}'),
@@ -488,13 +629,13 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected
-              ? activeColor.withValues(alpha: 0.15)
-              : CupertinoColors.systemGrey6.resolveFrom(context),
+              ? (isLight
+                    ? LightSurfaces.selection
+                    : activeColor.withValues(alpha: 0.15))
+              : unselectedBg,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected
-                ? activeColor
-                : CupertinoColors.systemGrey4.resolveFrom(context),
+            color: isSelected ? activeColor : unselectedBorder,
             width: 1,
           ),
         ),
@@ -503,9 +644,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            color: isSelected
-                ? activeColor
-                : secondaryText.resolveFrom(context),
+            color: isSelected ? activeColor : unselectedText,
           ),
         ),
       ),
@@ -521,23 +660,30 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     required Set<String> selectedIds,
   }) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
 
     if (!enabled && allLogs.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.waveform_path_badge_plus,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: isLight
+                  ? LightSurfaces.textSecondary
+                  : const Color(0xFF8E8E93),
             ),
             const SizedBox(height: 12),
             Text(
               l10n.diagnosticsEmptyDisabled,
               style: TextStyle(
                 fontSize: 14,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -551,7 +697,11 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
           l10n.diagnosticsEmptyNoLogs,
           style: TextStyle(
             fontSize: 14,
-            color: secondaryText.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
           ),
         ),
       );
@@ -563,7 +713,11 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
           l10n.diagnosticsEmptyNoMatch,
           style: TextStyle(
             fontSize: 14,
-            color: secondaryText.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
           ),
         ),
       );
@@ -612,6 +766,7 @@ class _DiagnosticsLogRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final color = entry.level.textColor.resolveFrom(context);
 
     return GestureDetector(
@@ -621,11 +776,19 @@ class _DiagnosticsLogRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? statusBlueText.resolveFrom(context).withValues(alpha: 0.1)
+              ? (isLight
+                    ? LightSurfaces.selection
+                    : statusBlueText
+                          .resolveFrom(context)
+                          .withValues(alpha: 0.1))
               : null,
           border: Border(
             bottom: BorderSide(
-              color: CupertinoColors.separator.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.divider,
+                dark: CupertinoColors.separator,
+              ),
               width: 0.5,
             ),
           ),
@@ -642,7 +805,9 @@ class _DiagnosticsLogRow extends StatelessWidget {
                       : CupertinoIcons.circle,
                   color: isSelected
                       ? statusBlueText.resolveFrom(context)
-                      : CupertinoColors.systemGrey,
+                      : (isLight
+                            ? LightSurfaces.textSecondary
+                            : const Color(0xFF8E8E93)),
                   size: 20,
                 ),
               ),
@@ -651,7 +816,9 @@ class _DiagnosticsLogRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
+                color: isLight
+                    ? _levelTint(entry.level)
+                    : color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
                   color: color.withValues(alpha: 0.4),
@@ -681,8 +848,10 @@ class _DiagnosticsLogRow extends StatelessWidget {
                           vertical: 0.5,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.systemGrey5.resolveFrom(
+                          color: LightSurfaces.resolve(
                             context,
+                            LightSurfaces.page,
+                            dark: CupertinoColors.systemGrey5,
                           ),
                           borderRadius: BorderRadius.circular(3),
                         ),
@@ -691,7 +860,11 @@ class _DiagnosticsLogRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: secondaryText.resolveFrom(context),
+                            color: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.textSecondary,
+                              dark: secondaryText,
+                            ),
                           ),
                         ),
                       ),
@@ -700,7 +873,11 @@ class _DiagnosticsLogRow extends StatelessWidget {
                         formatLogTimeOnly(entry.timestamp),
                         style: TextStyle(
                           fontSize: 11,
-                          color: secondaryText.resolveFrom(context),
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: secondaryText,
+                          ),
                         ),
                       ),
                       if (entry.durationMs != null) ...[
@@ -709,7 +886,11 @@ class _DiagnosticsLogRow extends StatelessWidget {
                           '${entry.durationMs}ms',
                           style: TextStyle(
                             fontSize: 11,
-                            color: secondaryText.resolveFrom(context),
+                            color: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.textSecondary,
+                              dark: secondaryText,
+                            ),
                           ),
                         ),
                       ],
@@ -740,10 +921,12 @@ class _DiagnosticsLogRow extends StatelessWidget {
               ),
             ),
             if (!isSelectionMode)
-              const Icon(
+              Icon(
                 CupertinoIcons.chevron_right,
                 size: 14,
-                color: CupertinoColors.systemGrey3,
+                color: isLight
+                    ? LightSurfaces.textSecondary
+                    : const Color(0xFFC7C7CC),
               ),
           ],
         ),

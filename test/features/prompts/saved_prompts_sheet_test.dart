@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Scaffold;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/saved_prompt.dart';
@@ -17,6 +18,7 @@ ProviderScope wrap(
   Widget child,
   FakePromptsApi api, {
   List<Override> extra = const [],
+  Brightness brightness = Brightness.light,
 }) {
   return ProviderScope(
     overrides: [
@@ -29,7 +31,10 @@ ProviderScope wrap(
       promptsApiFactoryProvider.overrideWithValue((_) => api),
       ...extra,
     ],
-    child: CupertinoApp(home: child),
+    child: CupertinoApp(
+      theme: CupertinoThemeData(brightness: brightness),
+      home: child,
+    ),
   );
 }
 
@@ -39,6 +44,7 @@ Widget sheetFor({
   String? currentInput,
   String Function()? getCurrentInput,
   List<String> inserted = const [],
+  Brightness brightness = Brightness.light,
 }) {
   final inserts = <String>[];
   inserts.addAll(inserted);
@@ -49,6 +55,7 @@ Widget sheetFor({
       getCurrentInput: getCurrentInput,
     ),
     api,
+    brightness: brightness,
   );
 }
 
@@ -316,6 +323,148 @@ void main() {
       ); // not loading
       // Material Scaffold/AppBar etc should not appear
       expect(find.byType(Scaffold), findsNothing);
+    });
+  });
+
+  group('SavedPromptsSheet 双主题断言', () {
+    testWidgets('浅色主题：外层白卡圆角描边/分割线 divider/条目白卡与 pressed 态/按钮 userDetail', (
+      tester,
+    ) async {
+      final api = FakePromptsApi(
+        initialPrompts: [p('p1', 'prompt one text', label: 'Prompt 1')],
+      );
+      await tester.pumpWidget(sheetFor(api: api, brightness: Brightness.light));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // 1. 根容器白卡 + 顶部/左右 0.5 hairline 描边
+      final sheetContainer = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byType(SavedPromptsSheet),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      final dec = sheetContainer.decoration as BoxDecoration;
+      expect(dec.color, LightSurfaces.card);
+      expect(
+        dec.border,
+        Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+      );
+      expect(
+        dec.borderRadius,
+        const BorderRadius.vertical(top: Radius.circular(12)),
+      );
+
+      // 2. CupertinoListTile 白卡底色与 pressed 激活色
+      final tile = tester.widget<CupertinoListTile>(
+        find.byKey(const ValueKey('saved-prompt-p1-0')),
+      );
+      expect(tile.backgroundColor, LightSurfaces.card);
+      expect(tile.backgroundColorActivated, LightSurfaces.pressed);
+
+      // 3. 次级文本 textSecondary
+      final subtitle = tester.widget<Text>(find.text('prompt one text'));
+      expect(subtitle.style?.color, LightSurfaces.textSecondary);
+
+      // 4. 保存当前输入按钮 userDetail
+      final saveBtn = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('saved-prompts-save-current')),
+      );
+      expect(saveBtn.color, LightSurfaces.userDetail);
+
+      // 5. 分割线 LightSurfaces.divider
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Container && w.color == LightSurfaces.divider,
+        ),
+        findsWidgets,
+      );
+
+      // 6. 空态次级文字
+      final emptyApi = FakePromptsApi(initialPrompts: const []);
+      await tester.pumpWidget(
+        sheetFor(api: emptyApi, brightness: Brightness.light),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final emptyText = tester.widget<Text>(find.text('暂无收藏提示词'));
+      expect(emptyText.style?.color, LightSurfaces.textSecondary);
+    });
+
+    testWidgets('暗色主题：外层 systemGrey6 无描边/分割线 separator/条目 null/按钮 null', (
+      tester,
+    ) async {
+      final api = FakePromptsApi(
+        initialPrompts: [p('p1', 'prompt one text', label: 'Prompt 1')],
+      );
+      await tester.pumpWidget(sheetFor(api: api, brightness: Brightness.dark));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final darkContext = tester.element(find.byType(SavedPromptsSheet));
+
+      // 1. 根容器 systemGrey6 无描边
+      final sheetContainer = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byType(SavedPromptsSheet),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      final dec = sheetContainer.decoration as BoxDecoration;
+      expect(dec.color, CupertinoColors.systemGrey6.resolveFrom(darkContext));
+      expect(dec.border, isNull);
+      expect(
+        dec.borderRadius,
+        const BorderRadius.vertical(top: Radius.circular(12)),
+      );
+
+      // 2. CupertinoListTile 背景色与激活色保持 null
+      final tile = tester.widget<CupertinoListTile>(
+        find.byKey(const ValueKey('saved-prompt-p1-0')),
+      );
+      expect(tile.backgroundColor, isNull);
+      expect(tile.backgroundColorActivated, isNull);
+
+      // 3. 次级文本 secondaryLabel
+      final subtitle = tester.widget<Text>(find.text('prompt one text'));
+      expect(
+        subtitle.style?.color,
+        CupertinoColors.secondaryLabel.resolveFrom(darkContext),
+      );
+
+      // 4. 保存当前输入按钮 null
+      final saveBtn = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('saved-prompts-save-current')),
+      );
+      expect(saveBtn.color, isNull);
+
+      // 5. 分割线 separator
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.color == CupertinoColors.separator.resolveFrom(darkContext),
+        ),
+        findsWidgets,
+      );
+
+      // 6. 空态次级文字 secondaryLabel
+      final emptyApi = FakePromptsApi(initialPrompts: const []);
+      await tester.pumpWidget(
+        sheetFor(api: emptyApi, brightness: Brightness.dark),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final emptyContext = tester.element(find.text('暂无收藏提示词'));
+      final emptyText = tester.widget<Text>(find.text('暂无收藏提示词'));
+      expect(
+        emptyText.style?.color,
+        CupertinoColors.secondaryLabel.resolveFrom(emptyContext),
+      );
     });
   });
 }

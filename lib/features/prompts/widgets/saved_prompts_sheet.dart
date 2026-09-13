@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../core/models/saved_prompt.dart';
 import '../../../l10n/app_localizations.dart';
@@ -103,21 +104,28 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
     final l10n = AppLocalizations.of(context);
     return showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(
-          message,
-          style: isError
-              ? TextStyle(color: statusRedText.resolveFrom(dialogContext))
-              : null,
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.ok),
+      builder: (dialogContext) {
+        final isLight =
+            CupertinoTheme.brightnessOf(dialogContext) == Brightness.light;
+        return CupertinoAlertDialog(
+          title: Text(title),
+          content: Text(
+            message,
+            style: isError
+                ? TextStyle(color: statusRedText.resolveFrom(dialogContext))
+                : null,
           ),
-        ],
-      ),
+          actions: [
+            CupertinoDialogAction(
+              textStyle: isLight
+                  ? const TextStyle(color: LightSurfaces.userDetail)
+                  : null,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.ok),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -144,7 +152,11 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
         ),
         Container(
           height: 0.5,
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.divider,
+            dark: CupertinoColors.separator,
+          ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -152,6 +164,9 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
             width: double.infinity,
             child: CupertinoButton.filled(
               key: const ValueKey('saved-prompts-save-current'),
+              color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? LightSurfaces.userDetail
+                  : null,
               onPressed: _saving ? null : _handleSaveCurrent,
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: _saving
@@ -178,7 +193,11 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
                 l10n.savedPromptsEmpty,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: CupertinoColors.secondaryLabel,
+                  ),
                 ),
               ),
             ),
@@ -190,7 +209,11 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
           itemCount: prompts.length,
           separatorBuilder: (_, _) => Container(
             height: 0.5,
-            color: CupertinoColors.separator.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.divider,
+              dark: CupertinoColors.separator,
+            ),
             margin: const EdgeInsets.only(left: 16),
           ),
           itemBuilder: (context, index) {
@@ -203,8 +226,12 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
                 : (displayLabel.isEmpty ? (prompt.text ?? '') : displayLabel);
             final subtitleText = prompt.text ?? '';
             final isDeleting = id != null && _deletingIds.contains(id);
+            final isLight =
+                CupertinoTheme.brightnessOf(context) == Brightness.light;
             return CupertinoListTile(
               key: ValueKey('saved-prompt-$id-$index'),
+              backgroundColor: isLight ? LightSurfaces.card : null,
+              backgroundColorActivated: isLight ? LightSurfaces.pressed : null,
               title: Text(
                 title.isEmpty ? l10n.unnamed : title,
                 maxLines: 1,
@@ -215,7 +242,11 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: CupertinoColors.secondaryLabel,
+                  ),
                   fontSize: 13,
                 ),
               ),
@@ -251,6 +282,8 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
       error: (error, _) {
         // 有缓存数据时错误不替换整板，仅显示重试行（由上层覆盖式 indicator 处理）
         // 无缓存才展示全板错误
+        final isLight =
+            CupertinoTheme.brightnessOf(context) == Brightness.light;
         if (async.valueOrNull != null && async.valueOrNull!.isNotEmpty) {
           return Center(
             child: Padding(
@@ -259,7 +292,12 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
                 key: const ValueKey('saved-prompts-retry'),
                 onPressed: () =>
                     ref.read(savedPromptsControllerProvider.notifier).refresh(),
-                child: Text(l10n.retry),
+                child: Text(
+                  l10n.retry,
+                  style: isLight
+                      ? const TextStyle(color: LightSurfaces.userDetail)
+                      : null,
+                ),
               ),
             ),
           );
@@ -281,7 +319,12 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
                   onPressed: () => ref
                       .read(savedPromptsControllerProvider.notifier)
                       .refresh(),
-                  child: Text(l10n.retry),
+                  child: Text(
+                    l10n.retry,
+                    style: isLight
+                        ? const TextStyle(color: LightSurfaces.userDetail)
+                        : null,
+                  ),
                 ),
               ],
             ),
@@ -316,12 +359,20 @@ class SavedPromptsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final bg = CupertinoColors.systemGrey6.resolveFrom(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final bg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.card,
+      dark: CupertinoColors.systemGrey6,
+    );
 
     return Container(
       decoration: BoxDecoration(
         color: bg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        border: isLight
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
       ),
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -332,6 +383,7 @@ class SavedPromptsSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
+            // 拖拽手柄保持 systemGrey3 装饰填充（非文字信息层，豁免正文 AA）。
             Container(
               width: 36,
               height: 5,
@@ -348,7 +400,11 @@ class SavedPromptsSheet extends StatelessWidget {
             const SizedBox(height: 8),
             Container(
               height: 0.5,
-              color: CupertinoColors.separator.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.divider,
+                dark: CupertinoColors.separator,
+              ),
             ),
             SavedPromptsPanel(
               onInsert: onInsert,

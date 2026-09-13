@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../app/shell/adaptive_shell.dart';
 import 'onboarding_hero_motion.dart';
 
@@ -49,7 +50,11 @@ class WideDualPane extends StatelessWidget {
         // 极简灰白分割线
         Container(
           width: 0.5,
-          color: CupertinoColors.separator.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.divider,
+            dark: CupertinoColors.separator,
+          ),
         ),
         // 右单列功能区（maxWidth 420~480 列内水平垂直居中，可滚动）
         Expanded(
