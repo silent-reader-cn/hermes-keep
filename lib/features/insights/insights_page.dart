@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../core/api/api_exception.dart';
@@ -28,7 +29,7 @@ class InsightsPage extends ConsumerWidget {
     final async = ref.watch(insightsControllerProvider);
     final state = async.valueOrNull;
 
-    return CupertinoPageScaffold(
+    final page = CupertinoPageScaffold(
       child: CustomScrollView(
         key: const ValueKey('insights-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
@@ -53,6 +54,14 @@ class InsightsPage extends ConsumerWidget {
           ..._buildContentSlivers(context, ref, async, state),
         ],
       ),
+    );
+    if (CupertinoTheme.brightnessOf(context) == Brightness.dark) return page;
+    return CupertinoTheme(
+      data: CupertinoTheme.of(context).copyWith(
+        scaffoldBackgroundColor: LightSurfaces.page,
+        barBackgroundColor: LightSurfaces.page,
+      ),
+      child: page,
     );
   }
 
@@ -85,6 +94,24 @@ class InsightsPage extends ConsumerWidget {
 
     final response = state.response;
     final timeframe = state.timeframe;
+    final sectionBackground = LightSurfaces.resolve(
+      context,
+      LightSurfaces.page,
+      dark: CupertinoColors.systemGroupedBackground,
+    );
+    final sectionSeparator = LightSurfaces.resolve(
+      context,
+      LightSurfaces.divider,
+      dark: CupertinoColors.separator,
+    );
+    final sectionDecoration =
+        CupertinoTheme.brightnessOf(context) == Brightness.light
+        ? BoxDecoration(
+            color: LightSurfaces.card,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+          )
+        : null;
     return [
       SliverToBoxAdapter(
         child: Padding(
@@ -112,6 +139,9 @@ class InsightsPage extends ConsumerWidget {
       ),
       SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
+          backgroundColor: sectionBackground,
+          separatorColor: sectionSeparator,
+          decoration: sectionDecoration,
           dividerMargin: 0,
           additionalDividerMargin: 0,
 
@@ -165,6 +195,9 @@ class InsightsPage extends ConsumerWidget {
       if (_recentDailyTokens(response).isNotEmpty)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            backgroundColor: sectionBackground,
+            separatorColor: sectionSeparator,
+            decoration: sectionDecoration,
             dividerMargin: 0,
             additionalDividerMargin: 0,
 
@@ -180,6 +213,9 @@ class InsightsPage extends ConsumerWidget {
       if (_hasActivity(response))
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            backgroundColor: sectionBackground,
+            separatorColor: sectionSeparator,
+            decoration: sectionDecoration,
             dividerMargin: 0,
             additionalDividerMargin: 0,
 
@@ -196,7 +232,11 @@ class InsightsPage extends ConsumerWidget {
                     ),
                     style: TextStyle(
                       fontSize: 13,
-                      color: secondaryText.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: secondaryText,
+                      ),
                     ),
                   ),
                 ),
@@ -210,7 +250,11 @@ class InsightsPage extends ConsumerWidget {
                     ),
                     style: TextStyle(
                       fontSize: 13,
-                      color: secondaryText.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: secondaryText,
+                      ),
                     ),
                   ),
                 ),
@@ -220,6 +264,9 @@ class InsightsPage extends ConsumerWidget {
       if (_modelBreakdowns(response).isNotEmpty)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            backgroundColor: sectionBackground,
+            separatorColor: sectionSeparator,
+            decoration: sectionDecoration,
             dividerMargin: 0,
             additionalDividerMargin: 0,
 
@@ -240,7 +287,11 @@ class InsightsPage extends ConsumerWidget {
             ),
             style: TextStyle(
               fontSize: 12,
-              color: secondaryText.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
             ),
           ),
         ),
@@ -257,10 +308,15 @@ class InsightsPage extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                // Preserve the original unresolved icon color in dark mode.
+                dark: const Color(0xFF8E8E93),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -279,6 +335,9 @@ class InsightsPage extends ConsumerWidget {
             const SizedBox(height: 20),
             CupertinoButton.filled(
               key: const ValueKey('insights-retry'),
+              color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? statusBlueText.resolveFrom(context)
+                  : null,
               onPressed: () => unawaited(
                 ref.read(insightsControllerProvider.notifier).refresh(),
               ),
@@ -299,10 +358,15 @@ class InsightsPage extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.chart_bar,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                // Preserve the original unresolved icon color in dark mode.
+                dark: const Color(0xFF8E8E93),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -315,7 +379,11 @@ class InsightsPage extends ConsumerWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -456,15 +524,23 @@ class _ModelBreakdownTile extends StatelessWidget {
       title: Text(title),
       subtitle: Text(
         l10n.modelTokensSubtitle(formatTokensCompact(model.totalTokens)),
+        style: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? const TextStyle(color: LightSurfaces.textSecondary)
+            : null,
       ),
       trailing: share == null
           ? null
           : Text(
               '$share%',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.systemBlue,
+                color: LightSurfaces.resolve(
+                  context,
+                  statusBlueText.resolveFrom(context),
+                  // TextStyle previously painted the unresolved blue value.
+                  dark: const Color(0xFF007AFF),
+                ),
               ),
             ),
     );
@@ -588,7 +664,11 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
         _shortDate(date),
         style: TextStyle(
           fontSize: 10,
-          color: secondaryText.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          ),
         ),
       ),
     );
@@ -656,6 +736,10 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
           ),
           actions: [
             CupertinoDialogAction(
+              textStyle:
+                  CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(l10n.ok),
             ),
