@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../app/locale/locale_resolver.dart';
 import '../../app/router.dart';
 import '../../l10n/app_localizations.dart';
-import '../../core/utils/uuid.dart';
 import '../chat/chat_providers.dart';
 import '../desktop/window_title_service.dart';
 import 'background_keepalive_service.dart';
@@ -220,31 +219,6 @@ final backgroundKeepaliveServiceProvider = Provider<BackgroundKeepaliveService>(
   },
 );
 
-/// In-app 通知类型。
-enum InAppNotificationType { turnCompleted, clarificationNeeded, sessionError }
-
-/// In-app 通知条目模型。
-class InAppNotificationItem {
-  const InAppNotificationItem({
-    required this.id,
-    required this.sessionId,
-    required this.title,
-    required this.message,
-    required this.type,
-  });
-
-  final String id;
-  final String sessionId;
-  final String title;
-  final String message;
-  final InAppNotificationType type;
-}
-
-/// In-app 通知事件 Provider（前台跨会话触发时推送）。
-final inAppNotificationProvider = StateProvider<InAppNotificationItem?>(
-  (ref) => null,
-);
-
 /// 全局路由 Provider 别名（对齐 goRouterProvider 契约命名）。
 final goRouterProvider = routerProvider;
 
@@ -289,13 +263,15 @@ bool isCurrentChatRoute(dynamic ref, String sessionId) {
   }
 }
 
-/// 判断是否应静默应用内横幅通知（#94 澄清页免打扰双条件判定）。
+/// 判断是否应静默本条通知（#94 免打扰双条件判定，原为应用内横幅设计，
+/// 现同等适用于系统通知）。
 ///
 /// 双条件约束：
 /// 1. 当前激活会话匹配目标会话（[getActiveSessionId] == [sessionId]）；
 /// 2. 当前路由即该会话聊天页（[isCurrentChatRoute] 为 true）。
-/// 两者同时满足时静默，避免横幅通知盖住澄清确认弹窗等顶层交互。
-bool shouldSilenceInAppNotification(dynamic ref, String sessionId) {
+/// 两者同时满足时静默——主人正在看这个会话本体，答案/澄清弹窗就在眼前，
+/// 通知纯属噪音且会遮挡顶层交互。
+bool shouldSilenceNotification(dynamic ref, String sessionId) {
   if (sessionId.isEmpty) return false;
   final active = getActiveSessionId(ref);
   if (active != sessionId) {
@@ -332,10 +308,10 @@ void openSessionFromNotification(dynamic ref, String sessionId) {
 
 /// chat 收尾 hook：chat_controller 在 done / stream_end 成功收尾处调用。
 ///
-/// 触发时机：
-/// - 开关关闭：不发系统通知也不发 in-app
-/// - app 前台（resumed）：非（同会话 且 同聊天页）时触发 in-app 提示，并清除残留系统通知
-/// - app 后台（paused / inactive / detached / hidden）：发系统通知
+/// 触发时机（应用内横幅已移除，全平台统一走系统通知）：
+/// - 开关关闭：不发通知
+/// - 免打扰双条件命中（前台 + 正停留在该会话聊天页）：不发，并清残留
+/// - 其余场景（前台跨会话 / 后台）：发系统通知
 final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
   final service = ref.watch(turnNotificationServiceProvider);
   final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
@@ -352,26 +328,20 @@ final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
 
     final settings = ref.read(notificationSettingsProvider);
     if (!settings.notifyTurnsEnabled) return;
-    final lifecycle = ref.read(appLifecycleStateProvider);
-    if (lifecycle == AppLifecycleState.resumed) {
-      if (!shouldSilenceInAppNotification(ref, sessionId)) {
-        ref
-            .read(inAppNotificationProvider.notifier)
-            .state = InAppNotificationItem(
-          id: uuidV4(),
-          sessionId: sessionId,
-          title: title.isNotEmpty
-              ? title
-              : AppLocalizations(LocaleResolver.resolve())
-                  .notifTurnCompleted,
-          message: preview,
-          type: InAppNotificationType.turnCompleted,
-        );
-      }
+    // 免打扰双条件命中（正在看这个会话本体）：不发通知并清残留。
+    if (shouldSilenceNotification(ref, sessionId)) {
       unawaited(service.clearAll());
-    } else {
-      unawaited(service.notifyTurnCompleted(sessionId, title, preview));
+      return;
     }
+    unawaited(
+      service.notifyTurnCompleted(
+        sessionId,
+        title.isNotEmpty
+            ? title
+            : AppLocalizations(LocaleResolver.resolve()).notifTurnCompleted,
+        preview,
+      ),
+    );
   };
 });
 
@@ -393,23 +363,12 @@ final clarificationNotificationHookProvider =
 
         final settings = ref.read(notificationSettingsProvider);
         if (!settings.notifyClarifyEnabled) return;
-        final lifecycle = ref.read(appLifecycleStateProvider);
-        if (lifecycle == AppLifecycleState.resumed) {
-          if (!shouldSilenceInAppNotification(ref, sessionId)) {
-            ref
-                .read(inAppNotificationProvider.notifier)
-                .state = InAppNotificationItem(
-              id: uuidV4(),
-              sessionId: sessionId,
-              title: AppLocalizations(LocaleResolver.resolve())
-                  .clarificationNeeded,
-              message: question,
-              type: InAppNotificationType.clarificationNeeded,
-            );
-          }
-        } else {
-          unawaited(service.notifyClarificationNeeded(sessionId, question));
+        // 免打扰双条件命中（正在看这个会话本体，澄清弹窗就在眼前）：不发。
+        if (shouldSilenceNotification(ref, sessionId)) {
+          unawaited(service.clearAll());
+          return;
         }
+        unawaited(service.notifyClarificationNeeded(sessionId, question));
       };
     });
 
@@ -431,25 +390,12 @@ final sessionErrorNotificationHookProvider = Provider<ChatSessionErrorCallback>(
 
       final settings = ref.read(notificationSettingsProvider);
       if (!settings.notifyErrorsEnabled) return;
-      final lifecycle = ref.read(appLifecycleStateProvider);
-      if (lifecycle == AppLifecycleState.resumed) {
-        if (!shouldSilenceInAppNotification(ref, sessionId)) {
-          ref
-              .read(inAppNotificationProvider.notifier)
-              .state = InAppNotificationItem(
-            id: uuidV4(),
-            sessionId: sessionId,
-            title: title.isNotEmpty
-                ? title
-                : AppLocalizations(LocaleResolver.resolve())
-                    .sessionErrorTitle,
-            message: preview,
-            type: InAppNotificationType.sessionError,
-          );
-        }
-      } else {
-        unawaited(service.notifySessionError(sessionId, title, preview));
+      // 免打扰双条件命中（正在看这个会话本体）：不发。
+      if (shouldSilenceNotification(ref, sessionId)) {
+        unawaited(service.clearAll());
+        return;
       }
+      unawaited(service.notifySessionError(sessionId, title, preview));
     };
   },
 );

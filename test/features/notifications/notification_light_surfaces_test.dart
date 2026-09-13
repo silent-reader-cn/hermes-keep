@@ -9,10 +9,10 @@ import 'package:hermes_ui/features/notifications/background_keepalive_service.da
 import 'package:hermes_ui/features/notifications/background_keepalive_settings_page.dart';
 import 'package:hermes_ui/features/notifications/notification_lifecycle_observer.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
+import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../helpers/contrast_utils.dart';
 import '../../helpers/fake_download_service.dart';
 
 void main() {
@@ -37,7 +37,6 @@ void main() {
   Widget buildNotificationHost({
     required Brightness brightness,
     required Widget child,
-    InAppNotificationItem? bannerItem,
     bool permissionEnabled = false,
   }) {
     return ProviderScope(
@@ -48,7 +47,6 @@ void main() {
         backgroundKeepaliveServiceProvider.overrideWithValue(
           fakeKeepaliveService,
         ),
-        inAppNotificationProvider.overrideWith((ref) => bannerItem),
         notificationPermissionProvider.overrideWith((ref) => permissionEnabled),
       ],
       child: CupertinoApp(
@@ -62,109 +60,46 @@ void main() {
   }
 
   group('Notification Light Surfaces & Dual-Theme Tests', () {
-    testWidgets('In-app 悬浮横幅在双主题下的边框、阴影与关闭图标契约', (tester) async {
-      const bannerItem = InAppNotificationItem(
-        id: 'banner-test-1',
-        sessionId: 'session-1',
-        title: 'Task Finished',
-        message: 'Your background job completed.',
-        type: InAppNotificationType.turnCompleted,
-      );
+    // 应用内悬浮横幅已移除（前台统一走系统通知），横幅双主题契约用例随之删除。
 
-      // --- 1. 浅色模式测试 ---
+    testWidgets('NotificationLifecycleObserver 前台恢复时清除全部系统通知', (tester) async {
+      final service = _ClearTrackingTurnService();
       await tester.pumpWidget(
-        buildNotificationHost(
-          brightness: Brightness.light,
-          bannerItem: bannerItem,
-          child: const CupertinoPageScaffold(
-            child: Center(child: Text('Content')),
+        ProviderScope(
+          overrides: [
+            turnNotificationServiceProvider.overrideWithValue(service),
+            backgroundKeepaliveServiceProvider.overrideWithValue(
+              fakeKeepaliveService,
+            ),
+          ],
+          child: CupertinoApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh'), Locale('en')],
+            localizationsDelegates: testDelegates,
+            theme: buildCupertinoTheme(Brightness.light),
+            home: const NotificationLifecycleObserver(
+              child: CupertinoPageScaffold(
+                child: Center(child: Text('Content')),
+              ),
+            ),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      final bannerFinder = find.byKey(
-        const ValueKey('in-app-notification-banner-test-1'),
-      );
-      expect(bannerFinder, findsOneWidget);
+      final callsBefore = service.clearAllCalls;
+      // 先切后台（不触发清理），再回前台（触发一次 clearAll）。
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      expect(service.clearAllCalls, callsBefore);
 
-      final cardContainer = tester.widget<Container>(
-        find
-            .descendant(of: bannerFinder, matching: find.byType(Container))
-            .first,
-      );
-      final cardDeco = cardContainer.decoration! as BoxDecoration;
-      expect(cardDeco.color, LightSurfaces.card);
-      expect(
-        cardDeco.border,
-        Border.all(color: LightSurfaces.cardBorder, width: 0.5),
-      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
 
-      // 装饰性阴影保留
-      expect(cardDeco.boxShadow, isNotNull);
-      expect(cardDeco.boxShadow!.length, 1);
-      expect(cardDeco.boxShadow!.first.offset, const Offset(0, 3));
-      expect(cardDeco.boxShadow!.first.blurRadius, 10);
-
-      // 实际消息文字使用 textSecondary，且对卡片背景对比度达标
-      final msgText = tester.widget<Text>(
-        find.descendant(
-          of: bannerFinder,
-          matching: find.text('Your background job completed.'),
-        ),
-      );
-      expect(msgText.style?.color, LightSurfaces.textSecondary);
-      expect(
-        contrastRatio(msgText.style!.color!, cardDeco.color!),
-        greaterThanOrEqualTo(4.5),
-      );
-
-      // 关闭图标使用 textSecondary，且对比度达标
-      final dismissIcon = tester.widget<Icon>(
-        find.descendant(
-          of: bannerFinder,
-          matching: find.byIcon(CupertinoIcons.xmark_circle_fill),
-        ),
-      );
-      expect(dismissIcon.color, LightSurfaces.textSecondary);
-      expect(
-        contrastRatio(dismissIcon.color!, cardDeco.color!),
-        greaterThanOrEqualTo(4.5),
-      );
-
-      // --- 2. 深色模式测试 ---
-      await tester.pumpWidget(
-        buildNotificationHost(
-          brightness: Brightness.dark,
-          bannerItem: bannerItem,
-          child: const CupertinoPageScaffold(
-            child: Center(child: Text('Content')),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final darkCardContainer = tester.widget<Container>(
-        find
-            .descendant(of: bannerFinder, matching: find.byType(Container))
-            .first,
-      );
-      final darkCardDeco = darkCardContainer.decoration! as BoxDecoration;
-      // 深色下边框严格为 null
-      expect(darkCardDeco.border, isNull);
-
-      // 关闭图标在深色下保持原 raw systemGrey 字节 (0xFF8E8E93)
-      final darkDismissIcon = tester.widget<Icon>(
-        find.descendant(
-          of: bannerFinder,
-          matching: find.byIcon(CupertinoIcons.xmark_circle_fill),
-        ),
-      );
-      expect(darkDismissIcon.color, const Color(0xFF8E8E93));
-
-      // 销毁组件树以清理挂载的定时器
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
+      // 观察器契约：每次 resumed 事件都触发一次 clearAll
+      expect(service.clearAllCalls, callsBefore + 1);
     });
 
     testWidgets('BackgroundKeepalivePage 在双主题下的列表标题与状态图标契约', (tester) async {
@@ -232,4 +167,59 @@ void main() {
       await tester.pump();
     });
   });
+}
+
+/// 统计 clearAll 调用次数的最小 fake（观察器回前台清通知契约专用）。
+class _ClearTrackingTurnService implements TurnNotificationService {
+  int clearAllCalls = 0;
+
+  @override
+  Future<void> clearAll() async => clearAllCalls++;
+
+  @override
+  Future<void> notifyTurnCompleted(
+    String sessionId,
+    String title,
+    String preview,
+  ) async {}
+
+  @override
+  Future<void> notifyClarificationNeeded(
+    String sessionId,
+    String question,
+  ) async {}
+
+  @override
+  Future<void> notifySessionError(
+    String sessionId,
+    String title,
+    String preview,
+  ) async {}
+
+  @override
+  Future<void> notifyDownloadCompleted(
+    String downloadId,
+    String fileName,
+    int byteSize,
+  ) async {}
+
+  @override
+  Future<void> updateDownloadProgress({
+    required String fileName,
+    required int receivedBytes,
+    required int expectedBytes,
+    int queuedCount = 0,
+  }) async {}
+
+  @override
+  Future<void> clearDownloadProgress() async {}
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<bool> areNotificationsEnabled() async => true;
+
+  @override
+  Future<String?> getLaunchSessionId() async => null;
 }

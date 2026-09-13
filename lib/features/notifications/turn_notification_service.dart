@@ -16,6 +16,9 @@ import '../downloads/download_models.dart';
 abstract interface class TurnNotificationService {
   /// 回合完成 → 弹系统通知（Android channel: "turns", ID: 1001; Windows）。
   ///
+  /// 应用内横幅已移除：前台与后台统一走系统通知（免打扰双条件命中时不发，
+  /// 见 notification_providers.dart 的 [shouldSilenceNotification] 语义）。
+  ///
   /// [sessionId] 编码进点击 payload（点击回到对应会话）；[title] 为通知标题，
   /// [preview] 为内容预览（由实现负责单行化/截断）。
   Future<void> notifyTurnCompleted(
