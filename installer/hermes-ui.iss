@@ -56,8 +56,9 @@ Source: "..\build\webui-bundle\*"; DestDir: "{app}\webui"; Flags: ignoreversion 
 ; main.cpp (SetCurrentProcessExplicitAppUserModelID). Windows resolves
 ; toast/notification icons + activation through this shortcut; without it
 ; notifications render without the app icon on fresh installs.
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; AppUserModelID="com.hermes.ui"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; AppUserModelID="com.hermes.ui"
+; NOTE: Inno syntax is "Param: value" (colon), NOT "Param=value".
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; AppUserModelID: "com.hermes.ui"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; AppUserModelID: "com.hermes.ui"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
