@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/shell/adaptive_shell.dart';
+import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/connection_store.dart';
@@ -35,8 +36,9 @@ import '../helpers/in_memory_secure_storage.dart';
 // ---------------------------------------------------------------------------
 // README 截图工装（非金照基线，不参与 CI 比对）
 //
-// 用法：README_SHOTS=1 C:/tmp/f.bat test test/screenshots/readme_shots_test.dart
-// 产物：docs/screenshots/*.png（浅色，宽屏 2560×1600 / 窄屏 780×1688）
+// 用法：README_SHOTS=1 [README_DARK=1] C:/tmp/f.bat test test/screenshots/readme_shots_test.dart
+// 产物：docs/screenshots/*.png（浅色原名；README_DARK=1 出暗色 *-dark.png），
+//       宽屏 2560×1600 / 窄屏 780×1688
 //
 // 与金照同源的真字体（MiSans）与 fake 数据，但页面在 AdaptiveShell 外壳内
 // 组装，还原真实导航形态；数据全部为演示文案，无真实隐私。
@@ -45,6 +47,9 @@ import '../helpers/in_memory_secure_storage.dart';
 /// 环境门控：默认 skip，CI / 日常 flutter test 零影响。
 final bool _capture = Platform.environment['README_SHOTS'] == '1';
 const String _skipReason = '设置 README_SHOTS=1 才生成 README 截图';
+
+/// README_DARK=1 时输出暗色主题套件（文件名加 -dark 后缀）。
+final bool _dark = Platform.environment['README_DARK'] == '1';
 
 /// 产物目录（仓库根下，README 相对引用）。
 const String _outDir = 'docs/screenshots';
@@ -233,6 +238,9 @@ void main() {
         child: CupertinoApp.router(
           routerConfig: router,
           debugShowCheckedModeBanner: false,
+          theme: buildCupertinoTheme(
+            _dark ? Brightness.dark : Brightness.light,
+          ),
           locale: const Locale('zh'),
           supportedLocales: const [Locale('zh'), Locale('en')],
           localizationsDelegates: const [
@@ -250,9 +258,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     // matchesGoldenFile + --update-goldens 负责写盘（路径相对本文件目录）。
+    // 暗色套件加 -dark 后缀，与浅色互不覆盖。
     await expectLater(
       find.byType(CupertinoApp),
-      matchesGoldenFile('../../$_outDir/$name.png'),
+      matchesGoldenFile(
+        '../../$_outDir/$name${_dark ? '-dark' : ''}.png',
+      ),
     );
   }
 

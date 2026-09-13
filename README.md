@@ -19,21 +19,29 @@ A Flutter + Cupertino client for [Hermes Agent](https://hermes-agent.nousresearc
 
 ## Screenshots
 
+Dark and light themes ship side by side; the harness generates both sets from the same demo data (`README_SHOTS=1`, `README_DARK=1`).
+
 <div align="center">
 
-### Windows desktop — streaming chat
+### Windows desktop — streaming chat (dark)
 
-<img src="docs/screenshots/wide-chat.png" width="86%" alt="Hermes UI on Windows: two-pane layout with session sidebar and streaming chat"/>
+<img src="docs/screenshots/wide-chat-dark.png" width="86%" alt="Hermes UI on Windows, dark theme: two-pane layout with session sidebar and streaming chat"/>
 
 | Sessions | Kanban | Insights |
 |---|---|---|
-| <img src="docs/screenshots/wide-sessions.png" width="280" alt="Session list, wide"/> | <img src="docs/screenshots/wide-kanban.png" width="280" alt="Kanban board, wide"/> | <img src="docs/screenshots/wide-insights.png" width="280" alt="Usage insights, wide"/> |
+| <img src="docs/screenshots/wide-sessions-dark.png" width="280" alt="Session list, dark"/> | <img src="docs/screenshots/wide-kanban-dark.png" width="280" alt="Kanban board, dark"/> | <img src="docs/screenshots/wide-insights-dark.png" width="280" alt="Usage insights, dark"/> |
 
-### Android phone
+### Light theme
+
+| Chat | Sessions | Kanban |
+|---|---|---|
+| <img src="docs/screenshots/wide-chat.png" width="280" alt="Chat, light"/> | <img src="docs/screenshots/wide-sessions.png" width="280" alt="Session list, light"/> | <img src="docs/screenshots/wide-kanban.png" width="280" alt="Kanban board, light"/> |
+
+### Android phone (dark)
 
 | Chat | Sessions | Insights |
 |---|---|---|
-| <img src="docs/screenshots/phone-chat.png" width="180" alt="Chat on Android"/> | <img src="docs/screenshots/phone-sessions.png" width="180" alt="Session list on Android"/> | <img src="docs/screenshots/phone-insights.png" width="180" alt="Insights on Android"/> |
+| <img src="docs/screenshots/phone-chat-dark.png" width="180" alt="Chat on Android"/> | <img src="docs/screenshots/phone-sessions-dark.png" width="180" alt="Session list on Android"/> | <img src="docs/screenshots/phone-insights-dark.png" width="180" alt="Insights on Android"/> |
 
 </div>
 

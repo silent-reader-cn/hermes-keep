@@ -19,21 +19,29 @@
 
 ## 截图
 
+暗色与浅色主题并排呈现；同一套演示数据由工装双份生成（`README_SHOTS=1`、`README_DARK=1`）。
+
 <div align="center">
 
-### Windows 桌面 —— 流式聊天
+### Windows 桌面 —— 流式聊天（暗色）
 
-<img src="docs/screenshots/wide-chat.png" width="86%" alt="Hermes UI Windows 桌面：左会话列表 + 右流式聊天双栏"/>
+<img src="docs/screenshots/wide-chat-dark.png" width="86%" alt="Hermes UI Windows 桌面暗色：左会话列表 + 右流式聊天双栏"/>
 
 | 会话列表 | 看板 | 用量统计 |
 |---|---|---|
-| <img src="docs/screenshots/wide-sessions.png" width="280" alt="宽屏会话列表"/> | <img src="docs/screenshots/wide-kanban.png" width="280" alt="宽屏看板"/> | <img src="docs/screenshots/wide-insights.png" width="280" alt="宽屏用量统计"/> |
+| <img src="docs/screenshots/wide-sessions-dark.png" width="280" alt="暗色会话列表"/> | <img src="docs/screenshots/wide-kanban-dark.png" width="280" alt="暗色看板"/> | <img src="docs/screenshots/wide-insights-dark.png" width="280" alt="暗色用量统计"/> |
 
-### Android 手机
+### 浅色主题
+
+| 聊天 | 会话列表 | 看板 |
+|---|---|---|
+| <img src="docs/screenshots/wide-chat.png" width="280" alt="浅色聊天页"/> | <img src="docs/screenshots/wide-sessions.png" width="280" alt="浅色会话列表"/> | <img src="docs/screenshots/wide-kanban.png" width="280" alt="浅色看板"/> |
+
+### Android 手机（暗色）
 
 | 聊天 | 会话列表 | 用量统计 |
 |---|---|---|
-| <img src="docs/screenshots/phone-chat.png" width="180" alt="安卓聊天页"/> | <img src="docs/screenshots/phone-sessions.png" width="180" alt="安卓会话列表"/> | <img src="docs/screenshots/phone-insights.png" width="180" alt="安卓用量统计"/> |
+| <img src="docs/screenshots/phone-chat-dark.png" width="180" alt="安卓聊天页"/> | <img src="docs/screenshots/phone-sessions-dark.png" width="180" alt="安卓会话列表"/> | <img src="docs/screenshots/phone-insights-dark.png" width="180" alt="安卓用量统计"/> |
 
 </div>
 
