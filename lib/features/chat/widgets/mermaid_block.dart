@@ -9,6 +9,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:mermaid_core/mermaid_core.dart' as core;
 import 'package:mermaid_flutter/mermaid_flutter.dart';
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../settings/settings_providers.dart';
 import 'mermaid_fullscreen_page.dart';
@@ -259,15 +260,21 @@ class _MermaidCodeBlockState extends ConsumerState<MermaidCodeBlock> {
                   Icon(
                     CupertinoIcons.arrow_up_left_arrow_down_right,
                     size: 12,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.secondaryLabel,
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Text(
                     fullscreenLabel,
                     style: TextStyle(
                       fontSize: 12,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                      color: LightSurfaces.resolve(
                         context,
+                        LightSurfaces.textSecondary,
+                        dark: CupertinoColors.secondaryLabel,
                       ),
                     ),
                   ),

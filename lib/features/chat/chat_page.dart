@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/api/api_client_sessions.dart';
@@ -240,10 +241,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final queued = ref.watch(queuedCountProvider(widget.sessionId));
     // Windows 桌面「打开项目文件夹」按钮可见性：仅 Windows + 会话带 workspace。
     final showProjectFolder =
-        !kIsWeb &&
-        Platform.isWindows &&
-        (state.workspace?.isNotEmpty ?? false);
-    return CupertinoPageScaffold(
+        !kIsWeb && Platform.isWindows && (state.workspace?.isNotEmpty ?? false);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final content = CupertinoPageScaffold(
+      backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
         leading: const AppBackButton(),
         middle: GestureDetector(
@@ -271,14 +272,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         Icon(
                           CupertinoIcons.arrow_2_squarepath,
                           size: 12,
-                          color: secondaryText.resolveFrom(context),
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: secondaryText,
+                          ),
                         ),
                         const SizedBox(width: 3),
                         Text(
                           l10n.branchBadge,
                           style: TextStyle(
                             fontSize: 12,
-                            color: secondaryText.resolveFrom(context),
+                            color: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.textSecondary,
+                              dark: secondaryText,
+                            ),
                           ),
                         ),
                       ],
@@ -388,6 +397,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
         ),
       ),
     );
+    return isLight
+        ? CupertinoTheme(
+            data: CupertinoTheme.of(context).copyWith(
+              scaffoldBackgroundColor: LightSurfaces.page,
+              barBackgroundColor: LightSurfaces.page,
+              primaryColor: LightSurfaces.userDetail,
+            ),
+            child: content,
+          )
+        : content;
   }
 }
 
@@ -405,11 +424,17 @@ Future<void> _showParentSessionDialog(
       content: Text(l10n.branchSessionDescription(parentSessionId)),
       actions: [
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
           key: const ValueKey('chat-branch-dialog-close'),
           onPressed: () => Navigator.pop(dialogContext),
           child: Text(l10n.close),
         ),
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
           key: const ValueKey('chat-goto-parent'),
           onPressed: () {
             Navigator.pop(dialogContext);
@@ -505,7 +530,8 @@ Future<void> _showSessionActions(
     AdaptiveMenuItem(
       key: const ValueKey('chat-action-workspace'),
       label: l10n.workspaceFilesTitle,
-      onPressed: () => unawaited(context.push('/workspace/$sessionId'))),
+      onPressed: () => unawaited(context.push('/workspace/$sessionId')),
+    ),
     // Windows 桌面：三点菜单同样提供「打开项目文件夹」。
     if (!kIsWeb && Platform.isWindows && (state.workspace?.isNotEmpty ?? false))
       AdaptiveMenuItem(
@@ -576,15 +602,41 @@ Future<void> _renameSession(
       title: Text(l10n.renameSession),
       content: Padding(
         padding: const EdgeInsets.only(top: 12),
-        child: CupertinoTextField(controller: input, autofocus: true),
+        child: CupertinoTextField(
+          decoration: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? BoxDecoration(
+                  color: LightSurfaces.card,
+                  border: Border.all(
+                    color: LightSurfaces.cardBorder,
+                    width: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(5),
+                )
+              : const CupertinoTextField().decoration,
+          placeholderStyle:
+              CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  color: LightSurfaces.placeholder,
+                )
+              : const CupertinoTextField().placeholderStyle,
+          controller: input,
+          autofocus: true,
+        ),
       ),
       actions: [
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
           key: const ValueKey('chat-rename-cancel'),
           onPressed: () => Navigator.pop(dialogContext),
           child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
           key: const ValueKey('chat-rename-save'),
           onPressed: () => Navigator.pop(dialogContext, input.text),
           child: Text(l10n.save),
@@ -605,11 +657,17 @@ Future<bool> _confirmSessionDelete(BuildContext context, String title) async {
       content: Text(l10n.confirmDeleteSession(title)),
       actions: [
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
           key: const ValueKey('chat-delete-cancel'),
           onPressed: () => Navigator.pop(dialogContext, false),
           child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? TextStyle(color: statusRedText.resolveFrom(context))
+              : null,
           key: const ValueKey('chat-delete-confirm'),
           isDestructiveAction: true,
           onPressed: () => Navigator.pop(dialogContext, true),
@@ -636,6 +694,23 @@ Future<void> _compressSession(
         padding: const EdgeInsets.only(top: 12),
         child: CupertinoTextField(
           key: const ValueKey('chat-compress-topic'),
+          decoration: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? BoxDecoration(
+                  color: LightSurfaces.card,
+                  border: Border.all(
+                    color: LightSurfaces.cardBorder,
+                    width: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(5),
+                )
+              : const CupertinoTextField().decoration,
+          placeholderStyle:
+              CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  color: LightSurfaces.placeholder,
+                )
+              : const CupertinoTextField().placeholderStyle,
           controller: input,
           placeholder: l10n.focusTopicPlaceholder,
           autofocus: true,
@@ -643,11 +718,17 @@ Future<void> _compressSession(
       ),
       actions: [
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
           key: const ValueKey('chat-compress-cancel'),
           onPressed: () => Navigator.pop(dialogContext),
           child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
           key: const ValueKey('chat-compress-confirm'),
           onPressed: () => Navigator.pop(dialogContext, input.text),
           child: Text(l10n.compress),
@@ -671,11 +752,17 @@ Future<bool> _confirmSessionUndo(BuildContext context) async {
       content: Text(l10n.confirmUndoLastTurnPrompt),
       actions: [
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
           key: const ValueKey('chat-undo-cancel'),
           onPressed: () => Navigator.pop(dialogContext, false),
           child: Text(l10n.cancel),
         ),
         CupertinoDialogAction(
+          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? TextStyle(color: statusRedText.resolveFrom(context))
+              : null,
           key: const ValueKey('chat-undo-confirm'),
           isDestructiveAction: true,
           onPressed: () => Navigator.pop(dialogContext, true),
@@ -716,6 +803,10 @@ Future<void> _exportSession(
           ),
           actions: [
             CupertinoDialogAction(
+              textStyle:
+                  CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.userDetail)
+                  : null,
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(l10n.ok),
             ),
@@ -732,6 +823,10 @@ Future<void> _exportSession(
           content: Text(error.message),
           actions: [
             CupertinoDialogAction(
+              textStyle:
+                  CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.userDetail)
+                  : null,
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(l10n.ok),
             ),
@@ -922,8 +1017,15 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: CupertinoColors.systemOrange.withValues(alpha: 0.12),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.tintWarning,
+            dark: CupertinoColors.systemOrange.withValues(alpha: 0.12),
+          ),
           borderRadius: BorderRadius.circular(10),
+          border: CupertinoTheme.brightnessOf(context) == Brightness.light
+              ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+              : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -933,7 +1035,11 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.systemOrange.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  statusOrangeText.resolveFrom(context),
+                  dark: CupertinoColors.systemOrange,
+                ),
               ),
             ),
             if (question != null && question.isNotEmpty) ...[
@@ -975,8 +1081,15 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemIndigo.withValues(alpha: 0.12),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintClarification,
+          dark: CupertinoColors.systemIndigo.withValues(alpha: 0.12),
+        ),
         borderRadius: BorderRadius.circular(10),
+        border: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1007,7 +1120,11 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
                     fontWeight: FontWeight.w600,
                     color: isUrgent
                         ? statusOrangeText.resolveFrom(context)
-                        : CupertinoColors.secondaryLabel.resolveFrom(context),
+                        : LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: CupertinoColors.secondaryLabel,
+                          ),
                   ),
                 ),
               const SizedBox(width: 6),
@@ -1020,7 +1137,11 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
                       ? CupertinoIcons.chevron_down
                       : CupertinoIcons.chevron_up,
                   size: 16,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: CupertinoColors.secondaryLabel,
+                  ),
                 ),
               ),
             ],
@@ -1059,13 +1180,28 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
                     height: 36,
                     child: CupertinoTextField(
                       key: const ValueKey('chat-prompt-clarify-input'),
+                      decoration:
+                          CupertinoTheme.brightnessOf(context) ==
+                              Brightness.light
+                          ? BoxDecoration(
+                              color: LightSurfaces.card,
+                              border: Border.all(
+                                color: LightSurfaces.cardBorder,
+                                width: 0.5,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                            )
+                          : const CupertinoTextField().decoration,
+
                       controller: _textController,
                       placeholder: l10n.clarifyInputPlaceholder,
                       style: const TextStyle(fontSize: 13),
                       placeholderStyle: TextStyle(
                         fontSize: 13,
-                        color: CupertinoColors.placeholderText.resolveFrom(
+                        color: LightSurfaces.resolve(
                           context,
+                          LightSurfaces.placeholder,
+                          dark: CupertinoColors.placeholderText,
                         ),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1098,7 +1234,11 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
               l10n.clarifyHint,
               style: TextStyle(
                 fontSize: 12,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
+                ),
               ),
             ),
           ],
@@ -1143,19 +1283,31 @@ class _OfflineCacheBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemBlue.withValues(alpha: 0.1),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.selection,
+          dark: CupertinoColors.systemBlue.withValues(alpha: 0.1),
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: CupertinoColors.systemBlue.withValues(alpha: 0.2),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.systemBlue.withValues(alpha: 0.2),
+          ),
           width: 0.5,
         ),
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             CupertinoIcons.archivebox,
             size: 14,
-            color: CupertinoColors.systemBlue,
+            color: LightSurfaces.resolve(
+              context,
+              statusBlueText.resolveFrom(context),
+              dark: CupertinoColors.systemBlue.color,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1163,9 +1315,13 @@ class _OfflineCacheBanner extends StatelessWidget {
               l10n.offlineCacheBanner,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: CupertinoColors.systemBlue,
+                color: LightSurfaces.resolve(
+                  context,
+                  statusBlueText.resolveFrom(context),
+                  dark: CupertinoColors.systemBlue.color,
+                ),
               ),
             ),
           ),
@@ -1176,10 +1332,14 @@ class _OfflineCacheBanner extends StatelessWidget {
             onPressed: onReload,
             child: Text(
               l10n.retry,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.systemBlue,
+                color: LightSurfaces.resolve(
+                  context,
+                  statusBlueText.resolveFrom(context),
+                  dark: CupertinoColors.systemBlue.color,
+                ),
               ),
             ),
           ),
@@ -1189,10 +1349,14 @@ class _OfflineCacheBanner extends StatelessWidget {
             label: l10n.dismissOfflineBanner,
             minimumSize: const Size(0, 0),
             onPressed: onDismiss,
-            child: const Icon(
+            child: Icon(
               CupertinoIcons.xmark_circle_fill,
               size: 14,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
             ),
           ),
         ],
@@ -1215,10 +1379,18 @@ class _ErrorBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemRed.withValues(alpha: 0.1),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintError,
+          dark: CupertinoColors.systemRed.withValues(alpha: 0.1),
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: CupertinoColors.systemRed.withValues(alpha: 0.2),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.systemRed.withValues(alpha: 0.2),
+          ),
           width: 0.5,
         ),
       ),
@@ -1270,10 +1442,18 @@ class _QueuedBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemYellow.withValues(alpha: 0.15),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintWarning,
+          dark: CupertinoColors.systemYellow.withValues(alpha: 0.15),
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: CupertinoColors.systemYellow.withValues(alpha: 0.25),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.systemYellow.withValues(alpha: 0.25),
+          ),
           width: 0.5,
         ),
       ),
@@ -1283,7 +1463,11 @@ class _QueuedBanner extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 12,
-          color: CupertinoColors.systemBrown.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            statusOrangeText.resolveFrom(context),
+            dark: CupertinoColors.systemBrown,
+          ),
         ),
       ),
     );
@@ -1307,19 +1491,31 @@ class _NoticeBanner extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemGreen.withValues(alpha: 0.12),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintGreen,
+          dark: CupertinoColors.systemGreen.withValues(alpha: 0.12),
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: CupertinoColors.systemGreen.withValues(alpha: 0.2),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.systemGreen.withValues(alpha: 0.2),
+          ),
           width: 0.5,
         ),
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             CupertinoIcons.checkmark_circle,
             size: 14,
-            color: CupertinoColors.systemGreen,
+            color: LightSurfaces.resolve(
+              context,
+              statusGreenText.resolveFrom(context),
+              dark: CupertinoColors.systemGreen.color,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1337,10 +1533,14 @@ class _NoticeBanner extends StatelessWidget {
             label: l10n.dismissNotice,
             minimumSize: const Size(0, 0),
             onPressed: onDismiss,
-            child: const Icon(
+            child: Icon(
               CupertinoIcons.xmark_circle_fill,
               size: 14,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
             ),
           ),
         ],
@@ -1424,8 +1624,8 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
     final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
     // 要求：白/绿8%轻底（浅色 white + systemGreen 8%）、深色 #2C2C2E
     // 文字用 label 主色 500、14px 绿勾、圆角10+细阴影
-    // 浅色：Color(0xFFF0FAF2) ≈ 白 92% + 绿 8% 轻底效果
-    final bgColor = isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0FAF2);
+    // Light tint and hairline are tokens; dark #2C2C2E stays unchanged.
+    final bgColor = isDark ? const Color(0xFF2C2C2E) : LightSurfaces.tintGreen;
     final textColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.92)
         : CupertinoColors.label.resolveFrom(context);
@@ -1445,7 +1645,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
                 ? CupertinoColors.systemGrey
                       .resolveFrom(context)
                       .withValues(alpha: 0.18)
-                : CupertinoColors.systemGreen.withValues(alpha: 0.18),
+                : LightSurfaces.cardBorder,
             width: 0.5,
           ),
           boxShadow: [
@@ -1460,10 +1660,14 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
         ),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.checkmark_circle_fill,
               size: 14,
-              color: CupertinoColors.systemGreen,
+              color: LightSurfaces.resolve(
+                context,
+                statusGreenText.resolveFrom(context),
+                dark: CupertinoColors.systemGreen.color,
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1483,10 +1687,14 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
               label: l10n.dismissNotice,
               minimumSize: const Size(0, 0),
               onPressed: _dismissNow,
-              child: const Icon(
+              child: Icon(
                 CupertinoIcons.xmark_circle_fill,
                 size: 14,
-                color: CupertinoColors.systemGrey,
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: const Color(0xFF8E8E93),
+                ),
               ),
             ),
           ],
@@ -1518,7 +1726,7 @@ class _SteerNoticeToast extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isDark = CupertinoTheme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0FAF2);
+    final bgColor = isDark ? const Color(0xFF2C2C2E) : LightSurfaces.tintGreen;
     final textColor = isDark
         ? CupertinoColors.white.withValues(alpha: 0.92)
         : CupertinoColors.label.resolveFrom(context);
@@ -1533,7 +1741,7 @@ class _SteerNoticeToast extends StatelessWidget {
               ? CupertinoColors.systemGrey
                     .resolveFrom(context)
                     .withValues(alpha: 0.18)
-              : CupertinoColors.systemGreen.withValues(alpha: 0.18),
+              : LightSurfaces.cardBorder,
           width: 0.5,
         ),
         boxShadow: [
@@ -1548,10 +1756,14 @@ class _SteerNoticeToast extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             CupertinoIcons.arrow_turn_up_right,
             size: 14,
-            color: CupertinoColors.systemGreen,
+            color: LightSurfaces.resolve(
+              context,
+              statusGreenText.resolveFrom(context),
+              dark: CupertinoColors.systemGreen.color,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1580,10 +1792,14 @@ class _SteerNoticeToast extends StatelessWidget {
             label: l10n.dismissNotice,
             minimumSize: const Size(0, 0),
             onPressed: onClose,
-            child: const Icon(
+            child: Icon(
               CupertinoIcons.xmark_circle_fill,
               size: 14,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: const Color(0xFF8E8E93),
+              ),
             ),
           ),
         ],

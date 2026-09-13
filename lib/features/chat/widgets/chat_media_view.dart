@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/widgets/hermes_page_route.dart';
 import '../../../core/cache/cache_providers.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/message_attachment.dart';
@@ -18,9 +20,8 @@ import '../../downloads/download_page.dart';
 import '../../downloads/download_providers.dart';
 import '../../downloads/download_save_service.dart';
 import '../../settings/settings_providers.dart';
-import 'chat_media_parser.dart';
-import '../../../app/widgets/hermes_page_route.dart';
 import '../../workspace_manager/file_preview_body.dart';
+import 'chat_media_parser.dart';
 
 export '../../downloads/download_confirm_dialog.dart';
 
@@ -106,10 +107,18 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey5.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.card,
+              dark: CupertinoColors.systemGrey5,
+            ),
             borderRadius: widget.borderRadius,
             border: Border.all(
-              color: CupertinoColors.systemGrey4.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.cardBorder,
+                dark: CupertinoColors.systemGrey4,
+              ),
               width: 0.5,
             ),
           ),
@@ -124,7 +133,11 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
                   Icon(
                     CupertinoIcons.photo,
                     size: 20,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.secondaryLabel,
+                    ),
                   ),
                   if (displayName != null && displayName.isNotEmpty) ...[
                     const SizedBox(width: 8),
@@ -136,8 +149,10 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                          color: LightSurfaces.resolve(
                             context,
+                            LightSurfaces.textSecondary,
+                            dark: CupertinoColors.secondaryLabel,
                           ),
                         ),
                       ),
@@ -152,7 +167,11 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
                   horizontal: 10,
                   vertical: 4,
                 ),
-                color: CupertinoTheme.of(context).primaryColor,
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.userDetail,
+                  dark: CupertinoTheme.of(context).primaryColor,
+                ),
                 borderRadius: BorderRadius.circular(5),
                 minimumSize: const Size(36, 26),
                 onPressed: () {
@@ -681,6 +700,7 @@ class AttachmentLightbox extends StatelessWidget {
               Text(
                 l10n.previewUnsupported,
                 style: const TextStyle(
+                  // Inverse media preview on black: #8E8E93 is 6.440674:1; theme-independent.
                   color: CupertinoColors.systemGrey,
                   fontSize: 14,
                 ),
@@ -960,6 +980,7 @@ class _AttachmentDownloadButton extends ConsumerWidget {
             l10n.dl53CannotDownload,
             style: const TextStyle(
               fontSize: 12,
+              // Inverse media preview on black: #8E8E93 is 6.440674:1; theme-independent.
               color: CupertinoColors.systemGrey,
             ),
           ),
@@ -1124,7 +1145,11 @@ Widget _loadingBox(
     height: height,
     alignment: Alignment.center,
     decoration: BoxDecoration(
-      color: CupertinoColors.systemGrey5.resolveFrom(context),
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.card,
+        dark: CupertinoColors.systemGrey5,
+      ),
       borderRadius: borderRadius,
     ),
     child: const CupertinoActivityIndicator(radius: 10),
@@ -1159,10 +1184,18 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
       constraints: BoxConstraints(maxWidth: maxWidth),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey5.resolveFrom(context),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.card,
+          dark: CupertinoColors.systemGrey5,
+        ),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: CupertinoColors.systemGrey4.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.systemGrey4,
+          ),
           width: 0.5,
         ),
       ),
@@ -1176,7 +1209,11 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
               Icon(
                 CupertinoIcons.photo,
                 size: 20,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
+                ),
               ),
               const SizedBox(width: 8),
               Flexible(
@@ -1189,8 +1226,10 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                        color: LightSurfaces.resolve(
                           context,
+                          LightSurfaces.textSecondary,
+                          dark: CupertinoColors.secondaryLabel,
                         ),
                       ),
                     ),
@@ -1201,8 +1240,10 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11,
-                          color: CupertinoColors.tertiaryLabel.resolveFrom(
+                          color: LightSurfaces.resolve(
                             context,
+                            LightSurfaces.textSecondary,
+                            dark: CupertinoColors.tertiaryLabel,
                           ),
                         ),
                       ),
@@ -1222,7 +1263,11 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
                     horizontal: 8,
                     vertical: 4,
                   ),
-                  color: CupertinoColors.systemGrey4.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.pressed,
+                    dark: CupertinoColors.systemGrey4,
+                  ),
                   borderRadius: BorderRadius.circular(5),
                   minimumSize: const Size(36, 26),
                   onPressed: () {
@@ -1243,7 +1288,11 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
                     horizontal: 8,
                     vertical: 4,
                   ),
-                  color: CupertinoTheme.of(context).primaryColor,
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.userDetail,
+                    dark: CupertinoTheme.of(context).primaryColor,
+                  ),
                   borderRadius: BorderRadius.circular(5),
                   minimumSize: const Size(36, 26),
                   onPressed: () async {
@@ -1325,14 +1374,26 @@ class ChatAttachmentChipView extends StatelessWidget {
     }
 
     final bgColor = isUserMessage
-        ? CupertinoColors.white.withValues(alpha: 0.22)
-        : CupertinoColors.systemGrey5.resolveFrom(context);
+        ? LightSurfaces.resolve(
+            context,
+            LightSurfaces.userDetail,
+            dark: CupertinoColors.white.withValues(alpha: 0.22),
+          )
+        : LightSurfaces.resolve(
+            context,
+            LightSurfaces.card,
+            dark: CupertinoColors.systemGrey5,
+          );
     final fgColor = isUserMessage
         ? CupertinoColors.white
         : CupertinoColors.label.resolveFrom(context);
     final iconColor = isUserMessage
         ? CupertinoColors.white
-        : CupertinoColors.secondaryLabel.resolveFrom(context);
+        : LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: CupertinoColors.secondaryLabel,
+          );
 
     // 用户消息中的图片附件：若有具体路径则展示内联预览与芯片
     final hasImagePath =
@@ -1358,6 +1419,9 @@ class ChatAttachmentChipView extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor,
+        border: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(

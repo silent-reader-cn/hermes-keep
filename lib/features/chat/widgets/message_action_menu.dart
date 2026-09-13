@@ -4,6 +4,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import '../../../app/shell/adaptive_shell.dart';
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/adaptive_popover.dart';
 import '../../../app/widgets/cupertino_popover.dart';
 import '../../../core/models/chat_message.dart';
@@ -56,35 +58,51 @@ Future<String?> _showMessageActionSheet(
 }) {
   final l10n = AppLocalizations.of(context);
   final hasContent = (message.content ?? '').trim().isNotEmpty;
+  final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+  final actionStyle = isLight
+      ? const TextStyle(color: LightSurfaces.userDetail)
+      : null;
+  final destructiveStyle = isLight
+      ? TextStyle(color: statusRedText.resolveFrom(context))
+      : null;
+  final copyStyle = isLight && !hasContent
+      ? const TextStyle(color: LightSurfaces.textSecondary)
+      : actionStyle;
   return showCupertinoModalPopup<String>(
     context: context,
     builder: (sheetContext) => CupertinoActionSheet(
-      title: Text(l10n.messageActions, style: const TextStyle(fontSize: 15)),
+      title: Text(
+        l10n.messageActions,
+        style: TextStyle(
+          fontSize: 15,
+          color: isLight ? LightSurfaces.textSecondary : null,
+        ),
+      ),
       actions: [
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-copy'),
           onPressed: hasContent
               ? () => Navigator.pop(sheetContext, MessageAction.copy)
               : () {},
-          child: Text(l10n.copyText),
+          child: Text(l10n.copyText, style: copyStyle),
         ),
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-copy-md'),
           onPressed: hasContent
               ? () => Navigator.pop(sheetContext, MessageAction.copyMd)
               : () {},
-          child: Text(l10n.copyMarkdown),
+          child: Text(l10n.copyMarkdown, style: copyStyle),
         ),
         if (message.role == 'user')
           CupertinoActionSheetAction(
             key: const ValueKey('msg-action-edit'),
             onPressed: () => Navigator.pop(sheetContext, MessageAction.edit),
-            child: Text(l10n.editAndResend),
+            child: Text(l10n.editAndResend, style: actionStyle),
           ),
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-branch'),
           onPressed: () => Navigator.pop(sheetContext, MessageAction.branch),
-          child: Text(l10n.branchFromHere),
+          child: Text(l10n.branchFromHere, style: actionStyle),
         ),
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-truncate'),
@@ -99,13 +117,13 @@ Future<String?> _showMessageActionSheet(
                   CupertinoDialogAction(
                     key: const ValueKey('msg-truncate-cancel'),
                     onPressed: () => Navigator.pop(dialogContext, false),
-                    child: Text(l10n.cancel),
+                    child: Text(l10n.cancel, style: actionStyle),
                   ),
                   CupertinoDialogAction(
                     key: const ValueKey('msg-truncate-confirm'),
                     isDestructiveAction: true,
                     onPressed: () => Navigator.pop(dialogContext, true),
-                    child: Text(l10n.truncate),
+                    child: Text(l10n.truncate, style: destructiveStyle),
                   ),
                 ],
               ),
@@ -114,13 +132,13 @@ Future<String?> _showMessageActionSheet(
               Navigator.pop(sheetContext, MessageAction.truncate);
             }
           },
-          child: Text(l10n.truncateFromHere),
+          child: Text(l10n.truncateFromHere, style: destructiveStyle),
         ),
       ],
       cancelButton: CupertinoActionSheetAction(
         key: const ValueKey('msg-action-cancel'),
         onPressed: () => Navigator.pop(sheetContext),
-        child: Text(l10n.cancel),
+        child: Text(l10n.cancel, style: actionStyle),
       ),
     ),
   );
@@ -218,11 +236,23 @@ Future<String?> _showMessageActionPopover(
                       content: Text(l10n.confirmTruncatePrompt),
                       actions: [
                         CupertinoDialogAction(
+                          textStyle:
+                              CupertinoTheme.brightnessOf(context) ==
+                                  Brightness.light
+                              ? const TextStyle(color: LightSurfaces.userDetail)
+                              : null,
                           key: const ValueKey('msg-truncate-cancel'),
                           onPressed: () => Navigator.pop(dialogContext, false),
                           child: Text(l10n.cancel),
                         ),
                         CupertinoDialogAction(
+                          textStyle:
+                              CupertinoTheme.brightnessOf(context) ==
+                                  Brightness.light
+                              ? TextStyle(
+                                  color: statusRedText.resolveFrom(context),
+                                )
+                              : null,
                           key: const ValueKey('msg-truncate-confirm'),
                           isDestructiveAction: true,
                           onPressed: () => Navigator.pop(dialogContext, true),
@@ -265,10 +295,34 @@ class _MessageActionPopoverRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = !enabled
-        ? CupertinoColors.placeholderText.resolveFrom(context)
+        ? LightSurfaces.resolve(
+            context,
+            LightSurfaces.placeholder,
+            dark: CupertinoColors.placeholderText,
+          )
         : isDestructive
-            ? CupertinoColors.destructiveRed.resolveFrom(context)
-            : CupertinoColors.label.resolveFrom(context);
+        ? LightSurfaces.resolve(
+            context,
+            statusRedText.resolveFrom(context),
+            dark: CupertinoColors.destructiveRed,
+          )
+        : CupertinoColors.label.resolveFrom(context);
+    if (CupertinoTheme.brightnessOf(context) == Brightness.light) {
+      return CupertinoListTile(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        backgroundColor: LightSurfaces.card,
+        backgroundColorActivated: LightSurfaces.pressed,
+        onTap: enabled ? onTap : null,
+        title: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: color,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      );
+    }
     return CupertinoButton(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       alignment: Alignment.centerLeft,

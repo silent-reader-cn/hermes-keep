@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
+import '../theme/light_surfaces.dart';
+import '../theme/status_colors.dart';
 
 /// 侧栏顶部工具条项配置。
 class _UtilityItem {
@@ -90,8 +92,15 @@ class SidebarUtilityToolbar extends ConsumerWidget {
 
     final l10n = AppLocalizations.of(context);
     final theme = CupertinoTheme.of(context);
-    final primaryColor = theme.primaryColor;
-    final inactiveColor = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final primaryColor = isLight
+        ? statusBlueText.resolveFrom(context)
+        : theme.primaryColor;
+    final inactiveColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
 
     final visibleItems = _items
         .where((item) {
@@ -100,7 +109,7 @@ class SidebarUtilityToolbar extends ConsumerWidget {
         })
         .toList(growable: false);
 
-    return Column(
+    final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
@@ -128,7 +137,9 @@ class SidebarUtilityToolbar extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(vertical: 6.0),
                         borderRadius: BorderRadius.circular(8.0),
                         color: isSelected
-                            ? primaryColor.withValues(alpha: 0.12)
+                            ? (isLight
+                                  ? LightSurfaces.selection
+                                  : primaryColor.withValues(alpha: 0.12))
                             : CupertinoColors.transparent,
                         onPressed: () {
                           unawaited(context.push(item.path));
@@ -147,9 +158,17 @@ class SidebarUtilityToolbar extends ConsumerWidget {
         ),
         Container(
           height: 0.5,
-          color: CupertinoColors.separator.resolveFrom(context),
+          // Decorative structural line; the icons carry the navigation semantics.
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.divider,
+            dark: CupertinoColors.separator,
+          ),
         ),
       ],
     );
+    return isLight
+        ? ColoredBox(color: LightSurfaces.page, child: content)
+        : content;
   }
 }

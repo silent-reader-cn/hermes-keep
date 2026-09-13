@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../core/models/tool_call.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
@@ -37,10 +39,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
 
   void _syncExpandedFromStorage() {
     final key = _storageKey;
-    final stored = PageStorage.maybeOf(context)?.readState(
-      context,
-      identifier: key,
-    );
+    final stored = PageStorage.maybeOf(context)
+        ?.readState(context, identifier: key);
     if (stored is bool) {
       _expanded = stored;
     }
@@ -72,11 +72,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
     setState(() {
       _expanded = !_expanded;
       final key = _storageKey;
-      PageStorage.maybeOf(context)?.writeState(
-        context,
-        _expanded,
-        identifier: key,
-      );
+      PageStorage.maybeOf(context)
+          ?.writeState(context, _expanded, identifier: key);
     });
   }
 
@@ -88,10 +85,22 @@ class _ToolCallCardState extends State<ToolCallCard> {
     final failed = call.isError == true;
     final running = !call.isCompleted;
     final accentColor = failed
-        ? CupertinoColors.systemRed.resolveFrom(context)
+        ? LightSurfaces.resolve(
+            context,
+            statusRedText.resolveFrom(context),
+            dark: CupertinoColors.systemRed,
+          )
         : running
-        ? CupertinoColors.activeBlue.resolveFrom(context)
-        : CupertinoColors.systemGreen.resolveFrom(context);
+        ? LightSurfaces.resolve(
+            context,
+            statusBlueText.resolveFrom(context),
+            dark: CupertinoColors.activeBlue,
+          )
+        : LightSurfaces.resolve(
+            context,
+            statusGreenText.resolveFrom(context),
+            dark: CupertinoColors.systemGreen,
+          );
     final bgColor = failed
         ? CupertinoColors.systemRed.resolveFrom(context).withValues(alpha: 0.08)
         : running
@@ -116,7 +125,18 @@ class _ToolCallCardState extends State<ToolCallCard> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: bgColor,
+        color: LightSurfaces.resolve(
+          context,
+          failed
+              ? LightSurfaces.tintError
+              : running
+              ? LightSurfaces.card
+              : LightSurfaces.tintGreen,
+          dark: bgColor,
+        ),
+        border: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -133,7 +153,11 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     height: 14,
                     child: CupertinoActivityIndicator(
                       radius: 7,
-                      color: CupertinoColors.activeBlue.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        statusBlueText.resolveFrom(context),
+                        dark: CupertinoColors.activeBlue,
+                      ),
                     ),
                   )
                 else
@@ -163,8 +187,10 @@ class _ToolCallCardState extends State<ToolCallCard> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w400,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                              color: LightSurfaces.resolve(
                                 context,
+                                LightSurfaces.textSecondary,
+                                dark: CupertinoColors.secondaryLabel,
                               ),
                             ),
                           ),
@@ -179,8 +205,10 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     '${call.duration!.toStringAsFixed(1)}s',
                     style: TextStyle(
                       fontSize: 11,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                      color: LightSurfaces.resolve(
                         context,
+                        LightSurfaces.textSecondary,
+                        dark: CupertinoColors.secondaryLabel,
                       ),
                     ),
                   ),
@@ -190,7 +218,11 @@ class _ToolCallCardState extends State<ToolCallCard> {
                       ? CupertinoIcons.chevron_up
                       : CupertinoIcons.chevron_down,
                   size: 12,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: CupertinoColors.secondaryLabel,
+                  ),
                 ),
               ],
             ),
@@ -221,7 +253,11 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     height: 12,
                     child: CupertinoActivityIndicator(
                       radius: 6,
-                      color: CupertinoColors.activeBlue.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        statusBlueText.resolveFrom(context),
+                        dark: CupertinoColors.activeBlue,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -229,8 +265,10 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     AppLocalizations.of(context).runningIndicator,
                     style: TextStyle(
                       fontSize: 11,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                      color: LightSurfaces.resolve(
                         context,
+                        LightSurfaces.textSecondary,
+                        dark: CupertinoColors.secondaryLabel,
                       ),
                     ),
                   ),
@@ -248,7 +286,11 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   height: 12,
                   child: CupertinoActivityIndicator(
                     radius: 6,
-                    color: CupertinoColors.activeBlue.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      statusBlueText.resolveFrom(context),
+                      dark: CupertinoColors.activeBlue,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -256,7 +298,11 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   AppLocalizations.of(context).runningIndicator,
                   style: TextStyle(
                     fontSize: 11,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.secondaryLabel,
+                    ),
                   ),
                 ),
               ],
@@ -274,7 +320,13 @@ class _DividerLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(color: CupertinoColors.systemGrey4.resolveFrom(context));
+    return ColoredBox(
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.divider,
+        dark: CupertinoColors.systemGrey4,
+      ),
+    );
   }
 }
 
@@ -333,10 +385,8 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
 
   void _syncExpandedFromStorage() {
     final key = _storageKey;
-    final stored = PageStorage.maybeOf(context)?.readState(
-      context,
-      identifier: 'tool-group-expanded-$key',
-    );
+    final stored = PageStorage.maybeOf(context)
+        ?.readState(context, identifier: 'tool-group-expanded-$key');
     if (stored is bool) {
       _expanded = stored;
     }
@@ -367,11 +417,9 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
     setState(() {
       _expanded = !_expanded;
       final key = _storageKey;
-      PageStorage.maybeOf(context)?.writeState(
+      PageStorage.maybeOf(
         context,
-        _expanded,
-        identifier: 'tool-group-expanded-$key',
-      );
+      )?.writeState(context, _expanded, identifier: 'tool-group-expanded-$key');
     });
   }
 
@@ -392,10 +440,18 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色亮块。
-        color: CupertinoColors.systemGrey6.resolveFrom(context),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.card,
+          dark: CupertinoColors.systemGrey6,
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: CupertinoColors.systemGrey4.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.systemGrey4,
+          ),
         ),
       ),
       child: Column(
@@ -412,7 +468,11 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                     height: 14,
                     child: CupertinoActivityIndicator(
                       radius: 7,
-                      color: CupertinoColors.activeBlue.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        statusBlueText.resolveFrom(context),
+                        dark: CupertinoColors.activeBlue,
+                      ),
                     ),
                   )
                 else
@@ -422,8 +482,16 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                         : CupertinoIcons.checkmark_circle_fill,
                     size: 14,
                     color: failed
-                        ? CupertinoColors.systemRed.resolveFrom(context)
-                        : CupertinoColors.systemGreen.resolveFrom(context),
+                        ? LightSurfaces.resolve(
+                            context,
+                            statusRedText.resolveFrom(context),
+                            dark: CupertinoColors.systemRed,
+                          )
+                        : LightSurfaces.resolve(
+                            context,
+                            statusGreenText.resolveFrom(context),
+                            dark: CupertinoColors.systemGreen,
+                          ),
                   ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -453,7 +521,11 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                     l10n.toolFailedStatus,
                     style: TextStyle(
                       fontSize: 11,
-                      color: CupertinoColors.systemRed.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        statusRedText.resolveFrom(context),
+                        dark: CupertinoColors.systemRed,
+                      ),
                     ),
                   )
                 else if (running)
@@ -461,8 +533,10 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                     l10n.toolRunningStatus,
                     style: TextStyle(
                       fontSize: 11,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                      color: LightSurfaces.resolve(
                         context,
+                        LightSurfaces.textSecondary,
+                        dark: CupertinoColors.secondaryLabel,
                       ),
                     ),
                   ),
@@ -472,7 +546,11 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                       ? CupertinoIcons.chevron_up
                       : CupertinoIcons.chevron_down,
                   size: 12,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: CupertinoColors.secondaryLabel,
+                  ),
                 ),
               ],
             ),
@@ -759,16 +837,27 @@ class _ThinkingRowState extends State<_ThinkingRow> {
     final preview = summary.length > 80
         ? '${summary.substring(0, 80)}…'
         : summary;
-    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final secondary = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
     // 与工具行同构的「卡式子行」：淡紫底块 + 圆角 8（思考专属色调），
     // 内部保持 ReasoningBlock 时代的标题/预览/展开交互。
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemPurple
-            .resolveFrom(context)
-            .withValues(alpha: 0.08),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintClarification,
+          dark: CupertinoColors.systemPurple
+              .resolveFrom(context)
+              .withValues(alpha: 0.08),
+        ),
+        border: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(

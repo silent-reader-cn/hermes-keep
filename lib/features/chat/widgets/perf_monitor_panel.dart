@@ -4,6 +4,8 @@ import 'dart:developer' as developer;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/adaptive_popover.dart';
 import '../../../app/widgets/cupertino_popover.dart';
 import '../../../core/api/api_client_server_panels.dart';
@@ -138,8 +140,7 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
   Future<void> _poll() async {
     if (_paused) return;
     // 仅两段式+性能监控开启且有激活连接时才轮询，避免在测试或无连接时产生额外请求。
-    if (!ref.read(composerTwoPaneProvider) ||
-        !ref.read(perfMonitorProvider)) {
+    if (!ref.read(composerTwoPaneProvider) || !ref.read(perfMonitorProvider)) {
       return;
     }
     // 无激活连接（测试环境或未配置时）不轮询。
@@ -234,9 +235,25 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
 
   /// 阈值颜色：≥85 红，≥75 橙，否则 secondaryLabel。
   static Color _thresholdColor(double percent, BuildContext ctx) {
-    if (percent >= 85) return CupertinoColors.systemRed.resolveFrom(ctx);
-    if (percent >= 75) return CupertinoColors.systemOrange.resolveFrom(ctx);
-    return CupertinoColors.secondaryLabel.resolveFrom(ctx);
+    if (percent >= 85) {
+      return LightSurfaces.resolve(
+        ctx,
+        statusRedText.resolveFrom(ctx),
+        dark: CupertinoColors.systemRed,
+      );
+    }
+    if (percent >= 75) {
+      return LightSurfaces.resolve(
+        ctx,
+        statusOrangeText.resolveFrom(ctx),
+        dark: CupertinoColors.systemOrange,
+      );
+    }
+    return LightSurfaces.resolve(
+      ctx,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
   }
 
   @override
@@ -251,8 +268,11 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
     if (data == null) return const SizedBox.shrink();
 
     final l10n = AppLocalizations.of(context);
-    final secondaryColor =
-        CupertinoColors.secondaryLabel.resolveFrom(context);
+    final secondaryColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -365,11 +385,7 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
       child: Container(
         key: _anchorKey,
         padding: const EdgeInsets.symmetric(horizontal: paddingHorizontal),
-        child: Text.rich(
-          chosenSpan,
-          maxLines: 1,
-          softWrap: false,
-        ),
+        child: Text.rich(chosenSpan, maxLines: 1, softWrap: false),
       ),
     );
   }
@@ -495,8 +511,11 @@ class _PerfMonitorPopoverContent extends StatelessWidget {
         if (data == null) return const SizedBox.shrink();
 
         final l10n = AppLocalizations.of(context);
-        final secondaryColor =
-            CupertinoColors.secondaryLabel.resolveFrom(context);
+        final secondaryColor = LightSurfaces.resolve(
+          context,
+          LightSurfaces.textSecondary,
+          dark: CupertinoColors.secondaryLabel,
+        );
         final cpuColor = _PerfMonitorPanelState._thresholdColor(
           data.cpu.percent,
           context,

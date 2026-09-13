@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/features/chat/widgets/markdown_styles.dart';
 
 /// 聊天气泡 Markdown 样式契约测试。
@@ -27,8 +28,9 @@ void main() {
   for (final brightness in [Brightness.light, Brightness.dark]) {
     final themeName = brightness == Brightness.light ? '浅色' : '深色';
 
-    testWidgets('assistant 样式 $themeName：全部文本色=解析后 label，标题阶梯收敛，加粗不放大',
-        (tester) async {
+    testWidgets('assistant 样式 $themeName：全部文本色=解析后 label，标题阶梯收敛，加粗不放大', (
+      tester,
+    ) async {
       final context = await pumpStyleContext(tester, brightness);
       final label = CupertinoColors.label.resolveFrom(context);
       final link = CupertinoColors.link.resolveFrom(context);
@@ -55,7 +57,14 @@ void main() {
       // 标题阶梯：20/18/16/15/15/15，全部 w600 + label
       const sizes = [20.0, 18.0, 16.0, 15.0, 15.0, 15.0];
       for (var i = 0; i < 6; i++) {
-        final h = [sheet.h1, sheet.h2, sheet.h3, sheet.h4, sheet.h5, sheet.h6][i];
+        final h = [
+          sheet.h1,
+          sheet.h2,
+          sheet.h3,
+          sheet.h4,
+          sheet.h5,
+          sheet.h6,
+        ][i];
         expect(h!.fontSize, sizes[i], reason: 'h${i + 1} 字号');
         expect(h.fontWeight, FontWeight.w600, reason: 'h${i + 1} 字重');
         expect(h.color, label, reason: 'h${i + 1} 颜色');
@@ -105,8 +114,7 @@ void main() {
     });
   }
 
-  testWidgets('渲染冒烟：markdown 全文（标题/加粗/代码/引用/列表/表格）正常渲染',
-      (tester) async {
+  testWidgets('渲染冒烟：markdown 全文（标题/加粗/代码/引用/列表/表格）正常渲染', (tester) async {
     await tester.pumpWidget(
       CupertinoApp(
         theme: const CupertinoThemeData(brightness: Brightness.dark),
@@ -129,54 +137,58 @@ void main() {
     for (final brightness in [Brightness.light, Brightness.dark]) {
       final themeName = brightness == Brightness.light ? '浅色' : '深色';
 
-      testWidgets('assistant 行内代码 $themeName：pill 圆角 4、padding 水平 4 垂直 1、背景 grey5',
-          (tester) async {
-        late BuildContext capturedContext;
-        await tester.pumpWidget(
-          CupertinoApp(
-            theme: CupertinoThemeData(brightness: brightness),
-            home: Builder(
-              builder: (context) {
-                capturedContext = context;
-                return MarkdownBody(
-                  data: '这是 `Actions` 测试。',
-                  selectable: true,
-                  styleSheet: buildAssistantMarkdownStyleSheet(context),
-                  builders: createAssistantMarkdownBuilders(context),
-                );
-              },
+      testWidgets(
+        'assistant 行内代码 $themeName：pill 圆角 4、padding 水平 4 垂直 1、背景 grey5',
+        (tester) async {
+          late BuildContext capturedContext;
+          await tester.pumpWidget(
+            CupertinoApp(
+              theme: CupertinoThemeData(brightness: brightness),
+              home: Builder(
+                builder: (context) {
+                  capturedContext = context;
+                  return MarkdownBody(
+                    data: '这是 `Actions` 测试。',
+                    selectable: true,
+                    styleSheet: buildAssistantMarkdownStyleSheet(context),
+                    builders: createAssistantMarkdownBuilders(context),
+                  );
+                },
+              ),
             ),
-          ),
-        );
+          );
 
-        final grey5 = CupertinoColors.systemGrey5.resolveFrom(capturedContext);
-        final label = CupertinoColors.label.resolveFrom(capturedContext);
+          final grey5 = CupertinoColors.systemGrey5.resolveFrom(
+            capturedContext,
+          );
+          final label = CupertinoColors.label.resolveFrom(capturedContext);
 
-        // 查找渲染为 pill 的 Container
-        final containerFinder = find.ancestor(
-          of: find.text('Actions'),
-          matching: find.byType(Container),
-        );
-        expect(containerFinder, findsOneWidget);
+          // 查找渲染为 pill 的 Container
+          final containerFinder = find.ancestor(
+            of: find.text('Actions'),
+            matching: find.byType(Container),
+          );
+          expect(containerFinder, findsOneWidget);
 
-        final container = tester.widget<Container>(containerFinder);
-        final decoration = container.decoration as BoxDecoration?;
-        expect(decoration, isNotNull);
-        expect(decoration!.color, grey5);
-        expect(
-          decoration.borderRadius,
-          const BorderRadius.all(Radius.circular(kInlineCodeBorderRadius)),
-        );
-        expect(container.padding, kInlineCodePadding);
+          final container = tester.widget<Container>(containerFinder);
+          final decoration = container.decoration as BoxDecoration?;
+          expect(decoration, isNotNull);
+          expect(decoration!.color, grey5);
+          expect(
+            decoration.borderRadius,
+            const BorderRadius.all(Radius.circular(kInlineCodeBorderRadius)),
+          );
+          expect(container.padding, kInlineCodePadding);
 
-        // 文本属性校验
-        final textWidget = tester.widget<Text>(find.text('Actions'));
-        expect(textWidget.style!.fontSize, 13);
-        expect(textWidget.style!.height, 1.4);
-        expect(textWidget.style!.fontFamily, 'monospace');
-        expect(textWidget.style!.color, label);
-        expect(textWidget.style!.backgroundColor, const Color(0x00000000));
-      });
+          // 文本属性校验
+          final textWidget = tester.widget<Text>(find.text('Actions'));
+          expect(textWidget.style!.fontSize, 13);
+          expect(textWidget.style!.height, 1.4);
+          expect(textWidget.style!.fontFamily, 'monospace');
+          expect(textWidget.style!.color, label);
+          expect(textWidget.style!.backgroundColor, const Color(0x00000000));
+        },
+      );
 
       testWidgets('user 行内代码 $themeName：pill 背景白 0.22、字色白', (tester) async {
         await tester.pumpWidget(
@@ -206,7 +218,9 @@ void main() {
         expect(decoration, isNotNull);
         expect(
           decoration!.color,
-          CupertinoColors.white.withValues(alpha: 0.22),
+          brightness == Brightness.light
+              ? LightSurfaces.userDetail
+              : CupertinoColors.white.withValues(alpha: 0.22),
         );
         expect(
           decoration.borderRadius,
@@ -220,8 +234,9 @@ void main() {
       });
     }
 
-    testWidgets('块级代码与行内代码混合渲染：块级保留滚动条与 codeblockDecoration，行内保持 pill',
-        (tester) async {
+    testWidgets('块级代码与行内代码混合渲染：块级保留滚动条与 codeblockDecoration，行内保持 pill', (
+      tester,
+    ) async {
       late BuildContext capturedContext;
       const markdown = '''
 前置行内 `inline1` 说明。

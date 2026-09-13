@@ -13,6 +13,10 @@ void main() {
       LightSurfaces.card,
       LightSurfaces.selection,
       LightSurfaces.pressed,
+      LightSurfaces.tintGreen,
+      LightSurfaces.tintWarning,
+      LightSurfaces.tintError,
+      LightSurfaces.tintClarification,
     ]) {
       expect(
         contrastRatio(LightSurfaces.textSecondary, surface),
@@ -23,7 +27,12 @@ void main() {
         greaterThanOrEqualTo(4.5),
       );
     }
+    expect(
+      contrastRatio(CupertinoColors.white, LightSurfaces.userDetail),
+      greaterThanOrEqualTo(4.5),
+    );
     for (final token in [
+      LightSurfaces.userDetail,
       LightSurfaces.page,
       LightSurfaces.card,
       LightSurfaces.cardBorder,
@@ -32,6 +41,10 @@ void main() {
       LightSurfaces.placeholder,
       LightSurfaces.selection,
       LightSurfaces.pressed,
+      LightSurfaces.tintGreen,
+      LightSurfaces.tintWarning,
+      LightSurfaces.tintError,
+      LightSurfaces.tintClarification,
     ]) {
       expect(token.a, 1);
       expect(token, isNot(isA<CupertinoDynamicColor>()));

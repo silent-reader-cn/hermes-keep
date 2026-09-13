@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../core/models/tool_call.dart';
 import '../../../l10n/app_localizations.dart';
@@ -87,7 +88,11 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
     final titleStyle = TextStyle(
       fontSize: 13,
       fontWeight: FontWeight.w400,
-      color: secondaryText.resolveFrom(context),
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.textSecondary,
+        dark: secondaryText,
+      ),
     );
     // 轨线与节点色（#64 方案 E）：装饰元素不受 AA 文字对比约束，
     // 但深浅两态仍显式解析，防暗黑退化。
@@ -168,7 +173,11 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
                                     trailingDuration,
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: secondaryText.resolveFrom(context),
+                                      color: LightSurfaces.resolve(
+                                        context,
+                                        LightSurfaces.textSecondary,
+                                        dark: secondaryText,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 6),
@@ -178,8 +187,11 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
                                       ? CupertinoIcons.chevron_up
                                       : CupertinoIcons.chevron_down,
                                   size: 12,
-                                  color: CupertinoColors.tertiaryLabel
-                                      .resolveFrom(context),
+                                  color: LightSurfaces.resolve(
+                                    context,
+                                    LightSurfaces.textSecondary,
+                                    dark: CupertinoColors.tertiaryLabel,
+                                  ),
                                 ),
                               ],
                             ),

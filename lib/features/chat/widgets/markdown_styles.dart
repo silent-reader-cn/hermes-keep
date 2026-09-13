@@ -5,8 +5,10 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
 
-import '../../settings/settings_providers.dart';
 import '../../../app/theme/cupertino_theme.dart' show kAppFontFamily;
+import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
+import '../../settings/settings_providers.dart';
 import 'mermaid_block.dart';
 
 /// 聊天气泡与正文 Markdown 样式（chat_spec.md §6.3 Markdown 渲染）。
@@ -71,12 +73,28 @@ double _headingSize(int level) => switch (level) {
 };
 
 /// assistant 气泡（浅/深色均可）：正文 label 色，标题/加粗同色同基准。
-MarkdownStyleSheet buildAssistantMarkdownStyleSheet(BuildContext context) {
+MarkdownStyleSheet buildAssistantMarkdownStyleSheet(
+  BuildContext context, {
+  bool useLightSurfaces = false,
+}) {
   final theme = CupertinoTheme.of(context);
   final label = CupertinoColors.label.resolveFrom(context);
-  final link = CupertinoColors.link.resolveFrom(context);
-  final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
-  final separator = CupertinoColors.separator.resolveFrom(context);
+  // This opt-in is chat-only; memory and file preview keep their current style.
+  final isLight =
+      useLightSurfaces &&
+      CupertinoTheme.brightnessOf(context) == Brightness.light;
+  final link = isLight
+      ? statusBlueText.resolveFrom(context)
+      : CupertinoColors.link.resolveFrom(context);
+  final grey5 = isLight
+      ? LightSurfaces.card
+      : CupertinoColors.systemGrey5.resolveFrom(context);
+  final separator = isLight
+      ? LightSurfaces.divider
+      : CupertinoColors.separator.resolveFrom(context);
+  final outline = isLight
+      ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+      : null;
 
   TextStyle heading(int level) => _body(
     color: label,
@@ -109,25 +127,32 @@ MarkdownStyleSheet buildAssistantMarkdownStyleSheet(BuildContext context) {
     ),
     codeblockDecoration: BoxDecoration(
       color: grey5,
+      border: outline,
       borderRadius: BorderRadius.circular(6),
     ),
     codeblockPadding: const EdgeInsets.all(12),
     blockquoteDecoration: BoxDecoration(
       color: grey5,
+      border: outline,
       borderRadius: BorderRadius.circular(6),
     ),
     blockquotePadding: const EdgeInsets.all(8),
     tableHead: _body(color: label, weight: kMarkdownStrongWeight),
     tableBody: _body(color: label, size: 14),
     tableBorder: TableBorder.all(color: separator, width: 0.5),
-    checkbox: _body(color: theme.primaryColor),
+    checkbox: _body(
+      color: isLight ? statusBlueText.resolveFrom(context) : theme.primaryColor,
+    ),
   );
 }
 
-/// user 气泡（蓝底白字）：全部文字固定白，代码块用半透明白底。
+/// User text stays white; light code/links use an opaque local blue surface.
 MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
   final theme = CupertinoTheme.of(context);
   const white = CupertinoColors.white;
+  final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+  // White on the main #007AFF bubble remains the approved 4.016976:1 exception.
+  // Weight/opacity cannot raise contrast. Detail surfaces use white/#005FB8 (6.308159:1).
 
   TextStyle heading(int level) => _body(
     color: white,
@@ -136,7 +161,10 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
   );
 
   return MarkdownStyleSheet.fromCupertinoTheme(theme).copyWith(
-    a: _body(color: white, decoration: TextDecoration.underline),
+    a: _body(
+      color: white,
+      decoration: TextDecoration.underline,
+    ).copyWith(backgroundColor: isLight ? LightSurfaces.userDetail : null),
     p: _body(color: white),
     pPadding: EdgeInsets.zero,
     listBullet: _body(color: white),
@@ -155,15 +183,27 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
       height: 1.4,
       fontFamily: 'monospace',
       color: white,
-      backgroundColor: white.withValues(alpha: 0.22),
+      backgroundColor: LightSurfaces.resolve(
+        context,
+        LightSurfaces.userDetail,
+        dark: white.withValues(alpha: 0.22),
+      ),
     ),
     codeblockDecoration: BoxDecoration(
-      color: white.withValues(alpha: 0.15),
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.userDetail,
+        dark: white.withValues(alpha: 0.15),
+      ),
       borderRadius: BorderRadius.circular(6),
     ),
     codeblockPadding: const EdgeInsets.all(12),
     blockquoteDecoration: BoxDecoration(
-      color: white.withValues(alpha: 0.12),
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.userDetail,
+        dark: white.withValues(alpha: 0.12),
+      ),
       borderRadius: BorderRadius.circular(6),
     ),
     blockquotePadding: const EdgeInsets.all(8),
@@ -190,6 +230,7 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
 class InlineCodeElementBuilder extends MarkdownElementBuilder {
   InlineCodeElementBuilder({
     this.backgroundColor,
+    this.border,
     this.textStyle,
     this.padding = kInlineCodePadding,
     this.borderRadius = const BorderRadius.all(
@@ -199,6 +240,9 @@ class InlineCodeElementBuilder extends MarkdownElementBuilder {
 
   /// pill 背景色（未传时从 preferredStyle?.backgroundColor 或 systemGrey5 获取）。
   final Color? backgroundColor;
+
+  /// Optional outline for light chat inline-code pills.
+  final BoxBorder? border;
 
   /// 文字样式（未传时从 preferredStyle 或 13pt monospace 基准派生）。
   final TextStyle? textStyle;
@@ -239,6 +283,7 @@ class InlineCodeElementBuilder extends MarkdownElementBuilder {
       final color =
           backgroundColor ??
           preferredStyle?.backgroundColor ??
+          // Shared fallback for non-chat consumers; chat supplies explicit tokens.
           CupertinoColors.systemGrey5.resolveFrom(context);
 
       final baseStyle =
@@ -263,7 +308,11 @@ class InlineCodeElementBuilder extends MarkdownElementBuilder {
           alignment: PlaceholderAlignment.middle,
           child: Container(
             padding: padding,
-            decoration: BoxDecoration(color: color, borderRadius: borderRadius),
+            decoration: BoxDecoration(
+              color: color,
+              border: border,
+              borderRadius: borderRadius,
+            ),
             child: Text(text, style: innerTextStyle),
           ),
         ),
@@ -317,6 +366,7 @@ class ImgBlockElementBuilder extends MarkdownElementBuilder {
 Map<String, MarkdownElementBuilder> createMarkdownElementBuilders(
   BuildContext context, {
   Color? codeBackgroundColor,
+  BoxBorder? codeBorder,
   TextStyle? codeTextStyle,
   EdgeInsetsGeometry codePadding = kInlineCodePadding,
   BorderRadiusGeometry codeBorderRadius = const BorderRadius.all(
@@ -327,6 +377,7 @@ Map<String, MarkdownElementBuilder> createMarkdownElementBuilders(
 }) {
   final builder = InlineCodeElementBuilder(
     backgroundColor: codeBackgroundColor,
+    border: codeBorder,
     textStyle: codeTextStyle,
     padding: codePadding,
     borderRadius: codeBorderRadius,
@@ -399,14 +450,23 @@ class _MermaidPreBuilder extends MarkdownElementBuilder {
 /// Mermaid 图表支持：注册 [_MermaidPreBuilder] 接管 mermaid 语法代码块。
 Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
   BuildContext context, {
+  bool useLightSurfaces = false,
   // ignore: deprecated_member_use
   Widget Function(Uri, String?, String?)? imageBuilder,
 }) {
   final label = CupertinoColors.label.resolveFrom(context);
-  final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
+  final isLight =
+      useLightSurfaces &&
+      CupertinoTheme.brightnessOf(context) == Brightness.light;
+  final grey5 = isLight
+      ? LightSurfaces.card
+      : CupertinoColors.systemGrey5.resolveFrom(context);
   final builders = createMarkdownElementBuilders(
     context,
     codeBackgroundColor: grey5,
+    codeBorder: isLight
+        ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+        : null,
     codeTextStyle: TextStyle(
       fontSize: 13,
       height: 1.4,
@@ -416,12 +476,15 @@ Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
     imageBuilder: imageBuilder,
   );
   builders['pre'] = _MermaidPreBuilder(
-    styleSheet: buildAssistantMarkdownStyleSheet(context),
+    styleSheet: buildAssistantMarkdownStyleSheet(
+      context,
+      useLightSurfaces: useLightSurfaces,
+    ),
   );
   return builders;
 }
 
-/// user 气泡场景 Markdown 构建器（蓝底半透明白 pill 底色）。
+/// User inline code: accessible local blue in light, original white overlay in dark.
 Map<String, MarkdownElementBuilder> createUserMarkdownBuilders(
   BuildContext context, {
   // ignore: deprecated_member_use
@@ -429,7 +492,11 @@ Map<String, MarkdownElementBuilder> createUserMarkdownBuilders(
 }) {
   return createMarkdownElementBuilders(
     context,
-    codeBackgroundColor: CupertinoColors.white.withValues(alpha: 0.22),
+    codeBackgroundColor: LightSurfaces.resolve(
+      context,
+      LightSurfaces.userDetail,
+      dark: CupertinoColors.white.withValues(alpha: 0.22),
+    ),
     codeTextStyle: const TextStyle(
       fontSize: 13,
       height: 1.4,

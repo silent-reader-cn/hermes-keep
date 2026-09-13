@@ -4,11 +4,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:markdown/markdown.dart' as md;
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../core/api/sse_client.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
@@ -18,6 +19,8 @@ import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
 import '../../chat/chat_providers.dart';
 import '../../chat/chat_state.dart';
+import '../../settings/injected_notice_settings.dart';
+import '../../settings/tool_group_settings.dart';
 import 'chat_media_parser.dart';
 import 'chat_media_view.dart';
 import 'collapsible_process_capsule.dart';
@@ -25,8 +28,6 @@ import 'markdown_styles.dart';
 import 'message_action_menu.dart';
 import 'message_bubble.dart';
 import 'message_highlight.dart';
-import '../../settings/injected_notice_settings.dart';
-import '../../settings/tool_group_settings.dart';
 import 'selected_context_card.dart';
 import 'steer_banner.dart';
 import 'tool_call_card.dart';
@@ -2502,10 +2503,14 @@ class _ScrollToBottomButton extends StatelessWidget {
       CupertinoColors.secondarySystemGroupedBackground,
       context,
     );
-    final borderColor = CupertinoDynamicColor.resolve(
-      CupertinoColors.separator,
+    final borderColor = LightSurfaces.resolve(
       context,
-    ).withValues(alpha: 0.6);
+      LightSurfaces.cardBorder,
+      dark: CupertinoDynamicColor.resolve(
+        CupertinoColors.separator,
+        context,
+      ).withValues(alpha: 0.6),
+    );
 
     return CupertinoButton(
       key: const ValueKey('chat-scroll-to-bottom-button'),
@@ -2688,6 +2693,7 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
         ? ' · ${l10n.chatStatusWorkingFor(elapsedStr)}'
         : '';
 
+    // Status dots/spinners repeat the adjacent status text: decorative color exception.
     if (prefillStatus == ContextPrefillStatus.error) {
       return _StatusLineRow(
         color: CupertinoColors.systemRed,
@@ -2710,7 +2716,11 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
     }
     if (phase == ChatPhase.sending) {
       return _StatusLineRow(
-        color: CupertinoColors.secondaryLabel,
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.textSecondary,
+          dark: CupertinoColors.secondaryLabel,
+        ),
         label: l10n.chatStatusConnecting + workSuffix,
         showSpinner: true,
       );
@@ -2789,7 +2799,11 @@ class _StatusLineRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
+                ),
               ),
             ),
           ),
@@ -2881,10 +2895,14 @@ class _LiveTextBlock extends ConsumerWidget {
           isStreaming: !hasMediaMarker,
           selectable: true,
           sessionId: sessionId,
-          styleSheet: buildAssistantMarkdownStyleSheet(context),
+          styleSheet: buildAssistantMarkdownStyleSheet(
+            context,
+            useLightSurfaces: true,
+          ),
           // #91 图片块级化：imageBuilder 同源注入 builders（img 独立成块）。
           builders: createAssistantMarkdownBuilders(
             context,
+            useLightSurfaces: true,
             imageBuilder: (uri, title, alt) {
               return ChatInlineMediaWidget(
                 rawUri: uri.toString(),
