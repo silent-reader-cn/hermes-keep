@@ -76,31 +76,44 @@ FakeSessionListApi demoSessionApi() {
         sessionId: 's-demo-1',
         title: '产品发布计划：多平台体验统一路线图',
         pinned: true,
+        messageCount: 23,
+        projectId: 'p-demo-hermes',
+        workspace: r'D:\projects\hermes-ui',
         lastMessageAt: at(const Duration(minutes: 30)),
       ),
       SessionSummary(
         sessionId: 's-demo-2',
         title: '帮我写一段 Python 数据清洗脚本',
+        messageCount: 8,
+        workspace: r'D:\data\etl',
         lastMessageAt: at(const Duration(hours: 1)),
       ),
       SessionSummary(
         sessionId: 's-demo-3',
         title: '本周行业资讯汇总与摘要',
+        messageCount: 5,
+        projectId: 'p-demo-reading',
         lastMessageAt: at(const Duration(hours: 3)),
       ),
       SessionSummary(
         sessionId: 's-demo-4',
         title: 'Flutter 深色模式对比度优化建议',
+        messageCount: 41,
+        projectId: 'p-demo-hermes',
+        workspace: r'D:\projects\hermes-ui',
         lastMessageAt: at(const Duration(days: 1, hours: 2)),
       ),
       SessionSummary(
         sessionId: 's-demo-5',
         title: '旅行攻略：周末短途行程规划',
+        messageCount: 12,
+        projectId: 'p-demo-reading',
         lastMessageAt: at(const Duration(days: 2)),
       ),
       SessionSummary(
         sessionId: 's-demo-6',
         title: '英文邮件润色与语气调整',
+        messageCount: 3,
         lastMessageAt: at(const Duration(days: 5)),
       ),
     ],
@@ -213,6 +226,8 @@ void main() {
           apiClientProvider.overrideWithValue(
             ApiClient(baseUrl: 'https://hermes.example.com:8787'),
           ),
+          // 会话行副标题需要项目名（projectId→name），统一喂 stub 避免真实请求。
+          projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
           ...overrides,
         ],
         child: CupertinoApp.router(
@@ -424,7 +439,6 @@ void main() {
       physicalSize: const Size(780, 1688),
       overrides: [
         sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
-        projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
       ],
     );
   }, skip: !_capture);
@@ -484,7 +498,12 @@ void main() {
 class _StubProjectApi implements ProjectApi {
   @override
   Future<ProjectsResponse> fetchProjects() async =>
-      const ProjectsResponse(projects: []);
+      const ProjectsResponse(
+        projects: [
+          ProjectSummary(projectId: 'p-demo-hermes', name: 'Hermes'),
+          ProjectSummary(projectId: 'p-demo-reading', name: '读书'),
+        ],
+      );
 
   @override
   Future<ProjectMutationResponse> createProject({
