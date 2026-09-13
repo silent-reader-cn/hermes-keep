@@ -1,6 +1,10 @@
 import 'dart:developer' as developer;
-import 'dart:io' show Platform;
+import 'dart:io' show Directory, File, Platform;
+import 'dart:typed_data' show ByteData;
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../app/locale/locale_resolver.dart';
@@ -115,8 +119,25 @@ class LocalNotificationsTurnNotificationService
     FlutterLocalNotificationsPlugin? plugin,
     this.onTap,
     bool? androidPlatformOverride,
+    bool? windowsPlatformOverride,
+    /// 资产加载器（测试注入用；null = rootBundle.load）。
+    Future<ByteData> Function(String key)? assetLoader,
+
+    /// logo 落盘目录（测试注入用；null = Directory.systemTemp）。
+    Directory? windowsLogoDirectory,
+    // ignore: prefer_initializing_formals
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
-        _androidPlatformOverride = androidPlatformOverride; // ignore: prefer_initializing_formals
+        // ignore: prefer_initializing_formals
+        _androidPlatformOverride = androidPlatformOverride,
+        // ignore: prefer_initializing_formals
+        _windowsPlatformOverride = windowsPlatformOverride,
+        // ignore: prefer_initializing_formals
+        _assetLoader = assetLoader,
+        // ignore: prefer_initializing_formals
+        _windowsLogoDirectory = windowsLogoDirectory;
+
+  /// Windows Toast 品牌 logo 资产（48px 不透明，appLogoOverride + 注册表 IconUri）。
+  static const windowsToastLogoAsset = 'assets/branding/notification_logo.png';
 
   /// Android 通知通道：回合完成。
   static const channelTurnsId = 'turns';
@@ -190,20 +211,90 @@ class LocalNotificationsTurnNotificationService
   /// Android 平台判定覆盖（测试注入用；null = 真实 Platform.isAndroid）。
   final bool? _androidPlatformOverride;
 
+  /// Windows 平台判定覆盖（测试注入用；null = 真实 defaultTargetPlatform）。
+  final bool? _windowsPlatformOverride;
+
+  /// 资产加载器覆盖（测试注入用；null = rootBundle.load）。
+  final Future<ByteData> Function(String key)? _assetLoader;
+
+  /// logo 落盘目录覆盖（测试注入用；null = Directory.systemTemp）。
+  final Directory? _windowsLogoDirectory;
+
   bool get _isAndroid => _androidPlatformOverride ?? Platform.isAndroid;
 
+  bool get _isWindows =>
+      _windowsPlatformOverride ??
+      defaultTargetPlatform == TargetPlatform.windows;
+
   bool _initialized = false;
+
+  /// Windows Toast 品牌 logo 落盘路径（懒加载；null=未尝试/失败）。
+  String? _windowsLogoPath;
+
+  /// 构建 Windows 通知 details：显式 appLogoOverride 塞入品牌 logo。
+  ///
+  /// 根因（Windows 通知无图标）：非打包 Win32 应用的 Toast 默认图标来自
+  /// 「AUMID 关联的开始菜单快捷方式」；即便 Inno 已补 AppUserModelID，
+  /// 历史安装/免安装运行（flutter run、绿色版）仍无快捷方式。appLogoOverride
+  /// 不依赖快捷方式，双保险让 Toast 稳定显示品牌 logo。logo 读取失败时
+  /// 回退为空 images（系统默认行为），绝不影响通知送达。
+  Future<WindowsNotificationDetails> _windowsDetails() async {
+    final logo = await _ensureWindowsLogoFile();
+    if (logo == null) return const WindowsNotificationDetails();
+    return WindowsNotificationDetails(
+      images: [
+        WindowsImage(
+          Uri.file(logo, windows: true),
+          altText: 'Hermes',
+          placement: WindowsImagePlacement.appLogoOverride,
+        ),
+      ],
+    );
+  }
+
+  /// 把 logo 资产解出到临时目录供 Toast（file:/// URI）引用，仅 Windows 执行一次。
+  Future<String?> _ensureWindowsLogoFile() async {
+    if (!_isWindows) return null;
+    final cached = _windowsLogoPath;
+    if (cached != null) return cached;
+    try {
+      final byteData = await (_assetLoader ?? rootBundle.load)(
+        windowsToastLogoAsset,
+      );
+      final dir = _windowsLogoDirectory ?? Directory.systemTemp;
+      final file = File(
+        '${dir.path}${Platform.pathSeparator}hermes_notification_logo.png',
+      );
+      await file.writeAsBytes(
+        byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ),
+        flush: true,
+      );
+      _windowsLogoPath = file.absolute.path;
+      return _windowsLogoPath;
+    } on Object catch (error) {
+      developer.log('Windows 通知 logo 落盘失败: $error', name: 'notifications');
+      return null;
+    }
+  }
 
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
     try {
+      // Windows：把品牌 logo 落盘后同时喂给初始化设置（注册表 IconUri，
+      // 修「Toast 无图标」的 Action Center/横幅默认图标）与每条通知的
+      // appLogoOverride（见 _windowsDetails）。
+      final windowsLogoPath = await _ensureWindowsLogoFile();
       await _plugin.initialize(
-        settings: const InitializationSettings(
-          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        settings: InitializationSettings(
+          android: const AndroidInitializationSettings('@mipmap/ic_launcher'),
           windows: WindowsInitializationSettings(
             appName: 'Hermes UI',
             appUserModelId: 'com.hermes.ui',
             guid: 'd9b0a6fb-9a4f-4d33-97be-4ef018260827',
+            iconPath: windowsLogoPath,
           ),
         ),
         onDidReceiveNotificationResponse: (response) {
@@ -269,15 +360,15 @@ class LocalNotificationsTurnNotificationService
         id: notificationTurnsId,
         title: title,
         body: formatPreview(preview),
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
+        notificationDetails: NotificationDetails(
+          android: const AndroidNotificationDetails(
             channelTurnsId,
             channelTurnsName,
             channelDescription: channelTurnsDescription,
             importance: Importance.high,
             priority: Priority.high,
           ),
-          windows: WindowsNotificationDetails(),
+          windows: await _windowsDetails(),
         ),
         payload: sessionId,
       );
@@ -317,15 +408,15 @@ class LocalNotificationsTurnNotificationService
         title: AppLocalizations(LocaleResolver.resolve())
             .clarificationNeeded,
         body: formatPreview(question),
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
+        notificationDetails: NotificationDetails(
+          android: const AndroidNotificationDetails(
             channelClarifyId,
             channelClarifyName,
             channelDescription: channelClarifyDescription,
             importance: Importance.high,
             priority: Priority.high,
           ),
-          windows: WindowsNotificationDetails(),
+          windows: await _windowsDetails(),
         ),
         payload: sessionId,
       );
@@ -367,15 +458,15 @@ class LocalNotificationsTurnNotificationService
         id: notificationErrorsId,
         title: heading,
         body: formatPreview(preview),
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
+        notificationDetails: NotificationDetails(
+          android: const AndroidNotificationDetails(
             channelErrorsId,
             channelErrorsName,
             channelDescription: channelErrorsDescription,
             importance: Importance.high,
             priority: Priority.high,
           ),
-          windows: WindowsNotificationDetails(),
+          windows: await _windowsDetails(),
         ),
         payload: sessionId,
       );
@@ -419,15 +510,15 @@ class LocalNotificationsTurnNotificationService
         title: AppLocalizations(LocaleResolver.resolve())
             .notifDownloadComplete,
         body: formatPreview(body),
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
+        notificationDetails: NotificationDetails(
+          android: const AndroidNotificationDetails(
             channelDownloadsId,
             channelDownloadsName,
             channelDescription: channelDownloadsDescription,
             importance: Importance.high,
             priority: Priority.high,
           ),
-          windows: WindowsNotificationDetails(),
+          windows: await _windowsDetails(),
         ),
         payload: 'download:$downloadId',
       );

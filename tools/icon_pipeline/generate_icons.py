@@ -115,6 +115,72 @@ def load_source_image(source_path: Path) -> Image.Image:
     return img
 
 
+SMALL_MASTER_SIZE = 256
+
+
+def build_small_master(source_img: Image.Image) -> Image.Image:
+    """High-contrast master for small-size rendering (taskbar / tray / toast).
+
+    Steps: trim padding -> down to 256px with LANCZOS -> flatten onto an
+    OPAQUE WHITE canvas via alpha compositing. The artwork is near-binary
+    black on white with transparent outside; forcing alpha=255 would turn
+    faint-alpha pixels (whose stored RGB is black) into stray black specks,
+    while compositing onto white maps every transparent/AA pixel cleanly to
+    the white background.
+    """
+    trimmed = trimTransparentPadding(source_img)
+    master = trimmed.resize(
+        (SMALL_MASTER_SIZE, SMALL_MASTER_SIZE), Image.Resampling.LANCZOS
+    )
+    white = Image.new("RGBA", master.size, (255, 255, 255, 255))
+    return Image.alpha_composite(white, master)
+
+
+def render_icon_size(master: Image.Image, size: int) -> Image.Image:
+    """Crisp per-size rendering for taskbar/tray/toast usage.
+
+    Large sizes (>=128) use plain LANCZOS. Small sizes step-halve to at least
+    2x the target, then BOX pixel-averaging to final size. A/B-verified on
+    this artwork: BOX-only is the cleanest at 16px (no ringing halo, no
+    isolated specks); UnsharpMask was tried and rejected — it introduces
+    stray pixels and line breaks that read as noise on the taskbar.
+    """
+    if size >= 128:
+        return master.resize((size, size), Image.Resampling.LANCZOS)
+    img = master
+    while img.size[0] // 2 >= size * 2:
+        half = img.size[0] // 2
+        img = img.resize((half, half), Image.Resampling.LANCZOS)
+    return img.resize((size, size), Image.Resampling.BOX)
+
+
+def save_ico(path: Path, frames: List[Tuple[int, Image.Image]]) -> None:
+    """Assemble an ICO from explicit per-size frames (PNG-compressed, Vista+).
+
+    Pillow's own ICO writer resamples every frame from the source with a
+    single bicubic pass; this lets each frame use render_icon_size() instead.
+    """
+    import io
+
+    buffers: List[Tuple[int, bytes]] = []
+    for size, img in frames:
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        buffers.append((size, buf.getvalue()))
+
+    header = struct.pack("<HHH", 0, 1, len(buffers))
+    data_offset = len(header) + 16 * len(buffers)
+    entries = b""
+    body = b""
+    for size, data in buffers:
+        dim = 0 if size >= 256 else size
+        entries += struct.pack(
+            "<BBBBHHII", dim, dim, 0, 0, 1, 32, len(data), data_offset + len(body)
+        )
+        body += data
+    path.write_bytes(header + entries + body)
+
+
 def generate_android_legacy_icons(source_img: Image.Image) -> List[Path]:
     """Generate Android legacy mipmap launcher icons."""
     trimmed = trimTransparentPadding(source_img)
@@ -184,19 +250,25 @@ def generate_android_adaptive_icons(source_img: Image.Image) -> List[Path]:
 def generate_windows_icon(source_img: Image.Image) -> List[Path]:
     """
     Generate Windows multi-size .ico icon with sizes 16, 24, 32, 48, 64, 128, 256.
-    Ensures small sizes (16, 32) are crisp and opaque for tray / taskbar usage.
+
+    Small frames (16/24/32/48/64) render via the crisp small master so the
+    taskbar / alt-tab / tray glyphs stay legible; the installer copy is kept
+    byte-identical for SetupIconFile + UninstallDisplayIcon.
     """
-    trimmed = trimTransparentPadding(source_img)
+    master = build_small_master(source_img)
     generated: List[Path] = []
     WINDOWS_RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
     ico_file = WINDOWS_RESOURCES_DIR / "app_icon.ico"
 
-    trimmed.save(
-        ico_file,
-        format="ICO",
-        sizes=WINDOWS_ICO_SIZES,
-    )
+    frames = [(size, render_icon_size(master, size)) for size, _ in WINDOWS_ICO_SIZES]
+    save_ico(ico_file, frames)
     generated.append(ico_file)
+
+    installer_dir = REPO_ROOT / "installer"
+    if installer_dir.exists():
+        installer_ico = installer_dir / "app_icon.ico"
+        installer_ico.write_bytes(ico_file.read_bytes())
+        generated.append(installer_ico)
     return generated
 
 
@@ -217,31 +289,35 @@ def generate_macos_icons(source_img: Image.Image) -> List[Path]:
 
 
 def generate_tray_icons(source_img: Image.Image) -> List[Path]:
-    """Generate dedicated tray icon assets (16x16 PNG, 32x32 PNG, and multi-size ICO)."""
-    trimmed = trimTransparentPadding(source_img)
+    """Generate dedicated tray icon assets (16x16 PNG, 32x32 PNG, multi-size ICO)
+    plus the 48px opaque toast logo (Windows notification appLogoOverride)."""
+    master = build_small_master(source_img)
     generated: List[Path] = []
     BRANDING_DIR.mkdir(parents=True, exist_ok=True)
 
     # 1. 32x32 PNG
     tray_32 = BRANDING_DIR / "tray_icon_32.png"
-    resized_32 = trimmed.resize((32, 32), Image.Resampling.LANCZOS)
-    resized_32.save(tray_32, format="PNG", optimize=True)
+    render_icon_size(master, 32).save(tray_32, format="PNG", optimize=True)
     generated.append(tray_32)
 
     # 2. 16x16 PNG
     tray_16 = BRANDING_DIR / "tray_icon_16.png"
-    resized_16 = trimmed.resize((16, 16), Image.Resampling.LANCZOS)
-    resized_16.save(tray_16, format="PNG", optimize=True)
+    render_icon_size(master, 16).save(tray_16, format="PNG", optimize=True)
     generated.append(tray_16)
 
     # 3. Multi-size ICO (16x16, 32x32)
     tray_ico = BRANDING_DIR / "tray_icon.ico"
-    trimmed.save(
+    save_ico(
         tray_ico,
-        format="ICO",
-        sizes=TRAY_ICO_SIZES,
+        [(size, render_icon_size(master, size)) for size, _ in TRAY_ICO_SIZES],
     )
     generated.append(tray_ico)
+
+    # 4. 48px toast logo (Windows notification appLogoOverride; opaque,
+    #    Windows crops the app logo into a circle so padding stays inside).
+    toast_logo = BRANDING_DIR / "notification_logo.png"
+    render_icon_size(master, 48).save(toast_logo, format="PNG", optimize=True)
+    generated.append(toast_logo)
 
     return generated
 
@@ -373,6 +449,22 @@ def verify_generated_artifacts() -> bool:
             all_ok = False
     else:
         print(f"[FAIL] Missing or empty {tray_ico}")
+        all_ok = False
+
+    # 6. Verify toast notification logo (48px, opaque)
+    toast_logo = BRANDING_DIR / "notification_logo.png"
+    if toast_logo.exists() and toast_logo.stat().st_size > 0:
+        with Image.open(toast_logo) as img:
+            if img.size != (48, 48):
+                print(f"[FAIL] toast logo size: expected 48x48, got {img.size}")
+                all_ok = False
+            elif img.convert("RGBA").getpixel((24, 24))[3] != 255:
+                print(f"[FAIL] toast logo center pixel not opaque")
+                all_ok = False
+            else:
+                print(f"[PASS] toast notification logo: {toast_logo.relative_to(REPO_ROOT)} (48x48, {toast_logo.stat().st_size} bytes)")
+    else:
+        print(f"[FAIL] Missing or empty {toast_logo}")
         all_ok = False
 
     return all_ok

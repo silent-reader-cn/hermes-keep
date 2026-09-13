@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_models.dart';
@@ -226,6 +228,84 @@ void main() {
             payload: any(named: 'payload'),
           ),
         );
+      });
+    });
+
+    group('Windows Toast 品牌 logo（通知无图标修复契约）', () {
+      late LocalNotificationsTurnNotificationService winService;
+
+      setUp(() {
+        winService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          windowsPlatformOverride: true,
+          assetLoader: (key) async {
+            expect(key, LocalNotificationsTurnNotificationService
+                .windowsToastLogoAsset);
+            return ByteData(8);
+          },
+        );
+      });
+
+      test('show 携带 appLogoOverride 图片，initialize 注册 iconPath', () async {
+        await winService.notifyTurnCompleted('sess-w1', '标题', '正文');
+
+        // 1. 初始化 settings 里 iconPath 指向落盘的 logo（注册表 IconUri 来源）
+        final initSettings = verify(
+          () => plugin.initialize(
+            settings: captureAny(named: 'settings'),
+            onDidReceiveNotificationResponse: any(
+              named: 'onDidReceiveNotificationResponse',
+            ),
+          ),
+        ).captured.single as InitializationSettings;
+        expect(initSettings.windows, isNotNull);
+        expect(initSettings.windows!.iconPath, isNotNull);
+        expect(initSettings.windows!.iconPath, endsWith('.png'));
+
+        // 2. 通知 details 带 appLogoOverride 图片
+        final details = verify(
+              () => plugin.show(
+                id: 1001,
+                title: '标题',
+                body: '正文',
+                notificationDetails: captureAny(named: 'notificationDetails'),
+                payload: 'sess-w1',
+              ),
+            ).captured.single
+            as NotificationDetails;
+        final windows = details.windows!;
+        expect(windows.images, hasLength(1));
+        expect(
+          windows.images.single.placement,
+          WindowsImagePlacement.appLogoOverride,
+        );
+        expect(windows.images.single.uri.scheme, 'file');
+        expect(
+          windows.images.single.uri.toFilePath(),
+          initSettings.windows!.iconPath,
+        );
+      });
+
+      test('logo 资产加载失败 → 回退空 images，通知照常发出', () async {
+        final brokenService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          windowsPlatformOverride: true,
+          assetLoader: (_) async => throw Exception('asset missing'),
+        );
+        await brokenService.notifyTurnCompleted('sess-w2', 't', 'p');
+
+        final details = verify(
+              () => plugin.show(
+                id: 1001,
+                title: 't',
+                body: 'p',
+                notificationDetails: captureAny(named: 'notificationDetails'),
+                payload: 'sess-w2',
+              ),
+            ).captured.single
+            as NotificationDetails;
+        expect(details.windows, isNotNull);
+        expect(details.windows!.images, isEmpty);
       });
     });
 
