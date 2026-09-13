@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/api/api_exception.dart';
@@ -134,12 +135,29 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
         child: CupertinoListSection.insetGrouped(
           dividerMargin: 0,
           additionalDividerMargin: 0,
-
+          decoration: CupertinoTheme.brightnessOf(context) == Brightness.dark
+              ? null
+              : BoxDecoration(
+                  color: LightSurfaces.card,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: LightSurfaces.cardBorder,
+                    width: 0.5,
+                  ),
+                ),
+          separatorColor:
+              CupertinoTheme.brightnessOf(context) == Brightness.dark
+              ? null
+              : LightSurfaces.divider,
           footer: Text(
             l10n.removeWorkspaceFooter,
             style: TextStyle(
               fontSize: 12,
-              color: secondaryText.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
             ),
           ),
           children: [
@@ -173,7 +191,11 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -192,6 +214,9 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             const SizedBox(height: 20),
             CupertinoButton.filled(
               key: const ValueKey('workspaces-retry'),
+              color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? LightSurfaces.userDetail
+                  : null,
               onPressed: () => unawaited(
                 ref.read(workspaceManagerControllerProvider.notifier).refresh(),
               ),
@@ -215,7 +240,11 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             Icon(
               CupertinoIcons.folder_badge_plus,
               size: 48,
-              color: CupertinoColors.systemGrey.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -228,7 +257,11 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -331,7 +364,12 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
                 Navigator.of(context).pop();
                 setState(() => _renameTarget = null);
               },
-              child: Text(l10n.cancel),
+              child: Text(
+                l10n.cancel,
+                style: CupertinoTheme.brightnessOf(context) == Brightness.light
+                    ? const TextStyle(color: LightSurfaces.menuAction)
+                    : null,
+              ),
             ),
             CupertinoDialogAction(
               key: const ValueKey('workspace-manager-rename-save'),
@@ -351,7 +389,12 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
                   );
                 }
               },
-              child: Text(l10n.save),
+              child: Text(
+                l10n.save,
+                style: CupertinoTheme.brightnessOf(context) == Brightness.light
+                    ? const TextStyle(color: LightSurfaces.menuAction)
+                    : null,
+              ),
             ),
           ],
         ),
@@ -375,7 +418,12 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
                 Navigator.of(context).pop();
                 setState(() => _pendingRemove = null);
               },
-              child: Text(l10n.cancel),
+              child: Text(
+                l10n.cancel,
+                style: CupertinoTheme.brightnessOf(context) == Brightness.light
+                    ? const TextStyle(color: LightSurfaces.menuAction)
+                    : null,
+              ),
             ),
             CupertinoDialogAction(
               key: const ValueKey('workspace-manager-remove-confirm'),
@@ -414,7 +462,12 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
           CupertinoDialogAction(
             key: const ValueKey('workspace-manager-dialog-ok'),
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.ok),
+            child: Text(
+              l10n.ok,
+              style: CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
           ),
         ],
       ),
@@ -545,7 +598,11 @@ class _WorkspaceRowState extends State<_WorkspaceRow> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
-                          color: secondaryText.resolveFrom(context),
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: secondaryText,
+                          ),
                         ),
                       ),
                     ],
@@ -568,7 +625,11 @@ class _WorkspaceRowState extends State<_WorkspaceRow> {
                   child: Icon(
                     CupertinoIcons.ellipsis,
                     size: 20,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.secondaryLabel,
+                    ),
                   ),
                 ),
               ),
@@ -584,6 +645,7 @@ class _WorkspaceRowState extends State<_WorkspaceRow> {
 class _FolderBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    // 文件夹灰底与图标颜色保持系统语义色解析（暗色测试精确断言 0x3D767680 与 0xFFFFFFFF）
     return Container(
       width: 30,
       height: 30,
@@ -606,12 +668,15 @@ class _CurrentBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemBlue
-            .resolveFrom(context)
-            .withValues(alpha: 0.15),
+        color: isDark
+            ? CupertinoColors.systemBlue
+                  .resolveFrom(context)
+                  .withValues(alpha: 0.15)
+            : LightSurfaces.selection,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(

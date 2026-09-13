@@ -4,12 +4,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/memory.dart';
 import '../../core/utils/accessibility.dart';
-import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
@@ -263,10 +264,28 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     MemoryResponse response,
     _MemoryTab tab,
   ) {
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final sectionBg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.page,
+      dark: CupertinoColors.systemGroupedBackground,
+    );
+    final sectionDecoration = isLight
+        ? BoxDecoration(
+            color: LightSurfaces.card,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+          )
+        : null;
+    final sectionSeparator = isLight ? LightSurfaces.divider : null;
+
     switch (tab) {
       case _MemoryTab.memory:
         final content = response.memory ?? '';
         return CupertinoListSection.insetGrouped(
+          backgroundColor: sectionBg,
+          separatorColor: sectionSeparator,
+          decoration: sectionDecoration,
           dividerMargin: 0,
           additionalDividerMargin: 0,
 
@@ -299,6 +318,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       case _MemoryTab.user:
         final content = response.user ?? '';
         return CupertinoListSection.insetGrouped(
+          backgroundColor: sectionBg,
+          separatorColor: sectionSeparator,
+          decoration: sectionDecoration,
           dividerMargin: 0,
           additionalDividerMargin: 0,
 
@@ -331,6 +353,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       case _MemoryTab.soul:
         final content = response.soul ?? '';
         return CupertinoListSection.insetGrouped(
+          backgroundColor: sectionBg,
+          separatorColor: sectionSeparator,
+          decoration: sectionDecoration,
           dividerMargin: 0,
           additionalDividerMargin: 0,
 
@@ -363,6 +388,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       case _MemoryTab.projectContext:
         final content = response.projectContext ?? '';
         return CupertinoListSection.insetGrouped(
+          backgroundColor: sectionBg,
+          separatorColor: sectionSeparator,
+          decoration: sectionDecoration,
           dividerMargin: 0,
           additionalDividerMargin: 0,
 
@@ -392,6 +420,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
 
   Widget _buildErrorSliver(BuildContext context, Object? error) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -399,10 +428,15 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                // 保留原未经解析的 systemGrey 绘制值（#8E8E93），防止高对比暗色下 resolve 变色
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -421,6 +455,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             const SizedBox(height: 20),
             CupertinoButton.filled(
               key: const ValueKey('memory-retry'),
+              color: isLight ? LightSurfaces.userDetail : null,
               onPressed: () => unawaited(
                 ref.read(memoryControllerProvider.notifier).refresh(),
               ),
@@ -441,17 +476,28 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.doc_text,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                // 保留原未经解析的 systemGrey 绘制值（#8E8E93），防止高对比暗色下 resolve 变色
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
             const SizedBox(height: 12),
             Text(l10n.noMemory, style: const TextStyle(fontSize: 17)),
             const SizedBox(height: 6),
             Text(
               l10n.noMemoryContentYet,
-              style: TextStyle(color: secondaryText.resolveFrom(context)),
+              style: TextStyle(
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
+              ),
             ),
           ],
         ),
@@ -514,7 +560,11 @@ class _MemorySectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final modified = formatMemoryMtime(mtime);
-    final metaColor = secondaryText.resolveFrom(context);
+    final metaColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
     final metaStyle = _metaStyle.copyWith(color: metaColor);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -603,6 +653,7 @@ class _MemorySectionEditBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     return _AdaptiveViewportScrollable(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -618,6 +669,22 @@ class _MemorySectionEditBody extends StatelessWidget {
             enabled: !isSaving,
             style: const TextStyle(fontSize: 15, height: 1.4),
             padding: const EdgeInsets.all(12),
+            decoration: isLight
+                ? BoxDecoration(
+                    color: LightSurfaces.card,
+                    border: Border.all(
+                      color: LightSurfaces.cardBorder,
+                      width: 0.5,
+                    ),
+                    borderRadius: BorderRadius.circular(5),
+                  )
+                : const CupertinoTextField().decoration,
+            placeholderStyle: isLight
+                ? const TextStyle(
+                    fontWeight: FontWeight.w400,
+                    color: LightSurfaces.placeholder,
+                  )
+                : const CupertinoTextField().placeholderStyle,
           ),
           if (error != null && error!.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -640,7 +707,12 @@ class _MemorySectionEditBody extends StatelessWidget {
                   vertical: 8,
                 ),
                 onPressed: isSaving ? null : onCancel,
-                child: Text(l10n.cancel),
+                child: Text(
+                  l10n.cancel,
+                  style: (isLight && !isSaving)
+                      ? const TextStyle(color: LightSurfaces.userDetail)
+                      : null,
+                ),
               ),
               const SizedBox(width: 8),
               CupertinoButton.filled(
@@ -649,6 +721,7 @@ class _MemorySectionEditBody extends StatelessWidget {
                   horizontal: 16,
                   vertical: 8,
                 ),
+                color: isLight ? LightSurfaces.userDetail : null,
                 onPressed: isSaving ? null : onSave,
                 child: isSaving
                     ? const CupertinoActivityIndicator(radius: 8)
@@ -678,7 +751,11 @@ class _MemorySectionBody extends StatelessWidget {
         style: TextStyle(
           fontSize: 15,
           fontStyle: FontStyle.italic,
-          color: secondaryText.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          ),
         ),
       );
     }
@@ -707,7 +784,11 @@ class _MemorySectionMarkdownBody extends StatelessWidget {
         style: TextStyle(
           fontSize: 15,
           fontStyle: FontStyle.italic,
-          color: secondaryText.resolveFrom(context),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          ),
         ),
       );
     }
@@ -747,6 +828,7 @@ class _AdaptiveViewportScrollable extends StatelessWidget {
 }
 
 /// Markdown 样式：以 Cupertino 主题为基底，显式配置正文语义色 label。
+/// 灰底 code/blockquote 承载面上 label 黑字已达标，装饰面不改。
 MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
   final theme = CupertinoTheme.of(context);
   final label = CupertinoColors.label.resolveFrom(context);
@@ -789,7 +871,11 @@ class _ProjectContextHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final modified = formatMemoryMtime(mtime);
-    final metaColor = secondaryText.resolveFrom(context);
+    final metaColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
     final metaStyle = _metaStyle.copyWith(color: metaColor);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -833,7 +919,11 @@ class _ProjectContextHeader extends StatelessWidget {
           Icon(
             CupertinoIcons.lock_fill,
             size: 13,
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: CupertinoColors.secondaryLabel,
+            ),
           ),
         ],
       ),
@@ -852,6 +942,11 @@ class _ProjectContextFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final footerColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -861,7 +956,7 @@ class _ProjectContextFooter extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w400,
-              color: secondaryText.resolveFrom(context),
+              color: footerColor,
             ),
           ),
         if (shadowed) ...[
@@ -871,7 +966,7 @@ class _ProjectContextFooter extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w400,
-              color: secondaryText.resolveFrom(context),
+              color: footerColor,
             ),
           ),
         ],

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/router.dart';
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import 'notification_providers.dart';
 
@@ -144,6 +145,7 @@ class _InAppNotificationBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final IconData icon;
     final Color iconColor;
     switch (item.type) {
@@ -161,10 +163,16 @@ class _InAppNotificationBanner extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+        color: LightSurfaces.resolve(
           context,
+          LightSurfaces.card,
+          dark: CupertinoColors.secondarySystemGroupedBackground,
         ),
         borderRadius: BorderRadius.circular(10),
+        border: isLight
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
+        // 装饰性阴影保留原样，无需为浅色添加额外阴影
         boxShadow: [
           BoxShadow(
             color: CupertinoColors.systemGrey.withValues(alpha: 0.25),
@@ -203,8 +211,10 @@ class _InAppNotificationBanner extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                        color: LightSurfaces.resolve(
                           context,
+                          LightSurfaces.textSecondary,
+                          dark: CupertinoColors.secondaryLabel,
                         ),
                       ),
                     ),
@@ -218,10 +228,12 @@ class _InAppNotificationBanner extends StatelessWidget {
               // ignore: deprecated_member_use
               minSize: 28,
               onPressed: onDismiss,
-              child: const Icon(
+              child: Icon(
                 CupertinoIcons.xmark_circle_fill,
                 size: 18,
-                color: CupertinoColors.systemGrey,
+                color: isLight
+                    ? LightSurfaces.textSecondary
+                    : const Color(0xFF8E8E93),
               ),
             ),
           ],

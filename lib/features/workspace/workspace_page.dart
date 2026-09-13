@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/shell/android_back_interceptor.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
@@ -198,8 +199,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             onRoot: () =>
                 unawaited(ref.read(provider.notifier).navigateToRoot()),
             onUp: () => unawaited(ref.read(provider.notifier).navigateUp()),
-            onDownloadFolder: () =>
-                unawaited(ref.read(provider.notifier).downloadFolder(context: context)),
+            onDownloadFolder: () => unawaited(
+              ref.read(provider.notifier).downloadFolder(context: context),
+            ),
             onRetry: () =>
                 unawaited(ref.read(provider.notifier).retryLastLoad()),
             onCrumbTap: (crumb) =>
@@ -240,7 +242,20 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         child: CupertinoListSection.insetGrouped(
           dividerMargin: 0,
           additionalDividerMargin: 0,
-
+          decoration: CupertinoTheme.brightnessOf(context) == Brightness.dark
+              ? null
+              : BoxDecoration(
+                  color: LightSurfaces.card,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: LightSurfaces.cardBorder,
+                    width: 0.5,
+                  ),
+                ),
+          separatorColor:
+              CupertinoTheme.brightnessOf(context) == Brightness.dark
+              ? null
+              : LightSurfaces.divider,
           children: [
             for (final entry in state.entries)
               _WorkspaceEntryRow(
@@ -269,7 +284,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -288,6 +307,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             const SizedBox(height: 20),
             CupertinoButton.filled(
               key: const ValueKey('workspace-retry'),
+              color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? LightSurfaces.userDetail
+                  : null,
               onPressed: () => unawaited(
                 ref
                     .read(
@@ -315,7 +337,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             Icon(
               CupertinoIcons.folder_open,
               size: 48,
-              color: CupertinoColors.systemGrey.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
             ),
             const SizedBox(height: 12),
             Text(l10n.noFiles, style: const TextStyle(fontSize: 17)),
@@ -325,7 +351,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -611,6 +641,7 @@ class _PathHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final isAtRoot = crumbs.length == 1;
     return SliverToBoxAdapter(
       child: Column(
@@ -625,7 +656,11 @@ class _PathHeader extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: secondaryText.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: secondaryText,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -657,9 +692,27 @@ class _PathHeader extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(CupertinoIcons.house, size: 14),
+                      Icon(
+                        CupertinoIcons.house,
+                        size: 14,
+                        color: isDark
+                            ? null
+                            : (isAtRoot
+                                  ? LightSurfaces.textSecondary
+                                  : LightSurfaces.userDetail),
+                      ),
                       const SizedBox(width: 4),
-                      Text(l10n.rootDir, style: const TextStyle(fontSize: 13)),
+                      Text(
+                        l10n.rootDir,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark
+                              ? null
+                              : (isAtRoot
+                                    ? LightSurfaces.textSecondary
+                                    : LightSurfaces.userDetail),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -677,11 +730,26 @@ class _PathHeader extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(CupertinoIcons.arrow_up, size: 14),
+                      Icon(
+                        CupertinoIcons.arrow_up,
+                        size: 14,
+                        color: isDark
+                            ? null
+                            : (isAtRoot
+                                  ? LightSurfaces.textSecondary
+                                  : LightSurfaces.userDetail),
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         l10n.parentDir,
-                        style: const TextStyle(fontSize: 13),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark
+                              ? null
+                              : (isAtRoot
+                                    ? LightSurfaces.textSecondary
+                                    : LightSurfaces.userDetail),
+                        ),
                       ),
                     ],
                   ),
@@ -715,8 +783,11 @@ class _PathHeader extends StatelessWidget {
                               child: Icon(
                                 CupertinoIcons.chevron_right,
                                 size: 10,
-                                color: CupertinoColors.tertiaryLabel
-                                    .resolveFrom(context),
+                                color: LightSurfaces.resolve(
+                                  context,
+                                  LightSurfaces.textSecondary,
+                                  dark: CupertinoColors.tertiaryLabel,
+                                ),
                               ),
                             ),
                           CupertinoButton(
@@ -732,7 +803,14 @@ class _PathHeader extends StatelessWidget {
                                 : () => onCrumbTap(crumbs[i]),
                             child: Text(
                               crumbs[i].title,
-                              style: const TextStyle(fontSize: 13),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark
+                                    ? null
+                                    : (crumbs[i].path == crumbs.last.path
+                                          ? LightSurfaces.textSecondary
+                                          : LightSurfaces.userDetail),
+                              ),
                             ),
                           ),
                         ],
@@ -755,7 +833,11 @@ class _PathHeader extends StatelessWidget {
                     l10n.loadingIndicator,
                     style: TextStyle(
                       fontSize: 13,
-                      color: secondaryText.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: secondaryText,
+                      ),
                     ),
                   ),
                 ],
@@ -779,7 +861,11 @@ class _PathHeader extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: secondaryText.resolveFrom(context),
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: secondaryText,
+                        ),
                       ),
                     ),
                   ),
@@ -789,7 +875,10 @@ class _PathHeader extends StatelessWidget {
                     onPressed: onRetry,
                     child: Text(
                       l10n.retry,
-                      style: const TextStyle(fontSize: 12),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? null : LightSurfaces.userDetail,
+                      ),
                     ),
                   ),
                 ],
@@ -865,7 +954,11 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: secondaryText.resolveFrom(context),
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: secondaryText,
+                        ),
                       ),
                     ),
                   ],
@@ -879,7 +972,11 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
               Icon(
                 CupertinoIcons.chevron_right,
                 size: 14,
-                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.tertiaryLabel,
+                ),
               )
             else
               KeyedSubtree(
@@ -894,7 +991,11 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
                   child: Icon(
                     CupertinoIcons.ellipsis,
                     size: 20,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.secondaryLabel,
+                    ),
                   ),
                 ),
               ),
@@ -914,10 +1015,15 @@ class _EntryIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, color) = _iconFor(entry);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final resolvedIconColor = isDark
+        ? color.resolveFrom(context)
+        : _resolveLightIconColor(context, color);
     return Container(
       width: 30,
       height: 30,
       decoration: BoxDecoration(
+        // 图标灰底属于配套装饰，保留系统 fill 并逐字节保留暗色解析
         color:
             (entry.isBrowsableDirectory
                     ? CupertinoColors.tertiarySystemFill
@@ -925,8 +1031,24 @@ class _EntryIcon extends StatelessWidget {
                 .resolveFrom(context),
         borderRadius: BorderRadius.circular(7),
       ),
-      child: Icon(icon, size: 16, color: color.resolveFrom(context)),
+      child: Icon(icon, size: 16, color: resolvedIconColor),
     );
+  }
+
+  static Color _resolveLightIconColor(
+    BuildContext context,
+    CupertinoDynamicColor color,
+  ) {
+    if (color == CupertinoColors.secondaryLabel) {
+      return LightSurfaces.textSecondary;
+    }
+    if (color == CupertinoColors.systemGreen) {
+      return statusGreenText.resolveFrom(context);
+    }
+    if (color == CupertinoColors.systemTeal) {
+      return statusTealText.resolveFrom(context);
+    }
+    return color.resolveFrom(context);
   }
 
   static (IconData, CupertinoDynamicColor) _iconFor(WorkspaceEntry entry) {

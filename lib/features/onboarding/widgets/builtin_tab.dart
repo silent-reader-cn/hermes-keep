@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
@@ -14,6 +15,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../desktop/desktop_settings.dart';
 import '../../webui_sidecar/webui_sidecar_providers.dart';
 import '../onboarding_providers.dart';
+import 'onboarding_field_style.dart';
 
 /// 内置服务 Tab（Windows 打包版形态 A 默认选中）。
 ///
@@ -132,31 +134,35 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
 
     final completer = Completer<void>();
 
-    unawaited(startFuture.then((_) {
-      final s = ref.read(webuiSidecarControllerProvider);
-      if (s.status == SidecarStatus.running) {
+    unawaited(
+      startFuture
+          .then((_) {
+            final s = ref.read(webuiSidecarControllerProvider);
+            if (s.status == SidecarStatus.running) {
+              if (!completer.isCompleted) completer.complete();
+            } else if (s.status == SidecarStatus.failed) {
+              if (!completer.isCompleted) {
+                completer.completeError(StateError(_mapFailureReason(s)));
+              }
+            }
+          })
+          .catchError((e) {
+            if (!completer.isCompleted) completer.completeError(e);
+          }),
+    );
+
+    final sub = ref.listenManual<SidecarState>(webuiSidecarControllerProvider, (
+      prev,
+      next,
+    ) {
+      if (next.status == SidecarStatus.running) {
         if (!completer.isCompleted) completer.complete();
-      } else if (s.status == SidecarStatus.failed) {
+      } else if (next.status == SidecarStatus.failed) {
         if (!completer.isCompleted) {
-          completer.completeError(StateError(_mapFailureReason(s)));
+          completer.completeError(StateError(_mapFailureReason(next)));
         }
       }
-    }).catchError((e) {
-      if (!completer.isCompleted) completer.completeError(e);
-    }));
-
-    final sub = ref.listenManual<SidecarState>(
-      webuiSidecarControllerProvider,
-      (prev, next) {
-        if (next.status == SidecarStatus.running) {
-          if (!completer.isCompleted) completer.complete();
-        } else if (next.status == SidecarStatus.failed) {
-          if (!completer.isCompleted) {
-            completer.completeError(StateError(_mapFailureReason(next)));
-          }
-        }
-      },
-    );
+    });
 
     final timer = Timer(const Duration(seconds: 30), () {
       if (!completer.isCompleted) {
@@ -189,8 +195,9 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
       await ref.read(webuiSidecarConfigProvider.notifier).setEnabled(true);
 
       // 2. controller.start()
-      final startFuture =
-          ref.read(webuiSidecarControllerProvider.notifier).start();
+      final startFuture = ref
+          .read(webuiSidecarControllerProvider.notifier)
+          .start();
 
       // 等待 running 状态（超时 30s 失败态）
       await _waitForRunning(startFuture);
@@ -271,7 +278,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     final addr = InternetAddress.tryParse(trimmed);
     if (addr == null || addr.type != InternetAddressType.IPv4) {
       setState(
-          () => _hostError = AppLocalizations.of(context).webuiInvalidHost);
+        () => _hostError = AppLocalizations.of(context).webuiInvalidHost,
+      );
       return;
     }
     setState(() => _hostError = null);
@@ -286,7 +294,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     final port = int.tryParse(trimmed);
     if (port == null || port < 1 || port > 65535) {
       setState(
-          () => _portError = AppLocalizations.of(context).webuiInvalidPort);
+        () => _portError = AppLocalizations.of(context).webuiInvalidPort,
+      );
       return;
     }
     setState(() => _portError = null);
@@ -299,8 +308,9 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
   void _submitPassword(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
-      setState(() =>
-          _passwordError = AppLocalizations.of(context).webuiPasswordEmpty);
+      setState(
+        () => _passwordError = AppLocalizations.of(context).webuiPasswordEmpty,
+      );
       return;
     }
     setState(() {
@@ -309,7 +319,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     final current = ref.read(webuiSidecarConfigProvider).password;
     if (trimmed != current) {
       unawaited(
-          ref.read(webuiSidecarConfigProvider.notifier).setPassword(trimmed));
+        ref.read(webuiSidecarConfigProvider.notifier).setPassword(trimmed),
+      );
     }
   }
 
@@ -329,18 +340,19 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           _portController.text != next.port.toString()) {
         _portController.text = next.port.toString();
       }
-      if (!_passwordFocusNode.hasFocus && _passwordController.text != next.password) {
+      if (!_passwordFocusNode.hasFocus &&
+          _passwordController.text != next.password) {
         _passwordController.text = next.password;
       }
     });
 
-    final isBuiltinActiveAndRunning = activeConn != null &&
+    final isBuiltinActiveAndRunning =
+        activeConn != null &&
         activeConn.id == ServerConnection.builtinId &&
         activeConn.kind == ConnectionKind.builtin &&
         sidecarState.status == SidecarStatus.running;
 
-    final isAgentInstalled =
-        ref.watch(agentEnvPresentProvider).value ?? false;
+    final isAgentInstalled = ref.watch(agentEnvPresentProvider).value ?? false;
 
     return ListView(
       shrinkWrap: true,
@@ -359,15 +371,15 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           l10n.onboardingBuiltinSubtitle,
           style: TextStyle(
             fontSize: 14,
-            color: secondaryText.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
           ),
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            _buildStatusCapsule(l10n, sidecarState, sidecarConfig),
-          ],
-        ),
+        Row(children: [_buildStatusCapsule(l10n, sidecarState, sidecarConfig)]),
         if (sidecarState.status == SidecarStatus.failed ||
             _errorMessage != null) ...[
           const SizedBox(height: 12),
@@ -395,14 +407,22 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
       key: const ValueKey('onboarding-missing-agent-card'),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemOrange
-            .resolveFrom(context)
-            .withValues(alpha: 0.12),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintWarning,
+          dark: CupertinoColors.systemOrange
+              .resolveFrom(context)
+              .withValues(alpha: 0.12),
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: CupertinoColors.systemOrange
-              .resolveFrom(context)
-              .withValues(alpha: 0.35),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: CupertinoColors.systemOrange
+                .resolveFrom(context)
+                .withValues(alpha: 0.35),
+          ),
           width: 0.8,
         ),
       ),
@@ -434,7 +454,11 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
             l10n.agentGateNotDetectedDesc,
             style: TextStyle(
               fontSize: 13,
-              color: secondaryText.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -443,8 +467,15 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
               Expanded(
                 child: CupertinoButton(
                   key: const ValueKey('onboarding-install-agent-btn'),
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                  color: CupertinoColors.activeOrange,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 8,
+                  ),
+                  color: LightSurfaces.resolve(
+                    context,
+                    statusOrangeText.resolveFrom(context),
+                    dark: CupertinoColors.activeOrange,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                   onPressed: () => unawaited(_openInstallGuide()),
                   child: FittedBox(
@@ -464,8 +495,15 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
               Expanded(
                 child: CupertinoButton(
                   key: const ValueKey('onboarding-recheck-agent-btn'),
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                  color: CupertinoColors.systemGrey5.resolveFrom(context),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 8,
+                  ),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.pressed,
+                    dark: CupertinoColors.systemGrey5,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                   onPressed: () => unawaited(_recheckAgent()),
                   child: FittedBox(
@@ -494,7 +532,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     SidecarState sidecarState,
     SidecarConfig config,
   ) {
-    final isRestarting = sidecarState.detail != null &&
+    final isRestarting =
+        sidecarState.detail != null &&
         sidecarState.detail!.toLowerCase().contains('restarting');
 
     final String text;
@@ -504,39 +543,60 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     if (isRestarting) {
       text = '◐ ${l10n.onboardingRestarting}';
       textColor = statusOrangeText.resolveFrom(context);
-      bgColor = CupertinoColors.systemOrange
-          .resolveFrom(context)
-          .withValues(alpha: 0.12);
+      bgColor = LightSurfaces.resolve(
+        context,
+        LightSurfaces.tintWarning,
+        dark: CupertinoColors.systemOrange
+            .resolveFrom(context)
+            .withValues(alpha: 0.12),
+      );
     } else {
       switch (sidecarState.status) {
         case SidecarStatus.running:
-          final effectiveHost = (config.host == '0.0.0.0' || config.host.isEmpty)
+          final effectiveHost =
+              (config.host == '0.0.0.0' || config.host.isEmpty)
               ? '127.0.0.1'
               : config.host;
           text =
               '● ${l10n.onboardingBuiltinRunning} $effectiveHost:${config.port}';
           textColor = statusGreenText.resolveFrom(context);
-          bgColor = CupertinoColors.systemGreen
-              .resolveFrom(context)
-              .withValues(alpha: 0.12);
+          bgColor = LightSurfaces.resolve(
+            context,
+            LightSurfaces.tintGreen,
+            dark: CupertinoColors.systemGreen
+                .resolveFrom(context)
+                .withValues(alpha: 0.12),
+          );
         case SidecarStatus.starting:
           text = '◐ ${l10n.onboardingStarting}';
           textColor = statusBlueText.resolveFrom(context);
-          bgColor = CupertinoColors.systemBlue
-              .resolveFrom(context)
-              .withValues(alpha: 0.12);
+          bgColor = LightSurfaces.resolve(
+            context,
+            LightSurfaces.selection,
+            dark: CupertinoColors.systemBlue
+                .resolveFrom(context)
+                .withValues(alpha: 0.12),
+          );
         case SidecarStatus.failed:
           text = '● ${l10n.webuiStatusFailed}';
           textColor = statusRedText.resolveFrom(context);
-          bgColor = CupertinoColors.systemRed
-              .resolveFrom(context)
-              .withValues(alpha: 0.12);
+          bgColor = LightSurfaces.resolve(
+            context,
+            LightSurfaces.tintError,
+            dark: CupertinoColors.systemRed
+                .resolveFrom(context)
+                .withValues(alpha: 0.12),
+          );
         case SidecarStatus.stopped:
           text = '○ ${l10n.onboardingBuiltinNotStarted}';
           textColor = statusGreyText.resolveFrom(context);
-          bgColor = CupertinoColors.systemGrey
-              .resolveFrom(context)
-              .withValues(alpha: 0.12);
+          bgColor = LightSurfaces.resolve(
+            context,
+            LightSurfaces.page,
+            dark: CupertinoColors.systemGrey
+                .resolveFrom(context)
+                .withValues(alpha: 0.12),
+          );
       }
     }
 
@@ -547,7 +607,11 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
         color: bgColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: textColor.withValues(alpha: 0.3),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: textColor.withValues(alpha: 0.3),
+          ),
           width: 0.5,
         ),
       ),
@@ -573,10 +637,18 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: statusRedText.resolveFrom(context).withValues(alpha: 0.08),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintError,
+          dark: statusRedText.resolveFrom(context).withValues(alpha: 0.08),
+        ),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: statusRedText.resolveFrom(context).withValues(alpha: 0.25),
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.cardBorder,
+            dark: statusRedText.resolveFrom(context).withValues(alpha: 0.25),
+          ),
           width: 0.5,
         ),
       ),
@@ -623,13 +695,17 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
   ) {
     if (isBuiltinActiveAndRunning) {
       return CupertinoButton.filled(
+        color: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? LightSurfaces.userDetail
+            : null,
         key: const ValueKey('onboarding-builtin-action-btn'),
         onPressed: () => unawaited(_enterSessionList()),
         child: Text(l10n.onboardingEnterSessionList),
       );
     }
 
-    final isBusy = _isStartingAndConnecting ||
+    final isBusy =
+        _isStartingAndConnecting ||
         sidecarState.status == SidecarStatus.starting;
 
     final String buttonText;
@@ -642,17 +718,23 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     final canPress = !isBusy && isAgentInstalled;
 
     return CupertinoButton.filled(
+      color: CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? LightSurfaces.userDetail
+          : null,
       key: const ValueKey('onboarding-builtin-action-btn'),
       onPressed: canPress ? () => unawaited(_startAndConnect()) : null,
       child: isBusy
-          ? const CupertinoActivityIndicator()
+          ? CupertinoActivityIndicator(
+              color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                  ? LightSurfaces.textSecondary
+                  : null,
+            )
           : Text(buttonText),
     );
   }
 
   /// 高级设置折叠
-  Widget _buildAdvancedDisclosure(
-      BuildContext context, AppLocalizations l10n) {
+  Widget _buildAdvancedDisclosure(BuildContext context, AppLocalizations l10n) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -673,7 +755,11 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: secondaryText.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: secondaryText,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -682,7 +768,11 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                       ? CupertinoIcons.chevron_down
                       : CupertinoIcons.chevron_right,
                   size: 14,
-                  color: secondaryText.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
                 ),
               ],
             ),
@@ -701,6 +791,18 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
     final sidecarConfig = ref.watch(webuiSidecarConfigProvider);
 
     return CupertinoListSection.insetGrouped(
+      decoration: CupertinoTheme.brightnessOf(context) == Brightness.light
+          ? BoxDecoration(
+              color: LightSurfaces.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+            )
+          : null,
+      separatorColor: LightSurfaces.resolve(
+        context,
+        LightSurfaces.divider,
+        dark: CupertinoColors.separator,
+      ),
       margin: const EdgeInsets.only(top: 8),
       dividerMargin: 0,
       additionalDividerMargin: 0,
@@ -720,6 +822,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           trailing: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 180),
             child: CupertinoTextField(
+              decoration: OnboardingFieldStyle.decoration(context),
+              placeholderStyle: OnboardingFieldStyle.placeholder(context),
               key: const ValueKey('onboarding-sidecar-port-input'),
               controller: _portController,
               focusNode: _portFocusNode,
@@ -733,9 +837,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                   setState(() => _portError = null);
                   if (p != ref.read(webuiSidecarConfigProvider).port) {
                     unawaited(
-                      ref
-                          .read(webuiSidecarConfigProvider.notifier)
-                          .setPort(p),
+                      ref.read(webuiSidecarConfigProvider.notifier).setPort(p),
                     );
                   }
                 }
@@ -760,6 +862,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           trailing: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 180),
             child: CupertinoTextField(
+              decoration: OnboardingFieldStyle.decoration(context),
+              placeholderStyle: OnboardingFieldStyle.placeholder(context),
               key: const ValueKey('onboarding-sidecar-host-input'),
               controller: _hostController,
               focusNode: _hostFocusNode,
@@ -794,7 +898,11 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           subtitle: Text(
             l10n.onboardingStartOnLoginSubtitle,
             style: TextStyle(
-              color: secondaryText.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
               fontSize: 12,
             ),
           ),
@@ -836,6 +944,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
       trailing: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 180),
         child: CupertinoTextField(
+          decoration: OnboardingFieldStyle.decoration(context),
+          placeholderStyle: OnboardingFieldStyle.placeholder(context),
           key: const ValueKey('onboarding-sidecar-password-input'),
           controller: _passwordController,
           focusNode: _passwordFocusNode,
@@ -844,20 +954,20 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           placeholder: l10n.webuiPasswordPlaceholder,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           suffix: CupertinoButton(
-            key: const ValueKey(
-              'onboarding-sidecar-password-visibility-btn',
-            ),
+            key: const ValueKey('onboarding-sidecar-password-visibility-btn'),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             minimumSize: const Size(0, 28),
             onPressed: () {
               setState(() => _passwordObscured = !_passwordObscured);
             },
             child: Icon(
-              _passwordObscured
-                  ? CupertinoIcons.eye
-                  : CupertinoIcons.eye_slash,
+              _passwordObscured ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
               size: 18,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.secondaryLabel,
+              ),
             ),
           ),
           onChanged: (_) {

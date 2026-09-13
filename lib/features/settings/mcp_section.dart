@@ -4,12 +4,14 @@ import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_page_route.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/mcp.dart';
 import '../../l10n/app_localizations.dart';
 import 'settings_providers.dart';
-import '../../app/widgets/hermes_page_route.dart';
+import 'settings_surfaces.dart';
 
 /// MCP 服务器管理分组（`_McpSection`，key: `settings-mcp-section`）。
 ///
@@ -23,51 +25,57 @@ class McpSection extends ConsumerWidget {
     final mcpAsync = ref.watch(mcpControllerProvider);
 
     return mcpAsync.when(
-      loading: () => CupertinoListSection(
-        key: const ValueKey('settings-mcp-section'),
-        header: Text(l10n.mcpSection),
-        children: [
-          CupertinoListTile(
-            title: Text(l10n.loadingMcpServers),
-            trailing: const CupertinoActivityIndicator(),
-          ),
-        ],
-      ),
-      error: (error, _) => CupertinoListSection(
-        key: const ValueKey('settings-mcp-section'),
-        header: Text(l10n.mcpSection),
-        children: [
-          CupertinoListTile(
-            title: Text(l10n.mcpServersLoadFailed),
-            subtitle: Text(_describeError(context, error)),
-          ),
-          CupertinoListTile(
-            key: const ValueKey('settings-mcp-retry'),
-            title: Text(l10n.retry),
-            trailing: const Icon(CupertinoIcons.refresh),
-            onTap: () => unawaited(
-              ref.read(mcpControllerProvider.notifier).refresh(),
-            ),
-          ),
-        ],
-      ),
-      data: (state) => CupertinoListSection(
-        key: const ValueKey('settings-mcp-section'),
-        header: Text(l10n.mcpSection),
-        children: [
-          if (state.servers.isEmpty)
+      loading: () => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          key: const ValueKey('settings-mcp-section'),
+          header: Text(l10n.mcpSection),
+          children: [
             CupertinoListTile(
-              title: Text(l10n.noMcpServers),
+              title: Text(l10n.loadingMcpServers),
+              trailing: const CupertinoActivityIndicator(),
             ),
-          for (final server in state.servers)
-            _buildServerRow(context, ref, server, state.tools),
-          CupertinoListTile(
-            key: const ValueKey('settings-mcp-add'),
-            leading: const Icon(CupertinoIcons.add_circled),
-            title: Text(l10n.addMcpServer),
-            onTap: () => unawaited(_openServerEditor(context, ref)),
-          ),
-        ],
+          ],
+        ),
+      ),
+      error: (error, _) => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          key: const ValueKey('settings-mcp-section'),
+          header: Text(l10n.mcpSection),
+          children: [
+            CupertinoListTile(
+              title: Text(l10n.mcpServersLoadFailed),
+              subtitle: Text(_describeError(context, error)),
+            ),
+            CupertinoListTile(
+              key: const ValueKey('settings-mcp-retry'),
+              title: Text(l10n.retry),
+              trailing: const Icon(CupertinoIcons.refresh),
+              onTap: () =>
+                  unawaited(ref.read(mcpControllerProvider.notifier).refresh()),
+            ),
+          ],
+        ),
+      ),
+      data: (state) => SettingsSurfaces.section(
+        context,
+        CupertinoListSection(
+          key: const ValueKey('settings-mcp-section'),
+          header: Text(l10n.mcpSection),
+          children: [
+            if (state.servers.isEmpty)
+              CupertinoListTile(title: Text(l10n.noMcpServers)),
+            for (final server in state.servers)
+              _buildServerRow(context, ref, server, state.tools),
+            CupertinoListTile(
+              key: const ValueKey('settings-mcp-add'),
+              leading: const Icon(CupertinoIcons.add_circled),
+              title: Text(l10n.addMcpServer),
+              onTap: () => unawaited(_openServerEditor(context, ref)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -83,8 +91,8 @@ class McpSection extends ConsumerWidget {
     final statusText = isConnected
         ? l10n.mcpStatusConnected
         : (server.status.isNotEmpty
-            ? server.status
-            : l10n.mcpStatusDisconnected);
+              ? server.status
+              : l10n.mcpStatusDisconnected);
     final cmdSummary = server.args.isNotEmpty
         ? '${server.command} ${server.args.join(' ')}'
         : server.command;
@@ -95,20 +103,24 @@ class McpSection extends ConsumerWidget {
       subtitle: Text(
         '$cmdSummary · $statusText',
         style: TextStyle(
-          color: (isConnected ? statusGreenText : statusGreyText)
-              .resolveFrom(context),
+          color: (isConnected ? statusGreenText : statusGreyText).resolveFrom(
+            context,
+          ),
         ),
       ),
-      trailing: CupertinoSwitch(
-        key: ValueKey('mcp-toggle-${server.name}'),
-        value: server.enabled,
-        onChanged: (value) {
-          unawaited(
-            ref
-                .read(mcpControllerProvider.notifier)
-                .toggleServer(server.name, value),
-          );
-        },
+      trailing: SettingsSurfaces.toggle(
+        context,
+        CupertinoSwitch(
+          key: ValueKey('mcp-toggle-${server.name}'),
+          value: server.enabled,
+          onChanged: (value) {
+            unawaited(
+              ref
+                  .read(mcpControllerProvider.notifier)
+                  .toggleServer(server.name, value),
+            );
+          },
+        ),
       ),
       onTap: () => unawaited(_showServerMenu(context, ref, server, tools)),
     );
@@ -125,41 +137,42 @@ class McpSection extends ConsumerWidget {
 
     return showCupertinoModalPopup<void>(
       context: context,
-      builder: (modalContext) => CupertinoActionSheet(
-        title: Text(server.name),
-        message: Text(server.command),
-        actions: [
-          CupertinoActionSheetAction(
-            key: ValueKey('mcp-tools-${server.name}'),
-            onPressed: () {
-              Navigator.of(modalContext).pop();
-              unawaited(_openToolsPage(context, server, serverTools));
-            },
-            child: Text(
-              '${l10n.mcpTools} (${serverTools.length})',
+      builder: (modalContext) => SettingsSurfaces.sheet(
+        context,
+        CupertinoActionSheet(
+          title: Text(server.name),
+          message: Text(server.command),
+          actions: [
+            CupertinoActionSheetAction(
+              key: ValueKey('mcp-tools-${server.name}'),
+              onPressed: () {
+                Navigator.of(modalContext).pop();
+                unawaited(_openToolsPage(context, server, serverTools));
+              },
+              child: Text('${l10n.mcpTools} (${serverTools.length})'),
             ),
+            CupertinoActionSheetAction(
+              key: ValueKey('mcp-edit-${server.name}'),
+              onPressed: () {
+                Navigator.of(modalContext).pop();
+                unawaited(_openServerEditor(context, ref, server: server));
+              },
+              child: Text(l10n.editMcpServer),
+            ),
+            CupertinoActionSheetAction(
+              key: ValueKey('mcp-delete-${server.name}'),
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.of(modalContext).pop();
+                unawaited(_confirmDelete(context, ref, server));
+              },
+              child: Text(l10n.deleteMcpServer),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(modalContext).pop(),
+            child: Text(l10n.cancel),
           ),
-          CupertinoActionSheetAction(
-            key: ValueKey('mcp-edit-${server.name}'),
-            onPressed: () {
-              Navigator.of(modalContext).pop();
-              unawaited(_openServerEditor(context, ref, server: server));
-            },
-            child: Text(l10n.editMcpServer),
-          ),
-          CupertinoActionSheetAction(
-            key: ValueKey('mcp-delete-${server.name}'),
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(modalContext).pop();
-              unawaited(_confirmDelete(context, ref, server));
-            },
-            child: Text(l10n.deleteMcpServer),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(modalContext).pop(),
-          child: Text(l10n.cancel),
         ),
       ),
     );
@@ -174,28 +187,31 @@ class McpSection extends ConsumerWidget {
 
     return showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.deleteMcpServer),
-        content: Text(l10n.confirmDeleteMcpServer(server.name)),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            key: const ValueKey('mcp-delete-confirm'),
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              unawaited(
-                ref
-                    .read(mcpControllerProvider.notifier)
-                    .deleteServer(server.name),
-              );
-            },
-            child: Text(l10n.delete),
-          ),
-        ],
+      builder: (dialogContext) => SettingsSurfaces.dialog(
+        context,
+        CupertinoAlertDialog(
+          title: Text(l10n.deleteMcpServer),
+          content: Text(l10n.confirmDeleteMcpServer(server.name)),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.cancel),
+            ),
+            CupertinoDialogAction(
+              key: const ValueKey('mcp-delete-confirm'),
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(
+                  ref
+                      .read(mcpControllerProvider.notifier)
+                      .deleteServer(server.name),
+                );
+              },
+              child: Text(l10n.delete),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -319,7 +335,9 @@ class _McpServerEditorPageState extends ConsumerState<McpServerEditorPage> {
     }
 
     setState(() => _saving = true);
-    final ok = await ref.read(mcpControllerProvider.notifier).saveServer(
+    final ok = await ref
+        .read(mcpControllerProvider.notifier)
+        .saveServer(
           name,
           command: command,
           args: args,
@@ -331,8 +349,10 @@ class _McpServerEditorPageState extends ConsumerState<McpServerEditorPage> {
     if (ok) {
       Navigator.of(context).pop();
     } else {
-      final actionError =
-          ref.read(mcpControllerProvider).valueOrNull?.actionError;
+      final actionError = ref
+          .read(mcpControllerProvider)
+          .valueOrNull
+          ?.actionError;
       setState(() {
         _saving = false;
         _error = actionError ?? 'Failed to save MCP server';
@@ -345,77 +365,101 @@ class _McpServerEditorPageState extends ConsumerState<McpServerEditorPage> {
     final l10n = AppLocalizations.of(context);
     final isEditing = widget.server != null;
 
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const _PopBackButton(),
-        middle: Text(isEditing ? l10n.editMcpServer : l10n.addMcpServer),
-        trailing: CupertinoButton(
-          key: const ValueKey('mcp-editor-save'),
-          padding: EdgeInsets.zero,
-          onPressed: _saving ? null : () => unawaited(_save()),
-          child: Text(l10n.save),
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const _PopBackButton(),
+          middle: Text(isEditing ? l10n.editMcpServer : l10n.addMcpServer),
+          trailing: CupertinoButton(
+            foregroundColor: SettingsSurfaces.actionColor(
+              context,
+              disabled: _saving,
+            ),
+            pressedOpacity: SettingsSurfaces.pressedOpacity(context),
+            key: const ValueKey('mcp-editor-save'),
+            padding: EdgeInsets.zero,
+            onPressed: _saving ? null : () => unawaited(_save()),
+            child: Text(l10n.save),
+          ),
         ),
-      ),
-      child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            CupertinoTextField(
-              key: const ValueKey('mcp-editor-name'),
-              controller: _nameController,
-              placeholder: l10n.mcpServerName,
-              readOnly: isEditing,
-              autocorrect: false,
-              padding: const EdgeInsets.all(12),
-            ),
-            const SizedBox(height: 12),
-            CupertinoTextField(
-              key: const ValueKey('mcp-editor-command'),
-              controller: _commandController,
-              placeholder: l10n.mcpCommand,
-              autocorrect: false,
-              padding: const EdgeInsets.all(12),
-            ),
-            const SizedBox(height: 12),
-            CupertinoTextField(
-              key: const ValueKey('mcp-editor-args'),
-              controller: _argsController,
-              placeholder: l10n.mcpArgsPlaceholder,
-              autocorrect: false,
-              maxLines: 3,
-              padding: const EdgeInsets.all(12),
-            ),
-            const SizedBox(height: 12),
-            CupertinoTextField(
-              key: const ValueKey('mcp-editor-env'),
-              controller: _envController,
-              placeholder: l10n.mcpEnv,
-              autocorrect: false,
-              maxLines: 3,
-              padding: const EdgeInsets.all(12),
-            ),
-            const SizedBox(height: 12),
-            CupertinoListSection(
-              children: [
-                CupertinoListTile(
-                  title: Text(l10n.mcpServerEnabled),
-                  trailing: CupertinoSwitch(
-                    key: const ValueKey('mcp-editor-enabled'),
-                    value: _enabled,
-                    onChanged: (value) => setState(() => _enabled = value),
-                  ),
-                ),
-              ],
-            ),
-            if (_error.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _error,
-                  style: TextStyle(color: statusRedText.resolveFrom(context)),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              CupertinoTextField(
+                decoration: SettingsSurfaces.fieldDecoration(context),
+                placeholderStyle: SettingsSurfaces.placeholderStyle(context),
+                key: const ValueKey('mcp-editor-name'),
+                controller: _nameController,
+                placeholder: l10n.mcpServerName,
+                readOnly: isEditing,
+                autocorrect: false,
+                padding: const EdgeInsets.all(12),
+              ),
+              const SizedBox(height: 12),
+              CupertinoTextField(
+                decoration: SettingsSurfaces.fieldDecoration(context),
+                placeholderStyle: SettingsSurfaces.placeholderStyle(context),
+                key: const ValueKey('mcp-editor-command'),
+                controller: _commandController,
+                placeholder: l10n.mcpCommand,
+                autocorrect: false,
+                padding: const EdgeInsets.all(12),
+              ),
+              const SizedBox(height: 12),
+              CupertinoTextField(
+                decoration: SettingsSurfaces.fieldDecoration(context),
+                placeholderStyle: SettingsSurfaces.placeholderStyle(context),
+                key: const ValueKey('mcp-editor-args'),
+                controller: _argsController,
+                placeholder: l10n.mcpArgsPlaceholder,
+                autocorrect: false,
+                maxLines: 3,
+                padding: const EdgeInsets.all(12),
+              ),
+              const SizedBox(height: 12),
+              CupertinoTextField(
+                decoration: SettingsSurfaces.fieldDecoration(context),
+                placeholderStyle: SettingsSurfaces.placeholderStyle(context),
+                key: const ValueKey('mcp-editor-env'),
+                controller: _envController,
+                placeholder: l10n.mcpEnv,
+                autocorrect: false,
+                maxLines: 3,
+                padding: const EdgeInsets.all(12),
+              ),
+              const SizedBox(height: 12),
+              SettingsSurfaces.section(
+                context,
+                CupertinoListSection(
+                  children: [
+                    CupertinoListTile(
+                      title: Text(l10n.mcpServerEnabled),
+                      trailing: SettingsSurfaces.toggle(
+                        context,
+                        CupertinoSwitch(
+                          key: const ValueKey('mcp-editor-enabled'),
+                          value: _enabled,
+                          onChanged: (value) =>
+                              setState(() => _enabled = value),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-          ],
+              if (_error.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    _error,
+                    style: TextStyle(color: statusRedText.resolveFrom(context)),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -424,11 +468,7 @@ class _McpServerEditorPageState extends ConsumerState<McpServerEditorPage> {
 
 /// MCP 工具列表页面。
 class McpToolsPage extends StatelessWidget {
-  const McpToolsPage({
-    super.key,
-    required this.server,
-    required this.tools,
-  });
+  const McpToolsPage({super.key, required this.server, required this.tools});
 
   final McpServer server;
   final List<McpTool> tools;
@@ -437,39 +477,58 @@ class McpToolsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
 
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        leading: const _PopBackButton(),
-        middle: Text('${server.name} · ${l10n.mcpTools}'),
-      ),
-      child: SafeArea(
-        child: tools.isEmpty
-            ? Center(
-                child: Text(
-                  l10n.noMcpTools,
-                  style: TextStyle(color: secondaryText.resolveFrom(context)),
-                ),
-              )
-            : ListView(
-                children: [
-                  CupertinoListSection(
-                    header: Text(l10n.mcpToolsCount(tools.length)),
-                    children: [
-                      for (final tool in tools)
-                        CupertinoListTile(
-                          key: ValueKey('mcp-tool-row-${tool.name}'),
-                          title: Text(tool.name),
-                          subtitle: Text(
-                            tool.description.isNotEmpty
-                                ? tool.description
-                                : l10n.noDescription,
-                            style: TextStyle(color: secondaryText.resolveFrom(context)),
-                          ),
-                        ),
-                    ],
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const _PopBackButton(),
+          middle: Text('${server.name} · ${l10n.mcpTools}'),
+        ),
+        child: SafeArea(
+          child: tools.isEmpty
+              ? Center(
+                  child: Text(
+                    l10n.noMcpTools,
+                    style: TextStyle(
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: secondaryText,
+                      ),
+                    ),
                   ),
-                ],
-              ),
+                )
+              : ListView(
+                  children: [
+                    SettingsSurfaces.section(
+                      context,
+                      CupertinoListSection(
+                        header: Text(l10n.mcpToolsCount(tools.length)),
+                        children: [
+                          for (final tool in tools)
+                            CupertinoListTile(
+                              key: ValueKey('mcp-tool-row-${tool.name}'),
+                              title: Text(tool.name),
+                              subtitle: Text(
+                                tool.description.isNotEmpty
+                                    ? tool.description
+                                    : l10n.noDescription,
+                                style: TextStyle(
+                                  color: LightSurfaces.resolve(
+                                    context,
+                                    LightSurfaces.textSecondary,
+                                    dark: secondaryText,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }

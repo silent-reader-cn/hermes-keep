@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_models.dart';
@@ -42,9 +43,7 @@ Future<String?> _androidContentUriFor(String path) async {
 /// Android 8+：当前 app 是否已被授予「安装未知应用」资格（#96）。
 Future<bool> _canRequestInstall() async {
   try {
-    return await _fileShareChannel.invokeMethod<bool>(
-          'canRequestInstall',
-        ) ??
+    return await _fileShareChannel.invokeMethod<bool>('canRequestInstall') ??
         false;
   } catch (_) {
     return false;
@@ -82,12 +81,22 @@ Future<void> _installApkWithPermissionGate(
         content: Text(l10n.installPermissionBody),
         actions: [
           CupertinoDialogAction(
-            child: Text(l10n.cancel),
+            child: Text(
+              l10n.cancel,
+              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
             onPressed: () => Navigator.of(ctx).pop(),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
-            child: Text(l10n.installPermissionGoSettings),
+            child: Text(
+              l10n.installPermissionGoSettings,
+              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
             onPressed: () {
               Navigator.of(ctx).pop();
               unawaited(_openInstallPermissionSettings());
@@ -168,7 +177,12 @@ Future<void> openDownloadedFile(
           content: Text(l10n.downloadFileMissing),
           actions: [
             CupertinoDialogAction(
-              child: Text(l10n.ok),
+              child: Text(
+                l10n.ok,
+                style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                    ? const TextStyle(color: LightSurfaces.menuAction)
+                    : null,
+              ),
               onPressed: () => Navigator.of(ctx).pop(),
             ),
           ],
@@ -224,7 +238,12 @@ Future<void> openDownloadedFile(
           content: Text(error.toString()),
           actions: [
             CupertinoDialogAction(
-              child: Text(l10n.ok),
+              child: Text(
+                l10n.ok,
+                style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                    ? const TextStyle(color: LightSurfaces.menuAction)
+                    : null,
+              ),
               onPressed: () => Navigator.of(ctx).pop(),
             ),
           ],
@@ -298,6 +317,8 @@ class CupertinoProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 原进度条 primaryColor #007AFF 对 systemGrey5 轨道约 3.200:1 已达数据图形阈值，
+    // 保留既有色彩，自定义 trackColor/progressColor 覆盖继续有效。
     final effectiveTrackColor =
         trackColor ?? CupertinoColors.systemGrey5.resolveFrom(context);
     final effectiveProgressColor =
@@ -346,6 +367,7 @@ class DownloadPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final tasks = ref.watch(downloadTasksProvider);
     final controller = ref.read(downloadControllerProvider.notifier);
 
@@ -355,10 +377,20 @@ class DownloadPage extends ConsumerWidget {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+      backgroundColor: LightSurfaces.resolve(
         context,
+        LightSurfaces.page,
+        dark: CupertinoColors.systemGroupedBackground,
       ),
       navigationBar: CupertinoNavigationBar(
+        backgroundColor: isLight ? LightSurfaces.page : null,
+        border: isLight
+            ? const Border(
+                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
+              )
+            : const Border(
+                bottom: BorderSide(color: Color(0x4D000000), width: 0.0),
+              ),
         leading: const AppBackButton(),
         middle: Text(l10n.downloadsTitle),
         trailing: hasTerminalTasks
@@ -372,7 +404,9 @@ class DownloadPage extends ConsumerWidget {
                   l10n.downloadClear,
                   style: TextStyle(
                     fontSize: 14,
-                    color: CupertinoTheme.of(context).primaryColor,
+                    color: isLight
+                        ? LightSurfaces.userDetail
+                        : CupertinoTheme.of(context).primaryColor,
                   ),
                 ),
               )
@@ -406,14 +440,22 @@ class DownloadPage extends ConsumerWidget {
           Icon(
             CupertinoIcons.arrow_down_circle,
             size: 64,
-            color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: CupertinoColors.tertiaryLabel,
+            ),
           ),
           const SizedBox(height: 12),
           Text(
             l10n.downloadsEmpty,
             style: TextStyle(
               fontSize: 16,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.secondaryLabel,
+              ),
             ),
           ),
         ],
@@ -432,6 +474,7 @@ class _DownloadTaskCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final controller = ref.read(downloadControllerProvider.notifier);
 
     final fileType = getDownloadFileType(
@@ -457,8 +500,8 @@ class _DownloadTaskCard extends ConsumerWidget {
         } else {
           final resumeSuffix =
               (task.resumedFromBytes != null && task.resumedFromBytes! > 0)
-                  ? ' · ${l10n.downloadResumedWithSize(formatDownloadByteSize(task.resumedFromBytes!))}'
-                  : '';
+              ? ' · ${l10n.downloadResumedWithSize(formatDownloadByteSize(task.resumedFromBytes!))}'
+              : '';
           if (task.expectedBytes != null && task.expectedBytes! > 0) {
             final progressPercent = ((task.progress ?? 0.0) * 100)
                 .toStringAsFixed(0);
@@ -505,7 +548,11 @@ class _DownloadTaskCard extends ConsumerWidget {
           CupertinoButton(
             key: ValueKey('download-cancel-${task.id}'),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            color: CupertinoColors.systemGrey4.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.pressed,
+              dark: CupertinoColors.systemGrey4,
+            ),
             borderRadius: BorderRadius.circular(6),
             minimumSize: const Size(44, 28),
             onPressed: () {
@@ -528,7 +575,9 @@ class _DownloadTaskCard extends ConsumerWidget {
             CupertinoButton(
               key: ValueKey('download-open-${task.id}'),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              color: CupertinoTheme.of(context).primaryColor,
+              color: isLight
+                  ? LightSurfaces.userDetail
+                  : CupertinoTheme.of(context).primaryColor,
               borderRadius: BorderRadius.circular(6),
               minimumSize: const Size(44, 28),
               onPressed: () {
@@ -586,7 +635,11 @@ class _DownloadTaskCard extends ConsumerWidget {
               child: Icon(
                 CupertinoIcons.share,
                 size: 18,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
+                ),
               ),
             ),
           );
@@ -595,7 +648,9 @@ class _DownloadTaskCard extends ConsumerWidget {
             CupertinoButton(
               key: ValueKey('download-retry-${task.id}'),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              color: CupertinoTheme.of(context).primaryColor,
+              color: isLight
+                  ? LightSurfaces.userDetail
+                  : CupertinoTheme.of(context).primaryColor,
               borderRadius: BorderRadius.circular(6),
               minimumSize: const Size(44, 28),
               onPressed: () async {
@@ -629,7 +684,11 @@ class _DownloadTaskCard extends ConsumerWidget {
             child: Icon(
               CupertinoIcons.trash,
               size: 18,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.secondaryLabel,
+              ),
             ),
           ),
         );
@@ -640,7 +699,9 @@ class _DownloadTaskCard extends ConsumerWidget {
           CupertinoButton(
             key: ValueKey('download-retry-${task.id}'),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            color: CupertinoTheme.of(context).primaryColor,
+            color: isLight
+                ? LightSurfaces.userDetail
+                : CupertinoTheme.of(context).primaryColor,
             borderRadius: BorderRadius.circular(6),
             minimumSize: const Size(44, 28),
             onPressed: () {
@@ -666,7 +727,11 @@ class _DownloadTaskCard extends ConsumerWidget {
             child: Icon(
               CupertinoIcons.trash,
               size: 18,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.secondaryLabel,
+              ),
             ),
           ),
         );
@@ -677,10 +742,15 @@ class _DownloadTaskCard extends ConsumerWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+        color: LightSurfaces.resolve(
           context,
+          LightSurfaces.card,
+          dark: CupertinoColors.secondarySystemGroupedBackground,
         ),
         borderRadius: BorderRadius.circular(10),
+        border: isLight
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -691,7 +761,11 @@ class _DownloadTaskCard extends ConsumerWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: CupertinoColors.systemGrey6.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.page,
+                    dark: CupertinoColors.systemGrey6,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(

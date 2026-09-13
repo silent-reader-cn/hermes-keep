@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
@@ -72,18 +73,55 @@ CupertinoDynamicColor kanbanStatusColor(String? rawValue) {
     case 'todo':
       return statusBlueText;
     case 'ready':
-      return statusTealText;
+      return _kanbanReadyColor;
     case 'running':
       return statusOrangeText;
     case 'blocked':
-      return CupertinoColors.systemRed;
+      return _kanbanBlockedColor;
     case 'done':
       return statusGreenText;
     case 'archived':
-      return secondaryText;
+      return _kanbanArchivedColor;
     default:
-      return CupertinoColors.systemPurple;
+      return _kanbanUnknownColor;
   }
+}
+
+// Reuse existing stronger light palette entries on page/card/pressed surfaces.
+// Keep all four dark variants from the original status color unchanged.
+final _kanbanReadyColor = _withLightStatusColor(
+  statusTealText,
+  statusTealText.highContrastColor,
+);
+final _kanbanBlockedColor = _withLightStatusColor(
+  CupertinoColors.systemRed,
+  statusRedText.color,
+  highContrast: statusRedText.highContrastColor,
+);
+final _kanbanArchivedColor = _withLightStatusColor(
+  secondaryText,
+  LightSurfaces.textSecondary,
+);
+final _kanbanUnknownColor = _withLightStatusColor(
+  CupertinoColors.systemPurple,
+  CupertinoColors.systemPurple.highContrastColor,
+);
+
+CupertinoDynamicColor _withLightStatusColor(
+  CupertinoDynamicColor original,
+  Color light, {
+  Color? highContrast,
+}) {
+  return CupertinoDynamicColor(
+    color: light,
+    darkColor: original.darkColor,
+    highContrastColor: highContrast ?? light,
+    darkHighContrastColor: original.darkHighContrastColor,
+    elevatedColor: light,
+    darkElevatedColor: original.darkElevatedColor,
+    highContrastElevatedColor: highContrast ?? light,
+    darkHighContrastElevatedColor: original.darkHighContrastElevatedColor,
+  );
 }
 
 /// 看板页（`/kanban`）。
@@ -115,7 +153,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
     });
 
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
+    final page = CupertinoPageScaffold(
       child: CustomScrollView(
         key: const ValueKey('kanban-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
@@ -139,6 +177,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         ],
       ),
     );
+    return _withKanbanLightTheme(context, page);
   }
 
   // -------------------------------------------------------------------------
@@ -191,22 +230,64 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
           final board = state.boards[index];
           final slug = board.slug ?? '';
           final selected = slug == state.currentBoardSlug;
-          return CupertinoButton(
-            key: ValueKey('kanban-board-$slug'),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            borderRadius: BorderRadius.circular(14),
-            color: selected
-                ? CupertinoColors.activeBlue
-                : CupertinoColors.secondarySystemFill,
-            onPressed: selected ? null : () => unawaited(_selectBoard(slug)),
-            child: Text(
-              board.name ?? board.slug ?? l10n.unnamedBoard,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected ? CupertinoColors.white : CupertinoColors.label,
-              ),
-            ),
+          final isLight = _usesLightSurfaces(context);
+          return _KanbanPressFeedback(
+            enabled: !selected,
+            builder: (pressed) {
+              final button = CupertinoButton(
+                key: ValueKey('kanban-board-$slug'),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                borderRadius: BorderRadius.circular(14),
+                pressedOpacity: isLight ? 1 : 0.4,
+                // Native buttons reapply the original color alpha after
+                // resolution, so dark must retain the unresolved dynamic value.
+                color: isLight
+                    ? (selected
+                          ? LightSurfaces.selection
+                          : (pressed
+                                ? LightSurfaces.pressed
+                                : LightSurfaces.card))
+                    : (selected
+                          ? CupertinoColors.activeBlue
+                          : CupertinoColors.secondarySystemFill),
+                disabledColor: isLight
+                    ? LightSurfaces.selection
+                    : CupertinoColors.quaternarySystemFill,
+                onPressed: selected
+                    ? null
+                    : () => unawaited(_selectBoard(slug)),
+                child: Text(
+                  board.name ?? board.slug ?? l10n.unnamedBoard,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    color: isLight
+                        ? (selected
+                              ? statusBlueText.resolveFrom(context)
+                              : CupertinoColors.label.resolveFrom(context))
+                        : (selected
+                              ? CupertinoColors.white
+                              : CupertinoColors.label),
+                  ),
+                ),
+              );
+              if (!isLight) return button;
+              return Semantics(
+                selected: selected,
+                child: DecoratedBox(
+                  position: DecorationPosition.foreground,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    // Decorative chip boundary; selection also has weight/semantics.
+                    border: Border.all(
+                      color: LightSurfaces.cardBorder,
+                      width: 0.5,
+                    ),
+                  ),
+                  child: button,
+                ),
+              );
+            },
           );
         },
       ),
@@ -225,7 +306,19 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         itemCount: columns.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        separatorBuilder: (context, _) => _usesLightSurfaces(context)
+            ? const SizedBox(
+                width: 12,
+                child: Center(
+                  child: SizedBox(
+                    width: 0.5,
+                    height: double.infinity,
+                    // Decorative column separator, not a status indicator.
+                    child: ColoredBox(color: LightSurfaces.divider),
+                  ),
+                ),
+              )
+            : const SizedBox(width: 12),
         itemBuilder: (context, index) => _KanbanColumnView(
           column: columns[index],
           onCardDropped: (card) =>
@@ -258,10 +351,14 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.rectangle_stack,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
             const SizedBox(height: 12),
             Text(l10n.kanbanEmptyContent, style: const TextStyle(fontSize: 17)),
@@ -270,7 +367,11 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               l10n.clickPlusToCreateFirstCard,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -288,10 +389,14 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.square_stack_3d_up,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
             const SizedBox(height: 12),
             Text(l10n.noKanbanBoards, style: const TextStyle(fontSize: 17)),
@@ -300,7 +405,11 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               l10n.createBoardOnServerPrompt,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -318,10 +427,14 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -375,6 +488,9 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         content: Text(message),
         actions: [
           CupertinoDialogAction(
+            textStyle: _usesLightSurfaces(dialogContext)
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
             onPressed: () => Navigator.pop(dialogContext),
             child: Text(l10n.ok),
           ),
@@ -435,7 +551,11 @@ class _KanbanColumnView extends StatelessWidget {
                   '${cards.length}',
                   style: TextStyle(
                     fontSize: 13,
-                    color: secondaryText.resolveFrom(context),
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: secondaryText,
+                    ),
                   ),
                 ),
               ],
@@ -451,7 +571,11 @@ class _KanbanColumnView extends StatelessWidget {
                         l10n.noCards,
                         style: TextStyle(
                           fontSize: 13,
-                          color: secondaryText.resolveFrom(context),
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: secondaryText,
+                          ),
                         ),
                       ),
                     )
@@ -465,6 +589,8 @@ class _KanbanColumnView extends StatelessWidget {
                       itemBuilder: (context, index) =>
                           LongPressDraggable<KanbanCard>(
                             data: cards[index],
+                            // Drag copies are decorative motion/position cues;
+                            // the readable card remains the interaction source.
                             feedback: Opacity(
                               opacity: 0.8,
                               child: SizedBox(
@@ -498,59 +624,85 @@ class _KanbanCardTile extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final id = card.cardID ?? '';
     final dependencyBadge = _dependencyBadge(context, card.linkCounts);
-    return CupertinoButton(
-      key: ValueKey('kanban-card-$id'),
-      padding: EdgeInsets.zero,
-      borderRadius: BorderRadius.circular(10),
-      onPressed: () => _openDetail(context, id),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色卡。
-          color: CupertinoColors.secondarySystemBackground.resolveFrom(context),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: CupertinoColors.systemGrey.withValues(alpha: 0.25),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              card.title ?? l10n.unnamedCard,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+    return _KanbanPressFeedback(
+      builder: (pressed) => CupertinoButton(
+        key: ValueKey('kanban-card-$id'),
+        pressedOpacity: _usesLightSurfaces(context) ? 1 : 0.4,
+        padding: EdgeInsets.zero,
+        borderRadius: BorderRadius.circular(10),
+        onPressed: () => _openDetail(context, id),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            // 动态色需显式 resolve：暗黑模式下不 resolve 会画成浅色卡。
+            color: LightSurfaces.resolve(
+              context,
+              pressed ? LightSurfaces.pressed : LightSurfaces.card,
+              dark: CupertinoColors.secondarySystemBackground,
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  CupertinoIcons.person,
-                  size: 13,
-                  // const 动态色不会自动 resolve：深色主题下冻结为黑色隐身，
-                  // 必须显式 resolveFrom(context)。
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              // Decorative hairline, shared with the column/divider line family.
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.cardBorder,
+                dark: CupertinoColors.systemGrey.withValues(alpha: 0.25),
+              ),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                card.title ?? l10n.unnamedCard,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: _usesLightSurfaces(context)
+                      ? CupertinoColors.label.resolveFrom(context)
+                      : null,
                 ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    card.assignee ?? l10n.unassigned,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: secondaryText.resolveFrom(context),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    CupertinoIcons.person,
+                    size: 13,
+                    // const 动态色不会自动 resolve：深色主题下冻结为黑色隐身，
+                    // 必须显式 resolveFrom(context)。
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.secondaryLabel,
                     ),
                   ),
-                ),
-                if (dependencyBadge != null) ...[
-                  const SizedBox(width: 8),
-                  dependencyBadge,
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      card.assignee ?? l10n.unassigned,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: secondaryText,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (dependencyBadge != null) ...[
+                    const SizedBox(width: 8),
+                    dependencyBadge,
+                  ],
                 ],
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -565,16 +717,24 @@ class _KanbanCardTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemYellow.withValues(alpha: 0.2),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.tintWarning,
+          dark: CupertinoColors.systemYellow.withValues(alpha: 0.2),
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             CupertinoIcons.link,
             size: 11,
-            color: CupertinoColors.systemOrange,
+            color: LightSurfaces.resolve(
+              context,
+              statusOrangeText.resolveFrom(context),
+              dark: Color(CupertinoColors.systemOrange.toARGB32()),
+            ),
           ),
           const SizedBox(width: 3),
           Text(
@@ -643,8 +803,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
     );
 
     final l10n = AppLocalizations.of(context);
-    return CupertinoPageScaffold(
+    final page = CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
+        border: _kanbanNavigationBorder(context),
         middle: Text(
           state?.card?.title ?? l10n.cardDetail,
           maxLines: 1,
@@ -653,6 +814,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
       ),
       child: _buildContent(async, state, readOnly),
     );
+    return _withKanbanLightTheme(context, page);
   }
 
   Widget _buildContent(
@@ -691,6 +853,15 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
   Widget _buildDescription(KanbanCard card) {
     final l10n = AppLocalizations.of(context);
     return CupertinoListSection.insetGrouped(
+      backgroundColor: LightSurfaces.resolve(
+        context,
+        LightSurfaces.page,
+        dark: CupertinoColors.systemGroupedBackground,
+      ),
+      decoration: _kanbanSectionDecoration(context),
+      separatorColor: _usesLightSurfaces(context)
+          ? LightSurfaces.divider
+          : null,
       dividerMargin: 0,
       additionalDividerMargin: 0,
 
@@ -703,7 +874,11 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             style: TextStyle(
               fontSize: 15,
               color: (card.body ?? '').trim().isEmpty
-                  ? secondaryText.resolveFrom(context)
+                  ? LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: secondaryText,
+                    )
                   : CupertinoColors.label.resolveFrom(context),
             ),
           ),
@@ -728,6 +903,15 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
         _metadataRow(l10n.updatedAtLabel, Text(card.updatedAt!)),
     ];
     return CupertinoListSection.insetGrouped(
+      backgroundColor: LightSurfaces.resolve(
+        context,
+        LightSurfaces.page,
+        dark: CupertinoColors.systemGroupedBackground,
+      ),
+      decoration: _kanbanSectionDecoration(context),
+      separatorColor: _usesLightSurfaces(context)
+          ? LightSurfaces.divider
+          : null,
       dividerMargin: 0,
       additionalDividerMargin: 0,
 
@@ -748,7 +932,11 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               label,
               style: TextStyle(
                 fontSize: 14,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ),
@@ -767,23 +955,41 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
     final buttons = <Widget>[
       for (final status in destinations)
         if (status != current)
-          CupertinoButton(
-            key: ValueKey('kanban-status-$status'),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            borderRadius: BorderRadius.circular(10),
-            color: CupertinoColors.secondarySystemFill,
-            onPressed: _busyStatus != null
-                ? null
-                : () => unawaited(_changeStatus(card, status)),
-            child: _busyStatus == status
-                ? const CupertinoActivityIndicator(radius: 8)
-                : Text(
-                    kanbanStatusTitle(status, context),
-                    style: const TextStyle(fontSize: 13),
-                  ),
+          _KanbanPressFeedback(
+            enabled: _busyStatus == null,
+            builder: (pressed) => CupertinoButton(
+              key: ValueKey('kanban-status-$status'),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              borderRadius: BorderRadius.circular(10),
+              pressedOpacity: _usesLightSurfaces(context) ? 1 : 0.4,
+              foregroundColor: _usesLightSurfaces(context)
+                  ? statusBlueText.resolveFrom(context)
+                  : null,
+              color: _usesLightSurfaces(context)
+                  ? (pressed ? LightSurfaces.pressed : LightSurfaces.selection)
+                  : CupertinoColors.secondarySystemFill,
+              onPressed: _busyStatus != null
+                  ? null
+                  : () => unawaited(_changeStatus(card, status)),
+              child: _busyStatus == status
+                  ? const CupertinoActivityIndicator(radius: 8)
+                  : Text(
+                      kanbanStatusTitle(status, context),
+                      style: const TextStyle(fontSize: 13),
+                    ),
+            ),
           ),
     ];
     return CupertinoListSection.insetGrouped(
+      backgroundColor: LightSurfaces.resolve(
+        context,
+        LightSurfaces.page,
+        dark: CupertinoColors.systemGroupedBackground,
+      ),
+      decoration: _kanbanSectionDecoration(context),
+      separatorColor: _usesLightSurfaces(context)
+          ? LightSurfaces.divider
+          : null,
       dividerMargin: 0,
       additionalDividerMargin: 0,
 
@@ -801,6 +1007,15 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
     final l10n = AppLocalizations.of(context);
     final comments = state.comments;
     return CupertinoListSection.insetGrouped(
+      backgroundColor: LightSurfaces.resolve(
+        context,
+        LightSurfaces.page,
+        dark: CupertinoColors.systemGroupedBackground,
+      ),
+      decoration: _kanbanSectionDecoration(context),
+      separatorColor: _usesLightSurfaces(context)
+          ? LightSurfaces.divider
+          : null,
       dividerMargin: 0,
       additionalDividerMargin: 0,
 
@@ -814,7 +1029,11 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               l10n.noComments,
               style: TextStyle(
                 fontSize: 14,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           )
@@ -835,7 +1054,11 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                     _commentMeta(comment),
                     style: TextStyle(
                       fontSize: 12,
-                      color: secondaryText.resolveFrom(context),
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: secondaryText,
+                      ),
                     ),
                   ),
                 ],
@@ -850,6 +1073,8 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   key: const ValueKey('kanban-comment-input'),
                   controller: _commentController,
                   placeholder: l10n.addCommentPlaceholder,
+                  decoration: _kanbanFieldDecoration(context),
+                  placeholderStyle: _kanbanPlaceholderStyle(context),
                   minLines: 1,
                   maxLines: 4,
                   onChanged: (_) => setState(() {}),
@@ -927,6 +1152,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
         content: Text(message),
         actions: [
           CupertinoDialogAction(
+            textStyle: _usesLightSurfaces(dialogContext)
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
             onPressed: () => Navigator.pop(dialogContext),
             child: Text(l10n.ok),
           ),
@@ -947,10 +1175,14 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -1022,8 +1254,9 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
     final boardAsync = ref.watch(kanbanControllerProvider);
     final currentBoard = boardAsync.valueOrNull?.currentBoard;
 
-    return CupertinoPageScaffold(
+    final page = CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
+        border: _kanbanNavigationBorder(context),
         middle: Text(l10n.newCard),
         trailing: CupertinoButton(
           key: const ValueKey('kanban-form-save'),
@@ -1040,7 +1273,11 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
               l10n.boardPrefix(currentBoard.name ?? currentBoard.slug ?? ''),
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -1071,23 +1308,47 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
             l10n.initialStatus,
             style: TextStyle(
               fontSize: 13,
-              color: secondaryText.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
             ),
           ),
           const SizedBox(height: 8),
-          CupertinoSlidingSegmentedControl<String>(
-            groupValue: _status,
-            onValueChanged: (value) =>
-                setState(() => _status = value ?? 'triage'),
-            children: {
-              for (final status in KanbanController.createStatuses)
-                status: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(kanbanStatusTitle(status, context)),
-                ),
-            },
-          ),
+          _buildInitialStatusControl(),
         ],
+      ),
+    );
+    return _withKanbanLightTheme(context, page);
+  }
+
+  Widget _buildInitialStatusControl() {
+    final control = CupertinoSlidingSegmentedControl<String>(
+      groupValue: _status,
+      onValueChanged: (value) => setState(() => _status = value ?? 'triage'),
+      children: {
+        for (final status in KanbanController.createStatuses)
+          status: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(kanbanStatusTitle(status, context)),
+          ),
+      },
+    );
+    if (!_usesLightSurfaces(context)) return control;
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        // Decorative field outline; the native thumb identifies selection.
+        border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+      ),
+      child: CupertinoSlidingSegmentedControl<String>(
+        groupValue: control.groupValue,
+        onValueChanged: control.onValueChanged,
+        children: control.children,
+        backgroundColor: LightSurfaces.card,
+        thumbColor: LightSurfaces.selection,
       ),
     );
   }
@@ -1106,7 +1367,11 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           label,
           style: TextStyle(
             fontSize: 13,
-            color: secondaryText.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
           ),
         ),
         const SizedBox(height: 6),
@@ -1114,6 +1379,8 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           key: fieldKey,
           controller: controller,
           placeholder: placeholder,
+          decoration: _kanbanFieldDecoration(context),
+          placeholderStyle: _kanbanPlaceholderStyle(context),
           maxLines: maxLines,
           onChanged: (_) => setState(() {}),
         ),
@@ -1137,5 +1404,89 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
     if (ok) {
       Navigator.maybePop(context);
     }
+  }
+}
+
+bool _usesLightSurfaces(BuildContext context) =>
+    CupertinoTheme.brightnessOf(context) == Brightness.light;
+
+Widget _withKanbanLightTheme(BuildContext context, Widget child) {
+  if (!_usesLightSurfaces(context)) return child;
+  return CupertinoTheme(
+    data: CupertinoTheme.of(context).copyWith(
+      scaffoldBackgroundColor: LightSurfaces.page,
+      barBackgroundColor: LightSurfaces.page,
+      primaryColor: statusBlueText.resolveFrom(context),
+    ),
+    child: DefaultSelectionStyle(
+      selectionColor: LightSurfaces.selection,
+      cursorColor: statusBlueText.resolveFrom(context),
+      child: child,
+    ),
+  );
+}
+
+Border? _kanbanNavigationBorder(BuildContext context) =>
+    _usesLightSurfaces(context)
+    ? const Border(bottom: BorderSide(color: LightSurfaces.divider, width: 0))
+    : const CupertinoNavigationBar().border;
+
+BoxDecoration? _kanbanSectionDecoration(BuildContext context) =>
+    _usesLightSurfaces(context)
+    ? const BoxDecoration(
+        color: LightSurfaces.card,
+        borderRadius: BorderRadius.all(Radius.circular(10)),
+        // Decorative outline, consistent with the session list cards.
+        border: Border.fromBorderSide(
+          BorderSide(color: LightSurfaces.cardBorder, width: 0.5),
+        ),
+      )
+    : null;
+
+BoxDecoration? _kanbanFieldDecoration(BuildContext context) =>
+    _usesLightSurfaces(context)
+    ? BoxDecoration(
+        color: LightSurfaces.card,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+      )
+    : const CupertinoTextField().decoration;
+
+TextStyle? _kanbanPlaceholderStyle(BuildContext context) =>
+    _usesLightSurfaces(context)
+    ? const TextStyle(
+        fontWeight: FontWeight.w400,
+        color: LightSurfaces.placeholder,
+      )
+    : const CupertinoTextField().placeholderStyle;
+
+/// Surface feedback wraps native buttons only in light mode.
+/// The original Cupertino fade, gesture handling and layout remain in dark mode.
+class _KanbanPressFeedback extends StatefulWidget {
+  const _KanbanPressFeedback({required this.builder, this.enabled = true});
+
+  final Widget Function(bool pressed) builder;
+  final bool enabled;
+
+  @override
+  State<_KanbanPressFeedback> createState() => _KanbanPressFeedbackState();
+}
+
+class _KanbanPressFeedbackState extends State<_KanbanPressFeedback> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (mounted && _pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_usesLightSurfaces(context)) return widget.builder(false);
+    return Listener(
+      onPointerDown: widget.enabled ? (_) => _setPressed(true) : null,
+      onPointerUp: (_) => _setPressed(false),
+      onPointerCancel: (_) => _setPressed(false),
+      child: widget.builder(widget.enabled && _pressed),
+    );
   }
 }

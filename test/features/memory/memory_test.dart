@@ -5,6 +5,8 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
+import 'package:hermes_ui/app/theme/status_colors.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
@@ -163,7 +165,11 @@ void main() {
   });
 
   group('MemoryPage widget', () {
-    Future<void> pumpMemoryPage(WidgetTester tester, FakeMemoryApi api) async {
+    Future<void> pumpMemoryPage(
+      WidgetTester tester,
+      FakeMemoryApi api, {
+      Brightness brightness = Brightness.light,
+    }) async {
       final router = GoRouter(
         initialLocation: '/',
         routes: [GoRoute(path: '/', builder: (_, _) => const MemoryPage())],
@@ -176,7 +182,10 @@ void main() {
             ),
             memoryApiFactoryProvider.overrideWithValue((_) => api),
           ],
-          child: CupertinoApp.router(routerConfig: router),
+          child: CupertinoApp.router(
+            theme: CupertinoThemeData(brightness: brightness),
+            routerConfig: router,
+          ),
         ),
       );
       // 首帧（AsyncLoading）+ 异步 build 完成（AsyncData）
@@ -473,60 +482,59 @@ void main() {
       expect(find.text('粗体项目说明'), findsOneWidget);
     });
 
-    testWidgets(
-      '分区头副文案样式瘦身：字数与更新时间显式 12pt、w400、secondaryText、Flexible 省略',
-      (tester) async {
-        final mtime =
-            DateTime.now()
-                .subtract(const Duration(hours: 1))
-                .millisecondsSinceEpoch /
-            1000;
-        final api = FakeMemoryApi(
-          response: MemoryResponse(
-            memory: '测试笔记内容',
-            memoryMtime: mtime,
-            projectContext: '测试项目上下文内容',
-            projectContextMtime: mtime,
-          ),
-        );
-        await pumpMemoryPage(tester, api);
+    testWidgets('分区头副文案样式瘦身：字数与更新时间显式 12pt、w400、secondaryText、Flexible 省略', (
+      tester,
+    ) async {
+      final mtime =
+          DateTime.now()
+              .subtract(const Duration(hours: 1))
+              .millisecondsSinceEpoch /
+          1000;
+      final api = FakeMemoryApi(
+        response: MemoryResponse(
+          memory: '测试笔记内容',
+          memoryMtime: mtime,
+          projectContext: '测试项目上下文内容',
+          projectContextMtime: mtime,
+        ),
+      );
+      await pumpMemoryPage(tester, api);
 
-        // 默认处于项目上下文 tab
-        final pcCharCountFinder = find.text('9 字');
-        final pcModifiedFinder = find.text('1 小时前更新');
-        expect(pcCharCountFinder, findsOneWidget);
-        expect(pcModifiedFinder, findsOneWidget);
+      // 默认处于项目上下文 tab
+      final pcCharCountFinder = find.text('9 字');
+      final pcModifiedFinder = find.text('1 小时前更新');
+      expect(pcCharCountFinder, findsOneWidget);
+      expect(pcModifiedFinder, findsOneWidget);
 
-        final pcCharCountText = tester.widget<Text>(pcCharCountFinder);
-        expect(pcCharCountText.style?.fontSize, 12);
-        expect(pcCharCountText.style?.fontWeight, FontWeight.w400);
-        expect(pcCharCountText.overflow, TextOverflow.ellipsis);
+      final pcCharCountText = tester.widget<Text>(pcCharCountFinder);
+      expect(pcCharCountText.style?.fontSize, 12);
+      expect(pcCharCountText.style?.fontWeight, FontWeight.w400);
+      expect(pcCharCountText.overflow, TextOverflow.ellipsis);
 
-        final pcModifiedText = tester.widget<Text>(pcModifiedFinder);
-        expect(pcModifiedText.style?.fontSize, 12);
-        expect(pcModifiedText.style?.fontWeight, FontWeight.w400);
-        expect(pcModifiedText.overflow, TextOverflow.ellipsis);
+      final pcModifiedText = tester.widget<Text>(pcModifiedFinder);
+      expect(pcModifiedText.style?.fontSize, 12);
+      expect(pcModifiedText.style?.fontWeight, FontWeight.w400);
+      expect(pcModifiedText.overflow, TextOverflow.ellipsis);
 
-        // 切换到 memory tab 验证 _MemorySectionHeader
-        await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
-        await tester.pump();
+      // 切换到 memory tab 验证 _MemorySectionHeader
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
 
-        final memCharCountFinder = find.text('6 字');
-        final memModifiedFinder = find.text('1 小时前更新');
-        expect(memCharCountFinder, findsOneWidget);
-        expect(memModifiedFinder, findsOneWidget);
+      final memCharCountFinder = find.text('6 字');
+      final memModifiedFinder = find.text('1 小时前更新');
+      expect(memCharCountFinder, findsOneWidget);
+      expect(memModifiedFinder, findsOneWidget);
 
-        final memCharCountText = tester.widget<Text>(memCharCountFinder);
-        expect(memCharCountText.style?.fontSize, 12);
-        expect(memCharCountText.style?.fontWeight, FontWeight.w400);
-        expect(memCharCountText.overflow, TextOverflow.ellipsis);
+      final memCharCountText = tester.widget<Text>(memCharCountFinder);
+      expect(memCharCountText.style?.fontSize, 12);
+      expect(memCharCountText.style?.fontWeight, FontWeight.w400);
+      expect(memCharCountText.overflow, TextOverflow.ellipsis);
 
-        final memModifiedText = tester.widget<Text>(memModifiedFinder);
-        expect(memModifiedText.style?.fontSize, 12);
-        expect(memModifiedText.style?.fontWeight, FontWeight.w400);
-        expect(memModifiedText.overflow, TextOverflow.ellipsis);
-      },
-    );
+      final memModifiedText = tester.widget<Text>(memModifiedFinder);
+      expect(memModifiedText.style?.fontSize, 12);
+      expect(memModifiedText.style?.fontWeight, FontWeight.w400);
+      expect(memModifiedText.overflow, TextOverflow.ellipsis);
+    });
 
     testWidgets('项目上下文覆盖提示：13pt secondary 说明层级，与分区头右簇贴右缘', (tester) async {
       final api = FakeMemoryApi(
@@ -535,9 +543,10 @@ void main() {
           projectContextShadowed: true,
           projectContextName: 'HERMES.md',
           projectContextWorkspace: 'D:/projects/hermes-ui',
-          projectContextMtime: DateTime.now()
-              .subtract(const Duration(hours: 1))
-              .millisecondsSinceEpoch /
+          projectContextMtime:
+              DateTime.now()
+                  .subtract(const Duration(hours: 1))
+                  .millisecondsSinceEpoch /
               1000,
         ),
       );
@@ -585,10 +594,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('现有笔记内容'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('memory-edit-memory')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('memory-edit-memory')), findsOneWidget);
 
       // 点击编辑按钮
       await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
@@ -608,15 +614,9 @@ void main() {
       expect(textField.controller?.text, '现有笔记内容');
     });
 
-    testWidgets('保存成功：提交 writeMemory → refresh → 退出编辑态并渲染新内容', (
-      tester,
-    ) async {
+    testWidgets('保存成功：提交 writeMemory → refresh → 退出编辑态并渲染新内容', (tester) async {
       final api = FakeMemoryApi(
-        response: const MemoryResponse(
-          memory: '原笔记',
-          user: '原用户',
-          soul: '原灵魂',
-        ),
+        response: const MemoryResponse(memory: '原笔记', user: '原用户', soul: '原灵魂'),
       );
       await pumpMemoryPage(tester, api);
 
@@ -656,15 +656,9 @@ void main() {
       expect(find.text('更新后的笔记'), findsOneWidget);
     });
 
-    testWidgets('保存失败：保留编辑态 + 不丢用户输入 + 输入框下方显示错误', (
-      tester,
-    ) async {
+    testWidgets('保存失败：保留编辑态 + 不丢用户输入 + 输入框下方显示错误', (tester) async {
       final api = FakeMemoryApi(
-        response: const MemoryResponse(
-          memory: '原笔记',
-          user: '原用户',
-          soul: '原灵魂',
-        ),
+        response: const MemoryResponse(memory: '原笔记', user: '原用户', soul: '原灵魂'),
       );
       api.writeError = HttpException(403, null, message: '写入权限不足');
       await pumpMemoryPage(tester, api);
@@ -763,10 +757,7 @@ void main() {
 
       // 空态显示占位文案
       expect(find.text('暂无笔记'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('memory-edit-memory')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('memory-edit-memory')), findsOneWidget);
 
       // 点编辑进入空白输入
       await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
@@ -847,6 +838,173 @@ void main() {
       expect(api.writeCalls.last.content, '# 新灵魂\n- 细心严谨');
       expect(find.text('新灵魂'), findsOneWidget);
       expect(find.text('细心严谨'), findsOneWidget);
+    });
+
+    testWidgets('双主题断言：浅色卡片描边/次级字/编辑态 vs 暗色默认与原语义色', (tester) async {
+      final nowSec =
+          DateTime.now()
+              .subtract(const Duration(minutes: 1))
+              .millisecondsSinceEpoch /
+          1000;
+      final fullResponse = MemoryResponse(
+        memory: '笔记内容',
+        user: '画像内容',
+        soul: '灵魂内容',
+        projectContext: '项目上下文内容',
+        projectContextName: 'demo-proj',
+        projectContextWorkspace: '/ws/demo',
+        projectContextShadowed: true,
+        memoryMtime: nowSec,
+      );
+
+      // 1. 浅色模式
+      await pumpMemoryPage(
+        tester,
+        FakeMemoryApi(response: fullResponse),
+        brightness: Brightness.light,
+      );
+
+      // CupertinoListSection 浅色：白卡 + 0.5 hairline 描边 + 分隔线
+      final sectionLight = tester.widget<CupertinoListSection>(
+        find.byType(CupertinoListSection),
+      );
+      expect(sectionLight.decoration, isNotNull);
+      final sectionDecLight = sectionLight.decoration as BoxDecoration;
+      expect(sectionDecLight.color, LightSurfaces.card);
+      expect(sectionDecLight.borderRadius, BorderRadius.circular(10));
+      expect(sectionDecLight.border?.top.color, LightSurfaces.cardBorder);
+      expect(sectionDecLight.border?.top.width, 0.5);
+      expect(sectionLight.separatorColor, LightSurfaces.divider);
+
+      // 项目上下文只读锁与 footer 详情为浅色次级文字
+      final lockIconLight = tester.widget<Icon>(
+        find.byIcon(CupertinoIcons.lock_fill),
+      );
+      expect(lockIconLight.color, LightSurfaces.textSecondary);
+      final footerTextLight = tester.widget<Text>(
+        find.text('demo-proj — /ws/demo'),
+      );
+      expect(footerTextLight.style?.color, LightSurfaces.textSecondary);
+
+      // 切换到「我的笔记」，检查字数统计次级文字
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
+      final charCountLight = tester.widget<Text>(find.text('4 字'));
+      expect(charCountLight.style?.color, LightSurfaces.textSecondary);
+
+      // 点击进入编辑态
+      await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
+      await tester.pump();
+
+      // 输入框浅色：白卡 + 0.5 hairline 描边 + placeholder 颜色
+      final editFieldLight = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+      );
+      final fieldDecLight = editFieldLight.decoration as BoxDecoration;
+      expect(fieldDecLight.color, LightSurfaces.card);
+      expect(fieldDecLight.borderRadius, BorderRadius.circular(5));
+      expect(fieldDecLight.border?.top.color, LightSurfaces.cardBorder);
+      expect(fieldDecLight.border?.top.width, 0.5);
+      expect(editFieldLight.placeholderStyle?.color, LightSurfaces.placeholder);
+
+      // 取消与保存按钮浅色 userDetail
+      final cancelTextLight = tester.widget<Text>(find.text('取消'));
+      expect(cancelTextLight.style?.color, LightSurfaces.userDetail);
+      final saveButtonLight = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('memory-edit-save')),
+      );
+      expect(saveButtonLight.color, LightSurfaces.userDetail);
+
+      // 2. 暗色模式
+      await pumpMemoryPage(
+        tester,
+        FakeMemoryApi(response: fullResponse),
+        brightness: Brightness.dark,
+      );
+      final darkContext = tester.element(find.byType(CupertinoListSection));
+
+      // CupertinoListSection 暗色回退 null
+      final sectionDark = tester.widget<CupertinoListSection>(
+        find.byType(CupertinoListSection),
+      );
+      expect(sectionDark.decoration, isNull);
+      expect(sectionDark.separatorColor, isNull);
+
+      // 项目上下文只读锁暗色 secondaryLabel，footer 暗色 secondaryText
+      final lockIconDark = tester.widget<Icon>(
+        find.byIcon(CupertinoIcons.lock_fill),
+      );
+      expect(
+        lockIconDark.color,
+        CupertinoColors.secondaryLabel.resolveFrom(darkContext),
+      );
+      final footerTextDark = tester.widget<Text>(
+        find.text('demo-proj — /ws/demo'),
+      );
+      expect(
+        footerTextDark.style?.color,
+        secondaryText.resolveFrom(darkContext),
+      );
+
+      // 切换到「我的笔记」，检查字数统计暗色 secondaryText
+      await tester.tap(find.byKey(const ValueKey('memory-tab-memory')));
+      await tester.pump();
+      final charCountDark = tester.widget<Text>(find.text('4 字'));
+      expect(
+        charCountDark.style?.color,
+        secondaryText.resolveFrom(darkContext),
+      );
+
+      // 进入编辑态
+      await tester.tap(find.byKey(const ValueKey('memory-edit-memory')));
+      await tester.pump();
+
+      // 输入框暗色回退系统默认
+      final editFieldDark = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('memory-edit-input-memory')),
+      );
+      expect(editFieldDark.decoration, const CupertinoTextField().decoration);
+      expect(
+        editFieldDark.placeholderStyle,
+        const CupertinoTextField().placeholderStyle,
+      );
+
+      // 取消与保存按钮暗色保持系统默认（null）
+      final cancelTextDark = tester.widget<Text>(find.text('取消'));
+      expect(cancelTextDark.style?.color, isNull);
+      final saveButtonDark = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('memory-edit-save')),
+      );
+      expect(saveButtonDark.color, isNull);
+
+      // 3. 空态双主题断言
+      await pumpMemoryPage(
+        tester,
+        FakeMemoryApi(),
+        brightness: Brightness.light,
+      );
+      final emptyTextLight = tester.widget<Text>(find.text('还没有任何记忆内容'));
+      expect(emptyTextLight.style?.color, LightSurfaces.textSecondary);
+      final emptyIconLight = tester.widget<Icon>(
+        find.byIcon(CupertinoIcons.doc_text),
+      );
+      expect(emptyIconLight.color, LightSurfaces.textSecondary);
+
+      await pumpMemoryPage(
+        tester,
+        FakeMemoryApi(),
+        brightness: Brightness.dark,
+      );
+      final emptyContextDark = tester.element(find.text('还没有任何记忆内容'));
+      final emptyTextDark = tester.widget<Text>(find.text('还没有任何记忆内容'));
+      expect(
+        emptyTextDark.style?.color,
+        secondaryText.resolveFrom(emptyContextDark),
+      );
+      final emptyIconDark = tester.widget<Icon>(
+        find.byIcon(CupertinoIcons.doc_text),
+      );
+      expect(emptyIconDark.color, const Color(0xFF8E8E93));
     });
   });
 }

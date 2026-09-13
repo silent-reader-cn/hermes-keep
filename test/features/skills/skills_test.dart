@@ -4,6 +4,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
+import 'package:hermes_ui/app/theme/status_colors.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
@@ -87,14 +89,9 @@ void main() {
         isFalse,
       );
       expect(skillHasDetail(buildSkill('p', path: '/a/b')), isTrue);
+      expect(skillHasDetail(buildSkill('r', relatedSkills: ['alpha'])), isTrue);
       expect(
-        skillHasDetail(buildSkill('r', relatedSkills: ['alpha'])),
-        isTrue,
-      );
-      expect(
-        skillHasDetail(
-          buildSkill('both', path: '/p', relatedSkills: ['x']),
-        ),
+        skillHasDetail(buildSkill('both', path: '/p', relatedSkills: ['x'])),
         isTrue,
       );
     });
@@ -353,7 +350,11 @@ void main() {
   });
 
   group('SkillsPage widget', () {
-    Future<void> pumpSkillsPage(WidgetTester tester, FakeSkillsApi api) async {
+    Future<void> pumpSkillsPage(
+      WidgetTester tester,
+      FakeSkillsApi api, {
+      Brightness brightness = Brightness.light,
+    }) async {
       final router = GoRouter(
         initialLocation: '/',
         routes: [GoRoute(path: '/', builder: (_, _) => const SkillsPage())],
@@ -366,7 +367,10 @@ void main() {
             ),
             skillsApiFactoryProvider.overrideWithValue((_) => api),
           ],
-          child: CupertinoApp.router(routerConfig: router),
+          child: CupertinoApp.router(
+            theme: CupertinoThemeData(brightness: brightness),
+            routerConfig: router,
+          ),
         ),
       );
       // 首帧（AsyncLoading）+ 异步 build 完成（AsyncData）
@@ -645,6 +649,127 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(api.fetchCount, 2);
+    });
+
+    testWidgets('双主题断言：浅色卡片描边/次级字/展开态 vs 暗色默认与原语义色', (tester) async {
+      final skill = buildSkill(
+        'git-tool',
+        category: '工具',
+        description: 'Git 工具集',
+        path: '/skills/git-tool',
+        disabled: true,
+      );
+
+      // 1. 浅色模式
+      final lightApi = FakeSkillsApi(skills: [skill]);
+      await pumpSkillsPage(tester, lightApi, brightness: Brightness.light);
+
+      // 搜索框浅色装饰与 placeholder
+      final searchFieldLight = tester.widget<CupertinoSearchTextField>(
+        find.byKey(const ValueKey('skills-search')),
+      );
+      expect(searchFieldLight.decoration, isNotNull);
+      final searchBoxDecLight = searchFieldLight.decoration as BoxDecoration;
+      expect(searchBoxDecLight.color, LightSurfaces.card);
+      expect(searchBoxDecLight.border?.top.color, LightSurfaces.cardBorder);
+      expect(
+        searchFieldLight.placeholderStyle?.color,
+        LightSurfaces.placeholder,
+      );
+      expect(searchFieldLight.itemColor, LightSurfaces.textSecondary);
+
+      // 列表分组浅色白卡 + hairline + divider
+      final sectionLight = tester.widget<CupertinoListSection>(
+        find.byType(CupertinoListSection),
+      );
+      expect(sectionLight.separatorColor, LightSurfaces.divider);
+      final sectionBoxDecLight = sectionLight.decoration as BoxDecoration;
+      expect(sectionBoxDecLight.color, LightSurfaces.card);
+      expect(sectionBoxDecLight.border?.top.color, LightSurfaces.cardBorder);
+
+      // 描述次级文字浅色达标 textSecondary
+      final descTextLight = tester.widget<Text>(find.text('Git 工具集'));
+      expect(descTextLight.style?.color, LightSurfaces.textSecondary);
+
+      // 展开 chevron 图标浅色 textSecondary
+      final chevronLight = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const ValueKey('skills-row-git-tool')),
+          matching: find.byIcon(CupertinoIcons.chevron_right),
+        ),
+      );
+      expect(chevronLight.color, LightSurfaces.textSecondary);
+
+      // 点击展开详情行，检查 label 浅色 textSecondary
+      await tester.tap(find.byKey(const ValueKey('skills-row-git-tool')));
+      await tester.pump();
+      final detailTextLight = tester.widget<Text>(
+        find.byWidgetPredicate(
+          (w) => w is Text && w.textSpan?.toPlainText().contains('路径：') == true,
+        ),
+      );
+      final spanLight = detailTextLight.textSpan as TextSpan;
+      final labelSpanLight = spanLight.children!.first as TextSpan;
+      expect(labelSpanLight.text, '路径：');
+      expect(labelSpanLight.style?.color, LightSurfaces.textSecondary);
+
+      // 2. 暗色模式
+      final darkApi = FakeSkillsApi(skills: [skill]);
+      await pumpSkillsPage(tester, darkApi, brightness: Brightness.dark);
+
+      // 搜索框暗色回退 null
+      final searchFieldDark = tester.widget<CupertinoSearchTextField>(
+        find.byKey(const ValueKey('skills-search')),
+      );
+      expect(searchFieldDark.decoration, isNull);
+      expect(searchFieldDark.placeholderStyle, isNull);
+      final darkContext = tester.element(
+        find.byKey(const ValueKey('skills-search')),
+      );
+      expect(
+        searchFieldDark.itemColor,
+        CupertinoColors.secondaryLabel.resolveFrom(darkContext),
+      );
+
+      // 列表分组暗色回退 null
+      final sectionDark = tester.widget<CupertinoListSection>(
+        find.byType(CupertinoListSection),
+      );
+      expect(sectionDark.decoration, isNull);
+      expect(sectionDark.separatorColor, isNull);
+
+      // 描述次级文字暗色为 secondaryText 动态解析色（非 LightSurfaces.textSecondary）
+      final descTextDark = tester.widget<Text>(find.text('Git 工具集'));
+      expect(descTextDark.style?.color, secondaryText.resolveFrom(darkContext));
+      expect(descTextDark.style?.color, isNot(LightSurfaces.textSecondary));
+
+      // 展开 chevron 暗色为 tertiaryLabel 动态解析色
+      final chevronDark = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const ValueKey('skills-row-git-tool')),
+          matching: find.byIcon(CupertinoIcons.chevron_right),
+        ),
+      );
+      expect(
+        chevronDark.color,
+        CupertinoColors.tertiaryLabel.resolveFrom(darkContext),
+      );
+
+      // 展开后详情 label 暗色为 secondaryText 动态解析色
+      await tester.tap(find.byKey(const ValueKey('skills-row-git-tool')));
+      await tester.pump();
+      final detailTextDark = tester.widget<Text>(
+        find.byWidgetPredicate(
+          (w) => w is Text && w.textSpan?.toPlainText().contains('路径：') == true,
+        ),
+      );
+      final spanDark = detailTextDark.textSpan as TextSpan;
+      final labelSpanDark = spanDark.children!.first as TextSpan;
+      expect(labelSpanDark.text, '路径：');
+      expect(
+        labelSpanDark.style?.color,
+        secondaryText.resolveFrom(darkContext),
+      );
     });
   });
 }

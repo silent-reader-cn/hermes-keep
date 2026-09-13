@@ -12,6 +12,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:pdfrx/pdfrx.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
@@ -680,7 +681,11 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
           Icon(
             CupertinoIcons.music_note_2,
             size: 64,
-            color: CupertinoColors.systemGrey.resolveFrom(context),
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: CupertinoColors.systemGrey,
+            ),
           ),
           const SizedBox(height: 12),
           Text(
@@ -844,6 +849,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
 
   Widget _buildPptxBody(OfficeDocument doc) {
     final l10n = AppLocalizations.of(context);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Container(
@@ -858,17 +864,26 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
                 const SizedBox(height: 12),
                 Container(
                   height: 0.5,
-                  color: CupertinoColors.separator.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.divider,
+                    dark: CupertinoColors.separator,
+                  ),
                 ),
                 const SizedBox(height: 12),
               ],
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: CupertinoColors.secondarySystemBackground.resolveFrom(
-                    context,
-                  ),
+                  color: isDark
+                      ? CupertinoColors.secondarySystemBackground.resolveFrom(
+                          context,
+                        )
+                      : LightSurfaces.card,
                   borderRadius: BorderRadius.circular(8),
+                  border: isDark
+                      ? null
+                      : Border.all(color: LightSurfaces.cardBorder, width: 0.5),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -889,7 +904,11 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: secondaryText.resolveFrom(context),
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            dark: secondaryText,
+                          ),
                         ),
                       ),
                     ),
@@ -926,7 +945,11 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
               l10n.previewOfficeLegacyHint,
               style: TextStyle(
                 fontSize: 12,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -945,7 +968,11 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
     return Table(
       defaultColumnWidth: const IntrinsicColumnWidth(),
       border: TableBorder.all(
-        color: CupertinoColors.separator.resolveFrom(context),
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.divider,
+          dark: CupertinoColors.separator,
+        ),
         width: 0.5,
       ),
       children: [
@@ -975,7 +1002,14 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
     return Text(
       _formatFileSize(size),
       textAlign: TextAlign.center,
-      style: TextStyle(fontSize: 12, color: secondaryText.resolveFrom(context)),
+      style: TextStyle(
+        fontSize: 12,
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.textSecondary,
+          dark: secondaryText,
+        ),
+      ),
     );
   }
 
@@ -1043,7 +1077,14 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
     if (parts.isEmpty) return const SizedBox.shrink();
     return Text(
       parts.join(' · '),
-      style: TextStyle(fontSize: 12, color: secondaryText.resolveFrom(context)),
+      style: TextStyle(
+        fontSize: 12,
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.textSecondary,
+          dark: secondaryText,
+        ),
+      ),
     );
   }
 
@@ -1058,7 +1099,11 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
             Icon(
               CupertinoIcons.doc_plaintext,
               size: 48,
-              color: CupertinoColors.systemGrey.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -1071,7 +1116,11 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
             if (customBtn != null) ...[
@@ -1081,6 +1130,9 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
               const SizedBox(height: 20),
               CupertinoButton.filled(
                 key: const ValueKey('preview-download-fallback'),
+                color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                    ? LightSurfaces.userDetail
+                    : null,
                 onPressed: widget.onDownload,
                 child: Text(l10n.download),
               ),
@@ -1106,7 +1158,11 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
             Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey.resolveFrom(context),
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -1128,6 +1184,10 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
               children: [
                 CupertinoButton.filled(
                   key: const ValueKey('preview-retry'),
+                  color:
+                      CupertinoTheme.brightnessOf(context) == Brightness.light
+                      ? LightSurfaces.userDetail
+                      : null,
                   onPressed: onRetry,
                   child: Text(l10n.retry),
                 ),
@@ -1261,14 +1321,22 @@ class _MediaControlsState extends State<_MediaControls> {
                 _formatDuration(_position),
                 style: TextStyle(
                   fontSize: 12,
-                  color: secondaryText.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
                 ),
               ),
               Text(
                 _formatDuration(_duration),
                 style: TextStyle(
                   fontSize: 12,
-                  color: secondaryText.resolveFrom(context),
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
                 ),
               ),
             ],

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
+import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/models/session.dart';
 import '../../l10n/app_localizations.dart';
@@ -27,9 +29,15 @@ class _ProjectPickerSheet extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final async = ref.watch(projectsProvider);
     final projects = async.valueOrNull ?? const <ProjectSummary>[];
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
 
     return CupertinoActionSheet(
-      title: Text(l10n.moveToProject),
+      title: Text(
+        l10n.moveToProject,
+        style: isLight
+            ? const TextStyle(color: LightSurfaces.textSecondary)
+            : null,
+      ),
       message: async.isLoading
           ? const CupertinoActivityIndicator(radius: 12)
           : null,
@@ -37,15 +45,21 @@ class _ProjectPickerSheet extends ConsumerWidget {
         CupertinoActionSheetAction(
           key: const ValueKey('project-picker-none'),
           onPressed: () => Navigator.pop(context, ''),
-          child: Text(l10n.noProject),
+          child: Text(
+            l10n.noProject,
+            style: isLight
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
+          ),
         ),
         for (final project in projects)
           _ProjectPickerRow(
             key: ValueKey('project-picker-${project.id}'),
             project: project,
             onSelect: () => Navigator.pop(context, project.id),
-            onManage: (anchorKey) =>
-                unawaited(_showProjectActions(context, ref, project, anchorKey)),
+            onManage: (anchorKey) => unawaited(
+              _showProjectActions(context, ref, project, anchorKey),
+            ),
           ),
         CupertinoActionSheetAction(
           key: const ValueKey('project-picker-create'),
@@ -64,14 +78,24 @@ class _ProjectPickerSheet extends ConsumerWidget {
               Navigator.pop(context, created.id);
             }
           },
-          child: Text(l10n.newProjectEllipsis),
+          child: Text(
+            l10n.newProjectEllipsis,
+            style: isLight
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
+          ),
         ),
       ],
       cancelButton: CupertinoActionSheetAction(
         key: const ValueKey('project-picker-cancel'),
         isDefaultAction: true,
         onPressed: () => Navigator.pop(context),
-        child: Text(l10n.cancel),
+        child: Text(
+          l10n.cancel,
+          style: isLight
+              ? const TextStyle(color: LightSurfaces.menuAction)
+              : null,
+        ),
       ),
     );
   }
@@ -86,28 +110,54 @@ Future<String?> _promptProjectName(
   final controller = TextEditingController();
   final name = await showCupertinoDialog<String>(
     context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      key: const ValueKey('project-create-dialog'),
-      title: Text(title),
-      content: CupertinoTextField(
-        key: const ValueKey('project-create-name'),
-        controller: controller,
-        autofocus: true,
-        placeholder: l10n.projectNamePlaceholder,
-      ),
-      actions: [
-        CupertinoDialogAction(
-          key: const ValueKey('project-create-cancel'),
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text(l10n.cancel),
+    builder: (dialogContext) {
+      final isLight =
+          CupertinoTheme.brightnessOf(dialogContext) == Brightness.light;
+      return CupertinoAlertDialog(
+        key: const ValueKey('project-create-dialog'),
+        title: Text(title),
+        content: CupertinoTextField(
+          key: const ValueKey('project-create-name'),
+          controller: controller,
+          autofocus: true,
+          placeholder: l10n.projectNamePlaceholder,
+          decoration: isLight
+              ? BoxDecoration(
+                  color: LightSurfaces.card,
+                  border: Border.all(
+                    color: LightSurfaces.cardBorder,
+                    width: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(5),
+                )
+              : const CupertinoTextField().decoration,
+          placeholderStyle: isLight
+              ? const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  color: LightSurfaces.placeholder,
+                )
+              : const CupertinoTextField().placeholderStyle,
         ),
-        CupertinoDialogAction(
-          key: const ValueKey('project-create-confirm'),
-          onPressed: () => Navigator.pop(dialogContext, controller.text),
-          child: Text(confirmText),
-        ),
-      ],
-    ),
+        actions: [
+          CupertinoDialogAction(
+            key: const ValueKey('project-create-cancel'),
+            textStyle: isLight
+                ? const TextStyle(color: LightSurfaces.userDetail)
+                : null,
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.cancel),
+          ),
+          CupertinoDialogAction(
+            key: const ValueKey('project-create-confirm'),
+            textStyle: isLight
+                ? const TextStyle(color: LightSurfaces.userDetail)
+                : null,
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: Text(confirmText),
+          ),
+        ],
+      );
+    },
   );
   controller.dispose();
   return name;
@@ -135,6 +185,7 @@ class _ProjectPickerRowState extends State<_ProjectPickerRow> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onLongPress: () => widget.onManage(_anchorKey),
@@ -149,13 +200,20 @@ class _ProjectPickerRowState extends State<_ProjectPickerRow> {
                 child: Text(
                   widget.project.name ?? l10n.unnamedProject,
                   overflow: TextOverflow.ellipsis,
+                  style: isLight
+                      ? const TextStyle(color: LightSurfaces.menuAction)
+                      : null,
                 ),
               ),
               const SizedBox(width: 6),
               Icon(
                 CupertinoIcons.ellipsis,
                 size: 14,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: CupertinoColors.secondaryLabel,
+                ),
               ),
             ],
           ),
@@ -202,23 +260,36 @@ Future<void> _showProjectActions(
         onPressed: () async {
           final confirmed = await showCupertinoDialog<bool>(
             context: context,
-            builder: (dialogContext) => CupertinoAlertDialog(
-              title: Text(l10n.deleteProject),
-              content: Text(l10n.deleteProjectWarning),
-              actions: [
-                CupertinoDialogAction(
-                  key: const ValueKey('project-delete-cancel'),
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: Text(l10n.cancel),
-                ),
-                CupertinoDialogAction(
-                  key: const ValueKey('project-delete-confirm'),
-                  isDestructiveAction: true,
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: Text(l10n.delete),
-                ),
-              ],
-            ),
+            builder: (dialogContext) {
+              final isLight =
+                  CupertinoTheme.brightnessOf(dialogContext) ==
+                  Brightness.light;
+              return CupertinoAlertDialog(
+                title: Text(l10n.deleteProject),
+                content: Text(l10n.deleteProjectWarning),
+                actions: [
+                  CupertinoDialogAction(
+                    key: const ValueKey('project-delete-cancel'),
+                    textStyle: isLight
+                        ? const TextStyle(color: LightSurfaces.userDetail)
+                        : null,
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: Text(l10n.cancel),
+                  ),
+                  CupertinoDialogAction(
+                    key: const ValueKey('project-delete-confirm'),
+                    isDestructiveAction: true,
+                    textStyle: isLight
+                        ? TextStyle(
+                            color: statusRedText.resolveFrom(dialogContext),
+                          )
+                        : null,
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: Text(l10n.delete),
+                  ),
+                ],
+              );
+            },
           );
           if (confirmed == true && context.mounted) {
             await ref.read(projectsProvider.notifier).deleteProject(project.id);

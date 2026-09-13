@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../app/theme/light_surfaces.dart';
 import '../../l10n/app_localizations.dart';
 import 'download_models.dart';
 import 'download_page.dart';
@@ -59,12 +60,22 @@ Future<bool?> showDownloadConfirmationDialog(
       ),
       actions: [
         CupertinoDialogAction(
-          child: Text(l10n.downloadConfirmCancel),
+          child: Text(
+            l10n.downloadConfirmCancel,
+            style: CupertinoTheme.brightnessOf(dialogCtx) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
+          ),
           onPressed: () => Navigator.of(dialogCtx).pop(false),
         ),
         CupertinoDialogAction(
           isDefaultAction: true,
-          child: Text(l10n.downloadConfirmStart),
+          child: Text(
+            l10n.downloadConfirmStart,
+            style: CupertinoTheme.brightnessOf(dialogCtx) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
+          ),
           onPressed: () => Navigator.of(dialogCtx).pop(true),
         ),
       ],

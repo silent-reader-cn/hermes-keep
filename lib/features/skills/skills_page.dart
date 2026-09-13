@@ -3,11 +3,12 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/light_surfaces.dart';
+import '../../app/theme/status_colors.dart';
+import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
 import '../../core/utils/accessibility.dart';
-import '../../app/theme/status_colors.dart';
-import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'skills_providers.dart';
@@ -85,12 +86,28 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
 
   Widget _buildSearchBar() {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: CupertinoSearchTextField(
         key: const ValueKey('skills-search'),
         controller: _searchController,
         placeholder: l10n.searchSkills,
+        decoration: isLight
+            ? BoxDecoration(
+                color: LightSurfaces.card,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+              )
+            : null,
+        placeholderStyle: isLight
+            ? const TextStyle(color: LightSurfaces.placeholder)
+            : null,
+        itemColor: LightSurfaces.resolve(
+          context,
+          LightSurfaces.textSecondary,
+          dark: CupertinoColors.secondaryLabel,
+        ),
         onChanged: (value) =>
             ref.read(skillsControllerProvider.notifier).setSearchQuery(value),
       ),
@@ -123,13 +140,29 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
       return [_buildEmptySliver(isSearchMode: isSearchMode)];
     }
 
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     return [
       for (final group in groups)
         SliverToBoxAdapter(
           child: CupertinoListSection.insetGrouped(
+            backgroundColor: LightSurfaces.resolve(
+              context,
+              LightSurfaces.page,
+              dark: CupertinoColors.systemGroupedBackground,
+            ),
+            separatorColor: isLight ? LightSurfaces.divider : null,
+            decoration: isLight
+                ? BoxDecoration(
+                    color: LightSurfaces.card,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: LightSurfaces.cardBorder,
+                      width: 0.5,
+                    ),
+                  )
+                : null,
             dividerMargin: 0,
             additionalDividerMargin: 0,
-
             hasLeading: false,
             header: Text(_skillsGroupTitle(context, group.title)),
             children: [
@@ -148,6 +181,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
 
   Widget _buildErrorSliver(Object? error) {
     final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -155,10 +189,15 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.exclamationmark_triangle,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                // 保留原未经解析的 systemGrey 绘制值（#8E8E93），防止高对比暗色下 resolve 变色
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -177,6 +216,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             const SizedBox(height: 20),
             CupertinoButton.filled(
               key: const ValueKey('skills-retry'),
+              color: isLight ? LightSurfaces.userDetail : null,
               onPressed: () => unawaited(
                 ref.read(skillsControllerProvider.notifier).refresh(),
               ),
@@ -200,7 +240,12 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             Icon(
               isSearchMode ? CupertinoIcons.search : CupertinoIcons.hammer,
               size: 48,
-              color: CupertinoColors.systemGrey,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                // 保留原未经解析的 systemGrey 绘制值（#8E8E93），防止高对比暗色下 resolve 变色
+                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -214,7 +259,11 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
                   : l10n.serverSkillsWillShowHere,
               style: TextStyle(
                 fontSize: 13,
-                color: secondaryText.resolveFrom(context),
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.textSecondary,
+                  dark: secondaryText,
+                ),
               ),
             ),
           ],
@@ -241,16 +290,23 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
     final l10n = AppLocalizations.of(context);
     await showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.actionFailed),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.ok),
-          ),
-        ],
-      ),
+      builder: (dialogContext) {
+        final isLight =
+            CupertinoTheme.brightnessOf(dialogContext) == Brightness.light;
+        return CupertinoAlertDialog(
+          title: Text(l10n.actionFailed),
+          content: Text(message),
+          actions: [
+            CupertinoDialogAction(
+              textStyle: isLight
+                  ? const TextStyle(color: LightSurfaces.userDetail)
+                  : null,
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.ok),
+            ),
+          ],
+        );
+      },
     );
     await ref.read(skillsControllerProvider.notifier).clearActionError();
   }
@@ -341,7 +397,11 @@ class _SkillRow extends ConsumerWidget {
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
                                 color: disabled
-                                    ? secondaryText.resolveFrom(context)
+                                    ? LightSurfaces.resolve(
+                                        context,
+                                        LightSurfaces.textSecondary,
+                                        dark: secondaryText,
+                                      )
                                     : CupertinoColors.label.resolveFrom(
                                         context,
                                       ),
@@ -355,8 +415,10 @@ class _SkillRow extends ConsumerWidget {
                                   ? CupertinoIcons.chevron_down
                                   : CupertinoIcons.chevron_right,
                               size: 14,
-                              color: CupertinoColors.tertiaryLabel.resolveFrom(
+                              color: LightSurfaces.resolve(
                                 context,
+                                LightSurfaces.textSecondary,
+                                dark: CupertinoColors.tertiaryLabel,
                               ),
                             ),
                           ],
@@ -370,7 +432,11 @@ class _SkillRow extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 13,
-                            color: secondaryText.resolveFrom(context),
+                            color: LightSurfaces.resolve(
+                              context,
+                              LightSurfaces.textSecondary,
+                              dark: secondaryText,
+                            ),
                           ),
                         ),
                       ],
@@ -474,7 +540,13 @@ class _DetailLine extends StatelessWidget {
         children: [
           TextSpan(
             text: '$label：',
-            style: TextStyle(color: secondaryText.resolveFrom(context)),
+            style: TextStyle(
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
+            ),
           ),
           TextSpan(
             text: value,
@@ -499,6 +571,7 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
+        // 装饰性微填充色，非文字层；深浅色文字均为达标 label，保留原语义面。
         color: highlighted
             ? CupertinoColors.secondarySystemFill.resolveFrom(context)
             : CupertinoColors.tertiarySystemFill.resolveFrom(context),
