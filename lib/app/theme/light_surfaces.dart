@@ -4,12 +4,16 @@
 // page          #F2F2F7   1.000000  1.115871  4.820554
 // card          #FFFFFF   1.115871  1.000000  5.379116
 // cardBorder    #CCD0DA   1.383553  1.543866  3.484185
-// divider       #C6C6C8   1.528439  1.705540  3.153907
+// divider       #CCD0DA   1.383553  1.543866  3.484185
 // textSecondary #6A6A6F   4.820554  5.379116  1.000000
 // selection     #E0ECFF   1.068576  1.192393  4.511193
 // pressed = page；placeholder = textSecondary，三向数值同对应令牌。
 // 面/分隔线为装饰层级，不以正文 AA 判级；选中态另有勾选图标标识。
-// v2（2026-09-13 主人实机反馈「灰底太深」回调）：page 从 #EBEBF0 退回
+// v3（2026-09-13 主人拍板「分栏线/区域线提到同档拉平」）：divider 由
+// #C6C6C8 改为 cardBorder 别名（#CCD0DA）——原 divider 比描边更深且为
+// 中性灰，与冷灰紫描边色相分家，产生「结构线比卡片边界散」的观感；
+// 统一后全页线族/描边同一族同一档。v2（2026-09-13 主人实机反馈
+// 「灰底太深」回调）：page 从 #EBEBF0 退回
 // iOS 标准 #F2F2F7，分层主力移交加深一档的 cardBorder（#DDE0E8→#CCD0DA，
 // 对白卡 1.543866:1，接近 GitHub Primer #d0d7de 的可见 hairline 档位）。
 // page 变浅后 textSecondary 对 page 余量增大（4.527→4.821），维持不变。
@@ -29,8 +33,9 @@ abstract final class LightSurfaces {
   /// 分组卡片轮廓（0.5–1 逻辑像素 hairline）。
   static const Color cardBorder = Color(0xFFCCD0DA);
 
-  /// iOS 浅色 opaqueSeparator，避免透明分隔线随承载面漂移。
-  static const Color divider = Color(0xFFC6C6C8);
+  /// iOS 浅色 opaqueSeparator；v3（主人拍板拉平）与 cardBorder 同值同族，
+  /// 结构线与卡片描边共用一档冷灰紫，消除色相分家与层级倒挂观感。
+  static const Color divider = cardBorder;
 
   /// 次级文字和需要辨认的图标；页面、白卡、选中面均满足正文 AA。
   static const Color textSecondary = Color(0xFF6A6A6F);

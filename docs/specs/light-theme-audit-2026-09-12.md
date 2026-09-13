@@ -4,7 +4,7 @@
 
 ## 范围与复验方法
 
-- 扫描 `lib/` 全部 **231** 个 Dart 文件，记录 **1159** 个颜色引用/常量/别名透明度使用点。按实际目录补入下载、诊断和内置服务，不沿用旧目录快照假定覆盖。
+- 扫描 `lib/` 全部 **231** 个 Dart 文件，记录 **1158** 个颜色引用/常量/别名透明度使用点。按实际目录补入下载、诊断和内置服务，不沿用旧目录快照假定覆盖。
 - 语义色取自 Flutter **3.47.0** / Dart **3.13.0** 的 `packages/flutter/lib/src/cupertino/colors.dart` 普通浅色分支；增强对比度和暗色保留分支另标豁免。
 - WCAG：sRGB 通道 `c<=0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`；相对亮度 `0.2126R+0.7152G+0.0722B`；比值 `(L高+0.05)/(L低+0.05)`。先按实际 alpha 在 sRGB 合成，再线性化；中间值不取整，表格保留六位小数。
 - 正文 AA 门槛 4.5:1，功能图标/数据图形按 3:1；纯装饰面、边框、投影不套正文 AA。低对比度卡片面仍可存在视觉分层问题，不能用“装饰豁免”宣称已经分层充分。
@@ -162,9 +162,9 @@
 |---|---|---|---:|---:|---:|---|
 | `statusRedText` L494,536 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `LightSurfaces.userDetail` L499,529 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `LightSurfaces.divider` L590 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L590 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
 | `CupertinoColors.separator` L591 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
-| `LightSurfaces.divider` L682 | 装饰线/投影豁免 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L682 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
 | `CupertinoColors.systemGrey4` L683 | 暗色保留豁免 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 暗色保留豁免 |
 | `LightSurfaces.textSecondary` L719,738,1105,1124 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
 | `Color(0xFF8E8E93)` L720,739,1106,1125 | 暗色保留豁免 | #8E8E93 | 2.921958 | 3.260528 | 6.440674 | 暗色保留豁免 |
@@ -239,10 +239,10 @@
 |---|---|---|---:|---:|---:|---|
 | `LightSurfaces.card` L180 | 面 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
 | `CupertinoColors.secondarySystemBackground` L181 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
-| `LightSurfaces.divider` L187 | 装饰线/投影豁免 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L187 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
 | `CupertinoColors.separator` L188,215 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
 | `CupertinoColors.black @ 0.12` L194 | 装饰线/投影豁免 | #000000 / α=0.120000 | 1.311692 | 1.315107 | 1.000000 | 装饰线/投影豁免 |
-| `LightSurfaces.divider` L214 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L214 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
 | `statusBlueText` L252 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `CupertinoColors.activeBlue` L253 | 暗色保留豁免 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 暗色保留豁免 |
 | `CupertinoColors.label` L257 | 文字/复用 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
@@ -349,7 +349,7 @@
 | `CupertinoColors.link` L88 | 文字/复用 | #007AFF | 3.599857 | 4.016976 | 5.227813 | 非聊天共享默认/暗色分支；聊天浅色已显式传入令牌 |
 | `LightSurfaces.card` L90,462 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
 | `CupertinoColors.systemGrey5` L91,463 | 面/复用 | #E5E5EA | 1.125061 | 1.255423 | 16.727430 | 非聊天共享默认/暗色分支；聊天浅色已显式传入令牌 |
-| `LightSurfaces.divider` L93 | 装饰线/投影豁免 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L93 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
 | `CupertinoColors.separator` L94 | 装饰线/投影豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 装饰线/投影豁免 |
 | `LightSurfaces.cardBorder` L96,468 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
 | `statusBlueText` L144 | 文字 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
@@ -533,7 +533,7 @@
 | `LightSurfaces.textSecondary` L192,210,270,303,538 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `CupertinoColors.secondaryLabel` L193,211,224,271,304,539,552,843 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
 | `LightSurfaces.textSecondary` L223,551 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
-| `LightSurfaces.divider` L326 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L326 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
 | `CupertinoColors.systemGrey4` L327,453 | 暗色保留豁免 | #D1D1D6 | 1.363500 | 1.521490 | 13.802256 | 暗色保留豁免 |
 | `CupertinoColors.label` L346,435,882 | 文字 | #000000 | 18.819381 | 21.000000 | 1.000000 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `CupertinoColors.systemGrey6` L446 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
@@ -583,7 +583,7 @@
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `LightSurfaces.divider` L49 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L49 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
 | `CupertinoColors.separator` L50 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
 
 #### `lib/app/shell/sidebar_utility_toolbar.dart`
@@ -600,7 +600,7 @@
 | `CupertinoColors.secondaryLabel` L102 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
 | `LightSurfaces.selection` L141 | 复用色；按承载面判级 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
 | `CupertinoColors.transparent` L143 | 复用色；按承载面判级 | #000000 / α=0.000000 | 1.000000 | 1.000000 | 1.000000 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `LightSurfaces.divider` L164 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L164 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
 | `CupertinoColors.separator` L165 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
 | `LightSurfaces.page` L171 | 面 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
 
@@ -620,7 +620,7 @@
 |---|---|---|---:|---:|---:|---|
 | `LightSurfaces.textSecondary` L86,128 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `CupertinoColors.secondaryLabel` L87 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
-| `LightSurfaces.divider` L98 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L98 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
 | `CupertinoColors.separator` L99 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
 | `statusRedText` L146 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `LightSurfaces.menuAction` L147,160 | 文字 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
@@ -1402,7 +1402,7 @@ AppBackButton / app_navigation 无独立颜色常量；返回图标与 NarrowNav
 | `LightSurfaces.cardBorder` L105,151 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
 | `LightSurfaces.page` L143 | 复用色；按承载面判级 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
 | `CupertinoColors.systemGroupedBackground` L144 | 暗色保留豁免 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 暗色保留豁免 |
-| `LightSurfaces.divider` L146 | 复用色；按承载面判级 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `LightSurfaces.divider` L146 | 复用色；按承载面判级 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
 
 #### `lib/features/session_list/session_list_header.dart`
 
@@ -1428,12 +1428,12 @@ AppBackButton / app_navigation 无独立颜色常量；返回图标与 NarrowNav
 | `LightSurfaces.textSecondary` L286 | 复用色；按承载面判级 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `CupertinoColors.secondaryLabel` L287 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
 | `CupertinoColors.systemBackground` L395 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
-| `LightSurfaces.divider` L401 | 装饰线/投影豁免 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰线/投影豁免 |
+| `LightSurfaces.divider` L401 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
 | `CupertinoColors.separator` L402,604 | 暗色保留豁免 | #3C3C43 / α=0.286275 | 1.660195 | 1.684855 | 1.114966 | 暗色保留豁免 |
 | `statusRedText` L450,673,1152,1299 | 文字 | #B3001B | 6.417374 | 7.160960 | 2.932568 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `CupertinoColors.systemRed` L451 | 暗色保留豁免 | #FF3B30 | 3.178807 | 3.547138 | 5.920266 | 暗色保留豁免 |
 | `CupertinoColors.secondarySystemGroupedBackground` L541 | 暗色保留豁免 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 暗色保留豁免 |
-| `LightSurfaces.divider` L603 | 面 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰面豁免；分层强弱见三向值 |
+| `LightSurfaces.divider` L603 | 面 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰面豁免；分层强弱见三向值 |
 | `LightSurfaces.textSecondary` L631,726 | 文字 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 | `secondaryText` L632,727 | 暗色保留豁免 | #3C3C43 / α=0.600000 | 3.295321 | 3.438200 | 1.358277 | 暗色保留豁免 |
 | `LightSurfaces.textSecondary` L656,706 | 图标/图形 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 非文本：页面达 / 白卡达；反色见局部组合 |
@@ -1476,18 +1476,17 @@ AppBackButton / app_navigation 无独立颜色常量；返回图标与 NarrowNav
 
 | 来源 / 行号 | 用途 | 浅色 RGB / alpha | 对 P | 对 C | 对 L | 判级 / 豁免 |
 |---|---|---|---:|---:|---:|---|
-| `Color(0xFFF2F2F7)` L24 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
-| `Color(0xFFFFFFFF)` L27 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
-| `Color(0xFFCCD0DA)` L30 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
-| `Color(0xFFC6C6C8)` L33 | 装饰线/投影豁免 | #C6C6C8 | 1.528439 | 1.705540 | 12.312813 | 装饰线/投影豁免 |
-| `Color(0xFF6A6A6F)` L36 | 文字/复用 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `Color(0xFFE0ECFF)` L42 | 面/复用 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 装饰面豁免；分层强弱见三向值 |
-| `Color(0xFFF0FAF2)` L48 | 复用色；按承载面判级 | #F0FAF2 | 1.044745 | 1.068080 | 19.661457 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `Color(0xFFFFF4E8)` L51 | 复用色；按承载面判级 | #FFF4E8 | 1.028595 | 1.084850 | 19.357512 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `Color(0xFFFFF4F3)` L54 | 复用色；按承载面判级 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `Color(0xFFF3F2FF)` L57 | 复用色；按承载面判级 | #F3F2FF | 1.007248 | 1.107841 | 18.955790 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
-| `Color(0xFF005FB8)` L61 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
-| `Color(0xFF004A94)` L65 | 复用色；按承载面判级 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFFF2F2F7)` L28 | 面/复用 | #F2F2F7 | 1.000000 | 1.115871 | 18.819381 | 装饰面豁免；分层强弱见三向值 |
+| `Color(0xFFFFFFFF)` L31 | 面/复用 | #FFFFFF | 1.115871 | 1.000000 | 21.000000 | 装饰面豁免；分层强弱见三向值 |
+| `Color(0xFFCCD0DA)` L34 | 装饰线/投影豁免 | #CCD0DA | 1.383553 | 1.543866 | 13.602215 | 装饰线/投影豁免 |
+| `Color(0xFF6A6A6F)` L41 | 文字/复用 | #6A6A6F | 4.820554 | 5.379116 | 3.903987 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFFE0ECFF)` L47 | 面/复用 | #E0ECFF | 1.068576 | 1.192393 | 17.611640 | 装饰面豁免；分层强弱见三向值 |
+| `Color(0xFFF0FAF2)` L53 | 复用色；按承载面判级 | #F0FAF2 | 1.044745 | 1.068080 | 19.661457 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `Color(0xFFFFF4E8)` L56 | 复用色；按承载面判级 | #FFF4E8 | 1.028595 | 1.084850 | 19.357512 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `Color(0xFFFFF4F3)` L59 | 复用色；按承载面判级 | #FFF4F3 | 1.035448 | 1.077670 | 19.486486 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `Color(0xFFF3F2FF)` L62 | 复用色；按承载面判级 | #F3F2FF | 1.007248 | 1.107841 | 18.955790 | 正文 AA：页面不达 / 白卡不达；反色见局部组合 |
+| `Color(0xFF005FB8)` L66 | 复用色；按承载面判级 | #005FB8 | 5.653126 | 6.308159 | 3.329022 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
+| `Color(0xFF004A94)` L70 | 复用色；按承载面判级 | #004A94 | 7.818165 | 8.724063 | 2.407135 | 正文 AA：页面达 / 白卡达；反色见局部组合 |
 
 #### `lib/app/theme/status_colors.dart`
 
@@ -1608,7 +1607,7 @@ Material 桥接把 Cupertino 的面和语义色传给依赖组件；错误页/�
 | page | #F2F2F7 | 1.000000 | 1.115871 | 4.820554 |
 | card | #FFFFFF | 1.115871 | 1.000000 | 5.379116 |
 | cardBorder | #CCD0DA | 1.383553 | 1.543866 | 3.484185 |
-| divider | #C6C6C8 | 1.528439 | 1.705540 | 3.153907 |
+| divider | #CCD0DA | 1.383553 | 1.543866 | 3.484185 |
 | textSecondary | #6A6A6F | 4.820554 | 5.379116 | 1.000000 |
 | selection | #E0ECFF | 1.068576 | 1.192393 | 4.511193 |
 | pressed | #F2F2F7 | 1.000000 | 1.115871 | 4.820554 |
@@ -1707,16 +1706,16 @@ Material 桥接把 Cupertino 的面和语义色传给依赖组件；错误页/�
 | P0/media inverse secondary · `chat/widgets/chat_media_view.dart: fixed black lightbox, unchanged` | #8E8E93 | #000000 | 18.819381 | 2.921958 | 6.440674 | 正文 AA 达 |
 | P0/green notice layering · `chat/chat_page.dart: paired with the explicit hairline` | #F0FAF2 | #F2F2F7 | 1.000000 | 1.044745 | 1.044745 | 装饰豁免 |
 | P1/readable secondary/page · `sidebar toolbar, empty detail, menu title and disabled-message menu` | #6A6A6F | #F2F2F7 | 1.000000 | 4.820554 | 4.820554 | 正文 AA 达 |
-| P1/structural divider/page · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #C6C6C8 | #F2F2F7 | 1.000000 | 1.528439 | 1.528439 | 装饰豁免 |
+| P1/structural divider/page · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #CCD0DA | #F2F2F7 | 1.000000 | 1.383553 | 1.383553 | 装饰豁免 |
 | P1/popover hairline/page · `adaptive_popover + popover_dropdown: explicit 1px card boundary` | #CCD0DA | #F2F2F7 | 1.000000 | 1.383553 | 1.383553 | 装饰豁免 |
 | P1/readable secondary/card · `sidebar toolbar, empty detail, menu title and disabled-message menu` | #6A6A6F | #FFFFFF | 1.115871 | 4.820554 | 5.379116 | 正文 AA 达 |
-| P1/structural divider/card · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #C6C6C8 | #FFFFFF | 1.115871 | 1.528439 | 1.705540 | 装饰豁免 |
+| P1/structural divider/card · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #CCD0DA | #FFFFFF | 1.115871 | 1.383553 | 1.543866 | 装饰豁免 |
 | P1/popover hairline/card · `adaptive_popover + popover_dropdown: explicit 1px card boundary` | #CCD0DA | #FFFFFF | 1.115871 | 1.383553 | 1.543866 | 装饰豁免 |
 | P1/readable secondary/selection · `sidebar toolbar, empty detail, menu title and disabled-message menu` | #6A6A6F | #E0ECFF | 1.068576 | 4.820554 | 4.511193 | 正文 AA 达 |
-| P1/structural divider/selection · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #C6C6C8 | #E0ECFF | 1.068576 | 1.528439 | 1.430351 | 装饰豁免 |
+| P1/structural divider/selection · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #CCD0DA | #E0ECFF | 1.068576 | 1.383553 | 1.294763 | 装饰豁免 |
 | P1/popover hairline/selection · `adaptive_popover + popover_dropdown: explicit 1px card boundary` | #CCD0DA | #E0ECFF | 1.068576 | 1.383553 | 1.294763 | 装饰豁免 |
 | P1/readable secondary/pressed · `sidebar toolbar, empty detail, menu title and disabled-message menu` | #6A6A6F | #F2F2F7 | 1.000000 | 4.820554 | 4.820554 | 正文 AA 达 |
-| P1/structural divider/pressed · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #C6C6C8 | #F2F2F7 | 1.000000 | 1.528439 | 1.528439 | 装饰豁免 |
+| P1/structural divider/pressed · `sidebar resize handle and toolbar/menu separator; cursor and semantics unchanged` | #CCD0DA | #F2F2F7 | 1.000000 | 1.383553 | 1.383553 | 装饰豁免 |
 | P1/popover hairline/pressed · `adaptive_popover + popover_dropdown: explicit 1px card boundary` | #CCD0DA | #F2F2F7 | 1.000000 | 1.383553 | 1.383553 | 装饰豁免 |
 | P1/selected toolbar icon · `sidebar_utility_toolbar.dart` | #005FB8 | #E0ECFF | 1.068576 | 5.653126 | 5.290335 | 非文本 达 |
 | P1/empty detail filled action · `empty_detail_pane.dart: local button fill only` | #FFFFFF | #005FB8 | 5.653126 | 1.115871 | 6.308159 | 正文 AA 达 |
