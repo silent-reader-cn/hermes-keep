@@ -153,6 +153,67 @@ void main() {
     }
   });
 
+  testWidgets('dark board exposes three surfaces and readable dependencies', (
+    tester,
+  ) async {
+    await _pump(tester, brightness: Brightness.dark);
+    final card = find.byKey(const ValueKey('kanban-card-first'));
+    final context = tester.element(card);
+    expect(
+      CupertinoTheme.of(context).scaffoldBackgroundColor,
+      CupertinoColors.black,
+    );
+    final surfaces = <Color>[];
+    for (final target in find.byType(DragTarget<KanbanCard>).evaluate()) {
+      final panel = find
+          .ancestor(
+            of: find.byWidget(target.widget),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container && widget.decoration is BoxDecoration,
+            ),
+          )
+          .first;
+      final decoration =
+          tester.widget<Container>(panel).decoration! as BoxDecoration;
+      surfaces.add(decoration.color!);
+      expect(decoration.color!.computeLuminance(), greaterThan(0));
+      expect(
+        decoration.color!.computeLuminance(),
+        lessThan(_cardDecoration(tester).color!.computeLuminance()),
+      );
+      if (target == find.byType(DragTarget<KanbanCard>).evaluate().first) {
+        expect(
+          tester.getRect(card).left,
+          greaterThan(tester.getRect(panel).left),
+        );
+        expect(
+          tester.getRect(card).right,
+          lessThan(tester.getRect(panel).right),
+        );
+      }
+    }
+    expect(surfaces, hasLength(2));
+    expect(surfaces[0], surfaces[1]);
+    final link = find.byIcon(CupertinoIcons.link);
+    final badge = find
+        .ancestor(of: link, matching: find.byType(Container))
+        .first;
+    final fill =
+        (tester.widget<Container>(badge).decoration! as BoxDecoration).color!;
+    final icon = tester.widget<Icon>(link).color!;
+    expect(
+      icon,
+      CupertinoColors.systemYellow.resolveFrom(tester.element(link)),
+    );
+    expect(_contrast(icon, fill), greaterThanOrEqualTo(3));
+    expect(_contrast(icon, fill), closeTo(7.39, 0.01));
+    final label = tester.widget<Text>(
+      find.descendant(of: badge, matching: find.byType(Text)),
+    );
+    expect(_contrast(label.style!.color!, fill), greaterThanOrEqualTo(4.5));
+  });
+
   for (final brightness in Brightness.values) {
     final light = brightness == Brightness.light;
 
@@ -170,7 +231,7 @@ void main() {
         (resting.border! as Border).top.color,
         light
             ? LightSurfaces.cardBorder
-            : CupertinoColors.systemGrey.withValues(alpha: 0.25),
+            : const Color(0xFF3A3A3C),
       );
       expect(
         tester.widget<Text>(find.text('owner')).style!.color,
@@ -214,19 +275,53 @@ void main() {
       expect(selected.onPressed, isNull);
       expect(
         selected.disabledColor,
-        light ? LightSurfaces.selection : CupertinoColors.quaternarySystemFill,
+        light ? LightSurfaces.selection : CupertinoColors.transparent,
       );
-      // CupertinoButton reapplies the supplied color's alpha after resolving it.
-      // Keeping the unresolved dark value is required for the original pixels.
+      if (!light) {
+        final context = tester.element(otherFinder);
+        final selectedSurface = tester.widget<DecoratedBox>(
+          find
+              .ancestor(
+                of: find.byKey(const ValueKey('kanban-board-main')),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+        );
+        final selectedFill =
+            (selectedSurface.decoration as BoxDecoration).color!;
+        expect(selectedFill, CupertinoColors.activeBlue.resolveFrom(context));
+        expect(
+          _contrast((selected.child as Text).style!.color!, selectedFill),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(
+          (other.child as Text).style!.color,
+          CupertinoColors.label.resolveFrom(context),
+        );
+        expect(
+          _contrast((other.child as Text).style!.color!, other.color!),
+          greaterThanOrEqualTo(4.5),
+        );
+        final outline = tester.widget<DecoratedBox>(
+          find
+              .ancestor(of: otherFinder, matching: find.byType(DecoratedBox))
+              .first,
+        );
+        expect(
+          ((outline.decoration as BoxDecoration).border! as Border).top.color,
+          const Color(0xFF3A3A3C),
+        );
+      }
+      // Dark chips use an opaque fill and keep selected activeBlue visible.
       expect(
         other.color,
-        light ? LightSurfaces.card : CupertinoColors.secondarySystemFill,
+        light ? LightSurfaces.card : const Color(0xFF2C2C2E),
       );
       final pointer = await tester.startGesture(tester.getCenter(otherFinder));
       await tester.pump(const Duration(milliseconds: 100));
       expect(
         tester.widget<CupertinoButton>(otherFinder).color,
-        light ? LightSurfaces.pressed : CupertinoColors.secondarySystemFill,
+        light ? LightSurfaces.pressed : const Color(0xFF2C2C2E),
       );
       await pointer.up();
       await tester.pumpAndSettle();
@@ -279,8 +374,19 @@ void main() {
         await pointer.cancel();
         await tester.pumpAndSettle();
       } else {
-        expect(action.color, CupertinoColors.secondarySystemFill);
+        expect(action.color, const Color(0xFF111113));
         expect(action.foregroundColor, isNull);
+        final actionText = find.descendant(
+          of: actionFinder,
+          matching: find.byType(Text),
+        );
+        expect(
+          _contrast(
+            DefaultTextStyle.of(tester.element(actionText)).style.color!,
+            action.color!,
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
       }
       final input = tester.widget<CupertinoTextField>(
         find.byKey(const ValueKey('kanban-comment-input')),
@@ -363,7 +469,19 @@ void main() {
         expect(control.backgroundColor, LightSurfaces.card);
         expect(control.thumbColor, LightSurfaces.selection);
       } else {
-        expect(control.backgroundColor, CupertinoColors.tertiarySystemFill);
+        expect(control.backgroundColor, const Color(0xFF2C2C2E));
+        final outline = tester.widget<DecoratedBox>(
+          find
+              .ancestor(
+                of: find.byType(CupertinoSlidingSegmentedControl<String>),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+        );
+        expect(
+          ((outline.decoration as BoxDecoration).border! as Border).top.color,
+          const Color(0xFF3A3A3C),
+        );
       }
       await tester.enterText(
         find.byKey(const ValueKey('kanban-form-title')),

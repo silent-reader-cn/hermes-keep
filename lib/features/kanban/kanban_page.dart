@@ -14,6 +14,15 @@ import '../shared/app_back_button.dart';
 import 'kanban_providers.dart';
 import '../../app/widgets/hermes_page_route.dart';
 
+// Dark-only hierarchy: page #000000 -> column #111113 -> card #1C1C1E.
+// Column/card Michelson contrast is 0.348. Decorative #3A3A3C hairlines
+// have 1.50:1 WCAG contrast on cards; titles and spacing also define each card.
+const _kanbanDarkColumn = Color(0xFF111113);
+const _kanbanDarkBorder = Color(0xFF3A3A3C);
+const _kanbanDarkControlFill = Color(0xFF2C2C2E);
+// Resolved yellow on this tint: 7.39:1 (7.30:1 at high contrast).
+const _kanbanDarkDependencyFill = Color(0xFF4A3F14);
+
 /// Kanban 状态展示标题（对齐 Hermex KanbanStatusPresentation.title）。
 String kanbanStatusTitle(String? rawValue, [BuildContext? context]) {
   if (context != null) {
@@ -239,8 +248,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 borderRadius: BorderRadius.circular(14),
                 pressedOpacity: isLight ? 1 : 0.4,
-                // Native buttons reapply the original color alpha after
-                // resolution, so dark must retain the unresolved dynamic value.
+                // An opaque dark fill separates unselected chips from cards.
                 color: isLight
                     ? (selected
                           ? LightSurfaces.selection
@@ -249,10 +257,10 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
                                 : LightSurfaces.card))
                     : (selected
                           ? CupertinoColors.activeBlue
-                          : CupertinoColors.secondarySystemFill),
+                          : _kanbanDarkControlFill),
                 disabledColor: isLight
                     ? LightSurfaces.selection
-                    : CupertinoColors.quaternarySystemFill,
+                    : CupertinoColors.transparent,
                 onPressed: selected
                     ? null
                     : () => unawaited(_selectBoard(slug)),
@@ -266,12 +274,29 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
                               ? statusBlueText.resolveFrom(context)
                               : CupertinoColors.label.resolveFrom(context))
                         : (selected
-                              ? CupertinoColors.white
-                              : CupertinoColors.label),
+                              // Black on activeBlue is 5.76:1 in dark mode.
+                              ? CupertinoColors.black
+                              : CupertinoColors.label.resolveFrom(context)),
                   ),
                 ),
               );
-              if (!isLight) return button;
+              if (!isLight) {
+                return Semantics(
+                  selected: selected,
+                  child: selected
+                      // Selection owns its fill independently of disabled styling.
+                      ? DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.activeBlue.resolveFrom(
+                              context,
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: button,
+                        )
+                      : _kanbanDarkControlOutline(button, radius: 14),
+                );
+              }
               return Semantics(
                 selected: selected,
                 child: DecoratedBox(
@@ -357,7 +382,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+                dark: CupertinoColors.secondaryLabel,
               ),
             ),
             const SizedBox(height: 12),
@@ -395,7 +420,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+                dark: CupertinoColors.secondaryLabel,
               ),
             ),
             const SizedBox(height: 12),
@@ -433,7 +458,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+                dark: CupertinoColors.secondaryLabel,
               ),
             ),
             const SizedBox(height: 12),
@@ -518,7 +543,7 @@ class _KanbanColumnView extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final cards = column.cards ?? const <KanbanCard>[];
     final name = column.name ?? '';
-    return SizedBox(
+    final content = SizedBox(
       width: 280,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -610,6 +635,16 @@ class _KanbanColumnView extends StatelessWidget {
         ],
       ),
     );
+    if (_usesLightSurfaces(context)) return content;
+    return Container(
+      width: 280,
+      padding: const EdgeInsets.all(8),
+      decoration: const BoxDecoration(
+        color: _kanbanDarkColumn,
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+      ),
+      child: content,
+    );
   }
 }
 
@@ -646,7 +681,7 @@ class _KanbanCardTile extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.cardBorder,
-                dark: CupertinoColors.systemGrey.withValues(alpha: 0.25),
+                dark: _kanbanDarkBorder,
               ),
             ),
           ),
@@ -720,7 +755,7 @@ class _KanbanCardTile extends StatelessWidget {
         color: LightSurfaces.resolve(
           context,
           LightSurfaces.tintWarning,
-          dark: CupertinoColors.systemYellow.withValues(alpha: 0.2),
+          dark: _kanbanDarkDependencyFill,
         ),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -733,7 +768,7 @@ class _KanbanCardTile extends StatelessWidget {
             color: LightSurfaces.resolve(
               context,
               statusOrangeText.resolveFrom(context),
-              dark: Color(CupertinoColors.systemOrange.toARGB32()),
+              dark: CupertinoColors.systemYellow,
             ),
           ),
           const SizedBox(width: 3),
@@ -743,9 +778,7 @@ class _KanbanCardTile extends StatelessWidget {
                 : l10n.childrenDependency(children),
             style: TextStyle(
               fontSize: 11,
-              // 徽章文字用全强度 label：statusOrangeText 在 20% 黄底上
-              // dark 只有 ~1.45:1（背景追踪暴露的真问题），label 深浅色都达标。
-              // （注意：必须 resolve，const 动态色冻结浅色变体会在深色下隐身。）
+              // Full-strength label: white on the dark tint is 10.44:1.
               color: CupertinoColors.label.resolveFrom(context),
             ),
           ),
@@ -967,7 +1000,8 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   : null,
               color: _usesLightSurfaces(context)
                   ? (pressed ? LightSurfaces.pressed : LightSurfaces.selection)
-                  : CupertinoColors.secondarySystemFill,
+                  // Brand-blue action text on #111113 is 4.70:1.
+                  : _kanbanDarkColumn,
               onPressed: _busyStatus != null
                   ? null
                   : () => unawaited(_changeStatus(card, status)),
@@ -1181,7 +1215,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: Color(CupertinoColors.systemGrey.toARGB32()),
+                dark: CupertinoColors.secondaryLabel,
               ),
             ),
             const SizedBox(height: 12),
@@ -1335,7 +1369,17 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           ),
       },
     );
-    if (!_usesLightSurfaces(context)) return control;
+    if (!_usesLightSurfaces(context)) {
+      return _kanbanDarkControlOutline(
+        CupertinoSlidingSegmentedControl<String>(
+          groupValue: control.groupValue,
+          onValueChanged: control.onValueChanged,
+          children: control.children,
+          backgroundColor: _kanbanDarkControlFill,
+        ),
+        radius: 8,
+      );
+    }
     return DecoratedBox(
       position: DecorationPosition.foreground,
       decoration: BoxDecoration(
@@ -1406,6 +1450,17 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
     }
   }
 }
+
+// Foreground decoration adds a boundary without changing hit targets or layout.
+Widget _kanbanDarkControlOutline(Widget child, {required double radius}) =>
+    DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: _kanbanDarkBorder, width: 0.5),
+      ),
+      child: child,
+    );
 
 bool _usesLightSurfaces(BuildContext context) =>
     CupertinoTheme.brightnessOf(context) == Brightness.light;
