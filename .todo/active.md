@@ -92,3 +92,25 @@
   - b) `/api/session/stream?session_id=&known_count=`：`session-updated`/`bg_task_complete` 帧（WebUI messages.js:7553 在用，server:7587），进入聊天页伴随订阅→复用 `syncMissingMessages`，治「双端同看一会话内容不同步」。
   - c) `/api/sessions/gateway/stream`：watcher 全量 `sessions_changed {sessions}`，依赖 show_cli_sessions+watcher 存活（30002 实测未启用，probe 路径先行），优先级最低。
 
+
+---
+
+## #107 接线 /api/approval/stream 独立 SSE（候选 a 立项，2026-09-14 主人「按推荐立项」）
+
+- 位置：`lib/core/api/api_client_chat.dart:139` `approvalStreamUrl` 现为**零接线死代码**；镜像 clarify 独立流先例 `lib/features/chat/chat_server_api.dart:348-376`（连/断/重建 + pending 拉取兜底）。
+- 现状 vs 预期：现状=approval 卡片只靠回合主 stream 捎带帧，SSE 断线重连空窗期、或他端（WebUI/CLI）触发的审批，本机 approval 状态不可见/残留；预期=进入会话即伴随订阅 `/api/approval/stream?session_id=`（帧：`initial{pending,pending_count}` + `approval{...}`，server routes.py:19308/19321），pending 有→置 `ChatPhase.approvalPending`，无→清卡；与主 stream 捎带路径幂等合并（同 approval_id 去重，不双渲染）。
+- 生命周期：与回合流解耦（页面在挂→订阅，退页 dispose），断线重连退避同 #106 参数（1s*2^n 封顶 30s）；设置开关沿用 #106 的 `session_events_stream_enabled`? 独立键 `approval_stream_enabled` 更清晰（默认开），验收时再定。
+- 验收：analyze 零告警；单测=Fake 推 approval 帧→phase 变、initial 空→清卡、重连补 initial；既有关卡/审批测试全绿。规格细化后与 #108 并行拆 worktree。
+
+---
+
+## #108 接线 /api/session/stream 会话内容增量同步（候选 b 立项，2026-09-14 主人「按推荐立项」）
+
+- 位置：新伴随订阅（chat 页生命周期内），帧 `session-updated`（服务端比 `known_count` 后推增量计数）与 `bg_task_complete`；参照 WebUI `static/messages.js:7553` 消费法与 server routes.py:17429+ 语义；单会话 journal 变体 `/api/session/{sid}/events`（routes.py:13308/17587）与主 chat/stream 重叠，**不接**。
+- 现状 vs 预期：现状=手机开着会话 A、电脑上继续聊 A，本机内容不动（回合外无推送）；`process` 后台任务完成（如 delegate 通知）只能靠下次进页 syncMissingMessages；预期=session-updated→复用 `chat_controller` 现有 `syncMissingMessages`（差值同步已实现），bg_task_complete→复用现有通知/卡片路径；known_count 用服务端持久 `message_count` 基准（勿用渲染窗口长度，messages.js:7540-7546 注释的坑）。
+- 与 #106 关系：互补——#106 管列表行（结构变更），#108 管当前会话正文（内容追加）。
+- 验收：analyze 零告警；单测=推 session-updated 触发 syncMissingMessages 一次、known_count 门槛生效（无差值不拉）；金照不受影响。规格细化后与 #107 并行拆 worktree。
+
+---
+
+**#106 状态（2026-09-14 收口）**：已交付 main @d99d120（agy worktree `agy/s106-events` 执行，Leader 独立复验：主仓 analyze 零告警 + 2853 全绿 + 金照零破坏；新增 9 用例）。**待主人真机复验**：①Windows 端开着 App，在 WebUI 30002 里改名/归档一个会话 → 列表 <2s 跟随；②手机新建会话发首条消息 → 列表 <6s 稳定出现（现状最坏 35s）；③设置页「定时会话」组出现「会话列表实时推送」开关，关闭后退化纯轮询旧行为。开关落点在 _CronSection（与 cron 显隐同组），主人若觉得语义错位可后续挪组。
