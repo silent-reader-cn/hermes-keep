@@ -146,6 +146,46 @@ void main() {
     } catch (_) {}
   });
 
+  /// 轮询等待 [predicate] 成立（有界超时）。替代固定延迟：CI runner 负载下
+  /// 固定毫秒数常常不够，会在终态/副作用落地前断言。
+  Future<void> waitUntil(
+    bool Function() predicate, {
+    Duration timeout = const Duration(seconds: 15),
+    String? reason,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (!predicate()) {
+      if (DateTime.now().isAfter(deadline)) {
+        fail('waitUntil 超时（${reason ?? '条件未成立'}）');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  }
+
+  /// 等待下载队列静默（无 queued/downloading 任务），替代固定延迟。
+  ///
+  /// 固定延迟在 CI runner 负载下常常不够：会在任务到终态前断言，断言失败后
+  /// tearDown 关闭 drift 连接，而仍在跑的队列链继续落库 → 
+  /// "Can't re-open a database after closing it"（同一测试二次报错）。
+  Future<void> settleDownloads(
+    ProviderContainer container, {
+    Duration timeout = const Duration(seconds: 15),
+    String? reason,
+  }) {
+    return waitUntil(
+      () => container
+          .read(downloadControllerProvider)
+          .tasks
+          .every(
+            (t) =>
+                t.status != DownloadStatus.queued &&
+                t.status != DownloadStatus.downloading,
+          ),
+      timeout: timeout,
+      reason: reason ?? '队列未静默',
+    );
+  }
+
   ProviderContainer createContainer({
     DownloadBytesDownloader? customDownloader,
     DownloadResumableDownloader? customResumableDownloader,
@@ -261,7 +301,7 @@ void main() {
         fileName: 'progress.zip',
         expectedBytes: 64,
       );
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await settleDownloads(container);
 
       final state = container.read(downloadControllerProvider);
       expect(state.taskById(id)!.status, DownloadStatus.completed);
@@ -288,7 +328,7 @@ void main() {
         sourceUrl: 'https://example.com/boom.zip',
         fileName: 'boom.zip',
       );
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await settleDownloads(container);
 
       final state = container.read(downloadControllerProvider);
       expect(
@@ -315,7 +355,12 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 80));
       await controller.cancel(id);
-      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await settleDownloads(container, reason: '取消后队列应静默');
+      // 清进度通知是取消的异步副作用（状态变更后才落地）：等条件而非固定延迟。
+      await waitUntil(
+        () => notificationService.clearProgressCalls >= 1,
+        reason: '取消后应清进度通知',
+      );
 
       final state = container.read(downloadControllerProvider);
       expect(state.taskById(id)!.status, DownloadStatus.cancelled);
@@ -435,7 +480,7 @@ void main() {
       expect(task.progress, closeTo(0.5, 0.01));
 
       releaseDownload.complete();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
       task = container.read(downloadControllerProvider).taskById(id);
       expect(task!.status, DownloadStatus.completed);
     });
@@ -504,7 +549,7 @@ void main() {
 
       // 释放第一个任务
       blockFirstDownload.complete();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
 
       final state = container.read(downloadControllerProvider);
       expect(state.taskById(id1)?.status, DownloadStatus.completed);
@@ -545,7 +590,7 @@ void main() {
 
       // 下载返回
       finishDownload.complete();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
 
       final state = container.read(downloadControllerProvider);
       expect(state.taskById(id)?.status, DownloadStatus.cancelled);
@@ -572,7 +617,7 @@ void main() {
         fileName: 'retry.bin',
       );
 
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
       expect(
         container.read(downloadControllerProvider).taskById(id)?.status,
         DownloadStatus.failed,
@@ -580,7 +625,7 @@ void main() {
 
       // 重试
       await controller.retry(id);
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
 
       final state = container.read(downloadControllerProvider);
       expect(state.taskById(id)?.status, DownloadStatus.completed);
@@ -605,7 +650,7 @@ void main() {
         sourceUrl: 'https://example.com/dedup.png',
         fileName: 'dedup.png',
       );
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
       expect(downloadCalls, 1);
       final task1 = container.read(downloadControllerProvider).taskById(id1)!;
       expect(task1.status, DownloadStatus.completed);
@@ -617,7 +662,7 @@ void main() {
         fileName: 'dedup.png',
       );
       expect(id2, isNot(equals(id1)));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
       expect(downloadCalls, 2);
 
       final task2 = container.read(downloadControllerProvider).taskById(id2)!;
@@ -676,7 +721,7 @@ void main() {
       );
       expect(id2, isNotEmpty);
 
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await settleDownloads(container);
       expect(container.read(downloadControllerProvider).tasks, hasLength(2));
 
       await controller.remove(id1);
@@ -706,7 +751,7 @@ void main() {
         expectedBytes: 5,
       );
 
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
 
       final state = container.read(downloadControllerProvider);
       final task = state.taskById(id);
@@ -746,7 +791,7 @@ void main() {
         mimeType: 'text/plain',
       );
 
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
 
       final state = container.read(downloadControllerProvider);
       final task = state.taskById(id);
@@ -771,7 +816,7 @@ void main() {
         bytes: rawBytes,
         fileName: 'dup_test.bin',
       );
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
 
       final task1 = container.read(downloadControllerProvider).taskById(id1)!;
       expect(task1.status, DownloadStatus.completed);
@@ -783,7 +828,7 @@ void main() {
         fileName: 'dup_test.bin',
       );
       expect(id2, isNot(equals(id1)));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settleDownloads(container);
 
       final task2 = container.read(downloadControllerProvider).taskById(id2)!;
       expect(task2.status, DownloadStatus.completed);
