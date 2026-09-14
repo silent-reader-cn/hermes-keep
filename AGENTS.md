@@ -198,13 +198,13 @@ C:/tmp/f.bat analyze          # 零告警（含 info）
 C:/tmp/f.bat test             # 全绿
 C:/tmp/f.bat test --update-goldens   # 布局/样式变更后刷新金照（只写当前平台目录）
 C:/tmp/f.bat build apk --debug
-python tools/patch_android_gradle_namespace.py   # pub get 之后、build apk 之前（幂等）
+python tools/patch_android_pub_cache.py          # pub get 之后、build apk 之前（幂等）
 python tools/fake_gateway/smoke_test.py
 ```
 
 > Windows 宿主在 MSYS bash 下跑 flutter/dart 需走封装 bat `C:/tmp/f.bat`，避免 HOME/PATH 污染。详见 `windows-terminal` skill 的 `references/flutter-toolchain-msys-setup.md`。
 
-> **APK 构建前必须补 Android namespace**：`super_clipboard` 家族（`irondash_engine_context` / `super_native_extensions`）已停维护且未声明 AGP 8+ 必需的 `namespace`，干净 pub-cache 会让 `flutter build apk` 在 Gradle 配置期直接失败。每次 `pub get` 后跑一次 `python tools/patch_android_gradle_namespace.py`（幂等，CI 的 android-debug 已内置该步）。详见脚本模块文档。
+> **APK 构建前必须补 pub cache**：`super_clipboard` 家族（`irondash_engine_context` / `super_native_extensions`）已停维护，在 AGP 8+/Gradle 9 下有两处硬伤——未声明必需的 `namespace`、CargoKit 用了 Gradle 9 已移除的 `childProjects`。干净 pub-cache 上 `flutter build apk` 必然失败（且本机 2026-08-24 是**手工改过 pub cache** 才通的，那属于仓库外状态）。每次 `pub get` 后跑一次 `python tools/patch_android_pub_cache.py`（幂等；CI 的 android-debug 已内置该步）。详见脚本模块文档。
 >
 > **金照基线按平台分目录**：`test/golden/goldens/<windows|linux|macos>/`（逻辑见 `test/golden/golden_platform.dart`）。金照是**渲染环境**的产物——字体度量、CJK 字形回退随宿主平台变，故各平台只与自己那份比对；本平台**无基线时用例自动 skip**（记 `markTestSkipped`）而非失败，杜绝「拿 Windows 基线在 Linux 上比」的必然假红。补某平台基线：在该平台跑 `flutter test --update-goldens test/golden/` 后提交对应目录；CI 亦可 `workflow_dispatch` 选 `update_goldens=true` 生成并下载 artifact。金照字体源见 `golden_helpers.dart`（Windows 用系统 SimHei，其余平台退回仓库自带 MiSans）。
 

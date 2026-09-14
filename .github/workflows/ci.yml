@@ -78,10 +78,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - run: flutter pub get
-      # 停维护的 super_clipboard 家族（irondash_engine_context / super_native_extensions）
-      # 未声明 AGP 8+ 必需的 namespace，干净 pub-cache 会令 Gradle 配置期直接失败。
-      # 本机长期靠一份仓库外手改 pub-cache 绕过；此处收敛为入仓幂等步骤。
-      - run: python3 tools/patch_android_gradle_namespace.py
+      # 停维护的 super_clipboard 家族在 AGP 8+/Gradle 9 下有两处硬伤（缺 namespace、
+      # CargoKit 用已移除的 childProjects），干净 pub-cache 必然构建失败。本机长期靠
+      # 仓库外手改 pub-cache 绕过；此处收敛为入仓幂等步骤（细节见脚本模块文档）。
+      - run: python3 tools/patch_android_pub_cache.py
       - run: flutter build apk --debug
 
   fake-gateway:

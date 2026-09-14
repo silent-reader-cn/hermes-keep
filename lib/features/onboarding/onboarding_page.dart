@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -370,7 +369,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isBundled = ref.watch(bundledWebuiAvailableProvider);
-    final useBuiltinPane = Platform.isWindows && isBundled;
+    // 形态 A/B 判定走**注入的平台判定**而非宿主 Platform.isWindows：
+    // 平台语义是决策输入，必须能被测试覆写，否则 CI(Linux) 上永远落到形态 B、
+    // 「分段控件」类用例只能假红（本页既有的 bundledWebuiAvailable 覆写即同款思路）。
+    final useBuiltinPane =
+        ref.watch(sidecarFileSystemProvider).isWindows && isBundled;
 
     // 停用回退（风险②）：active 从 builtin 被清 → 停留内置 Tab
     if (useBuiltinPane) {

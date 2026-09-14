@@ -625,7 +625,10 @@ void main() {
     test(
       'DefaultSidecarFileSystem 默认 hermesAgentDir 与 customAgentDir 构造断言',
       () {
+        // 断言的是 **Windows 语义**，故必须显式注入平台判定：
+        // 不注入时该断言在非 Windows 宿主（CI Linux）上会拼出 '/' 分隔而假红。
         const fsDefault = DefaultSidecarFileSystem(
+          customIsWindows: true,
           customLocalAppData: r'D:\CustomAppData',
         );
         expect(
@@ -634,6 +637,7 @@ void main() {
         );
 
         const fsCustom = DefaultSidecarFileSystem(
+          customIsWindows: true,
           customAgentDir: r'E:\DedicatedAgent',
         );
         expect(fsCustom.hermesAgentDir, r'E:\DedicatedAgent');
