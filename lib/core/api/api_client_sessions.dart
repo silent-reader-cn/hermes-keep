@@ -5,18 +5,35 @@ import '../models/session.dart';
 
 /// sessions 域方法（18 个端点）+ projects 域（4 个端点）。
 extension ApiClientSessions on ApiClient {
+  /// 会话列表全量返回超时：120s（#111；其余端点保持默认 60s）。
+  ///
+  /// 服务端会话库全量重建（缓存失效时同步进行，数百个 JSON、本机实测解析
+  /// 9.3s 起步，叠加 reconcile / CLI 合并 / 序列化 + frp 出口）在弱网下会
+  /// 顶穿默认 60s，把冷启动首屏变成 receiveTimeout 红屏。列表是只读全量
+  /// 接口，放宽超时不影响写操作的失败可见性。
+  static const sessionsListTimeout = Duration(seconds: 120);
+
   /// GET /api/sessions（`include_archived` 为 opt-in，`archived_limit` 仅随其发送）。
+  ///
+  /// 并发去重：同参数的并发请求共享一次网络往返（冷启动会话列表 + 托盘菜单
+  /// 会同时触发，见 [ApiClient.coalesceRequest]）。
   Future<SessionsResponse> sessions({
     bool includeArchived = false,
     int? archivedLimit,
-  }) async {
-    final json = await sendJson(
-      Endpoint.sessions(
-        includeArchived: includeArchived,
-        archivedLimit: archivedLimit,
-      ),
+  }) {
+    return coalesceRequest(
+      'sessions-list:${includeArchived ? 1 : 0}:${archivedLimit ?? '-'}',
+      () async {
+        final json = await sendJson(
+          Endpoint.sessions(
+            includeArchived: includeArchived,
+            archivedLimit: archivedLimit,
+          ),
+          timeout: sessionsListTimeout,
+        );
+        return SessionsResponse.fromJson(_asMap(json));
+      },
     );
-    return SessionsResponse.fromJson(_asMap(json));
   }
 
   /// GET /api/sessions/search?q=&content=&depth= → SessionSearchResponse。

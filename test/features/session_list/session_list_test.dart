@@ -166,7 +166,8 @@ void main() {
     test('初始加载失败 → AsyncError；refresh 重试成功', () async {
       final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       api.fetchError = NetworkException(NetworkExceptionKind.cannotConnect);
-      final container = makeContainer(api);
+      // 非内置连接：冷启动会先静默补偿一次（#111），持续失败后仍落 AsyncError。
+      final container = makeContainer(api, active: _buildConn());
 
       await expectLater(
         container.read(sessionListControllerProvider.future),
@@ -174,6 +175,8 @@ void main() {
       );
       expect(container.read(sessionListControllerProvider).hasError, isTrue);
       expect(container.read(sessionListControllerProvider).valueOrNull, isNull);
+      // 首屏 1 次 + 冷启动补偿 1 次（补偿仍失败才落错误态）。
+      expect(api.fetchCount, 2);
 
       api.fetchError = null;
       await container.read(sessionListControllerProvider.notifier).refresh();
@@ -549,8 +552,9 @@ void main() {
   group('SessionListPage widget', () {
     Future<void> pumpSessionList(
       WidgetTester tester,
-      FakeSessionListApi api,
-    ) async {
+      FakeSessionListApi api, {
+      ServerConnection? active,
+    }) async {
       final router = GoRouter(
         initialLocation: '/',
         routes: [
@@ -576,6 +580,12 @@ void main() {
             projectApiFactoryProvider.overrideWithValue(
               (_) => _StubProjectApi(),
             ),
+            // 非内置连接：冷启动首屏失败会触发一次静默补偿（#111），需要
+            // 注入 stub 避免真实 connections provider 读 secure storage。
+            if (active != null)
+              activeConnectionProvider.overrideWith(
+                () => _StubActiveConnection(active),
+              ),
           ],
           child: CupertinoApp.router(routerConfig: router),
         ),
@@ -644,7 +654,9 @@ void main() {
     testWidgets('错误态：加载失败展示错误信息，重试恢复', (tester) async {
       final api = FakeSessionListApi(sessions: [buildSession('s1', '恢复的会话')]);
       api.fetchError = NetworkException(NetworkExceptionKind.cannotConnect);
-      await pumpSessionList(tester, api);
+      // 非内置连接：错误态要等冷启动补偿（#111）退避跑完才出现。
+      await pumpSessionList(tester, api, active: _buildConn());
+      await tester.pump(const Duration(seconds: 2));
 
       expect(find.text('加载失败'), findsOneWidget);
       expect(find.textContaining('无法连接'), findsOneWidget);

@@ -601,6 +601,67 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     });
   }
 
+  /// 冷启动首屏"快速失败"静默重试的退避间隔（#111）。
+  static const Duration coldStartRetryBackoff = Duration(milliseconds: 1500);
+
+  /// 冷启动首屏失败是否值得静默重试一次（#111）。
+  ///
+  /// 只补偿**网络类快速失败**：
+  /// - `cannotConnect` / `cannotFindHost` / `offline`：连接层抖动（sidecar
+  ///   刚拉起、frp 隧道刚重连、进程刚被系统回收）一次重试即可自愈；
+  /// - `502/503/504`：网关侧瞬断。
+  ///
+  /// 明确不补偿：`timedOut`（receiveTimeout 已耗尽 120s 预算，再等一轮会让
+  /// 首屏空窗翻倍——此时走离线缓存 / 冷启动静默宽限更友好）、`401`（走自动
+  /// 重登链）、`500`（服务端逻辑错，重试大概率同样失败，保持错误态让用户
+  /// 看到真因）。
+  static bool shouldRetryColdStartFetch(ApiException error) {
+    if (error is NetworkException) {
+      return error.kind == NetworkExceptionKind.cannotConnect ||
+          error.kind == NetworkExceptionKind.cannotFindHost ||
+          error.kind == NetworkExceptionKind.offline;
+    }
+    if (error is HttpException) {
+      return const {502, 503, 504}.contains(error.statusCode);
+    }
+    return false;
+  }
+
+  /// 首屏拉取：冷启动 + 网络类快速失败 → 退避 [coldStartRetryBackoff] 后
+  /// 静默重试一次（仅一次，防雪崩；401 原样抛出交给自动重登链）。
+  ///
+  /// **内置连接不补偿**：其冷启动有专属的静默宽限状态机（#72，轮询
+  /// `/health` + 显示离线缓存，本身就不会红屏），首屏失败是宽限的触发条件，
+  /// 抢先重试会绕过该契约；远程/自建连接没有宽限，才是本条补偿的对象。
+  Future<SessionsResponse> _fetchSessionsFirstPage(
+    SessionListApi api, {
+    required bool isColdStart,
+  }) async {
+    try {
+      return await api.fetchSessions();
+    } on ApiException catch (error) {
+      // 顺序有意：先跑纯函数判据，再读连接状态（读 provider 有副作用/可能抛）。
+      final compensate =
+          isColdStart &&
+          shouldRetryColdStartFetch(error) &&
+          !_isBuiltinConnectionOrUnknown();
+      if (!compensate) rethrow;
+      await Future<void>.delayed(coldStartRetryBackoff);
+      return api.fetchSessions();
+    }
+  }
+
+  /// [_isBuiltinConnection] 的容错版：连接状态读不到（初始化极早期、
+  /// 无 flutter_secure_storage 插件的测试容器）时按「内置」保守处理，
+  /// 即不补偿——不确定就不改变既有行为。
+  bool _isBuiltinConnectionOrUnknown() {
+    try {
+      return _isBuiltinConnection();
+    } on Object {
+      return true;
+    }
+  }
+
   /// 加载第一页；401 时自动用保存的密码重登一次再重试
   /// （防递归：`[allowAutoReauth]` 只放行一轮）。
   Future<SessionListState> _loadFirstPage(
@@ -610,7 +671,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     bool isColdStart = false,
   }) async {
     try {
-      final response = await api.fetchSessions();
+      final response = await _fetchSessionsFirstPage(
+        api,
+        isColdStart: isColdStart,
+      );
       final rawSessions = response.sessions ?? const <SessionSummary>[];
       final sessions = _overlayStreaming(rawSessions);
       try {

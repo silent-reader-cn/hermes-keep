@@ -990,6 +990,74 @@ void main() {
       expect(res.error, 'Service Unavailable');
     });
   });
+  group('ApiClientSessions 列表超时与并发去重 (#111)', () {
+    test('sessions 列表请求 receiveTimeout 放宽至 120s（其余端点仍 60s）', () async {
+      final adapter = _MockAdapter(
+        responder: (_) => ResponseBody.fromString('{"sessions":[]}', 200),
+      );
+      final client = buildClient(adapter);
+      await client.sessions();
+      expect(adapter.requests, hasLength(1));
+      expect(
+        adapter.requests.single.receiveTimeout,
+        const Duration(seconds: 120),
+      );
+      // 旁证：其它域端点未被顺手放宽。
+      await client.projects();
+      expect(adapter.requests.last.receiveTimeout, isNot(
+        const Duration(seconds: 120),
+      ));
+    });
+
+    test('并发 sessions 请求合并为一次网络往返；在途注销后重新发起', () async {
+      final adapter = _MockAdapter(
+        responder: (_) => ResponseBody.fromString(
+          '{"sessions":[{"session_id":"s1","title":"Session 1"}]}',
+          200,
+        ),
+      );
+      final client = buildClient(adapter);
+
+      // 冷启动并发两路（会话列表 + 托盘菜单）：共享同一个在途 Future。
+      final first = client.sessions();
+      final second = client.sessions();
+      expect(identical(first, second), isTrue);
+
+      final results = await Future.wait([first, second]);
+      expect(adapter.requests, hasLength(1));
+      expect(results[0].sessions?.single.sessionId, 's1');
+      expect(results[1].sessions?.single.sessionId, 's1');
+
+      // 在途请求结束后（成功或失败）登记注销 → 再调发新请求。
+      await client.sessions();
+      expect(adapter.requests, hasLength(2));
+    });
+
+    test('并发去重的失败同样共享，且不产生未处理异步异常', () async {
+      final adapter = _MockAdapter(
+        responder: (_) => ResponseBody.fromString('boom', 500),
+      );
+      final client = buildClient(adapter);
+      final first = client.sessions();
+      final second = client.sessions();
+      await expectLater(first, throwsA(isA<ApiException>()));
+      await expectLater(second, throwsA(isA<ApiException>()));
+      expect(adapter.requests, hasLength(1));
+    });
+
+    test('不同参数的 sessions 请求不互相去重', () async {
+      final adapter = _MockAdapter(
+        responder: (_) => ResponseBody.fromString('{"sessions":[]}', 200),
+      );
+      final client = buildClient(adapter);
+      await Future.wait([
+        client.sessions(),
+        client.sessions(includeArchived: true, archivedLimit: 10),
+      ]);
+      expect(adapter.requests, hasLength(2));
+    });
+  });
+
 }
 
 class _MockAdapter implements HttpClientAdapter {

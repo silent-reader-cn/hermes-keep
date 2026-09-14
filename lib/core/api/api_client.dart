@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show SocketException;
 import 'dart:typed_data';
@@ -90,6 +91,39 @@ class ApiClient {
 
   /// 防止并发重登的互斥标记。
   bool _reauthInFlight = false;
+
+  /// 在途请求登记表（并发去重 single-flight 用）：key → 共享 Future。
+  ///
+  /// 值类型留成 `Object?`（而非 `Future<Object?>`）：`Map.remove` 会把被移除的
+  /// Future 作为返回值丢弃，触发 `discarded_futures` 告警。
+  final Map<String, Object?> _inFlightRequests = {};
+
+  /// 并发去重（single-flight）：同一 [key] 的在途请求共享同一个 Future，
+  /// 请求结束（成功或失败）即注销，后续调用重新发起。
+  ///
+  /// 动机（#111）：冷启动时会话列表与桌面托盘菜单会并发触发
+  /// `GET /api/sessions`，而服务端该端点在缓存失效时需同步重建全量会话
+  /// （数百个 JSON 单次 9s 起步，ThreadingHTTPServer 下重建线程占 GIL
+  /// 串行化全体请求）——重复请求会把整个冷启动拖成超时。这里把同 key 的
+  /// 并发请求合并为一次真实网络往返。
+  ///
+  /// 同 key 但泛型不符时按未命中处理（直接发起新请求），避免错误类型转换。
+  Future<T> coalesceRequest<T>(String key, Future<T> Function() perform) {
+    final existing = _inFlightRequests[key];
+    if (existing is Future<T>) return existing;
+    final future = perform();
+    _inFlightRequests[key] = future;
+    void unregister(Object? _) {
+      if (identical(_inFlightRequests[key], future)) {
+        _inFlightRequests.remove(key);
+      }
+    }
+
+    // 用 then(onError:) 而非 whenComplete：后者的返回 Future 会承载异常，
+    // 被丢弃后即成为未处理异步异常（测试与线上都会报）。
+    unawaited(future.then<void>(unregister, onError: unregister));
+    return future;
+  }
 
   /// 默认请求超时（git commit-message 两个端点单独传 120s）。
   final Duration defaultTimeout;
