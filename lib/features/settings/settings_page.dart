@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/locale/locale_provider.dart';
 import '../../app/theme/light_surfaces.dart';
@@ -2058,6 +2060,54 @@ class _AboutSection extends ConsumerStatefulWidget {
 class _AboutSectionState extends ConsumerState<_AboutSection> {
   bool _isChecking = false;
 
+  /// 打开本应用公开仓库（外部浏览器）。
+  ///
+  /// 失败（无浏览器/被策略拦截/返回 false）时弹窗给出完整地址，
+  /// 用户可一键复制地址手动访问，不静默吞掉。
+  Future<void> _openRepository() async {
+    var launched = false;
+    try {
+      launched = await launchUrl(
+        Uri.parse(kHermesUiRepoUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      launched = false;
+    }
+
+    if (launched || !mounted) return;
+
+    final l10n = AppLocalizations.of(context);
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => SettingsSurfaces.dialog(
+        context,
+        CupertinoAlertDialog(
+          title: Text(l10n.actionFailed),
+          content: const Text(kHermesUiRepoUrl),
+          actions: [
+            CupertinoDialogAction(
+              child: Text(l10n.copy),
+              onPressed: () {
+                unawaited(
+                  Clipboard.setData(
+                    const ClipboardData(text: kHermesUiRepoUrl),
+                  ),
+                );
+                Navigator.of(ctx).pop();
+              },
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: Text(l10n.ok),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _checkUpdate() async {
     if (_isChecking) return;
     setState(() => _isChecking = true);
@@ -2159,8 +2209,11 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
         header: Text(l10n.aboutSection),
         children: [
           CupertinoListTile(
+            key: const ValueKey('settings-repo-tile'),
             title: const Text('Hermes UI'),
             subtitle: Text(l10n.hermesWebUIClient),
+            trailing: const CupertinoListTileChevron(),
+            onTap: () => unawaited(_openRepository()),
           ),
           CupertinoListTile(
             key: const ValueKey('settings-version-tile'),

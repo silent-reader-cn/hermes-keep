@@ -17,6 +17,9 @@ const String kLastUpdateCheckAtKey = 'last_update_check_at';
 const String kGithubReleasesLatestUrl =
     'https://api.github.com/repos/silent-reader-cn/hermes-ui/releases/latest';
 
+/// 本应用公开仓库主页（设置 → 关于 → Hermes UI 点击后外部浏览器打开）。
+const String kHermesUiRepoUrl = 'https://github.com/silent-reader-cn/hermes-ui';
+
 /// 更新检测结果状态。
 enum UpdateCheckStatus {
   /// 发现新版本。
