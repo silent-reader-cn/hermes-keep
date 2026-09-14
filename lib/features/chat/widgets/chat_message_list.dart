@@ -1968,6 +1968,52 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         .read(chatControllerProvider(sessionId))
         .liveReasoningText;
     final hideThinking = ref.watch(hideReasoningProvider);
+
+    // 跨源相邻合并（live 首卡 ▸ 上方最后一张转录卡）。
+    //
+    // live 期间流式临时消息会被服务端权威行吸收重锚，而该权威行自身不进
+    // transcript（被 streamingId 排除），于是「最后一张归档卡」正下方紧贴
+    // 「live 时间线卡」，中间没有任何正文行 —— 两张卡分属两个渲染源
+    //（transcript 行挂载 / live 条目），各自成卡，视觉上就是主人所报的
+    //「相邻两张 tools 不合并，有时变成多张 tools」。
+    //
+    // 判定同「正文是唯一分隔符」：live 首条若为 text 条目，正文已插在两卡
+    // 之间，不合并；若首条就是工具条目（think 行属卡内子行，不算分隔），
+    // 且合并目标之后没有可见正文行，则并入目标卡尾部（行序=事件时间线）。
+    var renderLiveTimeline = liveTimeline;
+    if (timelineActive &&
+        liveTimeline.isNotEmpty &&
+        liveTimeline.first.kind == LiveSegmentKind.tools &&
+        liveTimeline.first.toolGroup != null) {
+      var targetIndex = -1;
+      for (var i = transcript.length - 1; i >= 0; i--) {
+        final groups = entryToolGroups[transcript[i].renderId];
+        if (groups != null && groups.isNotEmpty) {
+          targetIndex = i;
+          break;
+        }
+      }
+      var hasTextAfterTarget = false;
+      if (targetIndex >= 0) {
+        for (var i = targetIndex + 1; i < transcript.length; i++) {
+          final message = transcript[i].message;
+          if (message.role == 'assistant' &&
+              (message.content?.trim().isNotEmpty ?? false)) {
+            hasTextAfterTarget = true;
+            break;
+          }
+        }
+      }
+      if (targetIndex >= 0 && !hasTextAfterTarget) {
+        final renderId = transcript[targetIndex].renderId;
+        final groups = List<ToolCallGroup>.of(entryToolGroups[renderId]!);
+        groups[groups.length - 1] = groups.last.mergedWith(
+          liveTimeline.first.toolGroup!,
+        );
+        entryToolGroups[renderId] = groups;
+        renderLiveTimeline = liveTimeline.sublist(1);
+      }
+    }
     // legacy（非时间线）模式：live 思考并入工具组（think 子卡行前置）。
     final streamingTools = streaming == null || liveTimeline != null
         ? const <ToolCallGroup>[]
@@ -2159,9 +2205,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
             prefillStatus == ContextPrefillStatus.error);
     final liveItemCount = streaming == null
         ? 0
-        : liveTimeline == null
-        ? 1
-        : liveTimeline.length;
+        : (renderLiveTimeline?.length ?? 1);
 
     var itemCount = displayItems.length + liveItemCount;
     if (showStatusLine) itemCount++;
@@ -2420,8 +2464,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       tail--;
                     }
                     if (streaming != null && timelineActive) {
-                      if (tail < liveTimeline.length) {
-                        final liveEntry = liveTimeline[tail];
+                      final liveEntries =
+                          renderLiveTimeline ?? const <LiveTimelineEntry>[];
+                      if (tail < liveEntries.length) {
+                        final liveEntry = liveEntries[tail];
                         final liveKey = _itemKeys.putIfAbsent(
                           liveEntry.renderKey,
                           () => GlobalKey(),
@@ -2442,7 +2488,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                           ),
                         );
                       }
-                      tail -= liveTimeline.length;
+                      tail -= liveEntries.length;
                     }
                     if (showStatusLine) {
                       if (tail == 0) {

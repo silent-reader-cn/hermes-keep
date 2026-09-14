@@ -640,3 +640,266 @@ class ToolCallDisplayContent {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// live 时间线构建（纯函数：断点 → 展示条目；供 liveTimelineProvider 调用）
+// ---------------------------------------------------------------------------
+
+/// 断点缺失/异常时的单段兜底：思考 → 正文 → 工具，各成一段（内容不丢）。
+List<LiveTimelineEntry> fallbackLiveTimelineEntries({
+  required String streamingId,
+  required String content,
+  required String reasoningText,
+  required List<ToolCall> liveToolCalls,
+  required bool hideReasoning,
+  required bool toolCoalesce,
+}) {
+  final entries = <LiveTimelineEntry>[];
+  // 思考子卡行并入工具条目（think 行前置，时间线一致）。
+  final calls = <ToolCall>[
+    if (!hideReasoning && reasoningText.trim().isNotEmpty)
+      ToolCall.thinking(reasoningText.trim()),
+    ...liveToolCalls,
+  ];
+  if (calls.isNotEmpty) {
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.tools,
+        renderKey: 'live:tools:fallback',
+        toolGroup: ToolCallGroup(
+          id: 'live-timeline-tools-fallback',
+          anchorMessageID: streamingId,
+          toolCalls: toolCoalesce ? calls : [for (final call in calls) call],
+        ),
+      ),
+    );
+  }
+  if (content.trim().isNotEmpty) {
+    entries.add(
+      LiveTimelineEntry(
+        kind: LiveSegmentKind.text,
+        renderKey: 'live:text:fallback',
+        textSlice: content,
+      ),
+    );
+  }
+  return entries;
+}
+
+/// 按事件断点把流式缓冲切成 think/text/tools 穿插的展示条目。
+///
+/// 断点顺序即事件时间线；正文（text）是唯一分隔符：聚合关闭（
+/// [toolCoalesce] == false）时按 text 区段切卡，聚合开启时整回合一张。
+///
+/// **段列表与断点列表必须一一对应（空段占位）**：断点记的是「缓冲全量」
+/// 长度，而 [content] 是已 reveal 的部分，中间态会出现 `start >= end` 的空段
+/// （或 diff-merge 吸收后 content 变短被 clamp 成零长）。若把空段从列表里
+/// 丢掉，后续段就会与前一个断点错配 —— 有内容的段被提前 flush，表现为
+/// 「相邻工具卡不该切却切了（变成多张 tools）」+ 正文提前错位渲染。
+List<LiveTimelineEntry> buildLiveTimelineEntries({
+  required String streamingId,
+  required String content,
+  required String reasoningText,
+  required List<LiveTimelinePoint> points,
+  required List<ToolCall> liveToolCalls,
+  required bool hideReasoning,
+  required bool toolCoalesce,
+}) {
+  try {
+    // 按 kind 分组切片边界。
+    final textStarts = <int>[];
+    final thinkStarts = <int>[];
+    final toolStarts = <int>[];
+    for (final point in points) {
+      switch (point.kind) {
+        case LiveSegmentKind.text:
+          textStarts.add(point.start);
+        case LiveSegmentKind.thinking:
+          thinkStarts.add(point.start);
+        case LiveSegmentKind.tools:
+          toolStarts.add(point.start);
+      }
+    }
+
+    final textSegments = <({int start, int end})>[];
+    for (var i = 0; i < textStarts.length; i++) {
+      // 断点含 pending 缓冲长度，中间态可能超过已 flush 的 content 长度，
+      // 两侧 clamp 保证切片安全（内容随后续 reveal 增长补齐）。
+      final rawEnd = i + 1 < textStarts.length
+          ? textStarts[i + 1]
+          : content.length;
+      final start = textStarts[i].clamp(0, content.length);
+      final end = rawEnd.clamp(start, content.length);
+      // 空段也入列（占位对齐），渲染端跳过。
+      textSegments.add((start: start, end: end));
+    }
+    final thinkSegments = <String>[];
+    for (var i = 0; i < thinkStarts.length; i++) {
+      final rawEnd = i + 1 < thinkStarts.length
+          ? thinkStarts[i + 1]
+          : reasoningText.length;
+      final start = thinkStarts[i].clamp(0, reasoningText.length);
+      final end = rawEnd.clamp(start, reasoningText.length);
+      // 空思考段入列（占位对齐），渲染端不产生子行。
+      thinkSegments.add(
+        end > start ? reasoningText.substring(start, end).trim() : '',
+      );
+    }
+    final toolSegments = <List<ToolCall>>[];
+    final toolCallsLength = liveToolCalls.length;
+    for (var i = 0; i < toolStarts.length; i++) {
+      final start = toolStarts[i].clamp(0, toolCallsLength);
+      final rawEnd = i + 1 < toolStarts.length
+          ? toolStarts[i + 1]
+          : toolCallsLength;
+      final end = rawEnd.clamp(start, toolCallsLength);
+      // 空工具段入列空列表（占位对齐）。
+      toolSegments.add(
+        end > start ? liveToolCalls.sublist(start, end) : const <ToolCall>[],
+      );
+    }
+
+    final entries = <LiveTimelineEntry>[];
+    // 混合行缓冲：思考子卡行与工具行按断点序统一累积，flush 时合并为一
+    // 张工具卡（思考为卡内子行，行序即事件时间线）。toolCoalesce=true
+    // 整回合一张（仅末尾 flush）；false 按 text 区段拆分（text 断点 flush）。
+    final pendingCallBlock = <({int seq, ToolCall call})>[];
+    // 重连/重锚定场景：首个断点前的内容无断点覆盖（如恢复时锚定到一条
+    // 已有内容的 assistant 消息），作为「孤儿段」前置，保证旧内容不丢失。
+    // 孤儿前缀以「全部段起点的最小值」为准，不能用首个断点的 start：
+    // 断点回退/虚高（缓冲含未 reveal 内容）时首个 start 会被 clamp 到
+    // content 末尾，用它取前缀会把整段正文当成孤儿重复渲染一次。
+    var minTextStart = content.length;
+    for (final start in textStarts) {
+      final clamped = start.clamp(0, content.length);
+      if (clamped < minTextStart) minTextStart = clamped;
+    }
+    var minThinkStart = reasoningText.length;
+    for (final start in thinkStarts) {
+      final clamped = start.clamp(0, reasoningText.length);
+      if (clamped < minThinkStart) minThinkStart = clamped;
+    }
+    var minToolStart = toolCallsLength;
+    for (final start in toolStarts) {
+      final clamped = start.clamp(0, toolCallsLength);
+      if (clamped < minToolStart) minToolStart = clamped;
+    }
+    final orphanText =
+        textStarts.isNotEmpty && minTextStart > 0 && content.isNotEmpty
+        ? content.substring(0, minTextStart)
+        : null;
+    final orphanThink =
+        thinkStarts.isNotEmpty &&
+            minThinkStart > 0 &&
+            reasoningText.isNotEmpty
+        ? reasoningText.substring(0, minThinkStart).trim()
+        : null;
+    final orphanToolCount = minToolStart > 0 ? minToolStart : 0;
+    if (orphanText != null && orphanText.trim().isNotEmpty) {
+      entries.add(
+        LiveTimelineEntry(
+          kind: LiveSegmentKind.text,
+          renderKey: 'live:text:orphan',
+          textSlice: orphanText,
+        ),
+      );
+    }
+    if (orphanThink != null && orphanThink.isNotEmpty && !hideReasoning) {
+      pendingCallBlock.add((seq: -1, call: ToolCall.thinking(orphanThink)));
+    }
+    if (orphanToolCount > 0 && orphanToolCount <= toolCallsLength) {
+      for (final call in liveToolCalls.sublist(0, orphanToolCount)) {
+        pendingCallBlock.add((seq: -1, call: call));
+      }
+    }
+
+    var textIndex = 0;
+    var thinkIndex = 0;
+    var toolIndex = 0;
+
+    void flushBlock() {
+      if (pendingCallBlock.isEmpty) return;
+      final firstSeq = pendingCallBlock.first.seq;
+      final renderKey = firstSeq < 0
+          ? 'live:tools:orphan'
+          : (toolCoalesce ? 'live:tools:merged' : 'live:tools:$firstSeq');
+      entries.add(
+        LiveTimelineEntry(
+          kind: LiveSegmentKind.tools,
+          renderKey: renderKey,
+          toolGroup: ToolCallGroup(
+            id: 'live-timeline-tools-${firstSeq < 0 ? 'orphan' : '$firstSeq'}',
+            anchorMessageID: streamingId,
+            toolCalls: [for (final e in pendingCallBlock) e.call],
+          ),
+        ),
+      );
+      pendingCallBlock.clear();
+    }
+
+    for (final point in points) {
+      switch (point.kind) {
+        case LiveSegmentKind.text:
+          // 关闭聚合：text 断点分区块（思考行/工具行随区段合并）。
+          // #62：纯空白 text 段（'\n\n'/空格 token、interim 分隔符残留）
+          // 渲染为零高度隐形文本，不是分隔符——不 flush 不渲染，相邻
+          // 工具块自然并为一张卡（修复 live 中「连续四张 tools 折叠卡」）。
+          final segment = textIndex < textSegments.length
+              ? textSegments[textIndex]
+              : null;
+          final segStart = segment == null
+              ? 0
+              : segment.start.clamp(0, content.length);
+          final segEnd = segment == null
+              ? 0
+              : segment.end.clamp(segStart, content.length);
+          final segText = segEnd > segStart
+              ? content.substring(segStart, segEnd)
+              : '';
+          if (segText.trim().isNotEmpty) {
+            if (!toolCoalesce) flushBlock();
+            entries.add(
+              LiveTimelineEntry(
+                kind: LiveSegmentKind.text,
+                renderKey: 'live:text:${point.sequence}',
+                textSlice: segText,
+              ),
+            );
+          }
+          textIndex++;
+        case LiveSegmentKind.thinking:
+          // 思考降级为工具卡子卡行：并入混合块（时间线与工具行混排）。
+          // 占位用的空思考段不产生子行（避免空卡片）。
+          final thinkText = thinkIndex < thinkSegments.length
+              ? thinkSegments[thinkIndex]
+              : '';
+          if (!hideReasoning && thinkText.isNotEmpty) {
+            pendingCallBlock.add((
+              seq: point.sequence,
+              call: ToolCall.thinking(thinkText),
+            ));
+          }
+          thinkIndex++;
+        case LiveSegmentKind.tools:
+          if (toolIndex < toolSegments.length) {
+            for (final call in toolSegments[toolIndex]) {
+              pendingCallBlock.add((seq: point.sequence, call: call));
+            }
+          }
+          toolIndex++;
+      }
+    }
+    flushBlock();
+    return entries;
+  } catch (_) {
+    // 顶层异常兜底：降级为单段呈现，确保不抛出到 Widget build 造成黑屏。
+    return fallbackLiveTimelineEntries(
+      streamingId: streamingId,
+      content: content,
+      reasoningText: reasoningText,
+      liveToolCalls: liveToolCalls,
+      hideReasoning: hideReasoning,
+      toolCoalesce: toolCoalesce,
+    );
+  }
+}

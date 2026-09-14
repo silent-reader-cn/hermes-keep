@@ -271,7 +271,16 @@ class ToolCallGroup {
   bool get isComplete => toolCalls.every((t) => t.isCompleted);
 
   /// 任一工具报错。
-  bool get hasFailedTool => toolCalls.any((t) => t.isError == true);
+    bool get hasFailedTool => toolCalls.any((t) => t.isError == true);
+
+    /// 合并另一组为一张卡：保留本组的 id / 卡位方向，工具行以本组在前、
+    /// [other] 按 stable id / 指纹去重并入（规则同内部相邻聚合，避免双显）。
+    ///
+    /// 供渲染层做**跨源相邻合并**：live 期间最后一张归档卡（挂 transcript 行）
+    /// 与 live 时间线首卡（独立条目）之间没有可见正文分隔时，应呈现为一张卡
+    /// （「正文是唯一分隔符」语义在跨渲染源时同样成立）。
+    ToolCallGroup mergedWith(ToolCallGroup other) =>
+        _mergingToolCallGroup(this, other);
 
   /// 实时组：id = `live-tools-<anchor ?? unanchored>`。
   static ToolCallGroup live({
