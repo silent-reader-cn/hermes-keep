@@ -7,39 +7,35 @@
 
 ---
 
-（#103 @77211b2、#104 @caaafa1、#105 @5ea4b14、#106 @d99d120、#107 @92e7449、#108 @d8b9973、#109 @a922086 已收口誊写至 `.todo/20260914.md`，其中 #103/#105/#106/#107/#108/#109 待主人真机/实机复验；#87/#88 已收口誊写至 `.todo/20260907.md` @f01c91d；#91 @0076554；#93 @0a69ee2；#95 @da21ea2；#96/#97 APK 安装权限与分享按钮已收口誊写至 20260907.md，随补丁批次 commit；#98 @5c19de7 与 #99 交付 @b9df051（含诊断原档）已收口誊写至 `.todo/20260908.md`）
+（#103 @77211b2、#104 @caaafa1、#105 @5ea4b14、#106 @d99d120、#107 @92e7449、#108 @d8b9973、#109 @a922086 已收口誊写至 `.todo/20260914.md`，其中 #103/#105/#106/#107/#108/#109 待主人真机/实机复验；#110 099131e、#111 b9b7ae0 已收口誊写至 `.todo/20260914.md`（#110/#111 待主人真机复验）；#87/#88 已收口誊写至 `.todo/20260907.md` @f01c91d；#91 @0076554；#93 @0a69ee2；#95 @da21ea2；#96/#97 APK 安装权限与分享按钮已收口誊写至 20260907.md，随补丁批次 commit；#98 @5c19de7 与 #99 交付 @b9df051（含诊断原档）已收口誊写至 `.todo/20260908.md`）
 
 ---
 
-## #76 二期（待一期真机复验后另批开工）
+## #76 二期（闸门未解 · 未开工）
 
 - 内置服务砍 embedded Python 打包瘦身（方案已定 · 未开工），见 `.todo/20260907.md` #76 条目。
+- 闸门：二期取消 embedded Python 兜底，必须**一期（agent 缺失硬门禁）先经主人真机/安装包验收**；本轮（2026-09-14）因闸门未解未开工，待主人指示。
+- 落点（开工时）：`scripts/packaging/build_webui_bundle.ps1`（砍 python 下载/裁剪段）、`installer/hermes-ui.iss`（删 `webui\python` 行 + `[InstallDelete]` 清存量）、`webui_sidecar_service.dart:299-314`（解释器选择塌缩为 venv→.venv，删 embedded 兜底与对应单测）。
 
 ---
 
+## #112 live 中途归档组锚点成「死锚」→ 幽灵工具卡 + 相邻合并不了（主人 2026-09-14 报告截图，Leader 取证）
 
-## #110 Android release：WorkManager 初始化失败（pigeon channel-error，保活周期轮询缺位）
-
-- 现象：2026-09-14 诊断日志导出（release）冷启动即报 `PlatformException(channel-error, Unable to establish connection on channel: "dev.flutter.pigeon.workmanager_platform_interface.WorkmanagerHostApi.initialize")`，随后「后台保活服务部分就绪（ForegroundTask 就绪，WorkManager 失败）」；全仓 docs/.todo 首次出现，非历史遗留。
-- 位置：`lib/features/notifications/background_keepalive_service.dart:336-368`（initialize try/catch）；调用点 `lib/main.dart:422-424`（`unawaited(...initialize())`）；依赖 `pubspec.yaml:65 workmanager: 0.10.9`（上游最新 0.10.10）。
-- 根因链（源码实证）：channel 绑定发生在插件 `onAttachedToEngine()`→`WorkmanagerHostApi.setUp(...)`，但其前先构造 `WorkManagerWrapper(applicationContext)`（内部 `WorkManager.getInstance(context)`）——该步抛异常则注册整体失败、channel 永不绑定，Dart 侧只见 channel-error；GeneratedPluginRegistrant try/catch 吞掉只打 logcat。GeneratedPluginRegistrant.java:99 确认 workmanager 注册代码在（排除「依赖没装」）；manifest 无 WorkManagerInitializer 移除（排除 provider 冲突）。
-- 与上游已知坑吻合：fluttercommunity/flutter_workmanager #656（2025-11 报、2026-08 closed）症状逐字相同（release 独有、debug 正常），maintainer 结论＝插件注册被干扰/陈旧构建/R8 keep，非 workmanager 本体。另 0.10.8/0.10.9 连发 Android 16 修复（expedited FGS 权限回收、one-off 卡 RUNNING），主人设备 HyperOS 安卓 16 相关嫌疑大。
-- 影响范围：仅 15min 周期后台轮询 `hermes-bg-poll`（进程被杀/退后台后刷新活跃会话数的兜底）；前台常驻通知与 SSE 主链路（#73）不受影响。
-- 取证（待主人手机连 adb，本机无 adb）：`adb logcat | grep -i "Error registering plugin"`——若见 `Error registering plugin workmanager_android, ...` → getInstance 抛异常实锤（顺栈定位）；若无 → 指向陈旧构建产物。
-- 修复候选（按性价比）：① `flutter clean` + 重打 release 排除陈旧构建；② workmanager 升 0.10.10（0.10.9→10 为 patch 级）重验；③ 取证后再定 keep 规则/启动时序（可选：initialize 挪到 runApp 后并加一次延迟重试，当前冷启动即调可能与引擎 attach 竞态）。
-- 验收：新 release 包诊断日志出现「后台保活服务初始化成功（WorkManager + ForegroundTask）」，且设置页能看到 `hermes-bg-poll` 周期任务在册；analyze 零告警 + test 全绿。
-- 状态：待主人 adb 取证 + 决定修复路径（本条先记录，未开工）。
-
----
-
-## #111 冷启动 GET /api/sessions 60s receiveTimeout 截断（服务端会话全量重建慢，客户端需超时保护）
-
-- 现象：诊断日志同场——冷启动两路并发 GET `/api/sessions?sidebar_source=webui`，60.009s 后 dio `receiveTimeout` 截断报错；同时段 /api/reasoning 也要 9.5s（正常 <100ms），旁证服务端全进程被拖住。
-- 位置：`lib/core/api/api_client.dart:63 defaultTimeout=60s`、`:140 receiveTimeout: defaultTimeout`（sessions/projects/models 全走主 dio）。
-- 根因（服务端实证，fork 侧非本仓）：30002 会话库 `sessions/` 724 个 JSON/0.76GB（另 72 个 .bak，目录共 5GB）；缓存失效时 owner 请求同步等全量重建（api/routes.py:13021 路由 → :2639 `_get_cached_session_list_payload` → owner 分支 builder()），纯 JSON 解析本机实测 9.3s 起步，叠加 reconcile/CLI 合并/序列化/frp 出口（手机 4G→50001）即 60s+；ThreadingHTTPServer 下重建线程占 GIL 串行化全体请求。
-- 客户端修复（本仓范围）：① `/api/sessions` 列表请求单独放宽 receiveTimeout（建议 120s，api_client 已有 `resolvedTimeout` 通道 :436/:514，按路径/调用点传入）；② 冷启动首屏失败静默退避重试一次（session_auto_refresh / 会话列表 provider 层，别红屏）；③ 可选：并发去重——冷启动多路并发 GET /api/sessions 合一。
-- 服务端建议（转主人 fork 侧，另议）：90 天+ 会话归档拆分、清 .bak、重建分段让锁。
-- 验收：release 冷启动弱网/4G 下会话列表不再出现 receiveTimeout 红色报错（首屏或宽限刷新成功）；新增/调整用例覆盖超时参数传递；analyze 零告警 + test 全绿。
-- 状态：待开工（客户端小改，可与 #110 同批 release 验证）。
-
----
+- 现象：会话 `59b5ab1f735b`「等它跑一会」正文下方三张连续卡：终端×2思考×2 / 待办列表×1思考×1 / 终端×1思考×1。中间无任何正文，按「text 唯一分隔符」应只有一张卡。
+- 取证（state.db 消息流 + tool_call.dart 分组管线逐步复算）：
+  - 消息序：621「已扇出…」todo+think、623「等它跑一会」terminal+think(68)、625 无文本 terminal+think(479)、627「还在读码…」terminal+think(272)。
+  - 正确分组（withThinkingRows 区间语义）：623→627 区间 = tools(623)+tools(625)+think(625)+think(627) = 终端×2 思考×2 —— 即截图第 1 张卡（D），**这条是对的**。
+  - 第 2 张「待办×1思考×1」= 上一张卡（C，621 区间）内容的**整卡复制**；第 3 张「终端×1思考×1」= D 区间的前缀子集。DB 里 621 之后根本没有第二个 todo_list —— 两张均为**幽灵卡（重复渲染）**，不是聚合算法漏合。
+- 根因链：
+  1. live 回合中 `_archiveLiveToolCallsIfNeeded/_archiveLiveReasoningIfNeeded`（chat_controller.dart:3922/3949）会把累积的 live 工具/思考以 `anchor=stream.streamingAssistantMessageId ?? toolCallAnchorMessageId` 落入 completedToolCallGroups。
+  2. 回合结束走服务端 transcript 刷新：state.db 读取路径**不携带 message_id**（api/models.py:7591 optional 列表无 id/message_id）→ 重载消息 `ChatMessage.messageId=null` → 服务端派生组锚点全部落在 `raw:<idx>` 空间；锚点也随分页 offset 漂移。
+  3. `ToolCallGroup.merging` 以 `'anchor:isAboveContent'` 为 key（tool_call.dart:552）——live 归档组锚点（流式 id 空间）与派生组锚点（raw: 空间）对不上 → 不合并，两组并存；`withThinkingRows` 尾部把未映射 raw 组原样保留（tool_call.dart:532-537）。
+  4. `coalescingAdjacent` canMerge 要求双方 `anchorIndex >= 0`（tool_call.dart:790-793）——死锚组永远拒绝合并，作为独立卡挤在旁边 →「明明连续却没合并」。渲染层挂载匹配同样要求锚点命中 messageId/anchorId（chat_message_list.dart:1854-1855），死锚组经 turn.allToolGroups 或兜底路径仍可见。
+  5. `_reanchorGroupsToMessages`（chat_controller.dart:3989-3998）只救 `local-`/`unanchored`/oldStreamingId，且仅 `_applyCompletedStreamSession` 路径调用；`_handleStreamEnd→_completeCurrentResponse`（done 无 refresh 路径）与全量重载/缓存回放路径**均不 re-anchor**。
+- 修复方向（拍板前不动码）：
+  - A（主修·归档即锚定）：live 归档时点统一把锚点 re-anchor 到当前 messages 的 assistant anchorID（`TranscriptTurnClassifier.anchorID`）空间，而非流式临时 id；refresh/重载完成后对 completedToolCallGroups 全量扫「锚点当前 anchor 集合」的组二次 re-anchor（不再只认 local- 前缀）。
+  - B（去重兜底）：`ToolCallGroup.merging`/`coalescingAdjacent` 前，对两组做内容指纹比对（stable tool-call id 集合 + think 文本指纹，复用 `_toolCallFingerprint`）——子集/相等者丢弃或合并，防锚点空间漂移导致的重复卡。
+  - C（可选加固）：`coalescingAdjacent` 对 `anchorIndex<0` 的组按 `isAboveContent` + 最近有锚组归并，防未来新泄漏场景再冒卡。
+- 禁区：不动「text 唯一分隔符」时间线语义（#20/#34/#54 既定）；liveTimelineProvider 流式期间表现正确，勿动；金照不受影响（幽灵卡系数据路径产物）。
+- 测试：`test/core/models/tool_call_test.dart` 增补「归档组锚=流式 id + 派生组锚=raw: → re-anchor/指纹去重后单卡」；controller 测试模拟 done→refresh 序列断言 completedToolCallGroups 无死锚残留。
+- 验收：analyze 零告警 + test 全绿 + 金照零破坏；实机取证=主人重进该会话，「等它跑一会」下方仅 1 张卡（终端×2 思考×2）。
