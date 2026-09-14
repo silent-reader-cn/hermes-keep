@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,7 @@ import 'package:hermes_ui/features/notifications/background_keepalive_service.da
 import 'package:hermes_ui/features/notifications/background_keepalive_settings_page.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
+import 'package:hermes_ui/features/notifications/workmanager_registration_probe.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
@@ -569,6 +571,121 @@ void main() {
       );
     });
   });
+
+  group('WorkManager 初始化失败归因探针 (#110)', () {
+    test('channel-error → 调原生探针并把成因写进诊断说明', () async {
+      final probe = _RecordingRegistrationProbe(
+        const WorkManagerRegistrationSnapshot(
+          initialized: false,
+          creation: 'manual-initialize-failed',
+          error: 'java.lang.IllegalStateException: WorkManager is not initialized',
+        ),
+      );
+      final service = ProductionBackgroundKeepaliveService(
+        registrationProbe: probe,
+      );
+
+      final text = await service.describeWorkManagerInitFailure(
+        PlatformException(
+          code: 'channel-error',
+          message:
+              'Unable to establish connection on channel: '
+              '"dev.flutter.pigeon.workmanager_platform_interface.'
+              'WorkmanagerHostApi.initialize"',
+        ),
+      );
+
+      expect(probe.calls, 1);
+      expect(text, contains('channel-error'));
+      expect(text, contains('initialized=false'));
+      expect(text, contains('creation=manual-initialize-failed'));
+      expect(text, contains('WorkManager is not initialized'));
+    });
+
+    test('channel-error 但 WorkManager 本身正常 → 说明指向插件注册（陈旧构建/注册期竞态）', () async {
+      final probe = _RecordingRegistrationProbe(
+        const WorkManagerRegistrationSnapshot(
+          initialized: true,
+          creation: 'already-initialized',
+        ),
+      );
+      final service = ProductionBackgroundKeepaliveService(
+        registrationProbe: probe,
+      );
+
+      final text = await service.describeWorkManagerInitFailure(
+        PlatformException(code: 'channel-error', message: 'unbound'),
+      );
+
+      expect(probe.calls, 1);
+      expect(text, contains('initialized=true'));
+      expect(text, contains('creation=already-initialized'));
+    });
+
+    test('非 channel-error 失败 → 不调探针、不加说明', () async {
+      final probe = _RecordingRegistrationProbe(
+        const WorkManagerRegistrationSnapshot(initialized: true),
+      );
+      final service = ProductionBackgroundKeepaliveService(
+        registrationProbe: probe,
+      );
+
+      final text = await service.describeWorkManagerInitFailure(
+        PlatformException(code: 'constraint-error', message: 'bad constraints'),
+      );
+
+      expect(text, isEmpty);
+      expect(probe.calls, 0);
+    });
+
+    test('探针不可用（通道缺失/原生异常）→ 降级为「探针不可用」且不抛出', () async {
+      final service = ProductionBackgroundKeepaliveService(
+        registrationProbe: _ThrowingRegistrationProbe(),
+      );
+
+      final text = await service.describeWorkManagerInitFailure(
+        PlatformException(code: 'channel-error', message: 'unbound'),
+      );
+
+      expect(text, contains('channel-error'));
+      expect(text, contains('探针不可用'));
+    });
+
+    test('快照 describe 拼装（null 字段不出现）', () {
+      const snapshot = WorkManagerRegistrationSnapshot(
+        initialized: true,
+        creation: 'already-initialized',
+      );
+      expect(
+        snapshot.describe(),
+        'initialized=true creation=already-initialized',
+      );
+      expect(
+        const WorkManagerRegistrationSnapshot(initialized: false).describe(),
+        'initialized=false',
+      );
+    });
+  });
+}
+
+class _RecordingRegistrationProbe implements WorkManagerRegistrationProbe {
+  _RecordingRegistrationProbe(this.snapshot);
+
+  final WorkManagerRegistrationSnapshot snapshot;
+  int calls = 0;
+
+  @override
+  Future<WorkManagerRegistrationSnapshot> probe() async {
+    calls++;
+    return snapshot;
+  }
+}
+
+class _ThrowingRegistrationProbe implements WorkManagerRegistrationProbe {
+  @override
+  Future<WorkManagerRegistrationSnapshot> probe() async {
+    throw MissingPluginException('no implementation found for probeWorkManager');
+  }
 }
 
 class MockWorkmanager extends Mock implements Workmanager {}

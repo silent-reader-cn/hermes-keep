@@ -7,16 +7,83 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
+import androidx.work.Configuration
+import androidx.work.WorkManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
+    /** WorkManager 冷启动兜底结果（探针用；onCreate 时记录）。 */
+    private var workManagerCreation: Map<String, Any?> = emptyMap()
+
+    /**
+     * #110 兜底：WorkManager 必须在引擎注册插件之前就绪。
+     *
+     * `WorkmanagerPlugin.onAttachedToEngine()` 的顺序是「先构造再绑通道」——
+     * `WorkManagerWrapper(applicationContext)`（内部 `WorkManager.getInstance()`）
+     * 先执行，随后才 `WorkmanagerHostApi.setUp(...)`。前者抛异常则整个插件注册
+     * 被 GeneratedPluginRegistrant 的 try/catch 吞掉（只打 logcat），pigeon 通道
+     * 永不绑定，Dart 侧只能看到 channel-error，且同进程内重试无意义。
+     *
+     * 因此这里在 super.onCreate()（→ configureFlutterEngine → 插件注册）之前
+     * 确保 WorkManager 已初始化，就地消灭「未初始化」这条成因。任何异常都不
+     * 阻断启动，仅记录供探针归因。
+     */
+    override fun onCreate(savedInstanceState: Bundle?) {
+        workManagerCreation = ensureWorkManagerInitialized()
+        super.onCreate(savedInstanceState)
+    }
+
+    /** 确保 WorkManager 已初始化（androidx.startup 已初始化时原样通过）。 */
+    private fun ensureWorkManagerInitialized(): Map<String, Any?> {
+        var firstFailure: Throwable? = null
+        try {
+            WorkManager.getInstance(applicationContext)
+            return mapOf("creation" to "already-initialized", "error" to null)
+        } catch (e: Throwable) {
+            firstFailure = e
+        }
+        return try {
+            // 只在 getInstance 已失败的前提下手动初始化；与 androidx.startup
+            // 重复初始化会抛 IllegalStateException，同样被下方捕获。
+            WorkManager.initialize(applicationContext, Configuration.Builder().build())
+            mapOf(
+                "creation" to "manual-initialize",
+                "error" to describeThrowable(firstFailure),
+            )
+        } catch (e: Throwable) {
+            mapOf(
+                "creation" to "manual-initialize-failed",
+                "error" to describeThrowable(firstFailure ?: e),
+            )
+        }
+    }
+
+    /** 探针：报告当下 WorkManager 是否可用 + 冷启动兜底动作 + 异常描述。 */
+    private fun probeWorkManagerNow(): Map<String, Any?> {
+        val failure: String? = try {
+            WorkManager.getInstance(applicationContext)
+            null
+        } catch (e: Throwable) {
+            describeThrowable(e)
+        }
+        return mapOf(
+            "initialized" to (failure == null),
+            "creation" to (workManagerCreation["creation"] ?: "unknown"),
+            "error" to (failure ?: workManagerCreation["error"]),
+        )
+    }
+
+    private fun describeThrowable(t: Throwable?): String? =
+        t?.let { "${it.javaClass.name}: ${it.message}" }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // 文件分享通道：content:// URI 生成 / APK 安装权限引导 / 系统分享面板。
@@ -105,6 +172,22 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 else -> result.notImplemented()
+            }
+        }
+
+        // #110 诊断探针通道：把 WorkManager 初始化状态暴露给 Dart 侧诊断日志，
+        // release 包无需连 adb 也能判定 channel-error 的成因。
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            KEEPALIVE_PROBE_CHANNEL
+        ).setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "probeWorkManager" -> result.success(probeWorkManagerNow())
+                    else -> result.notImplemented()
+                }
+            } catch (e: Exception) {
+                result.error("PROBE_ERROR", e.message, null)
             }
         }
 
@@ -257,6 +340,8 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "com.silentreader.hermes_ui/file_share"
+        private const val KEEPALIVE_PROBE_CHANNEL =
+            "com.silentreader.hermes_ui/keepalive_probe"
         private const val LIVE_UPDATE_CHANNEL =
             "com.silentreader.hermes_ui/live_update"
     }

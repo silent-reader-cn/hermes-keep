@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:hermes_ui/app/locale/locale_provider.dart';
@@ -19,6 +20,7 @@ import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
 import 'live_update_service.dart';
 import 'turn_notification_service.dart';
+import 'workmanager_registration_probe.dart';
 
 /// HyperOS / Android 系统保活与权限跳转类型。
 enum HyperOsSettingType {
@@ -207,12 +209,18 @@ class ProductionBackgroundKeepaliveService
   ProductionBackgroundKeepaliveService({
     Workmanager? workmanager,
     ForegroundTaskWrapper? foregroundTaskWrapper,
+    WorkManagerRegistrationProbe? registrationProbe,
   })  : _workmanager = workmanager ?? Workmanager(),
         _foregroundTaskWrapper =
-            foregroundTaskWrapper ?? const ForegroundTaskWrapper();
+            foregroundTaskWrapper ?? const ForegroundTaskWrapper(),
+        _registrationProbe =
+            registrationProbe ?? WorkManagerRegistrationProbe.instance;
 
   final Workmanager _workmanager;
   final ForegroundTaskWrapper _foregroundTaskWrapper;
+
+  /// 原生注册探针（#110；仅 WorkManager 初始化失败归因时使用）。
+  final WorkManagerRegistrationProbe _registrationProbe;
 
   static const String periodicTaskTag = 'hermes-bg-poll';
   static const String periodicTaskUniqueName = 'hermes-bg-poll-periodic';
@@ -358,10 +366,14 @@ class ProductionBackgroundKeepaliveService
           error: e,
           stackTrace: st,
         );
+        // #110：channel-error 说明原生插件注册期就抛了异常，补一次原生探针
+        // 取证，把「为什么通道没绑定」直接落进诊断日志（无需 adb 即可判定
+        // 是 WorkManager 自身初始化失败，还是插件从未附着）。
+        final attribution = await describeWorkManagerInitFailure(e);
         DiagnosticsService.instance.log(
           level: DiagnosticsLogLevel.error,
           tag: 'keepalive',
-          message: 'WorkManager 初始化失败',
+          message: 'WorkManager 初始化失败$attribution',
           errorKind: e.toString(),
         );
       }
@@ -411,6 +423,26 @@ class ProductionBackgroundKeepaliveService
           errorKind: e.toString(),
         );
       }
+    }
+  }
+
+  /// channel-error 归因增强（#110）：返回可直接拼进诊断日志的补充说明。
+  ///
+  /// 仅当失败是 pigeon `channel-error`（通道未绑定 = 原生插件注册期已抛异常）
+  /// 时才调用原生探针；其余失败（约束非法、配额等）返回空串。
+  ///
+  /// 注意：通道在引擎 attach 时绑定，失败后同进程内**不会**恢复——Dart 侧重试
+  /// `initialize()` 无法自愈，这里只做归因，不做假修复。
+  @visibleForTesting
+  Future<String> describeWorkManagerInitFailure(Object error) async {
+    final isChannelError =
+        error is PlatformException && error.code == 'channel-error';
+    if (!isChannelError) return '';
+    try {
+      final snapshot = await _registrationProbe.probe();
+      return '（channel-error：原生插件注册未绑定，探针 ${snapshot.describe()}）';
+    } on Object {
+      return '（channel-error：原生插件注册未绑定，探针不可用）';
     }
   }
 
