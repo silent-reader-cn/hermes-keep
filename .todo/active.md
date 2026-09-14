@@ -43,3 +43,52 @@
 - 测试更新：`onboarding_builtin_tab_test.dart` TASK U2 密码段（约 580-610 行）改新流程（框有值→眼睛切显隐→改字 done 写回→空字红字）；`webui_sidecar_section_test.dart` 密码两用例（约 394-549 行）重写（默认遮罩→眼睛明文→改字提交写回→空字红字，删复制/重生成断言）。
 - 验收：`C:/tmp/f.bat analyze` 零告警；两密码用例文件全绿；`--update-goldens` 仅布局金照受影响时刷新（onboarding 金照大概率命中）。
 - 状态：规格已落盘，待实现。
+
+---
+
+## #105 方向：安卓灵动岛（小米超级岛 / Android 16 Live Updates）（主人 2026-09-13 问询，柚子调研后待拍板）
+
+- 调研结论（来源：小米澎湃OS开发者平台 dev.mi.com 超级岛文档 2026-01 更新版；XimiTime 2026-01-30 HyperOS 3.1 报道；阿里云 EMAS 小米超级岛推送指南）：
+  1. **路线 A（推荐）＝ Android 16 原生 Live Updates（ProgressStyle）**。HyperOS 3.1 已支持该原生 API，第三方 app 无需小米专属代码即可上岛；Pixel/三星等安卓 16 机型同样受益。技术前提：targetSdk ≥ 36 + 通知带 LIVE 标注 + 进度走 ProgressStyle；本仓 compileSdk=37 已够，targetSdk 走 `flutter.targetSdkVersion` 需确认 Flutter 工具链实际解析值，不足则升。
+  2. **路线 B＝小米「超级岛/焦点通知」官方通道**（`miui.focus.param` 扩展参数 + 岛模板库）。效果最精细，但准入门槛重：小米开发者账号 → 场景预审 → 完整方案审核 → 设备白名单联调 → 提交正式 APK 上线验证才开正式权限；且要求应用已创建/上架。适合正式发布上架后再铺，现阶段（自分发 APK）不走。
+  3. 准入合规：本项目场景「回合进行中 / 等待用户确认」= 用户主动发起 + 明确生命周期 + 需实时关注，符合小米准入原则，预审无硬伤。
+- 现状底子：`lib/features/notifications/turn_notification_service.dart` 已用 flutter_local_notifications ^22.3.0 发 ongoing 通知，`main.dart:455` 已有 `syncOngoingNotification(activeCount, titles)` 聚合活跃回合——Live Update 的语义（进度条、状态栏胶囊 chip、完成即收）正好替换/升级这条链路，**不需要新增服务端能力**。
+- 范围（路线 A 落地时）：
+  1. 回合开始 → POST_NOTIFICATIONS + 建 LIVE ongoing 通知（ProgressStyle：计时器或不定量进度，标题=活跃回合数/会话名，状态栏显示 chip）；
+  2. 需要用户确认（clarification）→ 岛展开提示 + 点击唤起 app（沿用现有 deep-link response 接线）；
+  3. 回合完成 → 收岛 + 发普通完成通知（现行为保留）；
+  4. `flutter_local_notifications` 对 ProgressStyle 若覆盖不全，Kotlin 侧（MainActivity 同级新增 Plugin/MethodChannel）兜底直建 Notification；
+  5. 设置页开关：灵动岛/实况通知 开-关（主人铁律：新功能须有设置开关），关闭回退为现有普通 ongoing 通知。
+- 兼容性（2026-09-13 主人问询后核实，来源 developer.android.com Live Updates 文档 2026-08-07 版）：**不影响低版本安装与使用**。走 `NotificationCompat#setRequestPromotedOngoing` + `ProgressStyle` 兼容层属渐进增强：安卓 16+/HyperOS 3.1 上岛出 chip；安卓 8~15 自动降级为现有普通 ongoing 通知；`POST_PROMOTED_NOTIFICATIONS` 权限在低版本被忽略无副作用。minSdk=24（本机 Flutter 工具链实测值）不动，targetSdk 无须强拉 36，compileSdk=37 已够。进度条视觉细节低版本缺失但本仓通知为文字语义，降级无损。
+- 风险/未知：① HyperOS 3.1 原生 Live Updates→超级岛的映射质量仅有第三方报道，需主人手机实机取证；② 主人机器澎湃 OS 版本未确认（OS3 才有岛，OS2 只有焦点通知、无岛）；③ 岛默认 1h 兜底消失、展开态 5s 收起，回合超时体验需设计兜底；④ 小米保活链路（#27）当时实机取证未闭环，LIVE 通知同样依赖后台存活，同链路风险。
+- 验收：安卓 16 模拟器看 ProgressStyle 渲染 + 主人 HyperOS 实机看是否上岛出 chip；analyze 零告警；通知相关既有测试（turn_notification）全绿；金照不受影响。
+- 状态：**已交付** main @5ea4b14（子代理执行 + Leader 独立复验：analyze 零告警、2844 全绿、金照零变更——新开关在保活二级页不在金照覆盖内；Leader 修复 Kotlin chip 截断 bug：TextUtils.ellipsize 按像素非字符数，改为 take(6)）。**待主人 HyperOS 实机复验**（debug APK 构建中）：①发回合 → 状态栏 chip/岛摘要态出现「Hermes · 回合进行中」；②回合结束 → LIVE 撤销；③设置→后台保活页 → 「实况通知（灵动岛）」开关可关，关后仅剩普通常驻通知。若 OS 版本 <3.1 或系统未开放实况通知资格，预期=无岛、行为与旧版一致（降级无感）。
+
+---
+
+## #106 会话列表实时化：订阅 /api/sessions/events 推送 + 刷新补拉兜底（方案 D，主人 2026-09-14 拍板）
+
+- 背景实测取证（2026-09-14，Leader 直连 30002 全程 API 采样，原始档 `D:\tmp\session_visibility_trace.json` / `sessions_events_probe*.py`）：
+  1. 新建会话全程：`POST /api/session/new`(title="Untitled", 0 消息) → 列表 ABSENT（`isEmptySidebarPlaceholder` 设计过滤，session.dart:862-886）→ `POST /api/chat/start` 同步返回最终 title+stream_id → **+5~8s 才在 GET /api/sessions 可见**（pending 落行 + 服务端懒缓存重建）。
+  2. 服务端 `/api/sessions/events`（routes.py:13305，session_events.py）推 `sessions_changed {type,version,reason,profile?,session_id?}`，5s keepalive；实测 `session_new` 在创建后 ~900ms 即推送。触发点覆盖 new/rename/archive/delete/pin/move/branch/duplicate/import/cron_complete/attention_resolved，**回合完成不推**（实测 turn done 后 12s 无 push——存量会话收尾仍靠客户端 done→force 路径，已有）。
+  3. 服务端会话列表缓存（route_session_list_cache.py）：空闲 TTL 2.5s；**任一 stream 活跃时 freeze 到 45s**（#4808），stale-while-revalidate——首个 stale 请求拿旧数据后台重建，实测新会话首可见因此延迟 ~5s。即：**客户端现有 0ms+600ms 双枪（session_list_providers.dart:1142-1145）必然打在缓存旧数据上**，之后退化 30s 轮询；且 force 撞 `_refreshInFlight` 被静默吞（providers:535/665，无补拉）。
+- 目标：列表变更感知从「最坏 30s+」降到**亚秒~秒级**；消灭「force 被吞」与「双枪落空」。
+- 范围（全部在 lib/features/session_list/ + 接线点，不碰服务端）：
+  1. **新增 `SessionEventsSseClient`**（`lib/features/session_list/session_events_client.dart`）：dio 复用 `ApiClient.dio`（继承 cookie/CSRF 拦截器，同 clarify 流先例 chat_server_api.dart:348-376），订阅 `GET /api/sessions/events`；解析 `event: sessions_changed` 帧；**version 单调去重**（payload.version <= lastVersion → skip，防重放风暴）；profile 字段保守处理：非空且不等于当前激活 profile 也刷新（全量拉取代价可接受，宁多刷不漏刷）。
+  2. **生命周期与门控**（对齐现有 30s 轮询门控语义 session_auto_refresh.dart:136-141）：`resumed && windowFocused && enableSessionEventsStream(设置开关，默认开)` 才持有连接；失焦/后台关流，回焦重连并立即 `refreshIfStale()` 一次（补空洞）；断线指数退避重连（复用 sse_client.dart 现有能力，勿新造轮子——先核实 SseClient 是否支持无 after_seq 的持久订阅，不支持则在 SessionEventsSseClient 内实现 1s*2^n 封顶 30s 重连）。
+  3. **推送→刷新加防抖合并**：收到事件经 800ms debounce 合并多次 push（批量删除/多设备风暴）后 `refreshIfStale(force:true)`。
+  4. **刷新补拉兜底（方案 A 并入）**：`SessionListController` 加 `_refreshDirty` 标记——`refreshIfStale(force:true)`/`refresh()` 撞 `_refreshInFlight` 时置位，当前轮 finally 里检查并自动补拉一次（只补一次，防连环）；`handleNewChatSession` 双枪改**阶梯补拉 0/+600ms/+2.5s/+5.5s**（覆盖服务端懒缓存重建窗），或**收到本会话 session_new push 即提前停止阶梯**。回合 done 的 force 同样受益于 dirty 兜底。
+  5. **设置开关**（主人铁律）：设置页「会话」或「通用」组新增 `实时推送会话列表（实验）` CupertinoSwitch，持久化 key `session_events_stream_enabled` 默认 true；关闭 = 纯轮询旧行为（现链路零回归）。
+  6. 30s 轮询保留为兜底（跨断网/服务端事件丢失），周期可考虑放宽到 60s——**本期不动**，保守。
+- 现状 vs 预期：现状=新会话首条消息后要等 ~5-35s 列表才见（取决于轮询相位）、别的设备改名/归档/pin 后本机最长 30s（失焦则永久直到获焦）；预期=推送路径 <2s 内更新，推送不可用时无回归。
+- 禁区：不动 `isEmptySidebarPlaceholder` 过滤语义（#1171 对齐蓝本）；不动 `_sessionListRefreshThrottleWindow` 1500ms 存量节流；不做乐观占位插入（设计已否决，dirty 补拉后无需）。
+- 测试：
+  1. 单测 `test/features/session_list/session_events_client_test.dart`：FakeHTTP 推 sessions_changed 帧 → 断言 debounce 后 refreshIfStale(force) 被调 1 次；version 回退帧被忽略；keepalive 注释帧不炸解析；开关关闭时不建连。
+  2. 单测扩展 controller dirty 补拉：in-flight 时 force → 当前轮结束后自动补拉一次；无 in-flight 时不补。
+  3. 回归：现有 session_list / auto_refresh 测试全绿；金照不受影响（无 UI 布局变更，设置页新行如需金照另行 --update-goldens 审查）。
+- 验收：`C:/tmp/f.bat analyze` 零告警 + `C:/tmp/f.bat test` 全绿；实机取证=主人 Windows 端另开 WebUI 30002 改名/归档一个会话，Flutter 列表 <2s 跟随；手机新建会话发送后列表 <6s 稳定出现（对照现状最坏 35s）。
+- 后续候选（同批调研产出，未拍板不开工，各自动机独立）：
+  - a) `/api/approval/stream`：客户端 `approvalStreamUrl`（api_client_chat.dart:139）**零接线**，approval 靠主 stream 捎带——重连空窗/多设备审批不可见；clarify 已有独立 SSE 先例可镜像。
+  - b) `/api/session/stream?session_id=&known_count=`：`session-updated`/`bg_task_complete` 帧（WebUI messages.js:7553 在用，server:7587），进入聊天页伴随订阅→复用 `syncMissingMessages`，治「双端同看一会话内容不同步」。
+  - c) `/api/sessions/gateway/stream`：watcher 全量 `sessions_changed {sessions}`，依赖 show_cli_sessions+watcher 存活（30002 实测未启用，probe 路径先行），优先级最低。
+
