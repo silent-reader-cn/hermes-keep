@@ -3,111 +3,79 @@
 > 本文档是**执行契约**：本仓库的代码/样式/测试/Git 硬规范，任何进本仓库写代码的人或代理必读。
 > 并行子代理纪律（任务书 / 扇出 / 盯盘 / 复验 / 兜底后端）不在本文档，见 `HERMES.md` §6。
 > 与代码风格冲突时以本文档为准；协作与方向见 `HERMES.md`（主人 ↔ 柚子），与本文档冲突时本文档的硬规则优先。
-> 历史说明：曾因 Hermes 对 `AGENTS.md` 文件名的审批机制在 QQ 渠道不可用而以 `AGENT_.md` 落盘，现已正名。
 
 ## 1. 项目简介
 
-将 Hermex（iOS 原生 SwiftUI，MIT 开源）移植为 Flutter + Cupertino 的全平台客户端。
-API 契约对齐 nesquena/hermes-webui（主人 fork 跑在 :30002，经 frp 暴露公网）。
+Hermes Agent 的**跨平台客户端**：Flutter + Cupertino 单代码库，Android + Windows 优先，后置 macOS / Linux / Web。目标是「一次开发、各处一致的 Hermes 体验」，不是蓝本的逐像素复刻。
 
-- 蓝本源码（只读参考，不进仓库）：`.reference/hermex-src/`（即 uzairansaruzi/hermex 的 HermesMobile 目录）
+- API 契约：对齐 `nesquena/hermes-webui` 的 HTTP / SSE / WS 接口（主人 fork 跑在 :30002，经 frp 暴露公网）；端点以本仓 `lib/core/api/endpoints.dart` 为准
+- UI 蓝本（只读参考，不进仓库）：`.reference/hermex-src/`（即 uzairansaruzi/hermex 的 HermesMobile 目录）——**取交互与信息架构，不照搬 iOS 专属能力**
 - 上游 hermes-webui：https://github.com/nesquena/hermes-webui
-- 优先平台：Android + Windows；后置：macOS / Linux / Web
-- 公开仓库：https://github.com/silent-reader-cn/hermes-ui
+- 公开仓库与对外口径：https://github.com/silent-reader-cn/hermes-ui（`README.md` / `README.zh-CN.md`）
+- 外壳与路由设计：`DESIGN.md`
 
 ## 2. 技术栈（锁死，不得私自更换）
 
 | 领域 | 选型 | 说明 |
 |---|---|---|
 | 框架 | Flutter 3.x stable + Dart 3.x (`sdk: ^3.13.0`) | 六平台单代码库 |
-| UI | **全部 Cupertino widgets** | CupertinoApp / PageScaffold / ListSection / ListTile / NavigationBar / TextField / Switch / Slider / Picker / AlertDialog / SlidingSegmentedControl / ActivityIndicator；**禁止 Material widgets 混入业务 UI**（仅 App 壳桥接层例外） |
+| UI | **全部 Cupertino widgets** | CupertinoApp / CupertinoPageScaffold / ListSection / ListTile / NavigationBar / TextField / Switch / Slider / Picker / AlertDialog / SlidingSegmentedControl / ActivityIndicator；**业务 UI 禁 Material 组件**，例外清单见表注 ③ |
 | 状态管理 | flutter_riverpod 2.6.x | Notifier / AsyncNotifier / Provider |
 | 网络 | dio + 自封装 sse_client + web_socket_channel | HTTP / SSE 流式 / WS（Kanban） |
-| 路由 | go_router 17.5.x | ShellRoute 单 Navigator，外壳见 `DESIGN.md` |
-| Markdown | flutter_markdown 0.7.x | 自定义渲染器 |
-| 离线缓存 | drift 2.34.x + drift_flutter + sqlite3 | SQLite，会话只读缓存 |
+| 路由 | go_router 17.5.x | ShellRoute 单 Navigator，转场统一 `HermesPage`，外壳见 `DESIGN.md` |
+| Markdown | flutter_markdown（**third_party vendored 补丁**）+ markdown + mermaid_flutter | 自定义渲染器、mermaid 图、选择上下文卡片 |
+| 离线缓存 | drift 2.34.x + drift_flutter（`sqlite3` 在 dev_dependencies） | SQLite，会话只读缓存 |
 | 安全存储 | flutter_secure_storage 11.x | API Key / 凭据，禁硬编码、禁进日志 |
 | 本地持久化 | shared_preferences 2.5.x + path_provider | 轻量配置、窗口记忆等 |
 | 桌面能力 | window_manager + tray_manager + hotkey_manager | 窗口记忆、系统托盘、全局快捷键 |
+| 后台任务 | workmanager 0.10.x + flutter_foreground_task 8.x | Android 后台回合 worker + 前台服务保活 |
 | 通知 | flutter_local_notifications 22.3.x | Android 后台回合通知 |
-| 媒体/文件 | media_kit 1.2.x + media_kit_video 2.0.x + media_kit_libs_video + file_picker 12.x | 音视频预览、附件选择 |
-| 剪贴板 | super_clipboard 0.1.x | 粘贴附件/文本（clipboard_paste） |
+| 媒体/文件 | media_kit 1.2.x + media_kit_video 2.0.x + media_kit_libs_video + pdfrx 2.6.x + file_picker 12.x | 音视频 / PDF 预览、附件选择 |
+| 剪贴板 | super_clipboard 0.1.x + pasteboard 0.5.x | 粘贴附件/文本（clipboard_paste） |
+| 外链与意图 | url_launcher 6.x + android_intent_plus 5.x | 外部浏览器、APK 安装意图 |
+| 自更新与打包 | package_info_plus + archive + xml + crypto | 版本检查、sidecar 打包产物处理（实现见 `core/update/`、`core/install/`） |
+| 基础工具 | meta | 注解与不可变标注 |
 | 图表 | fl_chart 1.2.x | Insights 统计 |
+| 图标 | cupertino_icons | iOS 风格图标集 |
+| Material 桥接 | material_ui 1.2.x | **仅供 Localizations delegate 桥接**，不作为业务组件来源 |
 | 字体 | MiSans (Regular/Medium) | 见 §5 样式规范 |
-| 测试 | flutter_test + mocktail + fake_async + golden_toolkit + build_runner/drift_dev | 单元/widget/契约/金照 |
+| 测试 | flutter_test + mocktail + fake_async + golden_toolkit + flutter_driver + build_runner/drift_dev | 单元/widget/契约/金照/集成 |
 
-> 完整依赖以 `pubspec.yaml` 为准；新增依赖需对齐本表选型，不得私自引入 Material 体系或替代状态管理方案。
+> ① 版本号只示意「锁在哪个大版本」，逐条版本以 `pubspec.yaml` 为准，本文不再逐个维护。
+> ② `third_party/flutter_markdown` 是 vendored + 打过补丁的分叉（修 link-wrapped 图片崩溃），经 `dependency_overrides` 生效，说明见该目录 `PATCH_NOTES.md`。第三方补丁一律放 `third_party/` 并在 `pubspec.yaml` 注明原因与移除条件。
+> ③ **Material 例外清单**（业务 UI 一律 Cupertino，以下为既有例外，新增需写明理由）：`material_ui` 的 Localizations delegate 桥接（`app/app.dart`）、第三方 mermaid 渲染（`mermaid_flutter` 依赖 Material）、壳层初始化与系统主题监听（`main.dart` / `app/theme/theme_provider.dart`）。当前全仓 0 处 Material `Scaffold` / `MaterialApp`，37 处页面脚手架均为 `CupertinoPageScaffold`。
+> ④ 新增依赖需对齐本表选型，不得私自引入 Material 体系或替代状态管理方案。
 
-## 3. 目录结构（以实盘为准，2026-08-24 快照）
+## 3. 目录与边界（约定）
+
+> 逐文件明细**不再手抄**（手抄清单必漂：上一版写着 17 个 feature / ~80 测试文件，实盘已是 20 / 292）。实盘快照见 `docs/REPO_MAP.md`，`python tools/gen_repo_map.py` 重新生成；本节只钉约定与边界。
 
 ```
 lib/
-├── main.dart / driver_main.dart
-├── l10n/app_localizations.dart
-├── app/
-│   ├── app.dart / router.dart / deep_link.dart
-│   ├── shell/                      # 自适应双栏外壳（DESIGN.md）
-│   │   ├── adaptive_shell.dart
-│   │   ├── session_sidebar.dart
-│   │   ├── sidebar_utility_toolbar.dart
-│   │   ├── sidebar_resize_handle.dart
-│   │   └── empty_detail_pane.dart
-│   ├── theme/
-│   │   ├── cupertino_theme.dart
-│   │   ├── status_colors.dart
-│   │   └── theme_provider.dart
-│   └── widgets/                    # 通用 Cupertino 弹层/菜单/导航
-│       ├── adaptive_action_menu.dart
-│       ├── adaptive_popover.dart
-│       ├── adaptive_sliver_navigation_bar.dart
-│       ├── cupertino_popover.dart
-│       ├── narrow_navigation_dropdown.dart
-│       └── popover_dropdown.dart
-├── core/
-│   ├── api/                        # ApiClient + 12 域扩展 + 基础设施
-│   │   ├── api_client.dart + api_client_chat/cron/extensions/git/kanban/mcp/memory_skills/prompts/server_panels/sessions/upload/workspace.dart
-│   │   ├── api_exception.dart / cookie_store.dart / custom_header.dart
-│   │   └── endpoints.dart / sse_client.dart / ws_client.dart
-│   ├── models/                     # 28 数据模型（手写 fromJson/toJson 容错）
-│   │   └── approval/auxiliary_model/chat_message/clarification/context_window_snapshot/cron/extensions/git_workspace/goal/insights/json_value/kanban/mcp/memory/message_attachment/model_favorite/saved_prompt/server_account/server_catalog/server_info/session/skills/slash_skill_formatter/tool_call/transcribe_response/turn_file_change/upload_response/workspace.dart
-│   ├── cache/                      # drift 数据库（app_database*.dart + cache_service/media_cache_service/cache_providers）
-│   ├── connections/                # 多服务器连接与切换（server_connection/connection_store/connection_providers）
-│   ├── providers/                  # 跨域 provider（file_picker_provider/clipboard_paste_provider）
-│   └── utils/                      # 工具（accessibility/lossy_json/equality/uuid/selected_context/injected_message/context_window_formatter/clipboard_paste/file_picker/attachment_audio_detection）
-└── features/                       # 17 个 feature，各成目录，Provider 与页面同目录；跨 feature 复用进 shared/
-    ├── onboarding/       # 引导页/连接向导（/onboarding 独立全屏）
-    ├── session_list/     # 会话列表（/，8 文件：page/header/utility_rows/disclosure/entry_visibility/subtitle_settings/auto_refresh/providers）
-    ├── chat/             # 聊天（/chat*，23 文件：page/controller/state/models/providers/server_api/selection_provider + widgets/*）
-    ├── tasks/            # 定时任务（/tasks）
-    ├── skills/           # 技能（/skills）
-    ├── memory/           # 记忆（/memory）
-    ├── workspace/        # 会话工作区（/workspace/:sessionId，单会话文件）
-    ├── workspace_manager/# 工作区管理（/workspaces，注册表级 5 文件：page/api/providers/add_sheet/preview）
-    ├── kanban/           # 看板（/kanban）
-    ├── insights/         # 洞察/用量（/insights）
-    ├── settings/         # 设置（/settings，10 文件：page/providers/subpages + 6 子区 profile/extensions/mcp/auxiliary_models/cron_visibility/injected_notice/tool_group）
-    ├── git/              # Git 面板（/git/:sessionId，4 文件：page/api/providers/branch_tree）
-    ├── prompts/          # 提示词库（无独立路由，Chat 输入栏 Sheet）
-    ├── projects/         # 项目（无独立路由，列表顶部 Picker Sheet）
-    ├── notifications/    # 通知（无路由，后台服务 3 文件）
-    ├── desktop/          # 桌面能力（无路由，6 文件：window_memory/title/tray/shortcuts/lifecycle/settings）
-    └── shared/           # 共享组件（app_back_button 等跨 feature 复用）
-
-test/                               # 镜像 lib/ 结构（~80+ 文件：app/* + core/api+cache+connections+models+utils + features/*）
-assets/
-├── branding/                       # hermes-agent-icon-1024.png + tray_icon.ico / tray_icon_16.png / tray_icon_32.png
-└── fonts/  MiSans-Regular.ttf / MiSans-Medium.ttf (+ LICENSE/OFL.txt)
-tools/
-├── fake_gateway/  main.py + smoke_test.py + requirements.txt  # 契约模拟服务器
-└── icon_pipeline/ generate_icons.py
-docs/
-├── PROTOCOL_NOTES.md               # SSE/WS 协议笔记
-├── QA.md / RELEASE.md / auto_reauth_spec.md / cache_audit_report.md / PLAN-session-gaps-phase2-2026-08.md
-└── specs/  11 规格 + 1 目录：agent-injected-message-cards/api_spec/app_shell_spec/backend-api-catalog(+backend-api-details/)/chat_spec/models_spec/saved-prompts/selected-context/session-auto-refresh/settings-extensions-mcp-aux/workspace_manager_spec
-.reference/hermex-src/              # 蓝本只读参考，不进仓库（HermesMobile: Features 12 / Models 23 / Networking 22 + Config/Auth/...）
+├── main.dart / driver_main.dart   # driver_main 供 flutter_driver 集成测试
+├── l10n/                          # ARB（app_en.arb / app_zh.arb）+ app_localizations facade
+├── app/                           # 外壳与主题：app / router / deep_link / shell / theme / widgets / locale
+├── core/                          # 无 UI 的领域与基础设施
+│   ├── api/                       # ApiClient + 域扩展 + endpoints / sse_client / ws_client
+│   ├── models/                    # 手写 fromJson/toJson 容错模型
+│   ├── cache/                     # drift 只读缓存
+│   ├── connections/               # 多服务器连接与切换
+│   ├── install/                   # 内置 WebUI 探测与安装
+│   ├── update/                    # 应用自更新（版本检查 / APK 安装）
+│   └── providers/  utils/
+├── features/                      # 20 个 feature，各成目录（清单见 REPO_MAP.md）
+test/                              # 镜像 lib/ + helpers/ + golden/ + fixtures/
+third_party/flutter_markdown/      # vendored 补丁分叉（dependency_overrides）
+tools/                             # fake_gateway（契约模拟）/ icon_pipeline / 维护脚本
+docs/                              # specs/ + PROTOCOL_NOTES.md + REPO_MAP.md + screenshots/
 ```
 
-> 新增 feature 必须在 `lib/features/<name>/` 下自成目录，Provider 与页面同目录；跨 feature 复用进 `features/shared/`。
+**硬约定**：
+
+- 新增 feature 必须在 `lib/features/<name>/` 自成目录，Provider 与页面同目录；跨 feature 复用进 `features/shared/`
+- 第三方补丁一律放 `third_party/`，并在 `pubspec.yaml` 的 `dependency_overrides` 注明原因与移除条件（范例：`third_party/flutter_markdown`）
+- 顶层页转场统一 `HermesPage`（`app/widgets/hermes_page_route.dart`），不要退回 go_router 默认转场
+- 目录/规模类事实以 `docs/REPO_MAP.md` 为准；改结构后顺手重生成，别再往本文档抄清单
 
 ### 3.1 统一叫法表（界面/功能 ↔ 路由 ↔ 目录 ↔ 蓝本对照）
 
@@ -132,6 +100,9 @@ docs/
 | 15 | **通知** Notifications | 无路由，后台服务 | `features/notifications/` | `LiveActivities` 对位 | Android 后台回合完成通知 |
 | 16 | **桌面能力** Desktop | 无路由 | `features/desktop/` | — | window_manager / tray_manager / hotkey_manager |
 | 17 | **共享组件** Shared | — | `features/shared/` | `Shared` | 跨 feature 复用（AppBackButton 等） |
+| 18 | **诊断** Diagnostics | 无独立路由，设置页进入 | `features/diagnostics/` | — | 请求/响应诊断抓取与详情 |
+| 19 | **下载** Downloads | `/downloads` 进壳 | `features/downloads/` | — | 下载任务列表/确认框/落盘保存 |
+| 20 | **内置服务** WebUI Sidecar | 无独立路由，设置区 + 托盘 + 引导页内置 tab | `features/webui_sidecar/` | — | Windows 内置 WebUI 启停/端口/凭据/状态 |
 
 **外壳叫法定死：** `AdaptiveShell` 自适应外壳 / `SessionSidebar` 会话侧边栏 / `SidebarUtilityToolbar` 侧边栏工具条 / `SidebarResizeHandle` 拖拽手柄 / `EmptyDetailPane` 空态占位 / 断点 `kAdaptiveBreakpoint = 900`。
 **禁止混叫：** 不说“首页/主页/列表页”混指会话列表；不说“文件/空间”混指工作区——`/workspace/:id` 叫**会话工作区**，`/workspaces` 叫**工作区管理**。
@@ -148,18 +119,11 @@ docs/
 - 异步：优先 `async/await`，禁止裸 `Future` 忽略（加 `unawaited` 或注释说明）
 - `analysis_options.yaml` 启用 `package:flutter_lints/flutter.yaml` + 项目追加规则，`flutter analyze` 必须零告警才算完成
 
-当前追加 lint（`analysis_options.yaml`）：
+lint 取舍**以 `analysis_options.yaml` 为准**（`include: package:flutter_lints/flutter.yaml` + 项目追加 + `analyzer.exclude` 排除 `build/**`、各平台壳目录、`.reference/**`）；本文档只记刻意偏离：
 
-```yaml
-avoid_print: true
-prefer_single_quotes: true
-prefer_final_locals: true
-prefer_const_constructors: true
-always_declare_return_types: true
-unawaited_futures: true
-discarded_futures: true
-avoid_dynamic_calls: false  # 容错解码刻意放宽
-```
+- 额外开启：`avoid_print` / `prefer_single_quotes` / `prefer_final_locals` / `prefer_const_constructors` / `always_declare_return_types` / `unawaited_futures` / `discarded_futures`
+- 刻意放宽：`avoid_dynamic_calls: false`（JSON 容错解码是设计，不追求 strict 模式）
+- `dart format` 目前**不是 CI 门禁**（CI 只跑 analyze + test）；格式化改动单独成 commit，别夹带无关重排
 
 ## 5. 样式规范（Cupertino 主题与设计令牌）
 
@@ -186,24 +150,25 @@ avoid_dynamic_calls: false  # 容错解码刻意放宽
 | secondaryText | #3C3C43/60% | #EBEBF5/72% | 副标/次要信息（浅 ~4.5:1，深 ~8.9:1） |
 
 > 禁止直接用 `systemGreen/systemOrange/systemRed` 作文字色（浅底对比 ~2.0-3.4:1 不达标）；装饰圆点/图标可例外。
+> **用法纪律**：动态色必须 `statusGreenText.resolveFrom(context)` 解析后再用，禁止直接塞进 `const TextStyle` 的 color——不解析时暗色下会退化成浅色变体，对比度不达标（`status_colors.dart` 顶部注释已写明）。`highContrast*` 变体由 `withBrightnessAndContrast` 自动覆盖，无需手写。
 
 ### 5.3 布局与外壳
 
 - 自适应阈值：`kAdaptiveBreakpoint = 900.0`，`MediaQuery.sizeOf(context).width >= 900` 为宽屏（`DESIGN.md` §2，避开 Flutter 测试默认 800×600 视口）
 - 宽屏：`AdaptiveShell` → 左 320px `SessionSidebar`（工具条 + 完整 `SessionListPage` + 1px separator）+ 右 `Expanded` 内容区；窄屏直接透传 `child`
-- 路由进壳（`router.dart` 为准，`ShellRoute` 内）：`/`、`/chat`、`/chat/:sessionId`、`/settings`、`/tasks`、`/skills`、`/memory`、`/workspace/:sessionId`、`/workspaces`、`/kanban`、`/git/:sessionId`、`/insights`；`/onboarding` 顶层独立不进壳（`DESIGN.md` §4）
+- 路由进壳（`router.dart` 为准，`ShellRoute` 内）：`/`、`/chat`、`/chat/:sessionId`、`/settings`、`/tasks`、`/skills`、`/memory`、`/workspace/:sessionId`、`/workspaces`、`/kanban`、`/git/:sessionId`、`/insights`、`/downloads`；顶层独立不进壳：`/onboarding`、`/install-guide`（`DESIGN.md` §4）
 - 品牌资产：`assets/branding/hermes-agent-icon-1024.png`、`tray_icon.ico` / `tray_icon_16.png` / `tray_icon_32.png`
 
 ### 5.4 无障碍与本地化
 
 - 无障碍：`lib/core/utils/accessibility.dart` 提供 `AccessibleButton` 与 haptic helpers；逐步迁移既有图标按钮，需通过动态字号与对比度审计（`test/features/contrast_scan_test.dart`、`a11y_text_scale_test.dart`）
-- 本地化：`supportedLocales: en/zh` + Cupertino/Material/Widgets delegates + `AppLocalizationsDelegate`（`lib/app/app.dart`、`lib/l10n/`）；业务文案逐步 ARB 抽离，现阶段中英 facade 已可用
+- 本地化：ARB 已落地（`lib/l10n/app_en.arb` / `app_zh.arb` + `app_localizations.dart` facade），`supportedLocales: en/zh` + Cupertino/Material/Widgets delegates 见 `lib/app/app.dart`；新增文案走 ARB，豁免范围见 `docs/specs/l10n-exemptions.md`；语言解析（自动/中文/English）在 `lib/app/locale/`
 
 ## 6. 模型与 API 约定（对齐 Hermex 容错策略）
 
 - 所有模型手写 `fromJson` / `toJson`（**不用 json_serializable codegen**），保持可控容错
 - 容错规则：未知字段忽略；字段缺失/类型不符时给**安全默认值**，绝不 crash；可空字段用 `?`
-- `endpoints.dart` 端点表必须与 `.reference/hermex-src/Networking/Endpoints.swift` 一一对应（约 150 端点）
+- 端点表以本仓 `lib/core/api/endpoints.dart` 为准（当前 125 个端点）；权威契约是 hermes-webui 的真实 HTTP / SSE / WS 行为，`.reference/hermex-src/Networking/Endpoints.swift` 仅作命名对照，冲突时以真实响应为准
 - 响应形状以真实服务器为准；改动前先跑 `tools/fake_gateway` 契约测试（`smoke_test.py`）
 - API Key 存 flutter_secure_storage，禁止硬编码、禁止进日志
 - SSE 事件映射以 `docs/PROTOCOL_NOTES.md` 为准（token/interim_assistant/reasoning/tool/title/metering/done/initial/approval/clarify 等全量对照）
@@ -239,17 +204,18 @@ python tools/fake_gateway/smoke_test.py
 
 ### 8.3 CI 流水线（`.github/workflows/ci.yml`）
 
-| Job | 触发 | 步骤 |
-|---|---|---|
-| analyze-test | push main / PR | checkout → flutter-action 3.47.0 stable → setup-java 17 → `flutter pub get` → `flutter analyze` → `flutter test` |
-| android-debug | 依赖 analyze-test | 同上 → `flutter build apk --debug` |
-| fake-gateway | 独立 | checkout → setup-python 3.12 → `pip install -r tools/fake_gateway/requirements.txt` → `python tools/fake_gateway/smoke_test.py` |
+| Job | runs-on | 触发 | 步骤 |
+|---|---|---|---|
+| analyze-test | ubuntu | push main / tag `v*` / PR / 手动 | checkout → flutter-action 3.47.0 stable → setup-java 17 → `flutter pub get` → `flutter analyze` → `flutter test` |
+| android-debug | ubuntu | 依赖 analyze-test | 同上 → `flutter build apk --debug` |
+| fake-gateway | ubuntu | 独立 | checkout → setup-python 3.12 → `pip install -r tools/fake_gateway/requirements.txt` → `python tools/fake_gateway/smoke_test.py` |
+| windows-installer | windows | 依赖 analyze-test，仅 main / tag / 手动 | Inno Setup（choco）→ `flutter build windows --release` → 组装 WebUI sidecar → 编译安装包 → 上传 `hermes-ui-windows-setup` 产物 |
 
-> 合并到 main 前必须三 job 全绿；新增端点/模型需同步更新 `tools/fake_gateway` 契约。
+> 合并到 main 前必须全绿（analyze-test / android-debug / fake-gateway；windows-installer 按上表触发条件）；新增端点/模型需同步更新 `tools/fake_gateway` 契约。CI 带 `concurrency`，同 ref 的旧跑会被取消。
 
 ### 8.4 完成标准
 
-`flutter test` 全绿 + `flutter analyze` 零告警 + 无 Material 混入 + 与 Hermex 对应功能行为一致 = 完成。
+完成标准见 §11 完成定义（DoD），本节不重复。
 
 ## 9. Git 规范
 
@@ -261,23 +227,27 @@ python tools/fake_gateway/smoke_test.py
 ## 10. 参考优先级
 
 1. 本 AGENTS.md（强制规范，最高优先）
-2. `.reference/hermex-src/`（蓝本实现，翻译而非发明）
-3. Flutter / Riverpod 官方文档
-4. 如与 Hermex 行为冲突：以 Hermex 行为为准（它是产品定义）
+2. `lib/core/api/endpoints.dart` + `docs/PROTOCOL_NOTES.md` + hermes-webui 真实响应（**能力与行为的权威来源**）
+3. `.reference/hermex-src/`（UI 与交互蓝本：取信息架构与手感，不照搬 iOS 专属能力，也不照搬其业务定义）
+4. Flutter / Riverpod 官方文档
+
+> 旧口径「如与 Hermex 行为冲突则以 Hermex 为准（它是产品定义）」已作废：Hermex 是蓝本参考实现，产品能力以 Hermes 官方与本仓对外定位为准。
 
 ## 11. 完成定义（DoD）
 
 - [ ] `C:/tmp/f.bat analyze` 零告警
 - [ ] `C:/tmp/f.bat test` 全绿（新增代码有测试）
-- [ ] 无 Material 组件混入业务 UI
-- [ ] 与 Hermex 对应功能行为一致（对照 `.reference/hermex-src`）
+- [ ] 无 Material 组件混入业务 UI（既有例外见 §2 表注 ③）
+- [ ] 行为与 `docs/PROTOCOL_NOTES.md` / hermes-webui 真实响应一致；UI 对齐蓝本交互
 - [ ] 提交信息规范、分支正确
-- [ ] CI 三 job 全绿（analyze-test / android-debug / fake-gateway）
+- [ ] CI 全绿（analyze-test / android-debug / fake-gateway / windows-installer，后者按 §8.3 触发条件）
 
 ## 12. 索引（去哪看）
 
 - 协作与方向：`HERMES.md`（主人 ↔ 柚子）
 - 并行执行规范（任务书 / worktree 扇出 / 复验清单）：`HERMES.md` §6
-- 外壳：`DESIGN.md`
-- 规格：`docs/specs/` + `docs/PROTOCOL_NOTES.md`
-- 流水线：`.github/workflows/ci.yml`
+- 外壳与路由设计：`DESIGN.md`
+- 规格与协议：`docs/specs/` + `docs/PROTOCOL_NOTES.md`
+- 目录明细（自动生成，勿手改）：`docs/REPO_MAP.md`（`python tools/gen_repo_map.py`）
+- 对外发布口径：`README.md` / `README.zh-CN.md` / `CHANGELOG.md` / `THIRD-PARTY-NOTICES.md`
+- 流水线：`.github/workflows/ci.yml`（四 job）
