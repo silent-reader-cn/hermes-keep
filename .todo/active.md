@@ -116,3 +116,25 @@
 ---
 
 **#106 状态（2026-09-14 收口）**：已交付 main @d99d120（agy worktree `agy/s106-events` 执行，Leader 独立复验：主仓 analyze 零告警 + 2853 全绿 + 金照零破坏；新增 9 用例）。**待主人真机复验**：①Windows 端开着 App，在 WebUI 30002 里改名/归档一个会话 → 列表 <2s 跟随；②手机新建会话发首条消息 → 列表 <6s 稳定出现（现状最坏 35s）；③设置页「定时会话」组出现「会话列表实时推送」开关，关闭后退化纯轮询旧行为。开关落点在 _CronSection（与 cron 显隐同组），主人若觉得语义错位可后续挪组。
+
+---
+
+## #109 后台锁屏回来永久卡「等待模型响应」：prefillStatus 迟到帧死锁 + 落定后无自愈（主人 2026-09-14 报告）
+
+- 现象：流式回合中切手机后台/锁屏一段时间，服务端回合早已完成；解锁回 App 该会话永久显示「等待模型响应」（无「已工作 MM:SS」计时后缀），等多久都不消失；退回列表手动刷新仍显示生成中，进入还是卡住；仅杀 App 重开才恢复。
+- 根因链（Leader 代码级取证 @main d99d120 后）：
+  1. 「等待模型响应」渲染条件 = `prefillStatus ∈ {loading, notConfigured}`（`chat_message_list.dart:2731`），无计时后缀 = `turnStartedMillis == null`（`:2695`）。
+  2. `prefillStatus` 唯一写入口 `_handleContextStatus`（`chat_controller.dart:2290`）**无守卫**：SSE `context_status` 帧（含重放/迟到帧）在任何时刻都会写入；清除仅三条路径（发送新消息 `:1058`、`_completeCurrentResponse` `:2706`、`_finishStream` `:2859`）。
+  3. 死锁态 = 上一回合已完整落定（`_finishStream` 清 activeStreamId/turnStartedMillis/prefillStatus）后，一个迟到或重放的 loading 帧把 prefillStatus 重新置位；此后 activeStreamId==null → watchdog（`:3436` return）、resume 主动探活（`:1609` isStreamingActive=false）、recovery 哨兵全部旁路 → **无任何路径再清 display**，永久挂死。冷启动重建 controller 走干净 loadMessages 链故重开 App 可恢复。
+  4. 列表「生成中」残留 = 服务端 session.active_stream_id 挂账 + 本地 markStreaming 乐观位无二次纠偏（`session_list_providers.dart:1241` verifyInBackground 仅在置 true 时校验一次）。
+  5. 旁缺口：`_connectStream` 的 `onClosed`（`:1318`）在「非完成态 + 有活动流 + 无终结事件」时既不探活也不 finalize，仅复位 recovery——死流被干净关闭场景同样无兜底（watchdog 依赖 transport stale，但 heartbeat 帧在 `_handleSseEvent` 顶部 `_recordTransportActivity()` 无条件刷新，服务端活着但挂了的流会永远 fresh）。
+- 修复（全客户端，`lib/features/chat/chat_controller.dart` 为主）：
+  - **A（主闸）**：`_handleContextStatus` 开头守卫：`state.stream.activeStreamId == null || state.stream.hasCompletedResponse` → 直接 return 忽略该帧（debug 日志可选）。理由：context_status 仅对活动回合有意义；idle controller 收到的帧一律是迟到/串扰。
+  - **B（传输兜底）**：`onClosed` 回调中，若 `!hasCompletedResponse && activeStreamId != null && !_disposed && recovery==idle && reconnectTimer 未挂` → `unawaited(_checkStatusAndReconnect())`（走既有 budget/backoff/哨兵体系，不新增风暴：status 成功 active=true→loadMessagesAndResume、replay→重连、双 false→_finalizeAfterRecovery 落定；失败→resumeRetries 预算）。
+  - **C（显示层自愈兜底）**：prefillStatus ∈ {loading, notConfigured} 期间无任何 token/终结事件达到的累计时长 ≥90s（复用 watchdog 1s tick 或 `_pollContextWindowIfNeeded` 同频计数即可）→ 清 prefillStatus（`clearPrefillStatus/clearPrefillLabel`）+（若 activeStreamId 存在）触发一次 `_checkStatusAndReconnect`。覆盖 A 守卫外的未知边缘时序，保证状态行永不永久挂死。
+  - **D（接管计时）**：`_recoverExistingStream`（`:3934`）与 `_applySessionDetail` 活动流接管分支（`:947`）设 `turnStartedMillis ??= now`，使接管/恢复的回合「已工作」计时正常起跳（与现象中「没有计时」直接对应）。
+- 禁区：不动 `_finishStream`/`_completeCurrentResponse` 语义；不动 replay 幂等门控（`:1348`）；不引入新 Timer 类别（能挂进现有 watchdog 周期就挂）；卡片等待（hasPendingPrompt）与 prefill 无关，勿混。
+- 列表挂账（根因4）本期不新增客户端逻辑：B/C 落定路径都会经 `_syncSessionStreaming(false)` 清本地位；服务端 active_stream_id 自身有 repair（models.py:3113），主人真机复验若仍残留再立项。
+- 测试：镜像 `test/features/chat/` 既有 controller 测试风格新增用例：①idle controller 喂 context_status 帧 → prefillStatus 不置位；②streaming 中喂 → 正常置位（回归）；③onClosed 非完成态 → chatStreamStatus 被调、双 false → 落定 idle；④loading 挂 90s 无活动 → 自愈清除（用 fakeAsync/可注入 clock 或 ChatWatchdogConfig override，对齐既有测试手法）；⑤接管路径 turnStartedMillis 起跳。
+- 验收：`C:/tmp/f.bat analyze` 零告警；`C:/tmp/f.bat test` 全绿；金照零破坏；实机取证=主人 Android 流式中锁屏 1-2 分钟解锁 → 回页 <3s 呈现完整回复或正确进行态，无永久「等待模型响应」。
+- 状态：规格已落盘，agy worktree `agy/s109-stuck-spinner` 执行中。
