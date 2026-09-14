@@ -131,7 +131,14 @@ class InsightsPage extends ConsumerWidget {
               for (final t in InsightsTimeframe.values)
                 t: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(_insightsTimeframeTitle(context, t)),
+                  // 窄屏下每段宽度被均分（390pt ≈ 85pt/段），英文标签
+                  // （Last 30 Days）比中文长，裸 Text 会折成两行并溢出选中
+                  // 胶囊；scaleDown 保证单行自适应缩小，宽屏不加尺寸，中英文
+                  // 与既有基线像素一致。
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(_insightsTimeframeTitle(context, t)),
+                  ),
                 ),
             },
           ),

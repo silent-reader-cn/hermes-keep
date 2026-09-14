@@ -19,7 +19,7 @@
 
 ## 截图
 
-暗色与浅色主题并排呈现；同一套演示数据由工装双份生成（`README_SHOTS=1`、`README_DARK=1`）。
+暗色与浅色主题并排呈现；中英文各出一整套（英文版见 [README.md](README.md)），同一工装按语言分别生成（`README_SHOTS=1`、`README_DARK=1`、`README_LANG=en`）。
 
 <div align="center">
 
@@ -45,7 +45,7 @@
 
 </div>
 
-> 全部截图由 App 自身的 golden 截图工装生成（`test/screenshots/`，演示数据），与每次发布逐像素一致。
+> 全部截图由 App 自身的 golden 截图工装生成（`test/screenshots/`，演示数据），与每次发布逐像素一致；英文版 README 用的是同一工装出的英文套件（界面语言与演示数据同为英文）。
 
 ## 功能亮点
 

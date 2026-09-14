@@ -168,7 +168,7 @@
   - `workspace_manager_spec.md`
   - `backend-api-details/`
 
-- `docs/screenshots/` — README 截图 14 张
+- `docs/screenshots/` — README 截图 28 张
 
 ### 仓库根文件
 

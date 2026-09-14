@@ -19,33 +19,33 @@ A Flutter + Cupertino client for [Hermes Agent](https://hermes-agent.nousresearc
 
 ## Screenshots
 
-Dark and light themes ship side by side; the harness generates both sets from the same demo data (`README_SHOTS=1`, `README_DARK=1`).
+Dark and light themes ship side by side, and each language gets its own set so the English README shows an English UI (`README_SHOTS=1`, `README_DARK=1`, `README_LANG=en`).
 
 <div align="center">
 
 ### Windows desktop — streaming chat (dark)
 
-<img src="docs/screenshots/wide-chat-dark.png" width="86%" alt="Hermes UI on Windows, dark theme: two-pane layout with session sidebar and streaming chat"/>
+<img src="docs/screenshots/en/wide-chat-dark.png" width="86%" alt="Hermes UI on Windows, dark theme: two-pane layout with session sidebar and streaming chat"/>
 
 | Sessions | Kanban | Insights |
 |---|---|---|
-| <img src="docs/screenshots/wide-sessions-dark.png" width="280" alt="Session list, dark"/> | <img src="docs/screenshots/wide-kanban-dark.png" width="280" alt="Kanban board, dark"/> | <img src="docs/screenshots/wide-insights-dark.png" width="280" alt="Usage insights, dark"/> |
+| <img src="docs/screenshots/en/wide-sessions-dark.png" width="280" alt="Session list, dark"/> | <img src="docs/screenshots/en/wide-kanban-dark.png" width="280" alt="Kanban board, dark"/> | <img src="docs/screenshots/en/wide-insights-dark.png" width="280" alt="Usage insights, dark"/> |
 
 ### Light theme
 
 | Chat | Sessions | Kanban |
 |---|---|---|
-| <img src="docs/screenshots/wide-chat.png" width="280" alt="Chat, light"/> | <img src="docs/screenshots/wide-sessions.png" width="280" alt="Session list, light"/> | <img src="docs/screenshots/wide-kanban.png" width="280" alt="Kanban board, light"/> |
+| <img src="docs/screenshots/en/wide-chat.png" width="280" alt="Chat, light"/> | <img src="docs/screenshots/en/wide-sessions.png" width="280" alt="Session list, light"/> | <img src="docs/screenshots/en/wide-kanban.png" width="280" alt="Kanban board, light"/> |
 
 ### Android phone (dark)
 
 | Chat | Sessions | Insights |
 |---|---|---|
-| <img src="docs/screenshots/phone-chat-dark.png" width="180" alt="Chat on Android"/> | <img src="docs/screenshots/phone-sessions-dark.png" width="180" alt="Session list on Android"/> | <img src="docs/screenshots/phone-insights-dark.png" width="180" alt="Insights on Android"/> |
+| <img src="docs/screenshots/en/phone-chat-dark.png" width="180" alt="Chat on Android"/> | <img src="docs/screenshots/en/phone-sessions-dark.png" width="180" alt="Session list on Android"/> | <img src="docs/screenshots/en/phone-insights-dark.png" width="180" alt="Insights on Android"/> |
 
 </div>
 
-> All screenshots are captured from the app's own golden-screenshot harness with demo data (`test/screenshots/`), so they match every release byte-for-byte.
+> All screenshots are captured from the app's own golden-screenshot harness with demo data (`test/screenshots/`), so they match every release byte-for-byte. Both the English and [简体中文](README.zh-CN.md) sets are generated from the same harness, one run per language.
 
 ## Highlights
 

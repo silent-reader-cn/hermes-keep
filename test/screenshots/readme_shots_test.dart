@@ -5,6 +5,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/locale/locale_provider.dart';
+import 'package:hermes_ui/app/locale/locale_resolver.dart';
 import 'package:hermes_ui/app/shell/adaptive_shell.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
@@ -36,9 +38,14 @@ import '../helpers/in_memory_secure_storage.dart';
 // ---------------------------------------------------------------------------
 // README 截图工装（非金照基线，不参与 CI 比对）
 //
-// 用法：README_SHOTS=1 [README_DARK=1] C:/tmp/f.bat test test/screenshots/readme_shots_test.dart
-// 产物：docs/screenshots/*.png（浅色原名；README_DARK=1 出暗色 *-dark.png），
+// 用法：README_SHOTS=1 [README_DARK=1] [README_LANG=en] C:/tmp/f.bat test
+//         test/screenshots/readme_shots_test.dart --update-goldens
+// 产物：中文（默认，路径不变）docs/screenshots/*.png；英文 README_LANG=en 落
+//       docs/screenshots/en/*.png。浅色原名；README_DARK=1 出暗色 *-dark.png；
 //       宽屏 2560×1600 / 窄屏 780×1688
+//
+// 双语各出一整套：界面文案由 locale 驱动，演示数据（会话标题/聊天正文/看板卡片/
+// 项目名/连接名）按语言给两套中性文案——英文 README 不得出现中文界面。
 //
 // 与金照同源的真字体（MiSans）与 fake 数据，但页面在 AdaptiveShell 外壳内
 // 组装，还原真实导航形态；数据全部为演示文案，无真实隐私。
@@ -51,8 +58,36 @@ const String _skipReason = '设置 README_SHOTS=1 才生成 README 截图';
 /// README_DARK=1 时输出暗色主题套件（文件名加 -dark 后缀）。
 final bool _dark = Platform.environment['README_DARK'] == '1';
 
-/// 产物目录（仓库根下，README 相对引用）。
-const String _outDir = 'docs/screenshots';
+/// README_LANG=en 时出英文套件（界面 locale 与演示数据双切换）。
+final bool _en = Platform.environment['README_LANG'] == 'en';
+
+/// 当前套件语言模式：同时喂 LocaleResolver，保证 widget 树外文案同语言。
+final AppLocaleMode _localeMode = _en ? AppLocaleMode.en : AppLocaleMode.zh;
+
+/// 产物目录（仓库根下，README 相对引用）；英文套件落 en/ 子目录，中文路径不变。
+final String _outDir = _en ? 'docs/screenshots/en' : 'docs/screenshots';
+
+/// 演示会话标题（zh / en 两套中性文案，下标与 [demoSessionApi] 顺序一致）。
+const List<String> _demoTitlesZh = [
+  '产品发布计划：多平台体验统一路线图',
+  '帮我写一段 Python 数据清洗脚本',
+  '本周行业资讯汇总与摘要',
+  'Flutter 深色模式对比度优化建议',
+  '旅行攻略：周末短途行程规划',
+  '英文邮件润色与语气调整',
+];
+
+const List<String> _demoTitlesEn = [
+  'Product launch plan: unified multi-platform roadmap',
+  'Write a Python data-cleaning script',
+  'Weekly industry roundup and summary',
+  'Flutter dark-mode contrast review',
+  'Weekend short-trip travel plan',
+  'Polishing an English email and tuning the tone',
+];
+
+/// 当前套件的演示会话标题。
+List<String> get _demoTitles => _en ? _demoTitlesEn : _demoTitlesZh;
 
 /// 演示用激活连接（域名用 example 保留域，无真实主机）。
 Future<ConnectionStore> demoConnectionStore() async {
@@ -61,7 +96,7 @@ Future<ConnectionStore> demoConnectionStore() async {
   await store.save(
     ServerConnection(
       id: 'c1',
-      name: 'Home 服务器',
+      name: _en ? 'Home server' : 'Home 服务器',
       baseUrl: 'https://hermes.example.com:8787',
       createdAt: DateTime.utc(2026, 1, 1),
     ),
@@ -79,7 +114,7 @@ FakeSessionListApi demoSessionApi() {
     sessions: [
       SessionSummary(
         sessionId: 's-demo-1',
-        title: '产品发布计划：多平台体验统一路线图',
+        title: _demoTitles[0],
         pinned: true,
         messageCount: 23,
         projectId: 'p-demo-hermes',
@@ -88,21 +123,21 @@ FakeSessionListApi demoSessionApi() {
       ),
       SessionSummary(
         sessionId: 's-demo-2',
-        title: '帮我写一段 Python 数据清洗脚本',
+        title: _demoTitles[1],
         messageCount: 8,
         workspace: r'D:\data\etl',
         lastMessageAt: at(const Duration(hours: 1)),
       ),
       SessionSummary(
         sessionId: 's-demo-3',
-        title: '本周行业资讯汇总与摘要',
+        title: _demoTitles[2],
         messageCount: 5,
         projectId: 'p-demo-reading',
         lastMessageAt: at(const Duration(hours: 3)),
       ),
       SessionSummary(
         sessionId: 's-demo-4',
-        title: 'Flutter 深色模式对比度优化建议',
+        title: _demoTitles[3],
         messageCount: 41,
         projectId: 'p-demo-hermes',
         workspace: r'D:\projects\hermes-ui',
@@ -110,14 +145,14 @@ FakeSessionListApi demoSessionApi() {
       ),
       SessionSummary(
         sessionId: 's-demo-5',
-        title: '旅行攻略：周末短途行程规划',
+        title: _demoTitles[4],
         messageCount: 12,
         projectId: 'p-demo-reading',
         lastMessageAt: at(const Duration(days: 2)),
       ),
       SessionSummary(
         sessionId: 's-demo-6',
-        title: '英文邮件润色与语气调整',
+        title: _demoTitles[5],
         messageCount: 3,
         lastMessageAt: at(const Duration(days: 5)),
       ),
@@ -189,7 +224,7 @@ void main() {
     required Size physicalSize,
     List<Override> overrides = const [],
   }) async {
-    pinGoldenLocale();
+    LocaleResolver.reset(mode: _localeMode);
     tester.view.physicalSize = physicalSize;
     tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.reset);
@@ -241,7 +276,7 @@ void main() {
           theme: buildCupertinoTheme(
             _dark ? Brightness.dark : Brightness.light,
           ),
-          locale: const Locale('zh'),
+          locale: _en ? const Locale('en') : const Locale('zh'),
           supportedLocales: const [Locale('zh'), Locale('en')],
           localizationsDelegates: const [
             AppLocalizationsDelegate(),
@@ -276,26 +311,42 @@ void main() {
     api.sessionResult = {
       'session': {
         'session_id': 's-demo-1',
-        'title': '产品发布计划：多平台体验统一路线图',
+        'title': _demoTitles[0],
         'messages': [
           {
             'role': 'user',
-            'content': '帮我梳理一下 Hermes 客户端下个月的发布重点，'
-                '并给出 Android 侧的验证清单。',
+            'content': _en
+                ? 'List the release priorities for the Hermes client next '
+                    'month, plus an Android verification checklist.'
+                : '帮我梳理一下 Hermes 客户端下个月的发布重点，'
+                    '并给出 Android 侧的验证清单。',
             'message_id': 'u1',
           },
           {
             'role': 'assistant',
-            'content':
-                '**下月发布重点**\n\n'
-                '1. 内置服务体验打磨：首连成功率与冷启动宽限\n'
-                '2. 会话时间线一致性：思考与工具卡片穿插\n'
-                '3. Android 后台通知：回合完成直达会话\n\n'
-                '```bash\n'
-                'flutter build apk --release \\\n'
-                '  --target-platform android-arm64\n'
-                '```\n\n'
-                '验证清单已同步到看板「发布准备」列，共 8 项。',
+            'content': _en
+                ? '**Release priorities**\n\n'
+                    '1. Built-in service polish: first-connect success rate and '
+                    'cold-start grace window\n'
+                    '2. Session timeline consistency: reasoning and tool cards '
+                    'interleaved\n'
+                    '3. Android background notifications: jump straight into the '
+                    'conversation when a turn finishes\n\n'
+                    '```bash\n'
+                    'flutter build apk --release \\\n'
+                    '  --target-platform android-arm64\n'
+                    '```\n\n'
+                    'The verification checklist is synced to the "Release prep" '
+                    'column on the board — 8 items.'
+                : '**下月发布重点**\n\n'
+                    '1. 内置服务体验打磨：首连成功率与冷启动宽限\n'
+                    '2. 会话时间线一致性：思考与工具卡片穿插\n'
+                    '3. Android 后台通知：回合完成直达会话\n\n'
+                    '```bash\n'
+                    'flutter build apk --release \\\n'
+                    '  --target-platform android-arm64\n'
+                    '```\n\n'
+                    '验证清单已同步到看板「发布准备」列，共 8 项。',
             'message_id': 'a1',
           },
         ],
@@ -327,24 +378,30 @@ void main() {
 
   testWidgets('宽屏 · 看板', (tester) async {
     final api = FakeKanbanApi(
-      boards: const [KanbanBoard(slug: 'default', name: '发布计划')],
+      boards: [
+        KanbanBoard(slug: 'default', name: _en ? 'Release plan' : '发布计划'),
+      ],
       currentSlug: 'default',
       snapshots: {
-        'default': const KanbanBoardSnapshot(
+        'default': KanbanBoardSnapshot(
           columns: [
             KanbanColumn(
               name: 'todo',
               cards: [
                 KanbanCard(
                   cardID: 'c1',
-                  title: '首连宽限状态机复盘',
-                  status: KanbanStatus('todo'),
+                  title: _en
+                      ? 'First-connect grace state machine review'
+                      : '首连宽限状态机复盘',
+                  status: const KanbanStatus('todo'),
                   assignee: 'dev-a',
                 ),
                 KanbanCard(
                   cardID: 'c2',
-                  title: 'Android 通知点击直达深链验证',
-                  status: KanbanStatus('todo'),
+                  title: _en
+                      ? 'Verify Android notification deep-link'
+                      : 'Android 通知点击直达深链验证',
+                  status: const KanbanStatus('todo'),
                   assignee: 'dev-b',
                 ),
               ],
@@ -354,8 +411,10 @@ void main() {
               cards: [
                 KanbanCard(
                   cardID: 'c3',
-                  title: '时间线卡片穿插回归',
-                  status: KanbanStatus('ready'),
+                  title: _en
+                      ? 'Timeline card interleaving regression'
+                      : '时间线卡片穿插回归',
+                  status: const KanbanStatus('ready'),
                   assignee: 'dev-a',
                 ),
               ],
@@ -365,9 +424,11 @@ void main() {
               cards: [
                 KanbanCard(
                   cardID: 'c4',
-                  title: '柱状图 X 轴标签重叠修复',
-                  status: KanbanStatus('done'),
-                  linkCounts: KanbanLinkCounts(parents: 1),
+                  title: _en
+                      ? 'Fix overlapping chart X-axis labels'
+                      : '柱状图 X 轴标签重叠修复',
+                  status: const KanbanStatus('done'),
+                  linkCounts: const KanbanLinkCounts(parents: 1),
                 ),
               ],
             ),
@@ -407,24 +468,35 @@ void main() {
     api.sessionResult = {
       'session': {
         'session_id': 's-demo-2',
-        'title': 'Python 数据清洗脚本',
+        'title': _demoTitles[1],
         'messages': [
           {
             'role': 'user',
-            'content': '写一个 pandas 去重并按日期排序的清洗脚本。',
+            'content': _en
+                ? 'Write a pandas script that drops duplicate rows and sorts '
+                    'by date.'
+                : '写一个 pandas 去重并按日期排序的清洗脚本。',
             'message_id': 'u1',
           },
           {
             'role': 'assistant',
-            'content':
-                '好的，核心逻辑如下：\n\n'
-                '```python\n'
-                'df = (df.drop_duplicates(subset=["id"])\n'
-                '        .sort_values("date"))\n'
-                '```\n\n'
-                '需要先安装 pandas：\n\n'
-                '```bash\npip install pandas\n```\n\n'
-                '运行后会输出清洗前后行数对比。',
+            'content': _en
+                ? 'Sure — the core logic looks like this:\n\n'
+                    '```python\n'
+                    'df = (df.drop_duplicates(subset=["id"])\n'
+                    '        .sort_values("date"))\n'
+                    '```\n\n'
+                    'Install pandas first:\n\n'
+                    '```bash\npip install pandas\n```\n\n'
+                    'It prints the row counts before and after cleaning.'
+                : '好的，核心逻辑如下：\n\n'
+                    '```python\n'
+                    'df = (df.drop_duplicates(subset=["id"])\n'
+                    '        .sort_values("date"))\n'
+                    '```\n\n'
+                    '需要先安装 pandas：\n\n'
+                    '```bash\npip install pandas\n```\n\n'
+                    '运行后会输出清洗前后行数对比。',
             'message_id': 'a1',
           },
         ],
@@ -508,13 +580,15 @@ void main() {
 /// 项目 API 空 stub（会话列表 watch 项目 chips，避免真实请求）。
 class _StubProjectApi implements ProjectApi {
   @override
-  Future<ProjectsResponse> fetchProjects() async =>
-      const ProjectsResponse(
-        projects: [
-          ProjectSummary(projectId: 'p-demo-hermes', name: 'Hermes'),
-          ProjectSummary(projectId: 'p-demo-reading', name: '读书'),
-        ],
-      );
+  Future<ProjectsResponse> fetchProjects() async => ProjectsResponse(
+    projects: [
+      const ProjectSummary(projectId: 'p-demo-hermes', name: 'Hermes'),
+      ProjectSummary(
+        projectId: 'p-demo-reading',
+        name: _en ? 'Reading' : '读书',
+      ),
+    ],
+  );
 
   @override
   Future<ProjectMutationResponse> createProject({
