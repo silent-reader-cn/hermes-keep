@@ -303,6 +303,21 @@ class Endpoint {
   static const clarifyRespond = Endpoint('/api/clarify/respond');
 
   // ---------------------------------------------------------------------------
+  // 1.6.1 session stream — 1 个 (#108)
+  // ---------------------------------------------------------------------------
+
+  /// GET /api/session/stream?session_id=&known_count=（会话内容与自唤醒实时同步）。
+  static Endpoint sessionStream(String sessionId, [int? knownCount]) {
+    return Endpoint(
+      '/api/session/stream',
+      query: [
+        QueryParam('session_id', sessionId),
+        if (knownCount != null) QueryParam('known_count', '$knownCount'),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // 1.7 workspace — 12 个
   // ---------------------------------------------------------------------------
 

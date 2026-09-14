@@ -140,6 +140,20 @@ abstract interface class ChatServerApi {
 
   /// GET /api/clarify/pending?session_id= → ClarificationPendingResponse。
   Future<ClarificationPendingResponse> clarifyPending(String sessionId);
+
+  /// 建立 Approval SSE 独立流连接（`/api/approval/stream?session_id=`）。
+  Future<void> startApprovalStream(
+    String sessionId, {
+    required void Function(SseEvent event) onEvent,
+    required void Function(String message) onTransportError,
+    required void Function() onClosed,
+  });
+
+  /// 主动断开 Approval SSE 连接。
+  void stopApprovalStream();
+
+  /// GET /api/approval/pending?session_id= → ApprovalPendingResponse。
+  Future<ApprovalPendingResponse> approvalPending(String sessionId);
 }
 
 /// [ChatServerApi] 的生产实现（包 [ApiClient]，SSE 复用其 dio 继承 header/cookie）。
@@ -152,6 +166,9 @@ class ChatApiClient implements ChatServerApi {
 
   final ApiClient _client;
   final SseClient _sseClient;
+
+  /// 底层 [ApiClient] 实例（供伴随通道复用其 dio 与 baseUrl）。
+  ApiClient get client => _client;
 
   @override
   Future<ChatStartResponse> startChat({
@@ -374,5 +391,36 @@ class ChatApiClient implements ChatServerApi {
   void stopClarifyStream() {
     _clarifySseClient?.stop();
     _clarifySseClient = null;
+  }
+
+  SseClient? _approvalSseClient;
+
+  @override
+  Future<ApprovalPendingResponse> approvalPending(String sessionId) =>
+      _client.approvalPending(sessionId);
+
+  @override
+  Future<void> startApprovalStream(
+    String sessionId, {
+    required void Function(SseEvent event) onEvent,
+    required void Function(String message) onTransportError,
+    required void Function() onClosed,
+  }) async {
+    _approvalSseClient?.stop();
+    final sse = SseClient(dio: _client.dio, baseUrl: _client.baseUrl);
+    _approvalSseClient = sse;
+    final url = _client.approvalStreamUrl(sessionId);
+    await sse.start(
+      url,
+      onEvent: onEvent,
+      onTransportError: onTransportError,
+      onClosed: onClosed,
+    );
+  }
+
+  @override
+  void stopApprovalStream() {
+    _approvalSseClient?.stop();
+    _approvalSseClient = null;
   }
 }

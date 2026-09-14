@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/sse_client.dart';
 import '../../core/cache/cache_providers.dart';
@@ -28,6 +29,7 @@ import 'chat_diff_merge.dart';
 import 'chat_models.dart';
 import 'chat_providers.dart';
 import 'chat_server_api.dart';
+import 'chat_session_channel.dart';
 import 'chat_state.dart';
 
 /// 回合完成 → 会话列表刷新的节流窗口。
@@ -72,6 +74,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   Timer? _watchdogTimer;
   Timer? _transcriptRefreshTimer;
   Timer? _clarifyPollTimer;
+  Timer? _approvalPollTimer;
   Timer? _reconnectTimer;
   Timer? _statusPollJitterTimer;
   Timer? _forceReconnectJitterTimer;
@@ -194,8 +197,21 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _handleSpeedPresetChanged();
       }
     });
+    ref.listen(approvalStreamEnabledProvider, (prev, next) {
+      if (prev != next) {
+        if (next) {
+          if (sessionId.isNotEmpty) {
+            _startApprovalChannel(sessionId);
+          }
+        } else {
+          _stopApprovalChannel();
+        }
+      }
+    });
     if (sessionId.isNotEmpty) {
       _startClarifyChannel(sessionId);
+      _startApprovalChannel(sessionId);
+      _startSessionContentChannel(sessionId);
       // build 期间 state 未初始化，推迟到微任务再加载（读 state 安全）。
       scheduleMicrotask(() {
         if (_disposed) return;
@@ -248,6 +264,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _lastContextPollTime = null;
     _isContextPolling = false;
     _stopClarifyChannel();
+    _stopApprovalChannel();
+    _stopSessionContentChannel();
     _api?.stopStream();
   }
 
@@ -720,6 +738,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         final persistedToolCalls =
             detail.toolCalls ?? const <PersistedToolCall>[];
         _lastPersistedToolCalls = persistedToolCalls;
+        _recordPersistedMessageCount(detail.messageCount);
         final serverDerivedGroups = ToolCallGroup.groups(
           persistedToolCalls: persistedToolCalls,
           messages: allMessages,
@@ -823,6 +842,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }) {
     final persistedToolCalls = detail.toolCalls ?? const <PersistedToolCall>[];
     _lastPersistedToolCalls = persistedToolCalls;
+    _recordPersistedMessageCount(detail.messageCount);
     final newOffset = detail.messagesOffset ?? state.messagesOffset;
     final serverDerivedGroups = ToolCallGroup.groups(
       persistedToolCalls: persistedToolCalls,
@@ -1101,6 +1121,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         state = state.copyWith(sessionId: newSessionId);
         _onNewSessionCreated(newSessionId, text);
         _startClarifyChannel(newSessionId);
+        _startApprovalChannel(newSessionId);
+        _startSessionContentChannel(newSessionId);
       }
       _beginStream(streamId);
       return true;
@@ -2302,7 +2324,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 停止 Clarify SSE 流与轮询。
   void _stopClarifyChannel() {
     try {
-      ref.read(chatApiProvider).stopClarifyStream();
+      (_api ?? ref.read(chatApiProvider))?.stopClarifyStream();
     } catch (_) {}
     _clarifyPollTimer?.cancel();
     _clarifyPollTimer = null;
@@ -2369,6 +2391,83 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         });
       } else if (state.pendingAction.clarificationPrompt != null) {
         _clearClarificationCard();
+      }
+    } catch (_) {
+      // 静默容错
+    }
+  }
+
+  /// 启动独立 Approval SSE 流 + 轮询兜底通道。
+  void _startApprovalChannel(String sessionId) {
+    if (sessionId.isEmpty) return;
+    _stopApprovalChannel();
+    final enabled = ref.read(approvalStreamEnabledProvider);
+    if (!enabled) return;
+    _connectApprovalStream(sessionId);
+    _startApprovalPolling(sessionId);
+  }
+
+  /// 停止 Approval SSE 流与轮询。
+  void _stopApprovalChannel() {
+    try {
+      (_api ?? ref.read(chatApiProvider))?.stopApprovalStream();
+    } catch (_) {}
+    _approvalPollTimer?.cancel();
+    _approvalPollTimer = null;
+  }
+
+  /// 连接 `/api/approval/stream?session_id=` 独立 SSE 流。
+  void _connectApprovalStream(String sessionId) {
+    if (_disposed || sessionId.isEmpty) return;
+    try {
+      final api = ref.read(chatApiProvider);
+      unawaited(
+        api.startApprovalStream(
+          sessionId,
+          onEvent: (event) {
+            if (_disposed) return;
+            if (event is ApprovalPendingSseEvent) {
+              _applyApprovalUpdate(event.payload);
+            }
+          },
+          onTransportError: (_) {
+            // 静默容错，由轮询兜底
+          },
+          onClosed: () {},
+        ),
+      );
+    } catch (_) {
+      // 静默容错
+    }
+  }
+
+  /// 启动静默轮询兜底（20s 周期，会话打开时拉取）。
+  void _startApprovalPolling(String sessionId) {
+    _approvalPollTimer?.cancel();
+    _approvalPollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      unawaited(_pollApprovalPending(sessionId));
+    });
+    scheduleMicrotask(() => _pollApprovalPending(sessionId));
+  }
+
+  /// 静默拉取 `/api/approval/pending`。
+  Future<void> _pollApprovalPending(String sessionId) async {
+    if (_disposed || state.sessionId != sessionId) return;
+    final gen = _generation;
+    try {
+      final api = ref.read(chatApiProvider);
+      final response = await api.approvalPending(sessionId);
+      if (_disposed || gen != _generation || state.sessionId != sessionId) {
+        return;
+      }
+      if (response.pending != null) {
+        final p = response.pending!;
+        _applyApprovalUpdate({
+          'pending': p.toJson(),
+          'pending_count': response.pendingCount ?? 1,
+        });
+      } else if (state.pendingAction.approvalPrompt != null) {
+        _clearApprovalCard();
       }
     } catch (_) {
       // 静默容错
@@ -2498,6 +2597,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     final persisted = detail.toolCalls ?? const <PersistedToolCall>[];
     _lastPersistedToolCalls = persisted;
+    _recordPersistedMessageCount(detail.messageCount);
     final persistedGroups = ToolCallGroup.groups(
       persistedToolCalls: persisted,
       messages: merged,
@@ -4124,4 +4224,251 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     json['message_id'] ??= id;
     return json;
   }
+
+  // -------------------------------------------------------------------------
+  // #108 会话内容与自唤醒实时同步（/api/session/stream）
+  // -------------------------------------------------------------------------
+
+  ChatSessionChannel? _sessionContentChannel;
+  Timer? _sessionContentSyncDebounceTimer;
+  int? _persistedMessageCount;
+
+  @visibleForTesting
+  ChatSessionChannel? get sessionContentChannelForTesting =>
+      _sessionContentChannel;
+
+  @visibleForTesting
+  int? get persistedMessageCountForTesting => _persistedMessageCount;
+
+  @visibleForTesting
+  void setPersistedMessageCountForTesting(int? count) =>
+      _persistedMessageCount = count;
+
+  @visibleForTesting
+  void setSessionContentChannelForTesting(ChatSessionChannel? channel) =>
+      _sessionContentChannel = channel;
+
+  @visibleForTesting
+  void onSessionContentUpdatedForTesting(int serverCount) =>
+      _onSessionContentUpdated(serverCount, sessionId: state.sessionId);
+
+  @visibleForTesting
+  void onServerTurnStartedForTesting(
+    String streamId, {
+    bool recovered = false,
+    double? pendingStartedAt,
+  }) =>
+      _onServerTurnStarted(
+        streamId,
+        sessionId: state.sessionId,
+        recovered: recovered,
+        pendingStartedAt: pendingStartedAt,
+      );
+
+  @visibleForTesting
+  void onSessionBgTaskCompleteForTesting(Map<String, Object?> payload) =>
+      _onSessionBgTaskComplete(payload, sessionId: state.sessionId);
+
+  @visibleForTesting
+  void scheduleSessionContentSyncForTesting() => _scheduleSessionContentSync();
+
+  void _recordPersistedMessageCount(int? count) {
+    if (count != null) {
+      _persistedMessageCount = count;
+    }
+  }
+
+  /// 启动当前打开会话的 `/api/session/stream` 内容同步通道。
+  void _startSessionContentChannel(String sessionId) {
+    if (_disposed || sessionId.isEmpty) return;
+    _stopSessionContentChannel();
+
+    // 门控：开关关闭则不建连
+    try {
+      final enabled = ref.read(sessionContentStreamEnabledProvider);
+      if (!enabled) return;
+    } catch (_) {
+      // 单元测试环境若无 provider 默认放行
+    }
+
+    ApiClient? client;
+    final api = _api;
+    if (api is ChatApiClient) {
+      client = api.client;
+    }
+    if (client == null) return;
+
+    final channel = ChatSessionChannel(
+      dio: client.dio,
+      baseUrl: client.baseUrl,
+      sessionId: sessionId,
+      knownCountProvider: () => _persistedMessageCount ?? state.messages.length,
+      isEnabled: () {
+        try {
+          return ref.read(sessionContentStreamEnabledProvider);
+        } catch (_) {
+          return true;
+        }
+      },
+      onSessionUpdated: (serverCount) {
+        _onSessionContentUpdated(serverCount, sessionId: sessionId);
+      },
+      onServerTurnStarted: (streamId, {recovered = false, pendingStartedAt}) {
+        _onServerTurnStarted(
+          streamId,
+          sessionId: sessionId,
+          recovered: recovered,
+          pendingStartedAt: pendingStartedAt,
+        );
+      },
+      onBgTaskComplete: (payload) {
+        _onSessionBgTaskComplete(payload, sessionId: sessionId);
+      },
+    );
+
+    _sessionContentChannel = channel;
+    channel.start();
+  }
+
+  /// 停止当前会话的内容同步通道与去抖计时器。
+  void _stopSessionContentChannel() {
+    _sessionContentSyncDebounceTimer?.cancel();
+    _sessionContentSyncDebounceTimer = null;
+    _sessionContentChannel?.stop();
+    _sessionContentChannel?.dispose();
+    _sessionContentChannel = null;
+  }
+
+  /// 处理 `session-updated` 帧：仅当前屏会话 + 无活跃回合 + count > 本地持久 count 时，
+  /// 经 1s 防抖去抖触发 [syncMissingMessages]。
+  void _onSessionContentUpdated(int serverCount, {required String sessionId}) {
+    if (_disposed || state.sessionId != sessionId) return;
+
+    // 若当前正在发送或流式接收中，避免与实时消息状态竞争
+    if (state.stream.activeStreamId != null ||
+        state.phase == ChatPhase.streaming ||
+        state.phase == ChatPhase.sending) {
+      return;
+    }
+
+    final localCount = _persistedMessageCount ?? state.messages.length;
+    if (serverCount <= localCount) return;
+
+    _scheduleSessionContentSync();
+  }
+
+  /// 调度增量消息同步（1s 去抖合并）。
+  void _scheduleSessionContentSync() {
+    if (_disposed) return;
+    _sessionContentSyncDebounceTimer?.cancel();
+    _sessionContentSyncDebounceTimer = Timer(const Duration(seconds: 1), () {
+      if (_disposed) return;
+      unawaited(syncMissingMessages());
+    });
+  }
+
+  /// 处理 `server_turn_started` 帧：当前会话匹配且无活跃回合时 attach 服务端自唤醒回合。
+  void _onServerTurnStarted(
+    String streamId, {
+    required String sessionId,
+    bool recovered = false,
+    double? pendingStartedAt,
+  }) {
+    if (_disposed || state.sessionId != sessionId) return;
+
+    // 同 streamId 幂等 bail
+    if (state.stream.activeStreamId == streamId) return;
+
+    // 当前有活跃 stream 或非空闲状态时不抢占
+    if (state.stream.activeStreamId != null ||
+        state.phase == ChatPhase.streaming ||
+        state.phase == ChatPhase.sending) {
+      return;
+    }
+
+    if (recovered) {
+      unawaited(_attachRecoveredServerTurn(
+        streamId,
+        pendingStartedAt: pendingStartedAt,
+      ));
+    } else {
+      if (pendingStartedAt != null) {
+        state = state.copyWith(
+          turnStartedMillis: (pendingStartedAt * 1000).toInt(),
+        );
+      }
+      _beginStream(streamId);
+    }
+  }
+
+  /// 恢复附加 mid-flight 的服务端自唤醒回合（带 replay 参数重放）。
+  Future<void> _attachRecoveredServerTurn(
+    String streamId, {
+    double? pendingStartedAt,
+  }) async {
+    _resetReconnectBackoff();
+    await loadMessages();
+    if (_disposed || state.sessionId.isEmpty) return;
+
+    final startedMillis = pendingStartedAt != null
+        ? (pendingStartedAt * 1000).toInt()
+        : (state.turnStartedMillis ?? _now().millisecondsSinceEpoch);
+
+    state = state.copyWith(
+      phase: ChatPhase.streaming,
+      clearSendErrorMessage: true,
+      clearErrorMessage: true,
+      clearPrefillStatus: true,
+      clearPrefillLabel: true,
+      turnStartedMillis: startedMillis,
+      stream: state.stream.copyWith(
+        activeStreamId: streamId,
+        isSuspended: false,
+        recovery: ActiveStreamRecoveryState.idle,
+        hasCompletedResponse: false,
+        isCancelling: false,
+      ),
+      pendingAction: const ChatPendingActionState(),
+      responseCompletionNeedsTranscriptRefresh: false,
+    );
+
+    // 重锚定 assistant 消息或确保气泡
+    final lastAssistant = _lastAssistantMessageId(state.messages);
+    if (lastAssistant != null) {
+      state = state.copyWith(
+        stream: state.stream.copyWith(streamingAssistantMessageId: lastAssistant),
+      );
+    } else {
+      _ensureStreamingAssistantMessage();
+    }
+
+    _syncSessionStreaming(
+      state.sessionId,
+      true,
+      activeStreamId: streamId,
+      verifyInBackground: true,
+    );
+
+    // 以 replayAfterSeq: 0 进行 attach，重放流式 token
+    _connectStream(streamId, replayAfterSeq: 0);
+    _lastContextPollTime = _now();
+    _markProgress();
+    _recordTransportActivity();
+  }
+
+  /// 处理 `bg_task_complete` 帧：记入 DiagnosticsService log，并触发增量消息拉取（1s 去抖）。
+  void _onSessionBgTaskComplete(
+    Map<String, Object?> payload, {
+    required String sessionId,
+  }) {
+    if (_disposed || state.sessionId != sessionId) return;
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat_session_channel',
+      message:
+          'Background task complete received for session $sessionId: $payload',
+    );
+    _scheduleSessionContentSync();
+  }
 }
+

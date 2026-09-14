@@ -1861,3 +1861,31 @@ extension AppLocalizationsSessionEvents106 on AppLocalizations {
       ? 'Subscribe to server events for immediate session list updates'
       : '通过服务端事件推送即时感知会话变更';
 }
+
+// ---------------------------------------------------------------------------
+// #107 审批实时推送
+// ---------------------------------------------------------------------------
+extension AppLocalizationsApprovalStream107 on AppLocalizations {
+  /// 设置页开关行标题。
+  String get approvalStreamTitle =>
+      isEnglish ? 'Realtime approval updates' : '审批实时推送';
+
+  /// 设置页开关行副标题。
+  String get approvalStreamSubtitle => isEnglish
+      ? 'Subscribe to server events for immediate approval prompts'
+      : '通过服务端事件推送即时感知待审批操作';
+}
+
+// #108 会话内容实时同步
+// ---------------------------------------------------------------------------
+extension AppLocalizationsSessionContent108 on AppLocalizations {
+  /// 设置页开关行标题。
+  String get sessionContentStreamTitle =>
+      isEnglish ? 'Realtime session content sync' : '会话内容实时同步';
+
+  /// 设置页开关行副标题。
+  String get sessionContentStreamSubtitle => isEnglish
+      ? 'Subscribe to per-session events for realtime transcript updates'
+      : '通过当前会话事件流实时同步正文内容与自唤醒回合';
+}
+

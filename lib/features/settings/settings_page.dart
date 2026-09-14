@@ -22,6 +22,7 @@ import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
 import '../chat/chat_providers.dart';
+import '../chat/chat_session_channel.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_page.dart';
 import '../diagnostics/diagnostics_service.dart';
@@ -761,7 +762,46 @@ class _CronSection extends ConsumerWidget {
               ),
             ),
           ),
+          CupertinoListTile(
+            key: const ValueKey('settings-approval-stream'),
+            title: Text(l10n.approvalStreamTitle),
+            subtitle: Text(l10n.approvalStreamSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-approval-stream'),
+                value: ref.watch(approvalStreamEnabledProvider),
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(approvalStreamEnabledProvider.notifier)
+                        .setEnabled(value),
+                  );
+                },
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-session-content-stream'),
+            title: Text(l10n.sessionContentStreamTitle),
+            subtitle: Text(l10n.sessionContentStreamSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-session-content-stream'),
+                value: ref.watch(sessionContentStreamEnabledProvider),
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(sessionContentStreamEnabledProvider.notifier)
+                        .setEnabled(value),
+                  );
+                },
+              ),
+            ),
+          ),
         ],
+
       ),
     );
   }

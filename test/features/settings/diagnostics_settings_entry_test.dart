@@ -47,6 +47,15 @@ void main() {
       );
       expect(diagnosticsTile, findsOneWidget);
 
+      // 开关行会随版本追加，tile 可能滑出 2000px 视口（#107/#108 并集实测
+      // y=2018）——先滚进视口再点，别依赖页长魔数。
+      await tester.dragUntilVisible(
+        diagnosticsTile,
+        find.byType(Scrollable).first,
+        const Offset(0, -300),
+      );
+      await tester.pumpAndSettle();
+
       await tester.tap(diagnosticsTile);
       await tester.pumpAndSettle();
 
