@@ -105,6 +105,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 最近一次传输活动（看门狗 12s/18s/25s 阈值）。
   DateTime? _lastTransportActivity;
 
+  /// prefill 等待期间超时阈值（连续无进度 ≥90s 自愈清 prefill 态）。
+  static const Duration _prefillStaleTimeout = Duration(seconds: 90);
+
+  /// 最近一次进入 prefill loading / notConfigured 的起始时刻。
+  DateTime? _prefillSince;
+
   /// 最近一次 live 上下文窗口轮询请求发起的时刻。
   DateTime? _lastContextPollTime;
 
@@ -168,6 +174,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _generation++;
     _lastProgress = null;
     _lastTransportActivity = null;
+    _prefillSince = null;
     _statusCheckCooldownUntil = null;
     _revealQueue.clear();
     _revealQueueStart = null;
@@ -255,6 +262,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _mergeTimer?.cancel();
     _revealTimer?.cancel();
     _watchdogTimer?.cancel();
+    _prefillSince = null;
     _transcriptRefreshTimer?.cancel();
     _cancelReconnectTimer();
     _cancelJitterTimers();
@@ -971,6 +979,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _lastContextPollTime = _now();
       state = state.copyWith(
         phase: ChatPhase.streaming,
+        turnStartedMillis:
+            state.turnStartedMillis ?? _now().millisecondsSinceEpoch,
         stream: state.stream.copyWith(activeStreamId: activeStreamId),
       );
       _syncSessionStreaming(
@@ -1239,6 +1249,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _beginStream(String streamId) {
     _timelineSequence = 0;
     _replayRebuildTimeline = false;
+    _prefillSince = null;
     state = state.copyWith(
       phase: ChatPhase.streaming,
       clearSendErrorMessage: true,
@@ -1350,6 +1361,17 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             state = state.copyWith(
               stream: state.stream.copyWith(
                 recovery: ActiveStreamRecoveryState.idle,
+              ),
+            );
+          }
+          if (!state.stream.hasCompletedResponse &&
+              state.stream.activeStreamId != null &&
+              state.stream.recovery == ActiveStreamRecoveryState.idle &&
+              (_reconnectTimer == null || !_reconnectTimer!.isActive) &&
+              _resumeProbeRetryTimer == null) {
+            unawaited(
+              _checkStatusAndReconnect(
+                resumeRetries: _watchdogConfig.resumeProbeRetries,
               ),
             );
           }
@@ -2309,8 +2331,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }
 
   void _handleContextStatus(ContextPrefillStatus status, String? label) {
+    if (state.stream.activeStreamId == null ||
+        state.stream.hasCompletedResponse) {
+      return;
+    }
     state = state.copyWith(prefillStatus: status, prefillLabel: label);
     _markProgress();
+    if (status == ContextPrefillStatus.loading ||
+        status == ContextPrefillStatus.notConfigured) {
+      _prefillSince = _now();
+    } else {
+      _prefillSince = null;
+    }
   }
 
   /// 启动独立 Clarify SSE 流 + 轮询兜底通道。
@@ -2793,6 +2825,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }) {
     _api?.stopStream();
     _syncSessionStreaming(state.sessionId, false);
+    _prefillSince = null;
     final nextToolGroups = _archiveLiveToolCallsToGroups();
     final nextReasoningGroups = _archiveLiveReasoningToGroups();
     state = state.copyWith(
@@ -2937,6 +2970,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _resetReconnectBackoff();
     _cancelJitterTimers();
     _resetFullReconnectThrottle();
+    _prefillSince = null;
     var messages = state.messages;
     if (state.pinnedLocalNotices.isNotEmpty) {
       final notices = state.pinnedLocalNotices
@@ -3525,9 +3559,36 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _startWatchdog() {
     _watchdogTimer?.cancel();
     _watchdogTimer = Timer.periodic(_watchdogConfig.watchdogInterval, (_) {
+      _recoverStalePrefillIfNeeded();
       _recoverStaleStreamIfNeeded();
       _pollContextWindowIfNeeded();
     });
+  }
+
+  void _recoverStalePrefillIfNeeded() {
+    if (_disposed || _appPaused) return;
+    final status = state.prefillStatus;
+    if (status != ContextPrefillStatus.loading &&
+        status != ContextPrefillStatus.notConfigured) {
+      _prefillSince = null;
+      return;
+    }
+    final since = _prefillSince;
+    if (since == null) {
+      _prefillSince = _now();
+      return;
+    }
+    if (_now().difference(since) >= _prefillStaleTimeout) {
+      _prefillSince = null;
+      state = state.copyWith(
+        clearPrefillStatus: true,
+        clearPrefillLabel: true,
+      );
+      if (state.stream.activeStreamId != null &&
+          !state.stream.hasCompletedResponse) {
+        unawaited(_checkStatusAndReconnect());
+      }
+    }
   }
 
   void _recoverStaleStreamIfNeeded() {
@@ -4015,6 +4076,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   void _markProgress() {
     _lastProgress = _now();
+    _prefillSince = null;
     // steered 是子相位：收到任意 progress 事件回到 streaming。
     if (state.phase == ChatPhase.steered) {
       state = state.copyWith(phase: ChatPhase.streaming);
@@ -4037,6 +4099,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (_disposed) return;
     if (state.stream.activeStreamId == null) {
       state = state.copyWith(
+        turnStartedMillis:
+            state.turnStartedMillis ?? _now().millisecondsSinceEpoch,
         stream: state.stream.copyWith(activeStreamId: activeStreamId),
       );
     }
@@ -4045,6 +4109,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     state = state.copyWith(
       phase: ChatPhase.streaming,
+      turnStartedMillis:
+          state.turnStartedMillis ?? _now().millisecondsSinceEpoch,
       stream: state.stream.copyWith(
         hasCompletedResponse: false,
         isSuspended: false,
@@ -4271,6 +4337,22 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   @visibleForTesting
   void scheduleSessionContentSyncForTesting() => _scheduleSessionContentSync();
+
+  @visibleForTesting
+  set prefillSinceForTesting(DateTime? value) => _prefillSince = value;
+
+  @visibleForTesting
+  DateTime? get prefillSinceForTesting => _prefillSince;
+
+  @visibleForTesting
+  void handleSseEventForTesting(SseEvent event) => _handleSseEvent(event);
+
+  @visibleForTesting
+  void recoverStalePrefillForTesting() => _recoverStalePrefillIfNeeded();
+
+  @visibleForTesting
+  Future<void> recoverExistingStreamForTesting(String activeStreamId) =>
+      _recoverExistingStream(activeStreamId);
 
   void _recordPersistedMessageCount(int? count) {
     if (count != null) {
