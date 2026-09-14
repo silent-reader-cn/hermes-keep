@@ -61,4 +61,28 @@ void main() {
     );
     expect(title, '过程');
   });
+
+  test('第三方 MCP 工具在过程摘要中聚合为「外部工具 ×N」', () {
+    final mcpCalls = [
+      ToolCall(id: 'm1', name: 'mcp__github__create_issue', isCompleted: true),
+      ToolCall(id: 'm2', name: 'mcp__playwright__browser_navigate', isCompleted: true),
+      ToolCall(id: 'm3', name: 'mcp__anki__addNote', isCompleted: true),
+    ];
+    final title = formatProcessCapsuleSummary(
+      toolGroups: [group(mcpCalls)],
+      intermediateTextCount: 0,
+      hideThinking: false,
+      l10n: l10nZh,
+      processPrefix: true,
+    );
+    expect(title, '过程 · 外部工具 \u00D73');
+    final titleEn = formatProcessCapsuleSummary(
+      toolGroups: [group(mcpCalls)],
+      intermediateTextCount: 0,
+      hideThinking: false,
+      l10n: l10nEn,
+      processPrefix: true,
+    );
+    expect(titleEn, 'Process · External Tools \u00D73');
+  });
 }

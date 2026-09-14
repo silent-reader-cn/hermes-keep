@@ -118,6 +118,36 @@ void main() {
       );
       expect(group.localizedActivityTitle(l10nEn), contains('+1'));
     });
+
+    test('localizedActivityTitle：第三方 MCP 工具聚合为「外部工具 ×N」', () {
+      final l10nZh = const AppLocalizations(Locale('zh'));
+      final l10nEn = const AppLocalizations(Locale('en'));
+
+      final group = ToolCallGroup(
+        toolCalls: [
+          ToolCall(name: 'mcp__github__create_issue', isCompleted: true),
+          ToolCall(name: 'mcp__playwright__browser_click', isCompleted: true),
+          ToolCall(name: 'mcp__blender__execute_blender_code', isCompleted: true),
+          ToolCall(name: 'terminal', isCompleted: true),
+        ],
+      );
+      // 三种不同 MCP 服务器归为同一「外部工具」条目 ×3，内置工具照常显示。
+      expect(
+        group.localizedActivityTitle(l10nZh),
+        contains('外部工具 \u00D73'),
+      );
+      expect(group.localizedActivityTitle(l10nZh), contains('终端 \u00D71'));
+      expect(
+        group.localizedActivityTitle(l10nEn),
+        contains('External Tools \u00D73'),
+      );
+
+      // isExternalMcp 判定：大小写不敏感、trim 容错、非前缀不误伤。
+      expect(ToolCall(name: 'MCP__x__y').isExternalMcp, true);
+      expect(ToolCall(name: ' mcp__x__y ').isExternalMcp, true);
+      expect(ToolCall(name: 'mcp_x').isExternalMcp, false);
+      expect(ToolCall(name: 'not_mcp__x').isExternalMcp, false);
+    });
   });
 
   group('ToolCallGroup.groups 聚合', () {

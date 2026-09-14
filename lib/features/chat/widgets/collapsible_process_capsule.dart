@@ -334,9 +334,12 @@ String formatProcessCapsuleSummary({
   for (var i = 0; i < allCalls.length; i++) {
     final call = allCalls[i];
     if (call.isThinking && hideThinking) continue;
+    // 第三方 MCP 工具（mcp__*）聚合层统一归为「外部工具 ×N」。
     final name = call.isThinking
         ? l10n.thinkingLabel
-        : l10n.localizeToolName(call.displayName);
+        : call.isExternalMcp
+            ? l10n.externalToolsLabel
+            : l10n.localizeToolName(call.displayName);
     initialIndex.putIfAbsent(name, () => initialIndex.length);
     counts[name] = (counts[name] ?? 0) + 1;
   }

@@ -589,10 +589,13 @@ String _adaptiveActivityTitle({
   final initialIndex = <String, int>{};
   for (var i = 0; i < group.toolCalls.length; i++) {
     // 思考子卡行也计入标题统计（「思考 ×N, 终端 ×M」）；纯思考卡标题即「思考 ×N」。
+    // 第三方 MCP 工具（mcp__*）聚合层统一归为「外部工具 ×N」。
     final call = group.toolCalls[i];
     final name = call.isThinking
         ? l10n.thinkingLabel
-        : l10n.localizeToolName(call.displayName);
+        : call.isExternalMcp
+            ? l10n.externalToolsLabel
+            : l10n.localizeToolName(call.displayName);
     initialIndex.putIfAbsent(name, () => initialIndex.length);
     counts[name] = (counts[name] ?? 0) + 1;
   }
@@ -647,9 +650,11 @@ String _adaptiveActivityTitle({
 
 /// 工具名 → 语义图标映射（告别统一扳手，按工具语义匹配 Icon）。
 ///
-/// 覆盖 Hermes 内置工具与常见别名；未命中的工具回退 [CupertinoIcons.wrench]。
+/// 覆盖 Hermes 内置工具与常见别名；第三方 MCP 工具（mcp__*）用 [CupertinoIcons.cube]；
+/// 其余未命中的工具回退 [CupertinoIcons.wrench]。
 IconData _toolIconFor(String name) {
   final key = name.trim().toLowerCase();
+  if (key.startsWith('mcp__')) return CupertinoIcons.cube;
   switch (key) {
     case 'thinking':
     case 'think':

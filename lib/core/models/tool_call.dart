@@ -53,6 +53,11 @@ class ToolCall {
     return trimmedName;
   }
 
+  /// 第三方 MCP 工具（命名约定 `mcp__<server>__<action>`）。
+  /// 聚合标题统一显示「外部工具」，单卡详情保留原名。
+  bool get isExternalMcp =>
+      displayName.trim().toLowerCase().startsWith('mcp__');
+
   /// 提取关键参数摘要文本（纯文本，若无有效摘要返回 null）。
   String? get summary => toolCallSummary(this);
 
@@ -237,10 +242,13 @@ class ToolCallGroup {
     final initialIndex = <String, int>{};
     for (var i = 0; i < toolCalls.length; i++) {
       // 思考子卡行也计入标题统计（「思考 ×N, 终端 ×M」）；纯思考卡标题即「思考 ×N」。
+      // 第三方 MCP 工具（mcp__*）聚合层统一归为「外部工具 ×N」。
       final call = toolCalls[i];
       final name = call.isThinking
           ? l10n.thinkingLabel
-          : l10n.localizeToolName(call.displayName);
+          : call.isExternalMcp
+              ? l10n.externalToolsLabel
+              : l10n.localizeToolName(call.displayName);
       initialIndex.putIfAbsent(name, () => initialIndex.length);
       counts[name] = (counts[name] ?? 0) + 1;
     }

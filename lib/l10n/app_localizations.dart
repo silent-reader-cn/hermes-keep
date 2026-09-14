@@ -412,6 +412,8 @@ class AppLocalizations {
   String get toolFailedStatus => isEnglish ? 'Failed' : '失败';
   String get toolRunningStatus => isEnglish ? 'Running' : '运行中';
   String get noTools => isEnglish ? 'No tools' : '无工具';
+  String get externalToolsLabel =>
+      isEnglish ? 'External Tools' : '外部工具';
 
   /// 本地化工具名称（chat / tool_call 聚合）。
   String localizeToolName(String name) {

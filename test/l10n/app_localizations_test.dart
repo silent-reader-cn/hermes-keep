@@ -268,6 +268,11 @@ void main() {
         l10n.localizeToolName('unknown_custom_tool'),
         'unknown_custom_tool',
       );
+      // 第三方 MCP 工具：单卡详情保留原名（default 分支透传）。
+      expect(
+        l10n.localizeToolName('mcp__github__create_issue'),
+        'mcp__github__create_issue',
+      );
       expect(l10n.localizeToolName(''), '工具');
     });
 
