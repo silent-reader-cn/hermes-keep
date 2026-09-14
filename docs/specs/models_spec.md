@@ -1,7 +1,7 @@
 # Hermex Models → Dart 模型翻译规格（models_spec）
 
 > 依据：`.reference/hermex-src/Models/` 下全部 23 个 Swift 文件（逐一精读），
-> 对齐 `docs/CODING_STYLE.md` 第 5 节「模型与 API 约定」。
+> 对齐 `AGENTS.md` 第 6 节「模型与 API 约定」。
 > 本文件是规格不是代码：字段名、类型、JSON 键、容错规则必须精确，编码子代理按此直接写 Dart。
 > 生成日期：2026-08-16。
 
@@ -25,7 +25,7 @@ encoder.keyEncodingStrategy = .convertToSnakeCase     // 编码：camelCase 属�
 
 > 例外说明：Swift 里 `CodingKeys` 显式写 snake_case rawValue 的键（如 `kickoffPromptSnake = "kickoff_prompt"`）在全局 convertFromSnakeCase 下实际匹配不到原始 snake 键——它存在的意义是兼容**不走 APIClient 默认 decoder 的路径**（SSE 直解、`streamPayload` 的默认 `JSONDecoder()` 等）。Dart 端统一按「snake 优先、camel 其次」处理即可覆盖所有路径，无需区分。
 
-### 0.2 容错总纲（CODING_STYLE.md §5 落地）
+### 0.2 容错总纲（AGENTS.md §6 落地）
 
 - 手写 `fromJson` / `toJson`，**不用 json_serializable**。
 - 未知字段一律忽略。
@@ -73,7 +73,7 @@ encoder.keyEncodingStrategy = .convertToSnakeCase     // 编码：camelCase 属�
 - Swift 是 `enum JSONValue`（string/number/bool/object/array/null），sealed class 的语义一一对应，且 Dart 3 的 `switch` 穷尽检查在编译期保证所有分支被处理，杜绝漏分支。
 - 类型安全：`JsonNumber.value` 是 `double`，不会像 `dynamic` 一样在运行时才炸。
 - 支持在同一个文件内提供 Swift 等价辅助方法（`stringValue`、`compactJsonString`、`lossyString` 等），后续模型（ChatMessage content、ToolCall args、KanbanDispatchResult）都要用。
-- 禁止 `dynamic` 滥用是 CODING_STYLE §4 的硬约束；JSON 解析边界用 sealed class 即可覆盖全部需求。
+- 禁止 `dynamic` 滥用是 AGENTS.md §4 的硬约束；JSON 解析边界用 sealed class 即可覆盖全部需求。
 
 ### 1.2 Dart 设计（lib/core/models/json_value.dart）
 
@@ -248,7 +248,7 @@ List<T>? optModelList<T>(Map<String, Object?> json, String key, T Function(Map<S
   字符串路径 `double.parse` 后走同一检查。
 - **double 的 int 分支**：Dart `jsonDecode` 把 `42` 解为 `int`，而 Swift 的 `decodeIfPresent(Double)` 能吃掉整数——所以 `lossyDouble`/`flexibleDouble` 必须显式处理 `int`（`(v as num).toDouble()`），否则 `"age_seconds": 120` 会漏解。这是 Dart 端特有的坑。
 - 所有函数对 key 缺失返回 null；`json` 里值为 `null` 时一律返回 null。
-- 每个函数配单测（CODING_STYLE §7）：畸形输入矩阵（缺失/错型/字符串数字/超大数/混合数组）。
+- 每个函数配单测（AGENTS.md §8）：畸形输入矩阵（缺失/错型/字符串数字/超大数/混合数组）。
 
 ---
 

@@ -3,7 +3,7 @@
 > 状态：规格定稿（2026-08-16）
 > 来源：`.reference/hermex-src/Networking/` 全部 22 个 Swift 文件精读（Endpoints.swift 590 行全读；APIClient.swift / APIClient+Chat / +Sessions / +Cron / +Workspace / +Git / +Kanban / +Memory / +Projects / +Skills / +SessionExport / +ServerPanels / +Upload / +Transcribe / +TTS / SSEClient.swift / KanbanEventStreamClient.swift / CustomHeader.swift / MultipartFormData.swift / APIError.swift / CacheFallbackPolicy.swift）
 > 用途：编码子代理按本文档直接编写 `lib/core/api/endpoints.dart` 与 `lib/core/api/api_client.dart`，不需要再读 Swift 源码
-> 强制约束：`docs/CODING_STYLE.md` 第 5 节（端点表与 Endpoints.swift 一一对应；模型手写 fromJson/toJson 容错解码；API Key 存 flutter_secure_storage，禁止硬编码、禁止进日志）；SSE 部分引用 `docs/PROTOCOL_NOTES.md`，不重复编写
+> 强制约束：`AGENTS.md` 第 6 节（端点表与 Endpoints.swift 一一对应；模型手写 fromJson/toJson 容错解码；API Key 存 flutter_secure_storage，禁止硬编码、禁止进日志）；SSE 部分引用 `docs/PROTOCOL_NOTES.md`，不重复编写
 
 ---
 
@@ -271,7 +271,7 @@ class ApiClient {
 }
 ```
 
-- 文件拆分建议：`core/api/api_client.dart`（基类 + 请求原语）、`core/api/api_client_chat.dart`、`api_client_sessions.dart`、`api_client_cron.dart`、`api_client_kanban.dart` 等镜像 Swift 扩展（CODING_STYLE §3 允许，保持每个文件一个主类型）。
+- 文件拆分建议：`core/api/api_client.dart`（基类 + 请求原语）、`core/api/api_client_chat.dart`、`api_client_sessions.dart`、`api_client_cron.dart`、`api_client_kanban.dart` 等镜像 Swift 扩展（AGENTS.md §3-§4 允许，保持每个文件一个主类型）。
 - 请求原语（镜像 Swift 的 `send` / `sendData` / `sendDataReturningResponse`）：
   - `Future<T> send<T>(Endpoint e, {String method, Map<String, dynamic>? body, Duration? timeout})` — JSON 编解码 + 错误归一化
   - `Future<Uint8List> sendData(...)` — 返回原始字节（rawFile/media/tts）
@@ -291,7 +291,7 @@ class ApiClient {
 1. **Cookie 会话**：`POST /api/auth/login {"password": …}` 成功后服务端种 cookie（`httpCookieStorage = .shared`、`httpCookieAcceptPolicy = .always`、`httpShouldSetCookies = true`）。此后每个请求（含 SSE）自动携带 cookie。401 → `unauthorized`。
    - Flutter 端：dio 本身不管理 cookie，用 `dio_cookie_jar` + `cookie_jar`（或等价方案）持久化到本地存储；cookie 与当前服务器绑定。
 2. **自定义 Header**（CustomHeader.swift）：用户为反向代理（Authentik 等）配置的任意 header 列表（如 `Authorization: Bearer …`、`X-Api-Key: …`），**每次请求构建时**从 `CustomHeaderStore` 快照读取（改 header 不用重建 client），按 RFC 7230 校验（name 为合法 token、value 无换行、空行跳过）后注入。
-   - Flutter 端：`CustomHeaderStore` 内存快照（Provider）+ `flutter_secure_storage` 持久化（**per-server 作用域**，换服务器不串 header，CODING_STYLE §5：API Key 禁硬编码、禁日志）；dio `Interceptor` 在 `onRequest` 注入。
+   - Flutter 端：`CustomHeaderStore` 内存快照（Provider）+ `flutter_secure_storage` 持久化（**per-server 作用域**，换服务器不串 header，AGENTS.md §6：API Key 禁硬编码、禁日志）；dio `Interceptor` 在 `onRequest` 注入。
 3. **合并顺序**：自定义 header 先注入，内置头（Accept/Content-Type）后设置——**内置头永远赢**（SSE 同理，见 PROTOCOL_NOTES.md §1）。
 4. **跨域重定向剥离**（CrossOriginHeaderStripper，#277）：同域 → 跨域 3xx 重定向时按名字剥离全部自定义 header 再跟随（dio 默认 `followRedirects=true`，需在 `onRedirect` 拦截实现等价逻辑）；同域重定向保留 header。外部 URL 下载（`remoteTranscriptMediaData` 的跨域分支）根本不发自定义头。
 5. **baseURL 同域判定**：scheme + host + 归一化端口（无端口时 http=80 / https=443）全等才算同域。
@@ -402,7 +402,7 @@ dio 侧注意：`DioException.response` 携带原始 body；**错误路径也必
 
 ---
 
-## 5. 编解码与模型约定（对齐 CODING_STYLE.md §5）
+## 5. 编解码与模型约定（对齐 AGENTS.md §6）
 
 - 键名映射：Swift 全局 `convertToSnakeCase`（编码） / `convertFromSnakeCase`（解码）→ Dart 端模型手写 `fromJson`/`toJson`，**线上键名一律 snake_case**（如 `session_id`、`model_provider`、`toast_notifications`、`idempotency_key`、`workspace_kind`、`is_image`、`delete_untracked`、`expand_renderable`、`active_stream_id`）。
 - 例外（Swift 显式 CodingKeys 保持原样的键，Dart 照抄）：kanban 响应的 `latestEventId`（camelCase！）、`KanbanEvent` 的 `id`/`taskId`/`runId`；SSE ToolStreamEvent 的 `tid`/`id`/`tool_call_id`/`tool_use_id`/`call_id`（见 PROTOCOL_NOTES.md §3）。

@@ -56,7 +56,7 @@ class ServerConnection {
   /// 是否启用：builtin 专用语义；remote 恒为 true。
   final bool enabled;
 
-  /// 容错解码：字段缺失/类型不符给安全默认值，绝不 crash（CODING_STYLE §5）。
+  /// 容错解码：字段缺失/类型不符给安全默认值，绝不 crash（AGENTS.md §6）。
   ///
   /// 密码不在此 JSON 中（由 [ConnectionStore] 从单独 key 读出后注入）。
   /// 存量 JSON 缺失 kind 字段时默认兼容为 [ConnectionKind.remote]。

@@ -1,4 +1,4 @@
-# hermes-ui 项目分析配置（规范见 docs/CODING_STYLE.md）
+# hermes-ui 项目分析配置（规范见 AGENTS.md）
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
@@ -14,7 +14,7 @@ analyzer:
 
 linter:
   rules:
-    # 强制规范项（对照 docs/CODING_STYLE.md 第 4 节）
+    # 强制规范项（对照 AGENTS.md 第 4 节）
     avoid_print: true
     prefer_single_quotes: true
     prefer_final_locals: true

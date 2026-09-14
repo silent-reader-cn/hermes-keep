@@ -2,7 +2,7 @@
 
 > 蓝本：`.reference/hermex-src/Features/Chat/ChatViewModel.swift`（5773 行，精读）、`ChatStreamCoordinator.swift`、`ChatPendingActionCoordinator.swift`、`ChatView.swift`、`Models/ChatMessage.swift`、`Models/ToolCall.swift`、`Models/MessageAttachment.swift`、`Networking/APIClient+Chat.swift`、`Networking/SSEClient.swift`、`Networking/Endpoints.swift`
 > 协议：`docs/PROTOCOL_NOTES.md`（SSE 事件全清单，本文直接引用其事件映射，不再重复定义）
-> 约束：严格遵守 `docs/CODING_STYLE.md` §6（Riverpod：Notifier 类名后缀 `Controller`、Provider 命名后缀 `Provider`、Provider 文件与页面同目录）
+> 约束：严格遵守 `AGENTS.md` §7（Riverpod：Notifier 类名后缀 `Controller`、Provider 命名后缀 `Provider`、Provider 文件与页面同目录）
 > 用途：后续编码子代理按本文直接实现 `lib/features/chat/` 的 Dart 代码，不再读 Swift 源码。
 > 语义：本文出现的"必须/禁止/一律"为强约束；"建议"为可选。
 
@@ -437,7 +437,7 @@ class TranscriptMessage {          // 对应 Swift TranscriptMessage
 
 ---
 
-## 7. Riverpod 模块划分与命名（强制，CODING_STYLE §6）
+## 7. Riverpod 模块划分与命名（强制，AGENTS.md §7）
 
 ```
 lib/features/chat/

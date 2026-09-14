@@ -1,7 +1,7 @@
 # App Shell 规格（app_shell_spec）— Phase 2 编码依据
 
 > 版本：v1.0 ｜ 领头人：柚子 ｜ 供 Phase 2 编码子代理直接使用
-> 相关文档：CODING_STYLE.md（强制规范）、api_spec.md（§2 ApiClient 设计）、chat_spec.md（chat 模块）
+> 相关文档：AGENTS.md（强制规范）、api_spec.md（§2 ApiClient 设计）、chat_spec.md（chat 模块）
 
 ## 1. 目标
 
@@ -20,7 +20,7 @@ void main() {
 - 初始化顺序：ProviderScope → 读取持久化连接 → 若存在已选服务器则进入 SessionList，否则 Onboarding
 
 ### 2.2 根 Widget：HermexApp
-- 用 `CupertinoApp`（**不是 MaterialApp**——业务 UI 全 Cupertino，CODING_STYLE §2 硬约束）
+- 用 `CupertinoApp`（**不是 MaterialApp**——业务 UI 全 Cupertino，AGENTS.md §2 硬约束）
 - `theme: CupertinoThemeData`（深色 + 浅色，见 §4）
 - `router: go_router` 路由表（见 §3）
 - `localizationsDelegates`：默认 + flutter_localizations（中文/英文）

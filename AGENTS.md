@@ -1,8 +1,8 @@
-# AGENTS.md — hermes-ui 执行契约（agy 子代理必读）
+# AGENTS.md — hermes-ui 执行契约（编码规范）
 
-> 本文档是**执行契约**：所有编码子代理（agy / 任何 AI 代理）进本仓库前必读。
+> 本文档是**执行契约**：本仓库的代码/样式/测试/Git 硬规范，任何进本仓库写代码的人或代理必读。
+> 并行子代理纪律（任务书 / 扇出 / 盯盘 / 复验 / 兜底后端）不在本文档，见 `HERMES.md` §6。
 > 与代码风格冲突时以本文档为准；协作与方向见 `HERMES.md`（主人 ↔ 柚子），与本文档冲突时本文档的硬规则优先。
-> 精简镜像：`docs/CODING_STYLE.md`（同源，AGENTS.md 为权威）。
 > 历史说明：曾因 Hermes 对 `AGENTS.md` 文件名的审批机制在 QQ 渠道不可用而以 `AGENT_.md` 落盘，现已正名。
 
 ## 1. 项目简介
@@ -101,7 +101,6 @@ tools/
 ├── fake_gateway/  main.py + smoke_test.py + requirements.txt  # 契约模拟服务器
 └── icon_pipeline/ generate_icons.py
 docs/
-├── CODING_STYLE.md                 # 本文档精简备份（同源，AGENTS.md 为准）
 ├── PROTOCOL_NOTES.md               # SSE/WS 协议笔记
 ├── QA.md / RELEASE.md / auto_reauth_spec.md / cache_audit_report.md / PLAN-session-gaps-phase2-2026-08.md
 └── specs/  11 规格 + 1 目录：agent-injected-message-cards/api_spec/app_shell_spec/backend-api-catalog(+backend-api-details/)/chat_spec/models_spec/saved-prompts/selected-context/session-auto-refresh/settings-extensions-mcp-aux/workspace_manager_spec
@@ -257,7 +256,7 @@ python tools/fake_gateway/smoke_test.py
 - 分支：`feat/<模块>` 或 `agy/<任务>`；提交信息：`<type>(<scope>): <subject>`（type: feat/fix/refactor/test/docs/chore）
 - 提交前 `git status` 确认只 add 相关文件；禁止 `git add -A` 混入无关文件
 - 合并到 main 前必须：analyze 通过 + 测试通过 + 无 TODO 遗留（有意遗留的 TODO 要标注负责人）
-- 任务前先 commit 当前进度；子代理禁止自行 commit（由 Leader 统一提交，见 §12）
+- 任务前先 commit 当前进度；并行子代理禁止自行 commit，由 Leader 统一提交（并行纪律见 `HERMES.md` §6）
 
 ## 10. 参考优先级
 
@@ -275,58 +274,10 @@ python tools/fake_gateway/smoke_test.py
 - [ ] 提交信息规范、分支正确
 - [ ] CI 三 job 全绿（analyze-test / android-debug / fake-gateway）
 
-## 12. 子代理执行规范（agy 并行任务书）
-
-> 本节是**子代理执行规范**。协作与方向见 `HERMES.md`，任务书自包含，子代理无对话上下文，只按任务书执行。
-
-### 12.1 任务书自包含
-
-每个 AGY 子代理任务书（`TASK.md`）必须包含：
-
-- 项目根路径 `D:\projects\hermes-ui` 与 worktree 路径 `D:\worktrees\hermes-aug24-xxx`，以及 Windows/MSYS 环境坑说明（flutter/dart 必须走 `C:/tmp/f.bat`，见 `windows-terminal` skill `references/flutter-toolchain-msys-setup.md`）
-- 必读文档清单（绝对路径：本 AGENTS.md、`HERMES.md`、`DESIGN.md`、对应 `.reference` 源码、关键已有代码路径）
-- 文件级分区（例：`lib/features/chat/*` 归 A，`lib/core/models/*` 归 B，禁止交叉写）
-- 验收标准（具体命令与阈值：`C:/tmp/f.bat analyze` 零告警、`C:/tmp/f.bat test` 全绿 + `--update-goldens`、无 Material 混入）
-- Git 纪律：**不要 commit**，Leader 统一提交
-- 模型固定：`gemini-3.8-flash-high`（禁换）
-- 产出要求：手写 fromJson/toJson 容错、Cupertino 全量、Riverpod 后缀规范等（同本文第 4-8 节）
-
-### 12.2 agy 调用
-
-```bash
-# 探活
-command -v agy && agy --version
-agy models   # 确认 gemini-3.8-flash-high 在列
-
-# 一把梭（workdir 必须指到对应 worktree，否则 TASK.md 找不到会空 prompt）
-agy --model "gemini-3.8-flash-high" -p "$(cat TASK.md)" --print-timeout 40m --dangerously-skip-permissions
-```
-
-参数：`--model` 必须在 `-p` 前；`-p/--print` 非交互纯文本；`--print-timeout 40m` 起步（默认 5m 太紧）；`--dangerously-skip-permissions` 无人值守；`workdir` 指 worktree。
-
-### 12.3 验收清单（每批子代理交活后 Leader 复验）
-
-每批子代理交活后 Leader 必须逐项复验：
-
-- [ ] 独立跑 `C:/tmp/f.bat analyze` 全项目零告警（含 info）
-- [ ] 独立跑 `C:/tmp/f.bat test` 全绿（含原有用例无回归）；样式变更后 `C:/tmp/f.bat test --update-goldens` 并提交 `test/golden/goldens/*.png`
-- [ ] 无临时调试文件残留（如 `debug_tmp_test.dart`、未清理 mock、TODO(merge)）
-- [ ] 无 Material 组件混入业务 UI
-- [ ] 子代理偏离规格处有书面说明，无说明偏离需追问
-- [ ] 全量通过后统一 commit + push，提交信息 `<type>(<scope>): <subject>` 并标注阶段与测试数
-
-> 并发 flaky 识别：两子代理同时跑 `flutter test` 会抢 build 锁导致时序敏感用例偶发失败。判定：单独重跑该文件全绿且工作区干净即判为并发干扰，不视为回归；验收应在子代理全部结束后统一重跑。
-
-### 12.4 引用 Skill
-
-- `parallel-subagent-project-governance` — 并行治理主规范
-- `windows-terminal` — Windows 上 flutter 工具链封装与 MSYS 坑位
-- `hermes-ui-codebase` — 本仓库代码导航与移植约束
-- `hermes-agent` — Hermes 本体能力查询（与 docs 冲突时以 docs 为准）
-
-## 13. 索引（去哪看）
+## 12. 索引（去哪看）
 
 - 协作与方向：`HERMES.md`（主人 ↔ 柚子）
+- 并行执行规范（任务书 / worktree 扇出 / 复验清单）：`HERMES.md` §6
 - 外壳：`DESIGN.md`
 - 规格：`docs/specs/` + `docs/PROTOCOL_NOTES.md`
 - 流水线：`.github/workflows/ci.yml`
