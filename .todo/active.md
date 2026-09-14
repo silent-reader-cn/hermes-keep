@@ -137,4 +137,4 @@
 - 列表挂账（根因4）本期不新增客户端逻辑：B/C 落定路径都会经 `_syncSessionStreaming(false)` 清本地位；服务端 active_stream_id 自身有 repair（models.py:3113），主人真机复验若仍残留再立项。
 - 测试：镜像 `test/features/chat/` 既有 controller 测试风格新增用例：①idle controller 喂 context_status 帧 → prefillStatus 不置位；②streaming 中喂 → 正常置位（回归）；③onClosed 非完成态 → chatStreamStatus 被调、双 false → 落定 idle；④loading 挂 90s 无活动 → 自愈清除（用 fakeAsync/可注入 clock 或 ChatWatchdogConfig override，对齐既有测试手法）；⑤接管路径 turnStartedMillis 起跳。
 - 验收：`C:/tmp/f.bat analyze` 零告警；`C:/tmp/f.bat test` 全绿；金照零破坏；实机取证=主人 Android 流式中锁屏 1-2 分钟解锁 → 回页 <3s 呈现完整回复或正确进行态，无永久「等待模型响应」。
-- 状态：规格已落盘，agy worktree `agy/s109-stuck-spinner` 执行中。
+- 状态：**已交付** main @a922086（agy worktree `agy/s109-stuck-spinner` 执行，Leader 独立复验：主仓 analyze 零告警 + 全量 2888 全绿（首轮 1 例 download drift 偶发抖动，单跑 3 次全绿+复跑全量 EXIT=0 排除）+ 金照零变更；新增 7 用例 `chat_prefill_deadlock_test.dart`）。**待主人 Android 真机复验**：流式中锁屏 1-2 分钟解锁 → 回页应 <3s 呈现完整回复（或正确的「排查中/重新连接」进行态），不再出现无计时的永久「等待模型响应」；列表「生成中」角标应随落定清除（若列表仍残留而聊天页正常，则按规格另立服务端挂账条目）。
