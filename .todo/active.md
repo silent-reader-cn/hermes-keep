@@ -101,6 +101,7 @@
 - 现状 vs 预期：现状=approval 卡片只靠回合主 stream 捎带帧，SSE 断线重连空窗期、或他端（WebUI/CLI）触发的审批，本机 approval 状态不可见/残留；预期=进入会话即伴随订阅 `/api/approval/stream?session_id=`（帧：`initial{pending,pending_count}` + `approval{...}`，server routes.py:19308/19321），pending 有→置 `ChatPhase.approvalPending`，无→清卡；与主 stream 捎带路径幂等合并（同 approval_id 去重，不双渲染）。
 - 生命周期：与回合流解耦（页面在挂→订阅，退页 dispose），断线重连退避同 #106 参数（1s*2^n 封顶 30s）；设置开关沿用 #106 的 `session_events_stream_enabled`? 独立键 `approval_stream_enabled` 更清晰（默认开），验收时再定。
 - 验收：analyze 零告警；单测=Fake 推 approval 帧→phase 变、initial 空→清卡、重连补 initial；既有关卡/审批测试全绿。规格细化后与 #108 并行拆 worktree。
+- 状态：**已交付** main @92e7449+d8b9973（agy 双 worktree 并行，Leader 独立复验 analyze 零告警 + 2879 全绿 + 金照零破坏）。**待主人实机复验**：App 开着会话 → 在其它触发路径（如 gateway/另一设备同 session）产生待审批 → 本机审批卡即时出现/消失；设置「审批实时推送」关后回退现状。
 
 ---
 
@@ -110,6 +111,7 @@
 - 现状 vs 预期：现状=手机开着会话 A、电脑上继续聊 A，本机内容不动（回合外无推送）；`process` 后台任务完成（如 delegate 通知）只能靠下次进页 syncMissingMessages；预期=session-updated→复用 `chat_controller` 现有 `syncMissingMessages`（差值同步已实现），bg_task_complete→复用现有通知/卡片路径；known_count 用服务端持久 `message_count` 基准（勿用渲染窗口长度，messages.js:7540-7546 注释的坑）。
 - 与 #106 关系：互补——#106 管列表行（结构变更），#108 管当前会话正文（内容追加）。
 - 验收：analyze 零告警；单测=推 session-updated 触发 syncMissingMessages 一次、known_count 门槛生效（无差值不拉）；金照不受影响。规格细化后与 #107 并行拆 worktree。
+- 状态：**已交付** main @d8b9973（含合并修复 diagnostics 测试视口魔数）。**待主人实机复验**：手机开着会话 A，电脑上继续聊 A → 手机正文/消息数秒级增量更新（不再等退出重进）；cron/自唤醒回合在打开的会话里 live 渲染。
 
 ---
 
