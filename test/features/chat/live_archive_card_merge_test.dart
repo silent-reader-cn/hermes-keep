@@ -113,4 +113,70 @@ void main() {
       reason: 'live 工具行按事件时间线追加在归档行之后',
     );
   });
+
+  testWidgets('live：同一工具 id 同时出现在归档卡与 live 时只留一行', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({
+      kToolGroupCoalesceKey: false,
+      kTurnCollapseKey: false,
+    });
+
+    final api = FakeChatApi()
+      ..statusResponse = const ChatStreamStatusResponse(active: true);
+    api.sessionResult = {
+      'session': {
+        'session_id': 's-live-dedupe',
+        'title': 'live-dedupe',
+        'active_stream_id': 'stream-1',
+        'messages': [
+          {'role': 'user', 'content': '开始', 'message_id': 'u1'},
+          {
+            'role': 'assistant',
+            'content': '第一段正文。',
+            'message_id': 'a1',
+            'tool_calls': [_toolCall('c1', 'terminal')],
+          },
+          {
+            'role': 'tool',
+            'content': 'ok1',
+            'tool_call_id': 'c1',
+            'message_id': 'm-t1',
+          },
+        ],
+        'message_count': 3,
+      },
+    };
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [chatApiProvider.overrideWithValue(api)],
+        child: const CupertinoApp(home: ChatPage(sessionId: 's-live-dedupe')),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+
+    // 服务端 transcript 已归档 c1，live 侧又收到同一 stable id（归档副本仍在
+    // liveToolCalls 里继续切片展示）→ 合并时必须按 stable id 去重，不得双显。
+    api.emit(
+      const ToolStartedSseEvent(
+        ToolStreamEvent(stableId: 'c1', name: 'terminal'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 48));
+
+    final cards = tester
+        .widgetList<ToolCallGroupCard>(find.byType(ToolCallGroupCard))
+        .toList();
+    expect(cards.length, 1, reason: '合并后只有一张卡');
+    expect(
+      cards.single.group.toolCalls.map((c) => c.id).toList(),
+      ['c1'],
+      reason: '同一 stable id 的归档行与 live 行不得重复',
+    );
+  });
 }
