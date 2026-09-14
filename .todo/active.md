@@ -40,3 +40,24 @@
 - 范围：仅该行 + 一个只读状态 provider（`backgroundKeepaliveServiceProvider` 已可读，`wmReady` 需接口层暴露或 `is ProductionBackgroundKeepaliveService` 判定）；**不动**保活开关 / 前台服务 / 通知链路；若新增 l10n 文案须 zh+en 同补并跑多语言用例。
 - 验收：未就绪时不再显示绿勾且 subtitle 含探针归因；就绪 / 未就绪 / 不适用三态正确；widget 用例覆盖三态；analyze 零告警 + test 全绿 + 金照零变更。
 - 状态：待开工（2026-09-14 由 #110 复盘登记，未动码）。
+
+## #114 实况通知（灵动岛）：展开态图标是单色 H + 倒计时方向错 + 内容单一
+
+> 主人 2026-09-14 报告（HyperOS 超级岛展开态截图）。选型对比页：`sketches/live-update-icons.html` + `live-update-icons-preview.png`。
+
+### P0 — 已实现，待主人真机复验（2026-09-14）
+
+- 位置：`android/app/src/main/kotlin/com/silentreader/hermes_ui/MainActivity.kt:255-320`（`showLiveUpdate`）+ `android/app/src/main/res/drawable/`。
+- 问题 1 · 展开态图标 = 单色 H：`setLargeIcon` **从未被调用**，系统只能回落到 small icon（手绘 `ic_live_update.xml` 的字母 H），主人截图里蓝底白 H 即此。预期 → `setLargeIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))` 摆**真应用图标**；用自适应图标（anydpi-v26）而非位图，因其自带 66% 安全区、被 HyperOS 裁成圆形不切主体。注：本版 androidx 的 `setLargeIcon` **无 IconCompat 重载**（编译期实测报错），须用 framework `android.graphics.drawable.Icon` + `SDK_INT >= M` 守卫。
+- 问题 2 · 倒计时方向错：`setChronometerCountDown(true)` + `setWhen(now)` → 岛/通知显示「**-02:09**」一路往下跳，语义错误。预期 → 正计时「02:09」＝已跑多久。
+- 问题 3 · small icon 换 24dp 优化剪影：新增 `res/drawable/ic_hermes_agent.xml`（B 版：删下巴细线；耳机横梁与头顶留 3.4 间隙；耳罩与垂发留 0.8 间隙＝3x 屏 2.4px），删 `ic_live_update.xml`（H 被取代）。
+- 范围：**仅** Kotlin 通知组装 + res/drawable；**不动** Dart 侧文案/数据链路/开关/幂等缓存。
+- 编译验证：`:app:compileDebugKotlin` `BUILD SUCCESSFUL`（含新资源 aapt 校验）。
+- 验收：真机（安卓 16 + HyperOS 3.0.300+）岛上展开态圆形位显示**真应用图标**、时间为**正计时**；状态栏 chip 图标为剪影而非 H；非岛机型降级普通通知同样显示真图标且不崩。
+
+### P1 — 待主人拍板后开工
+
+- 内容升级：`contentText` 由「会话标题」→「**当前动作**」（思考中／调用终端…／输出中）。官方 UX 明确要求"算不出进度时给主动占位文案"，现行静态「正在生成回复…」不达标。
+- `ProgressStyle` 增强：`setProgressTrackerIcon` 随状态动态换（20dp，或官方 sample 的 40×20 胶囊）；`addProgressPoint` 每次工具调用落一点使内容随回合增长。**进度条保持 indeterminate**——agent 回合无真实百分比、段长不可预测，套 `Segment` 会出现"条走完还在跑"（截图里那条 1/5 填充已在造假进度，勿加剧）。
+- 前置改造（成本大头）：现通知**仅在活跃会话集合变化时**刷新（`lib/features/session_list/session_auto_refresh.dart:164-186`，集合相同即早退），阶段变化根本不触发。需新建回合实时状态回调链路（对标 `turnNotificationHookProvider`），并把 `ChatPhase`（`lib/features/chat/chat_state.dart:11`）的等待态（`clarifyPending` 待回复／`approvalPending` 待批准）一并上岛——那是主人离开时最需要被叫回的状态。
+- 参考：同赛道标杆 Capsulyric（小米 15 / HyperOS 3.0.300.7 实机验证：走 AOSP Live Update 通道即可映射到超级岛，**无需 Root/Shizuku**；小米私有超级岛接口才需特权，不碰）。

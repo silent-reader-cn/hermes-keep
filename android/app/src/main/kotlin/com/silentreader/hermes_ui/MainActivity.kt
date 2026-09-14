@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -271,7 +272,9 @@ class MainActivity : FlutterActivity() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             val builder = NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.drawable.ic_live_update)
+                // #114 small icon：应用标识的单色剪影（alpha-only，系统按语境着色）。
+                // 展开态大图标位另由 largeIcon 承担，二者职责不同。
+                .setSmallIcon(R.drawable.ic_hermes_agent)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setOngoing(true)
@@ -280,9 +283,19 @@ class MainActivity : FlutterActivity() {
                 .setShowWhen(true)
                 .setWhen(System.currentTimeMillis())
                 .setUsesChronometer(true)
-                .setChronometerCountDown(true)
+                // #114 修正计时方向：原先 countDown=true 使岛/通知显示「-02:09」
+                // 一路往下跳，语义错误。回合进行中应正计时，表达"已经跑了多久"。
+                .setChronometerCountDown(false)
                 .setContentIntent(contentIntent)
                 .setColor(0xFF007AFF.toInt())
+            // #114 largeIcon：展开态/岛展开态的大图标位——**支持彩色位图**，直接摆真应用
+            // 图标。此前从未设置该项，系统只能回落到 small icon，于是主人在岛上看到的永远
+            // 是那枚单色 H（本次修复的根因）。用自适应图标而非位图：它自带 66% 安全区，被
+            // HyperOS 裁成圆形时不会切到主体。本版 androidx 的 setLargeIcon 无 IconCompat
+            // 重载（编译期实测），故用 framework Icon 并加 API 23 守卫（Android 16 恒满足）。
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                builder.setLargeIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))
+            }
             // 状态栏 chip 短文案（系统硬约束 ≤6 字符）。按**字符数**截断：
             // TextUtils.ellipsize 的宽度参数单位是像素、非字符数（且新建
             // TextPaint 无字体度量），任何文案都会被压成单个「…」而使 chip 失效，

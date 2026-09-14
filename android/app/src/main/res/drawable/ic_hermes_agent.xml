@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #114 实况通知 small icon：应用标识的单色剪影（24dp 优化版）。
+
+     设计约束：setSmallIcon 必须是 alpha-only——系统会把它 tint 成单一颜色，
+     因此不能依赖原应用图标的"黑白对比"，只能靠**轮廓**辨识。
+
+     本剪影保留原图标最强特征（公主切刘海 + 垂肩长发 + 头戴式耳机），并按
+     24dp 可读性做了三处取舍（对照 #114 评审页 sketches/live-update-icons.html）：
+       ① 删除下巴轮廓细线（1.15 线宽缩到 24dp 必糊）；
+       ② 耳机横梁与头顶拉开 3.4 单位间隙，缩到 24dp 仍是独立一笔；
+       ③ 耳罩与垂发留 0.8 单位间隙（3x 屏 = 2.4px），避免与头发并成一团。
+     耳罩用粗描边圆帽胶囊（strokeLineCap=round）实现，比直角矩形更接近原图标。
+
+     纯白填充，实际着色由系统按状态栏/chip 语境决定。
+     展开态大图标位不使用本文件——那里由 MainActivity 的 setLargeIcon
+     摆真应用图标（mipmap/ic_launcher）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 头顶 + 齐刘海（半圆盘，底边 y=10.8 即刘海下沿） -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6.0,10.8 A6.0,6.0 0 0 1 18.0,10.8 Z" />
+
+    <!-- 左垂发 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6.0,10.2 h2.4 v6.6 h-2.4 Z" />
+
+    <!-- 右垂发 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15.6,10.2 h2.4 v6.6 h-2.4 Z" />
+
+    <!-- 头戴式耳机横梁（独立弧线，悬于头顶上方 3.4 单位） -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M5.0,8.4 A7.0,7.0 0 0 1 19.0,8.4" />
+
+    <!-- 左耳罩（粗描边圆帽 = 胶囊，x 2.6~5.2） -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:pathData="M3.9,9.2 L3.9,13.2" />
+
+    <!-- 右耳罩（x 18.8~21.4） -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:pathData="M20.1,9.2 L20.1,13.2" />
+
+</vector>
