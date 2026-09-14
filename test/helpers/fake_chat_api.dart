@@ -450,6 +450,47 @@ class FakeChatApi implements ChatServerApi {
 
   void closeClarifyStream() => _onClarifyClosed?.call();
 
+  void Function(SseEvent event)? _onApprovalEvent;
+  void Function(String message)? _onApprovalTransportError;
+  void Function()? _onApprovalClosed;
+  ApprovalPendingResponse? approvalPendingResponse;
+  int startApprovalStreamCalls = 0;
+  int stopApprovalStreamCalls = 0;
+  int approvalPendingCalls = 0;
+
+  @override
+  Future<ApprovalPendingResponse> approvalPending(String sessionId) async {
+    approvalPendingCalls++;
+    return approvalPendingResponse ?? const ApprovalPendingResponse();
+  }
+
+  @override
+  Future<void> startApprovalStream(
+    String sessionId, {
+    required void Function(SseEvent event) onEvent,
+    required void Function(String message) onTransportError,
+    required void Function() onClosed,
+  }) async {
+    startApprovalStreamCalls++;
+    _onApprovalEvent = onEvent;
+    _onApprovalTransportError = onTransportError;
+    _onApprovalClosed = onClosed;
+  }
+
+  @override
+  void stopApprovalStream() {
+    stopApprovalStreamCalls++;
+    _onApprovalEvent = null;
+    _onApprovalTransportError = null;
+    _onApprovalClosed = null;
+  }
+
+  void emitApproval(SseEvent event) => _onApprovalEvent?.call(event);
+
+  void failApproval(String message) => _onApprovalTransportError?.call(message);
+
+  void closeApprovalStream() => _onApprovalClosed?.call();
+
   void emit(SseEvent event) => _onEvent?.call(event);
 
   void emitId(String id) => _onEventId?.call(id);

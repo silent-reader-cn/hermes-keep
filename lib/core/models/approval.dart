@@ -75,6 +75,7 @@ class PendingApproval {
     this.description,
     this.patternKey,
     this.patternKeys,
+    this.raw,
   }) : approvalId = _normalizedApprovalId(approvalId);
 
   factory PendingApproval.fromJson(Map<String, Object?> json) {
@@ -84,6 +85,7 @@ class PendingApproval {
       description: lossyString(json, 'description'),
       patternKey: firstKey(json, ['pattern_key', 'patternKey'], lossyString),
       patternKeys: lossyStringArray(json, ['pattern_keys', 'patternKeys']),
+      raw: json,
     );
   }
 
@@ -92,6 +94,19 @@ class PendingApproval {
   final String? description;
   final String? patternKey;
   final List<String>? patternKeys;
+  final Map<String, Object?>? raw;
+
+  /// 序列化为 Map，优先复用原始入参保证字段无损。
+  Map<String, Object?> toJson() {
+    if (raw != null) return Map<String, Object?>.from(raw!);
+    return {
+      if (approvalId != null) 'approval_id': approvalId,
+      if (command != null) 'command': command,
+      if (description != null) 'description': description,
+      if (patternKey != null) 'pattern_key': patternKey,
+      if (patternKeys != null) 'pattern_keys': patternKeys,
+    };
+  }
 
   String get id {
     final aid = approvalId;

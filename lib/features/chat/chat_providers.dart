@@ -70,6 +70,63 @@ class ChatStatusLineController extends Notifier<bool> {
   }
 }
 
+/// 持久化 key：审批实时推送。
+const String kApprovalStreamEnabledKey = 'approval_stream_enabled';
+
+/// 审批实时推送（SSE）开关 Provider（持久化到 shared_preferences，默认开启 true）。
+final approvalStreamEnabledProvider =
+    NotifierProvider<ApprovalStreamEnabledController, bool>(
+      ApprovalStreamEnabledController.new,
+    );
+
+/// 控制审批实时推送开关及本地持久化的 Notifier。
+class ApprovalStreamEnabledController extends Notifier<bool> {
+  static const String key = kApprovalStreamEnabledKey;
+
+  /// 读取开关偏好的静态辅助方法。
+  static Future<bool> loadPref({SharedPreferences? customPrefs}) async {
+    try {
+      final prefs = customPrefs ?? await SharedPreferences.getInstance();
+      return prefs.getBool(key) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _hasCustomState = false;
+
+  @override
+  bool build() {
+    _hasCustomState = false;
+    unawaited(_load());
+    return true; // 默认 true
+  }
+
+  Future<void> _load() async {
+    try {
+      final value = await loadPref();
+      if (!_hasCustomState) {
+        state = value;
+      }
+    } catch (_) {
+      // 单元测试无 SharedPreferences 时静默忽略
+    }
+  }
+
+  Future<void> load() => _load();
+
+  Future<void> setEnabled(bool value) async {
+    _hasCustomState = true;
+    state = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key, value);
+    } catch (_) {
+      // 单元测试环境忽略
+    }
+  }
+}
+
 /// 看门狗阈值配置（chat_spec.md §5.3；测试可 override 缩短阈值）。
 class ChatWatchdogConfig {
   const ChatWatchdogConfig({
