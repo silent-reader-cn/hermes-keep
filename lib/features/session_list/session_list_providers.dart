@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api/api_client.dart';
@@ -413,6 +414,27 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// 刷新在途标记（并发互斥）。
   bool _refreshInFlight = false;
 
+  /// 刷新重试标记（在途时收到刷新请求则置位，当前轮结束后自动补拉一次）。
+  bool _refreshDirty = false;
+
+  /// 控制器是否已释放标记。
+  bool _disposed = false;
+
+  /// 会话变更推送事件（SSE）800ms 防抖计时器。
+  Timer? _eventsDebounceTimer;
+
+  /// 阶梯补拉活跃计时器集合。
+  final List<Timer> _activeLadderTimers = [];
+
+  @visibleForTesting
+  bool get isRefreshDirtyForTesting => _refreshDirty;
+
+  @visibleForTesting
+  bool get isRefreshInFlightForTesting => _refreshInFlight;
+
+  @visibleForTesting
+  Timer? get eventsDebounceTimerForTesting => _eventsDebounceTimer;
+
   /// 用户是否已手动切换过 subagent 开关（防后台偏好加载覆盖即时操作）。
   bool _showSubagentCustomized = false;
 
@@ -462,10 +484,17 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       ref.watch(apiClientProvider),
     );
     ref.onDispose(() {
+      _disposed = true;
       _autoRefreshTimer?.cancel();
       _autoRefreshTimer = null;
       _focusDebounceTimer?.cancel();
       _focusDebounceTimer = null;
+      _eventsDebounceTimer?.cancel();
+      _eventsDebounceTimer = null;
+      for (final t in _activeLadderTimers) {
+        t.cancel();
+      }
+      _activeLadderTimers.clear();
     });
     final loaded = await _loadFirstPage(api, isColdStart: true);
     // 首屏状态就绪后再后台读取本地「显示 subagent 会话」偏好并回填
@@ -532,7 +561,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       return;
     }
     final current = state.valueOrNull!;
-    if (_refreshInFlight || current.refreshing) return;
+    if (_refreshInFlight || current.refreshing) {
+      _refreshDirty = true;
+      return;
+    }
     final query = current.searchQuery?.trim();
     if (query != null && query.isNotEmpty) return;
     if (current.filterMode == SessionListFilterMode.archived) return;
@@ -544,6 +576,21 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       }
     }
     await refresh();
+  }
+
+  /// 收到会话变更推送事件（SSE）后的统一回调入口。
+  /// 内部 800ms debounce（Timer 重置式合并）→ refreshIfStale(force: true)。
+  void onSessionsChangedEvent({
+    int? version,
+    String? reason,
+    String? profile,
+    String? sessionId,
+  }) {
+    _eventsDebounceTimer?.cancel();
+    _eventsDebounceTimer = Timer(const Duration(milliseconds: 800), () {
+      _eventsDebounceTimer = null;
+      unawaited(refreshIfStale(force: true));
+    });
   }
 
   /// 获焦/前台恢复时带 1s debounce 的调度+刷新。
@@ -662,7 +709,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
 
   /// 下拉刷新 / 错误态重试：重新加载第一页并重置分页窗口。
   Future<void> refresh() async {
-    if (_refreshInFlight) return;
+    if (_refreshInFlight) {
+      _refreshDirty = true;
+      return;
+    }
     _refreshInFlight = true;
     if (_hasStartedGrace) {
       _hasStartedGrace = false;
@@ -726,6 +776,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       }
     } finally {
       _refreshInFlight = false;
+      if (_refreshDirty) {
+        _refreshDirty = false;
+        unawaited(refresh().catchError((Object _) {}));
+      }
     }
   }
 
@@ -1123,26 +1177,58 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     }
   }
 
-  /// P4：新会话首条消息后会话列表即时可见。
+  /// 新会话首条消息后会话列表即时可见（阶梯补拉）。
   ///
-  /// 设计抉择：乐观占位（`local-xxx` 预插入）可在 0ms 提供视觉反馈，但需
-  /// 临时 id → 真实 id 替换与去重逻辑，且后端 `startChat` 成功即返回
-  /// 真实 `sessionId`（延迟 <300ms 时单次刷新已在 0~500ms 内可见）。
-  /// 为兼顾「首轮完成后才落库」的异步后端，这里采用**纯刷新**策略：
-  /// 立即 `refreshIfStale(force: true)` + 600ms 二次补拉，桌面双栏下
-  /// 配合 ChatPage 的 `context.go('/chat/<newId>')` 导航即可满足
-  /// 「发送第一条消息后列表即出现新项，无需手动下拉」的验收；无需乐观
-  /// 占位复杂度。若后端延迟明显（>1s），再考虑占位增强。
+  /// 阶梯补拉：立即 / +600ms / +2.5s / +5.5s 各一次 `refreshIfStale(force: true)`；
+  /// 任一枪的响应里已含目标 `newSessionId` 则终止后续枪。
   Future<void> handleNewChatSession(
     String newSessionId, {
     String? titleHint,
   }) async {
     if (newSessionId.isEmpty) return;
-    // titleHint 保留作未来占位标题来源，当前纯刷新策略暂不使用。
-    unawaited(refreshIfStale(force: true));
-    Future<void>.delayed(const Duration(milliseconds: 600), () {
-      unawaited(refreshIfStale(force: true));
-    });
+
+    bool containsSession() {
+      final sessions = state.valueOrNull?.sessions;
+      if (sessions == null) return false;
+      return sessions.any(
+        (s) => s.sessionId == newSessionId || s.id == newSessionId,
+      );
+    }
+
+    // 立即执行第 1 枪 (0ms)
+    await refreshIfStale(force: true);
+    if (_disposed || containsSession()) return;
+
+    final sessionTimers = <Timer>[];
+    void cancelAll() {
+      for (final t in sessionTimers) {
+        t.cancel();
+        _activeLadderTimers.remove(t);
+      }
+      sessionTimers.clear();
+    }
+
+    void scheduleStep(Duration delay) {
+      late final Timer timer;
+      timer = Timer(delay, () async {
+        _activeLadderTimers.remove(timer);
+        if (_disposed || containsSession()) {
+          cancelAll();
+          return;
+        }
+        await refreshIfStale(force: true);
+        if (_disposed || containsSession()) {
+          cancelAll();
+        }
+      });
+      sessionTimers.add(timer);
+      _activeLadderTimers.add(timer);
+    }
+
+    // 阶梯调度：+600ms / +2.5s / +5.5s
+    scheduleStep(const Duration(milliseconds: 600));
+    scheduleStep(const Duration(milliseconds: 2500));
+    scheduleStep(const Duration(milliseconds: 5500));
   }
 
   /// 标记指定会话的流式状态（本地乐观置位 + 可选后台单会话校验）。

@@ -5,9 +5,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/api/api_client.dart';
+import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../desktop/desktop_settings.dart';
 import '../notifications/notification_providers.dart';
+import 'session_events_client.dart';
 import 'session_list_providers.dart';
 
 /// 会话列表活跃流同步回调（检测到活跃流集合变化时调用）。
@@ -107,6 +110,56 @@ class _SessionAutoRefreshObserverState
   Timer? _periodic;
   bool _didInit = false;
   Set<String>? _lastStreamingSessionIds;
+  SessionEventsSseClient? _eventsClient;
+
+  @visibleForTesting
+  SessionEventsSseClient? get eventsClientForTesting => _eventsClient;
+
+  bool get _shouldStreamEvents {
+    if (!enableSessionAutoRefresh) return false;
+    final enabled = ref.read(sessionEventsStreamEnabledProvider);
+    return _shouldPoll && enabled;
+  }
+
+  void _initEventsClient() {
+    _eventsClient?.stop();
+    _eventsClient?.dispose();
+    _eventsClient = null;
+
+    ApiClient? client;
+    try {
+      client = ref.read(apiClientProvider);
+    } catch (_) {
+      client = null;
+    }
+    if (client == null) return;
+
+    _eventsClient = SessionEventsSseClient(
+      dio: client.dio,
+      baseUrl: client.baseUrl,
+      onSessionsChanged: ({version, reason, profile, sessionId}) {
+        if (!mounted) return;
+        ref.read(sessionListControllerProvider.notifier).onSessionsChangedEvent(
+          version: version,
+          reason: reason,
+          profile: profile,
+          sessionId: sessionId,
+        );
+      },
+    );
+  }
+
+  void _syncEventsClient() {
+    if (!mounted) return;
+    if (_eventsClient == null) {
+      _initEventsClient();
+    }
+    if (_shouldStreamEvents) {
+      _eventsClient?.start();
+    } else {
+      _eventsClient?.stop();
+    }
+  }
 
   void _syncStreamingSessions(List<SessionSummary>? sessions) {
     if (sessions == null) return;
@@ -181,6 +234,7 @@ class _SessionAutoRefreshObserverState
 
   void _onFocusGained() {
     if (!mounted) return;
+    _syncEventsClient();
     _focusDebounce?.cancel();
     _focusDebounce = Timer(const Duration(seconds: 1), () {
       if (!mounted) return;
@@ -194,6 +248,7 @@ class _SessionAutoRefreshObserverState
   void _onFocusLost() {
     _focusDebounce?.cancel();
     _stopPeriodic();
+    _eventsClient?.stop();
   }
 
   @override
@@ -205,6 +260,8 @@ class _SessionAutoRefreshObserverState
       _syncStreamingSessions(
         ref.read(sessionListControllerProvider).valueOrNull?.sessions,
       );
+      _initEventsClient();
+      _syncEventsClient();
       _maybeSchedulePoll();
     });
   }
@@ -213,6 +270,9 @@ class _SessionAutoRefreshObserverState
   void dispose() {
     _focusDebounce?.cancel();
     _stopPeriodic();
+    _eventsClient?.stop();
+    _eventsClient?.dispose();
+    _eventsClient = null;
     super.dispose();
   }
 
@@ -225,6 +285,7 @@ class _SessionAutoRefreshObserverState
       } else {
         _onFocusLost();
       }
+      _syncEventsClient();
     });
     ref.listen<bool>(windowFocusedProvider, (prev, next) {
       if (!mounted || !_didInit) return;
@@ -233,13 +294,22 @@ class _SessionAutoRefreshObserverState
       } else {
         _onFocusLost();
       }
+      _syncEventsClient();
     });
-    // 监听会话列表变化：同步活跃流集合到保活常驻通知 + 失败次数退避重建
+    ref.listen<bool>(sessionEventsStreamEnabledProvider, (prev, next) {
+      if (!mounted || !_didInit) return;
+      _syncEventsClient();
+    });
+    // 监听会话列表变化：同步活跃流集合到保活常驻通知 + 失败次数退避重建 + 事件客户端重连
     ref.listen(sessionListControllerProvider, (prev, next) {
       if (!mounted) return;
       _syncStreamingSessions(next.valueOrNull?.sessions);
 
       if (!_didInit) return;
+      if (_eventsClient == null) {
+        _initEventsClient();
+        _syncEventsClient();
+      }
       final pf = prev?.valueOrNull?.consecutiveFailures ?? 0;
       final nf = next.valueOrNull?.consecutiveFailures ?? 0;
       if (pf != nf && _shouldPoll && _periodic != null) {

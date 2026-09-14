@@ -1847,3 +1847,17 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
       ? 'Promoted ongoing notifications on Android 16+ / HyperOS 3.1; silently ignored on older systems'
       : '安卓 16+/HyperOS 3.1 实况通知生效，其他系统自动降级、不受影响';
 }
+
+// ---------------------------------------------------------------------------
+// #106 会话列表实时推送
+// ---------------------------------------------------------------------------
+extension AppLocalizationsSessionEvents106 on AppLocalizations {
+  /// 设置页开关行标题。
+  String get sessionEventsStreamTitle =>
+      isEnglish ? 'Realtime session list updates' : '会话列表实时推送';
+
+  /// 设置页开关行副标题。
+  String get sessionEventsStreamSubtitle => isEnglish
+      ? 'Subscribe to server events for immediate session list updates'
+      : '通过服务端事件推送即时感知会话变更';
+}

@@ -177,6 +177,9 @@ class Endpoint {
   static const updateSession = Endpoint('/api/session/update');
   static const moveSession = Endpoint('/api/session/move');
 
+  /// GET /api/sessions/events（会话变更 SSE 推送）。
+  static const sessionEvents = Endpoint('/api/sessions/events');
+
   /// GET 查状态（query `session_id` 可选）；POST 设状态时传 null（无 query）。
   static Endpoint sessionYolo([String? sessionId]) {
     return Endpoint(

@@ -28,6 +28,7 @@ import '../diagnostics/diagnostics_service.dart';
 import '../notifications/background_keepalive_settings_page.dart';
 import '../notifications/notification_providers.dart';
 import '../onboarding/onboarding_providers.dart';
+import '../session_list/session_events_client.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
 import 'chat_send_shortcut_settings.dart';
@@ -736,6 +737,25 @@ class _CronSection extends ConsumerWidget {
                     ref
                         .read(cronVisibilityProvider.notifier)
                         .setShowCron(value),
+                  );
+                },
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-session-events-stream'),
+            title: Text(l10n.sessionEventsStreamTitle),
+            subtitle: Text(l10n.sessionEventsStreamSubtitle),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('settings-switch-session-events-stream'),
+                value: ref.watch(sessionEventsStreamEnabledProvider),
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(sessionEventsStreamEnabledProvider.notifier)
+                        .setEnabled(value),
                   );
                 },
               ),
