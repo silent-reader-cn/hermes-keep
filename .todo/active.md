@@ -39,3 +39,14 @@
 - 禁区：不动「text 唯一分隔符」时间线语义（#20/#34/#54 既定）；liveTimelineProvider 流式期间表现正确，勿动；金照不受影响（幽灵卡系数据路径产物）。
 - 测试：`test/core/models/tool_call_test.dart` 增补「归档组锚=流式 id + 派生组锚=raw: → re-anchor/指纹去重后单卡」；controller 测试模拟 done→refresh 序列断言 completedToolCallGroups 无死锚残留。
 - 验收：analyze 零告警 + test 全绿 + 金照零破坏；实机取证=主人重进该会话，「等它跑一会」下方仅 1 张卡（终端×2 思考×2）。
+
+---
+
+## #113 保活设置页「WorkManager 状态」行是静态绿勾（不反映真实注册状态）
+
+- 位置：`lib/features/notifications/background_keepalive_settings_page.dart:141-157`（`key: settings-bg-workmanager-status` 的 `CupertinoListTile`）——trailing 恒为 `CupertinoIcons.checkmark_seal_fill` 绿勾，subtitle 恒为 `l10n.bgWorkManagerStatusSubtitle`，**无任何数据源**。
+- 复现：任意平台打开「设置 → 后台保活」即见绿勾；2026-09-14 release 包 WorkManager 注册失败（#110）时该行**仍显示绿勾**——状态行与真实 `ProductionBackgroundKeepaliveService.wmReady` 完全解耦。
+- 现状 vs 预期：现状 = 静态绿勾（误导，是 #110 长期未被发现的旁因之一）；预期 = 反映真实三态：`wmReady == true` → 绿勾 + 现有文案；未就绪 → 红/橙标识 + 失败归因（可直接复用 #110 交付的 `WorkManagerRegistrationProbe.describe()`：initialized/creation/error）；非 Android（Windows 等）→ 「不适用」，不得误报「未就绪」。
+- 范围：仅该行 + 一个只读状态 provider（`backgroundKeepaliveServiceProvider` 已可读，`wmReady` 需接口层暴露或 `is ProductionBackgroundKeepaliveService` 判定）；**不动**保活开关 / 前台服务 / 通知链路；若新增 l10n 文案须 zh+en 同补并跑多语言用例。
+- 验收：未就绪时不再显示绿勾且 subtitle 含探针归因；就绪 / 未就绪 / 不适用三态正确；widget 用例覆盖三态；analyze 零告警 + test 全绿 + 金照零变更。
+- 状态：待开工（2026-09-14 由 #110 复盘登记，未动码）。
