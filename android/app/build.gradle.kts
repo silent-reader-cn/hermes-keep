@@ -72,5 +72,7 @@ dependencies {
     // flutter_local_notifications 必需（v10+ 要求 Java 8+ API 脱糖）
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // MainActivity FileProvider（content:// URI 共享，Android 7+ 禁裸 file://）
-    implementation("androidx.core:core-ktx:1.13.1")
+    // #105 升至 1.18.0：NotificationCompat.ProgressStyle / setRequestPromotedOngoing /
+    // NotificationManagerCompat.canPostPromotedNotifications（安卓 16 Live Updates 兼容层）。
+    implementation("androidx.core:core-ktx:1.18.0")
 }

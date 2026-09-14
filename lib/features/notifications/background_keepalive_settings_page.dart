@@ -102,6 +102,25 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
                 },
               ),
             ),
+            // #105 安卓 16 实况通知（灵动岛/状态栏 chip）开关：默认开，
+            // 关闭即回退到仅保活常驻通知的现状（低版本系统本就自动无感）。
+            CupertinoListTile(
+              key: const ValueKey('settings-bg-live-update'),
+              title: Text(l10n.liveUpdateSwitchTitle),
+              subtitle: Text(
+                l10n.liveUpdateSwitchSubtitle,
+                style: isLight
+                    ? const TextStyle(color: LightSurfaces.textSecondary)
+                    : null,
+              ),
+              trailing: CupertinoSwitch(
+                key: const ValueKey('settings-switch-bg-live-update'),
+                value: settings.bgLiveUpdateEnabled,
+                onChanged: (value) {
+                  unawaited(notifier.setBgLiveUpdateEnabled(value));
+                },
+              ),
+            ),
             if (settings.error != null)
               CupertinoListTile(
                 key: const ValueKey('settings-bg-foreground-service-error'),

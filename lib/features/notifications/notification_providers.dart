@@ -11,6 +11,7 @@ import '../../l10n/app_localizations.dart';
 import '../chat/chat_providers.dart';
 import '../desktop/window_title_service.dart';
 import 'background_keepalive_service.dart';
+import 'live_update_service.dart';
 import 'turn_notification_service.dart';
 
 /// App 生命周期状态（生产由 [NotificationLifecycleObserver] 驱动；测试可
@@ -39,6 +40,7 @@ class NotificationSettings {
     this.notifyClarifyEnabled = true,
     this.notifyErrorsEnabled = true,
     this.bgForegroundServiceEnabled = false,
+    this.bgLiveUpdateEnabled = true,
     this.error,
   });
 
@@ -46,6 +48,10 @@ class NotificationSettings {
   final bool notifyClarifyEnabled;
   final bool notifyErrorsEnabled;
   final bool bgForegroundServiceEnabled;
+
+  /// 安卓 16 实况通知（灵动岛/状态栏 chip）开关，默认开（渐进增强，
+  /// 低版本自动无感；关=回退到仅保活常驻通知的现状）。
+  final bool bgLiveUpdateEnabled;
   final String? error;
 
   String? get keepaliveError => error;
@@ -57,6 +63,7 @@ class NotificationSettings {
     bool? notifyClarifyEnabled,
     bool? notifyErrorsEnabled,
     bool? bgForegroundServiceEnabled,
+    bool? bgLiveUpdateEnabled,
     Object? error = _sentinel,
   }) {
     return NotificationSettings(
@@ -65,6 +72,7 @@ class NotificationSettings {
       notifyErrorsEnabled: notifyErrorsEnabled ?? this.notifyErrorsEnabled,
       bgForegroundServiceEnabled:
           bgForegroundServiceEnabled ?? this.bgForegroundServiceEnabled,
+      bgLiveUpdateEnabled: bgLiveUpdateEnabled ?? this.bgLiveUpdateEnabled,
       error: error == _sentinel ? this.error : (error as String?),
     );
   }
@@ -78,6 +86,7 @@ class NotificationSettings {
           notifyClarifyEnabled == other.notifyClarifyEnabled &&
           notifyErrorsEnabled == other.notifyErrorsEnabled &&
           bgForegroundServiceEnabled == other.bgForegroundServiceEnabled &&
+          bgLiveUpdateEnabled == other.bgLiveUpdateEnabled &&
           error == other.error;
 
   @override
@@ -86,6 +95,7 @@ class NotificationSettings {
     notifyClarifyEnabled,
     notifyErrorsEnabled,
     bgForegroundServiceEnabled,
+    bgLiveUpdateEnabled,
     error,
   );
 }
@@ -95,6 +105,7 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
   static const keyClarify = 'notify_clarify_enabled';
   static const keyErrors = 'notify_errors_enabled';
   static const keyBgForegroundService = 'bg_foreground_service_enabled';
+  static const keyBgLiveUpdate = LiveUpdateService.prefsKeyLiveUpdateEnabled;
 
   bool _loaded = false;
 
@@ -119,6 +130,8 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
         bgForegroundServiceEnabled:
             prefs.getBool(keyBgForegroundService) ??
             state.bgForegroundServiceEnabled,
+        bgLiveUpdateEnabled:
+            prefs.getBool(keyBgLiveUpdate) ?? state.bgLiveUpdateEnabled,
       );
     } catch (e) {
       developer.log('Failed to load notification settings from prefs: $e');
@@ -196,6 +209,26 @@ class NotificationSettingsNotifier extends Notifier<NotificationSettings> {
       } catch (prefsErr) {
         developer.log('Failed to persist rollback state: $prefsErr');
       }
+    }
+  }
+
+  /// 切换安卓 16 实况通知开关（#105）。
+  ///
+  /// 纯本地增强开关，无跨进程副作用，写入即生效（LiveUpdateService.sync 每次
+  /// 读 prefs 为唯一真相）；关闭时额外撤销当前已展示的实况通知，避免残留。
+  Future<void> setBgLiveUpdateEnabled(bool value) async {
+    _loaded = true;
+    state = state.copyWith(bgLiveUpdateEnabled: value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(keyBgLiveUpdate, value);
+    } catch (e) {
+      developer.log('Failed to save live update switch to prefs: $e');
+    }
+    if (!value) {
+      unawaited(
+        LiveUpdateService.instance.cancelAll().catchError((Object _) {}),
+      );
     }
   }
 }
@@ -325,6 +358,11 @@ final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
           // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
           .catchError((Object _) {}));
     unawaited(keepalive.cancelOneOffPoll(sessionId));
+    // #105 实况通知兜底 cancel：窄屏聊天页期间会话列表未挂载，sync(0) 回调
+    // 要等返回列表才触发——完成态即撤 LIVE，与 stopForegroundService 同步收口。
+    unawaited(
+      LiveUpdateService.instance.cancelAll().catchError((Object _) {}),
+    );
 
     final settings = ref.read(notificationSettingsProvider);
     if (!settings.notifyTurnsEnabled) return;
@@ -360,6 +398,10 @@ final clarificationNotificationHookProvider =
           // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
           .catchError((Object _) {}));
         unawaited(keepalive.cancelOneOffPoll(sessionId));
+        // #105 实况通知兜底 cancel（同回合完成 hook，窄屏 sync(0) 滞后）。
+        unawaited(
+          LiveUpdateService.instance.cancelAll().catchError((Object _) {}),
+        );
 
         final settings = ref.read(notificationSettingsProvider);
         if (!settings.notifyClarifyEnabled) return;

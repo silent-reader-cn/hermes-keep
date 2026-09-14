@@ -10,5 +10,11 @@
   "updateGoToDownload": "Download",
   "updateDownloadingStarted": "Download added to queue",
   "updateInstallNow": "Install Now",
-  "updateReadyToInstall": "Update download completed. Install now?"
+  "updateReadyToInstall": "Update download completed. Install now?",
+  "liveUpdateTitle": "Hermes · Working",
+  "liveUpdateTitleMulti": "Hermes · Working · {count} sessions",
+  "liveUpdateDefaultText": "Generating reply…",
+  "liveUpdateChip": "Live",
+  "liveUpdateSwitchTitle": "Live Updates (Dynamic Island)",
+  "liveUpdateSwitchSubtitle": "Promoted ongoing notifications on Android 16+ / HyperOS 3.1; silently ignored on older systems"
 }

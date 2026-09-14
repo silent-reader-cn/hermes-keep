@@ -1817,3 +1817,33 @@ extension AppLocalizationsProjectFolder on AppLocalizations {
   String openProjectFolderFailed(String error) =>
       isEnglish ? 'Failed to open project folder: $error' : '打开项目文件夹失败：$error';
 }
+
+// ---------------------------------------------------------------------------
+// #105 安卓 16 Live Updates（实况通知/灵动岛）
+// ---------------------------------------------------------------------------
+extension AppLocalizationsLiveUpdate105 on AppLocalizations {
+  /// 实况通知标题（单会话）。
+  String get liveUpdateTitle =>
+      isEnglish ? 'Hermes · Working' : 'Hermes · 回合进行中';
+
+  /// 实况通知标题（多会话聚合）。
+  String liveUpdateTitleMulti(int count) => isEnglish
+      ? 'Hermes · Working · $count sessions'
+      : 'Hermes · 回合进行中 · $count 个会话';
+
+  /// 无会话名时的兜底正文。
+  String get liveUpdateDefaultText =>
+      isEnglish ? 'Generating reply…' : '正在生成回复…';
+
+  /// 状态栏 chip 短文案（硬约束 ≤6 字符）。
+  String get liveUpdateChip => isEnglish ? 'Live' : '生成中';
+
+  /// 设置页开关行标题。
+  String get liveUpdateSwitchTitle =>
+      isEnglish ? 'Live Updates (Dynamic Island)' : '实况通知（灵动岛）';
+
+  /// 设置页开关行副标题。
+  String get liveUpdateSwitchSubtitle => isEnglish
+      ? 'Promoted ongoing notifications on Android 16+ / HyperOS 3.1; silently ignored on older systems'
+      : '安卓 16+/HyperOS 3.1 实况通知生效，其他系统自动降级、不受影响';
+}

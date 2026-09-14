@@ -10,5 +10,11 @@
   "updateGoToDownload": "前往下载",
   "updateDownloadingStarted": "已加入下载队列，可在下载管理中查看进度",
   "updateInstallNow": "立即安装",
-  "updateReadyToInstall": "新版本已下载完成，是否立即安装？"
+  "updateReadyToInstall": "新版本已下载完成，是否立即安装？",
+  "liveUpdateTitle": "Hermes · 回合进行中",
+  "liveUpdateTitleMulti": "Hermes · 回合进行中 · {count} 个会话",
+  "liveUpdateDefaultText": "正在生成回复…",
+  "liveUpdateChip": "生成中",
+  "liveUpdateSwitchTitle": "实况通知（灵动岛）",
+  "liveUpdateSwitchSubtitle": "安卓 16+/HyperOS 3.1 实况通知生效，其他系统自动降级、不受影响"
 }

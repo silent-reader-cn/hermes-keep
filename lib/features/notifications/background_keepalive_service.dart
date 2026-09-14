@@ -17,6 +17,7 @@ import 'package:workmanager/workmanager.dart';
 
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
+import 'live_update_service.dart';
 import 'turn_notification_service.dart';
 
 /// HyperOS / Android 系统保活与权限跳转类型。
@@ -574,6 +575,14 @@ class ProductionBackgroundKeepaliveService
     List<String>? titles,
   ]) async {
     if (!_isAndroid) return;
+    // #105 安卓 16 实况通知（灵动岛/状态栏 chip）：与常驻保活通知并列的增强
+    // 链路。放在「服务未 running 早退」之前——LIVE 通知不依赖保活服务运行；
+    // 开关读取、幂等缓存、平台/版本判定与吞错均在 LiveUpdateService 内部。
+    unawaited(
+      LiveUpdateService.instance
+          .sync(activeCount: activeCount, titles: titles ?? const [])
+          .catchError((Object _) {}),
+    );
     try {
       final isRunning = await _foregroundTaskWrapper.isRunningService;
       if (!isRunning) return;
