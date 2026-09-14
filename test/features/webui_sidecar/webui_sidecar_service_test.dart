@@ -625,7 +625,10 @@ void main() {
     test(
       'DefaultSidecarFileSystem 默认 hermesAgentDir 与 customAgentDir 构造断言',
       () {
+        // 断言的是 **Windows 语义**，故必须显式注入平台判定：
+        // 不注入时该断言在非 Windows 宿主（CI Linux）上会拼出 '/' 分隔而假红。
         const fsDefault = DefaultSidecarFileSystem(
+          customIsWindows: true,
           customLocalAppData: r'D:\CustomAppData',
         );
         expect(
@@ -634,9 +637,61 @@ void main() {
         );
 
         const fsCustom = DefaultSidecarFileSystem(
+          customIsWindows: true,
           customAgentDir: r'E:\DedicatedAgent',
         );
         expect(fsCustom.hermesAgentDir, r'E:\DedicatedAgent');
+      },
+    );
+
+    test(
+      'DefaultSidecarFileSystem 路径按**注入**的平台判定拼装，不读宿主平台',
+      () {
+        // 反方向取证：宿主是 Windows 时，直接读 Platform.pathSeparator 的旧实现
+        // 会拼出反斜杠分隔 → 本条即失败。CI(Linux) 上那批假红是同一病根。
+        const fsPosix = DefaultSidecarFileSystem(
+          customIsWindows: false,
+          customLocalAppData: '/home/u/.local/share',
+        );
+        expect(fsPosix.isWindows, isFalse);
+        expect(
+          fsPosix.hermesAgentDir,
+          '/home/u/.local/share/hermes/hermes-agent',
+        );
+        expect(
+          fsPosix.logDirectoryPath,
+          '/home/u/.local/share/hermes/webui-bundled/logs',
+        );
+
+        // 正方向：注入 Windows 语义 → 必为反斜杠分隔（宿主是 Linux 时旧实现失败）。
+        const fsWin = DefaultSidecarFileSystem(
+          customIsWindows: true,
+          customLocalAppData: r'D:\CustomAppData',
+        );
+        expect(fsWin.isWindows, isTrue);
+        expect(
+          fsWin.hermesAgentDir,
+          r'D:\CustomAppData\hermes\hermes-agent',
+        );
+      },
+    );
+
+    test(
+      'resolveAgentPythonPath 分隔符随注入平台走（非 Windows 宿主也认 Windows 语义）',
+      () {
+        final winFs = _FakeSidecarFileSystem();
+        final winExpected =
+            '${winFs.agentDir}' r'\venv\Scripts\python.exe';
+        winFs.fileExistsOverride = (path) => path == winExpected;
+        expect(resolveAgentPythonPath(winFs), winExpected);
+
+        // 反方向：注入 POSIX 语义 → 探测路径必须是正斜杠拼接。
+        final posixFs = _FakeSidecarFileSystem()
+          ..isWindows = false
+          ..agentDir = '/home/u/.local/share/hermes/hermes-agent';
+        final posixExpected = '${posixFs.agentDir}/venv/Scripts/python.exe';
+        posixFs.fileExistsOverride = (path) => path == posixExpected;
+        expect(resolveAgentPythonPath(posixFs), posixExpected);
       },
     );
 

@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../platform_paths.dart';
+
 /// 进程执行器抽象（用于单测 mock Process.run / Process.start，禁止在测试中拉起真实系统进程）。
 abstract interface class ProcessExecutor {
   Future<ProcessResult> run(
@@ -171,7 +173,9 @@ class DefaultInstallDetector implements InstallDetector {
     if (!isWindows) return false;
     final exe = fileSystem.executablePath;
     if (exe.isEmpty) return false;
-    final exeDir = File(exe).parent.path;
+    // 用平台无关的父目录解析：File(exe).parent 走**宿主**路径规则，
+    // Linux 上对 `C:\...\hermes.exe` 会得到 `.`，令本判定恒假。
+    final exeDir = platformParentDir(exe);
     final serverPy = '$exeDir\\webui\\server\\server.py';
     return fileSystem.fileExists(serverPy);
   }

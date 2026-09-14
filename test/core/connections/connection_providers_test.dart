@@ -122,6 +122,12 @@ void main() {
           ),
         ),
         webuiSidecarServiceProvider.overrideWithValue(lastSidecar),
+        // 平台语义走注入接缝：本文件断言的是 **Windows 桌面**下的 builtin
+        // 启停联动（controller.start() 有 `if (!fs.isWindows) return` 门禁），
+        // 不注入的话在 CI(Linux) 上 start() 根本不转发给 service。
+        sidecarFileSystemProvider.overrideWithValue(
+          const DefaultSidecarFileSystem(customIsWindows: true),
+        ),
       ],
     );
     addTearDown(container.dispose);

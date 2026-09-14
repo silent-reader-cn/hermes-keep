@@ -14,6 +14,7 @@ import 'package:hermes_ui/features/webui_sidecar/webui_sidecar_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'golden_helpers.dart';
+import 'golden_platform.dart';
 
 // ---------------------------------------------------------------------------
 // 引导体系宽屏双栏金照（规格 .todo/active.md 宽屏双栏铁律·验收4）
@@ -29,7 +30,7 @@ import 'golden_helpers.dart';
 // ---------------------------------------------------------------------------
 
 /// 横屏宽屏对：注册 [pageName] 浅色 + 深色两枚金照（[goldenLandscapeSize]
-/// 桌面档，PNG 输出到 test/golden/goldens/）。
+/// 桌面档，PNG 输出到 test/golden/goldens/<平台>/）。
 void goldenWidePair(
   String pageName, {
   required Widget Function() page,
@@ -38,6 +39,9 @@ void goldenWidePair(
   for (final brightness in Brightness.values) {
     final themeName = brightness == Brightness.light ? 'light' : 'dark';
     testWidgets('$pageName wide $themeName', (tester) async {
+      // 金照基线按平台分目录：本平台无基线时跳过（不是回归）。
+      final name = '${pageName}_$themeName';
+      if (skipIfNoGoldenBaseline(name)) return;
       await pumpHermesPage(
         tester,
         page: page(),
@@ -52,7 +56,7 @@ void goldenWidePair(
       await tester.pump(const Duration(milliseconds: 900));
       await expectLater(
         find.byType(CupertinoApp),
-        matchesGoldenFile('goldens/${pageName}_$themeName.png'),
+        matchesGoldenFile(goldenKey(name)),
       );
       await unmountHermesPage(tester);
     });
@@ -142,11 +146,14 @@ class _FakeLlmOnboardingApi implements LlmOnboardingApi {
       true;
 }
 
-/// 在本 isolate 内把 SimHei 抢先注册为 monospace 族（见 main 的 setUpAll 注释）。
+/// 在本 isolate 内把 CJK 字体抢先注册为 monospace 族（见 main 的 setUpAll 注释）。
+///
+/// 候选顺序见 [cjkFallbackFontCandidates]：Windows 命中 SimHei，其余平台退回
+/// 仓库自带 MiSans。各平台基线独立成目录，故字体差异不会造成跨平台假红。
 Future<void> _registerMonospaceCjk() async {
-  final file = File(r'C:\Windows\Fonts\simhei.ttf');
-  if (!file.existsSync()) return;
-  final bytes = file.readAsBytesSync();
+  final path = firstExistingFont(cjkFallbackFontCandidates);
+  if (path == null) return;
+  final bytes = File(path).readAsBytesSync();
   await (FontLoader('monospace')
         ..addFont(Future.value(ByteData.sublistView(bytes))))
       .load();

@@ -1,0 +1,192 @@
+// ---------------------------------------------------------------------------
+// vendored：来自 super_native_extensions 0.1.8+2 的 cargokit/gradle/plugin.gradle
+// （MIT License, Copyright (c) 2022 Superlist, Matej Knopp and the contributors）
+// 附加改动：Gradle 9 兼容（childProjects 已移除）
+//   - findFlutterPlugin 改走 rootProject.allprojects + 类名 contains 判定，
+//     并保留 try/catch 包裹的 legacy 回退
+//   - targetPlatforms 获取加 try/catch 兜底
+//   - CargoKitBuildTask.build() 由 project.exec 改 ProcessBuilder（显式 env + 退出码）
+// 用途：由 tools/patch_android_pub_cache.py 注入 pub cache（缓存内的副本缺这些
+// 改动时替换）。super_clipboard 升到 0.9+ 后连同脚本一起删除。
+// ---------------------------------------------------------------------------
+import java.nio.file.Paths
+import org.apache.tools.ant.taskdefs.condition.Os
+
+CargoKitPlugin.file = buildscript.sourceFile
+
+apply plugin: CargoKitPlugin
+
+class CargoKitExtension {
+    String manifestDir; // Relative path to folder containing Cargo.toml
+    String libname; // Library name within Cargo.toml. Must be a cdylib
+}
+
+abstract class CargoKitBuildTask extends DefaultTask {
+
+    @Input
+    String buildMode
+
+    @Input
+    String buildDir
+
+    @Input
+    String outputDir
+
+    @Input
+    String ndkVersion
+
+    @Input
+    String ndkDirectory
+
+    @Input
+    int compileSdkVersion;
+
+    @Input
+    int minSdkVersion;
+
+    @Input
+    String pluginFile
+
+    @Input
+    List<String> targetPlatforms
+
+    @TaskAction
+    def build() {
+        if (project.cargokit.manifestDir == null) {
+            throw new GradleException("Property 'manifestDir' must be set on cargokit extension");
+        }
+
+        if (project.cargokit.libname == null) {
+            throw new GradleException("Property 'libname' must be set on cargokit extension");
+        }
+
+        def executableName = Os.isFamily(Os.FAMILY_WINDOWS) ? "run_rust_tool.cmd" : "run_rust_tool.sh"
+        def path = Paths.get(new File(pluginFile).parent, "..", executableName);
+
+        def manifestDir = Paths.get(project.buildscript.sourceFile.parent, project.cargokit.manifestDir)
+
+        def pb = new ProcessBuilder([path.toString(), "build_android"])
+        def env = pb.environment()
+        env.put("CARGOKIT_TOOL_TEMP_DIR", "${buildDir}/rust_tool".toString())
+        env.put("CARGOKIT_MANIFEST_DIR", manifestDir.toString())
+        env.put("CARGOKIT_LIB_NAME", project.cargokit.libname.toString())
+        env.put("CARGOKIT_BUILD_MODE", buildMode.toString())
+        env.put("CARGOKIT_BUILD_DIR", buildDir.toString())
+        env.put("CARGOKIT_OUTPUT_DIR", outputDir.toString())
+        env.put("CARGOKIT_NDK_VERSION", ndkVersion.toString())
+        env.put("CARGOKIT_NDK_DIR", ndkDirectory.toString())
+        env.put("CARGOKIT_COMPILE_SDK_VERSION", compileSdkVersion.toString())
+        env.put("CARGOKIT_MIN_SDK_VERSION", minSdkVersion.toString())
+        env.put("CARGOKIT_TARGET_PLATFORMS", targetPlatforms.join(",").toString())
+        pb.directory(new File(project.buildscript.sourceFile.parent))
+        pb.redirectErrorStream(true)
+        def proc = pb.start()
+        def output = new StringBuilder()
+        proc.inputStream.eachLine { line -> println(line); output.append(line).append((char)10) }
+        int exitCode = proc.waitFor()
+        if (exitCode != 0) {
+            throw new GradleException("CargoKit build failed with exit code ${exitCode}: ${output}")
+        }
+    }
+}
+
+class CargoKitPlugin implements Plugin<Project> {
+
+    static String file;
+
+    private Plugin findFlutterPlugin(Project rootProject) {
+        // Gradle 8+ compatible search via allprojects (Flutter 3.47 uses dev.flutter.flutter-gradle-plugin)
+        for (proj in rootProject.allprojects) {
+            for (plugin in proj.getPlugins()) {
+                def cn = plugin.class.name
+                if (cn == "FlutterPlugin" || cn.contains("Flutter") || cn.contains("flutter")) {
+                    return plugin;
+                }
+            }
+        }
+        try { return _findFlutterPluginLegacy(rootProject.childProjects) } catch (ignored) {}
+        return null;
+    }
+
+    private Plugin _findFlutterPluginLegacy(Map projects) {
+        for (project in projects) {
+            for (plugin in project.value.getPlugins()) {
+                def cn2 = plugin.class.name; if (cn2 == "FlutterPlugin" || cn2.contains("Flutter") || cn2.contains("flutter")) {
+                    return plugin;
+                }
+            }
+            return _findFlutterPluginLegacy(project.value.childProjects);
+        }
+        return null;
+    }
+
+    @Override
+    void apply(Project project) {
+        def plugin = findFlutterPlugin(project.rootProject);
+
+        project.extensions.create("cargokit", CargoKitExtension)
+
+        if (plugin == null) {
+            print("Flutter plugin not found, CargoKit plugin will not be applied.")
+            return;
+        }
+
+        def cargoBuildDir = "${project.buildDir}/build"
+
+        plugin.project.android.applicationVariants.all { variant ->
+
+            final buildType = variant.buildType.name
+
+            def cargoOutputDir = "${project.buildDir}/jniLibs/${buildType}";
+            def jniLibs = plugin.project.android.sourceSets.getByName(buildType).jniLibs;
+            jniLibs.srcDir(new File(cargoOutputDir))
+
+            def platforms
+            try {
+                platforms = plugin.getTargetPlatforms().collect()
+            } catch (MissingMethodException e) {
+                platforms = ["arm64-v8a", "armeabi-v7a", "x86_64"]
+                try { def prop = project.hasProperty("target-platform") ? project.property("target-platform") : null; if (prop) platforms = prop.toString().split(",").collect{it.trim()} } catch (ignored) {}
+            }
+
+            // Same thing addFlutterDependencies does in flutter.gradle
+            if (buildType == "debug") {
+                platforms.add("android-x86")
+                platforms.add("android-x64")
+            }
+
+            // The task name depends on plugin properties, which are not available
+            // at this point
+            project.getGradle().afterProject {
+                def taskName = "cargokitCargoBuild${project.cargokit.libname.capitalize()}${buildType.capitalize()}";
+
+                if (project.tasks.findByName(taskName)) {
+                    return
+                }
+
+                if (plugin.project.android.ndkVersion == null) {
+                    throw new GradleException("Please set 'android.ndkVersion' in 'app/build.gradle'.")
+                }
+
+                def task = project.tasks.create(taskName, CargoKitBuildTask.class) {
+                    buildMode = variant.name
+                    buildDir = cargoBuildDir
+                    outputDir = cargoOutputDir
+                    ndkVersion = plugin.project.android.ndkVersion
+                    ndkDirectory = plugin.project.android.ndkDirectory
+                    minSdkVersion = plugin.project.android.defaultConfig.minSdkVersion.apiLevel as int
+                    compileSdkVersion = plugin.project.android.compileSdkVersion.substring(8) as int
+                    targetPlatforms = platforms
+                    pluginFile = CargoKitPlugin.file
+                }
+                def onTask = { newTask ->
+                    if (newTask.name == "javaPreCompile${buildType.capitalize()}") {
+                        newTask.dependsOn task
+                    }
+                }
+                project.tasks.each onTask
+                project.tasks.whenTaskAdded onTask
+            }
+        }
+    }
+}

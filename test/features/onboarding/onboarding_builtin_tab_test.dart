@@ -213,8 +213,12 @@ void main() {
 
   Widget buildTestApp({
     bool bundledAvailable = true,
+    bool isWindows = true,
     GoRouter? router,
   }) {
+    // 平台语义走注入：默认 Windows（本文件断言的是 Windows 桌面形态），
+    // 传 false 可构造「非 Windows 宿主 → 形态 B」的判别用例。
+    fakeFs.isWindows = isWindows;
     final effectiveRouter = router ??
         GoRouter(
           initialLocation: '/onboarding',
@@ -278,6 +282,25 @@ void main() {
         find.byKey(const ValueKey('onboarding-builtin-action-btn')),
         findsNothing,
       );
+    });
+
+    testWidgets(
+        'bundledWebuiAvailable=true 且 isWindows=false → 形态 B'
+        '（形态判定跟随注入的平台语义，不读宿主 Platform.isWindows）',
+        (tester) async {
+      // 判别用例：宿主是 Windows 时，旧实现（Platform.isWindows）会判成形态 A
+      // → 本条即失败。CI(Linux) 上旧的实现同样判不出形态 A，故两头皆可比。
+      await tester.pumpWidget(
+        buildTestApp(bundledAvailable: true, isWindows: false),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('onboarding-segmented-control')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('onboarding-url')), findsOneWidget);
+      expect(find.byKey(const ValueKey('onboarding-connect')), findsOneWidget);
     });
 
     testWidgets('bundledWebuiAvailable=true → 形态 A（分段控件渲染，默认内置服务 Tab）',
