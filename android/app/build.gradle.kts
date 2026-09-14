@@ -75,4 +75,8 @@ dependencies {
     // #105 升至 1.18.0：NotificationCompat.ProgressStyle / setRequestPromotedOngoing /
     // NotificationManagerCompat.canPostPromotedNotifications（安卓 16 Live Updates 兼容层）。
     implementation("androidx.core:core-ktx:1.18.0")
+    // #110：MainActivity 的 WorkManager 就绪兜底 + 诊断探针需要编译期依赖。
+    // workmanager_android 用 implementation 引入 work-runtime（只进 runtime 类路径），
+    // 不在 app 模块编译类路径上，故此处显式声明同版本（2.11.2，与插件一致）。
+    implementation("androidx.work:work-runtime:2.11.2")
 }
