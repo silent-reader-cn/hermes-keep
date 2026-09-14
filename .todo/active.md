@@ -7,7 +7,7 @@
 
 ---
 
-（#103 @77211b2、#104 @caaafa1、#105 @5ea4b14、#106 @d99d120、#107 @92e7449、#108 @d8b9973、#109 @a922086 已收口誊写至 `.todo/20260914.md`，其中 #103/#105/#106/#107/#108/#109 待主人真机/实机复验；#110 099131e、#111 b9b7ae0 已收口誊写至 `.todo/20260914.md`（#110/#111 待主人真机复验）；#76 二期 @8b4fab1 已收口誊写至 `.todo/20260914.md`（打包瘦身，安装包产物已本机取证）；#87/#88 已收口誊写至 `.todo/20260907.md` @f01c91d；#91 @0076554；#93 @0a69ee2；#95 @da21ea2；#96/#97 APK 安装权限与分享按钮已收口誊写至 20260907.md，随补丁批次 commit；#98 @5c19de7 与 #99 交付 @b9df051（含诊断原档）已收口誊写至 `.todo/20260908.md`）
+（#103 @77211b2、#104 @caaafa1、#105 @5ea4b14、#106 @d99d120、#107 @92e7449、#108 @d8b9973、#109 @a922086 已收口誊写至 `.todo/20260914.md`，其中 #103/#105/#106/#107/#108/#109 待主人真机/实机复验；#110 099131e、#111 b9b7ae0 已收口誊写至 `.todo/20260914.md`（#110/#111 待主人真机复验）；#76 二期 @8b4fab1 已收口誊写至 `.todo/20260914.md`（打包瘦身，安装包产物已本机取证）；#87/#88 已收口誊写至 `.todo/20260907.md` @f01c91d；#91 @0076554；#93 @0a69ee2；#95 @da21ea2；#96/#97 APK 安装权限与分享按钮已收口誊写至 20260907.md，随补丁批次 commit；#98 @5c19de7 与 #99 交付 @b9df051（含诊断原档）已收口誊写至 `.todo/20260908.md`；#116 @v0.1.47、#117 @本轮提交 已收口誊写至 `.todo/20260914.md`；#114 P0（展开态真应用图标/倒计时方向/small icon 剪影）@49062b4 已收口誊写至 `.todo/20260914.md`（待主人真机复验））
 
 ## #112 live 中途归档组锚点成「死锚」→ 幽灵工具卡 + 相邻合并不了（主人 2026-09-14 报告截图，Leader 取证）
 
@@ -41,19 +41,10 @@
 - 验收：未就绪时不再显示绿勾且 subtitle 含探针归因；就绪 / 未就绪 / 不适用三态正确；widget 用例覆盖三态；analyze 零告警 + test 全绿 + 金照零变更。
 - 状态：待开工（2026-09-14 由 #110 复盘登记，未动码）。
 
-## #114 实况通知（灵动岛）：展开态图标是单色 H + 倒计时方向错 + 内容单一
+## #114 P1 实况通知（灵动岛）内容升级：当前动作文案 + ProgressStyle 增强 + 回合状态回调链路（P0 已收口 @49062b4）
 
 > 主人 2026-09-14 报告（HyperOS 超级岛展开态截图）。选型对比页：`sketches/live-update-icons.html` + `live-update-icons-preview.png`。
-
-### P0 — 已实现，待主人真机复验（2026-09-14）
-
-- 位置：`android/app/src/main/kotlin/com/silentreader/hermes_ui/MainActivity.kt:255-320`（`showLiveUpdate`）+ `android/app/src/main/res/drawable/`。
-- 问题 1 · 展开态图标 = 单色 H：`setLargeIcon` **从未被调用**，系统只能回落到 small icon（手绘 `ic_live_update.xml` 的字母 H），主人截图里蓝底白 H 即此。预期 → `setLargeIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))` 摆**真应用图标**；用自适应图标（anydpi-v26）而非位图，因其自带 66% 安全区、被 HyperOS 裁成圆形不切主体。注：本版 androidx 的 `setLargeIcon` **无 IconCompat 重载**（编译期实测报错），须用 framework `android.graphics.drawable.Icon` + `SDK_INT >= M` 守卫。
-- 问题 2 · 倒计时方向错：`setChronometerCountDown(true)` + `setWhen(now)` → 岛/通知显示「**-02:09**」一路往下跳，语义错误。预期 → 正计时「02:09」＝已跑多久。
-- 问题 3 · small icon 换 24dp 优化剪影：新增 `res/drawable/ic_hermes_agent.xml`（B 版：删下巴细线；耳机横梁与头顶留 3.4 间隙；耳罩与垂发留 0.8 间隙＝3x 屏 2.4px），删 `ic_live_update.xml`（H 被取代）。
-- 范围：**仅** Kotlin 通知组装 + res/drawable；**不动** Dart 侧文案/数据链路/开关/幂等缓存。
-- 编译验证：`:app:compileDebugKotlin` `BUILD SUCCESSFUL`（含新资源 aapt 校验）。
-- 验收：真机（安卓 16 + HyperOS 3.0.300+）岛上展开态圆形位显示**真应用图标**、时间为**正计时**；状态栏 chip 图标为剪影而非 H；非岛机型降级普通通知同样显示真图标且不崩。
+> **P0（展开态真应用图标 / 倒计时方向 / small icon 剪影）已交付 @49062b4，已誊写归档至 `.todo/20260914.md`，待主人真机复验。**
 
 ### P1 — 待主人拍板后开工
 
@@ -61,3 +52,53 @@
 - `ProgressStyle` 增强：`setProgressTrackerIcon` 随状态动态换（20dp，或官方 sample 的 40×20 胶囊）；`addProgressPoint` 每次工具调用落一点使内容随回合增长。**进度条保持 indeterminate**——agent 回合无真实百分比、段长不可预测，套 `Segment` 会出现"条走完还在跑"（截图里那条 1/5 填充已在造假进度，勿加剧）。
 - 前置改造（成本大头）：现通知**仅在活跃会话集合变化时**刷新（`lib/features/session_list/session_auto_refresh.dart:164-186`，集合相同即早退），阶段变化根本不触发。需新建回合实时状态回调链路（对标 `turnNotificationHookProvider`），并把 `ChatPhase`（`lib/features/chat/chat_state.dart:11`）的等待态（`clarifyPending` 待回复／`approvalPending` 待批准）一并上岛——那是主人离开时最需要被叫回的状态。
 - 参考：同赛道标杆 Capsulyric（小米 15 / HyperOS 3.0.300.7 实机验证：走 AOSP Live Update 通道即可映射到超级岛，**无需 Root/Shizuku**；小米私有超级岛接口才需特权，不碰）。
+
+## #115 新建会话自动打开上下文弹窗：抢在页面入场滑动（300ms）中途弹出 → 弹窗冻结在半程锚点坐标（主人 2026-09-14 报告）
+
+> 主人原话：新建会话自动打开上下文弹窗后，总是新建会话页面弹出的滑动动画**播放到一半**的时候弹窗，导致弹窗可能停在「动画半程的上下文指示器位置」上；应等新聊天页入场动画播完再弹。
+
+- 位置（触发链，2026-09-14 源码级取证，未实机复现）：
+  - 标记（唯一触发源）：`lib/features/session_list/session_list_page.dart:776-781`（`createSession` → `markCreated(id)` → `_openChatRoute`）；`_openChatRoute`（:964-971）宽屏 `context.go('/chat/:id')`、窄屏 `context.push(...)`。全仓 `markCreated` 仅此一处；`_onBranch`（:1165-1174）不标记 → **不存在第二条自动打开链**。
+  - 消费：`lib/features/chat/widgets/chat_input_bar.dart` —— `_checkRecentlyCreatedOnMount`（:104-118，命中且开关开 → `_pendingAutoOpen = true`）；两条打开路径都**不看路由动画状态**：① initState 首个 postFrame 调 `_tryAutoOpenContextPopover`（:90-101 → :120-128）；② `_bindAutoOpenListener`（:197-209）首个 `contextWindowSnapshot` 到达时 postFrame 打开。最终都 `unawaited(_showContextPopover())`（:613-635，`anchorKey: _contextIndicatorKey`、`preferredWidth: 260`、默认 `PopoverAlign.end`）。
+  - 定位机制（根因所在）：`lib/app/widgets/adaptive_popover.dart:88-115` 在 `showAdaptivePopover` **调用瞬间**用 `anchorBox.localToGlobal(Offset.zero, ancestor: overlayBox)` **快照**锚点矩形；:207-228 把冻结值交给 `_AdaptivePopoverHost`，:298-362 用静态 `Positioned(left/top/bottom)` 布局。**无 LayerLink / CompositedTransformFollower**，弹层插入根 Overlay（不随页面转场平移），且 `_AdaptivePopoverHost` 无入场动画、entry 无重建触发 → 坐标一旦算出即**永久冻结**（动画结束后不会自己挪回）。
+  - 转场参数：`lib/app/widgets/hermes_page_route.dart:22-23` 300ms、`Curves.easeOut`；:80-88 push 时 `Offset(1.0,0)→0`（整页自右滑入，纯水平）；`lib/app/router.dart:106-114` `/chat/:sessionId` 走 `HermesPage`；宽屏同一转场（`lib/app/shell/adaptive_shell.dart:280-295`，详情区 `widget.child` 即转场页）。Flutter SDK `widgets/routes.dart` 的 `TransitionRoute` 无 `disableAnimations` 短路（本仓未设 `animationBehavior`）→ 这段滑动**恒为 300ms**，时长可预期。
+- 复现：设置 → 对话 → 打开「新建会话自动打开上下文」（`ValueKey('settings-switch-auto-open-context')`）→ 宽屏（≥900）点侧栏「新建会话」→ 聊天页自右滑入的 300ms 内，上下文弹窗立刻出现。
+- 现状 vs 预期：
+  - 现状：弹窗锚点取「滑动半程」的指示器坐标；弹层在根 Overlay 且坐标冻结、无跟随 → 弹窗定格在半程位置。宽屏（详情区宽 1600、弹层 260 + `align.end`）半程 `anchorRect.right` 被推到屏外，`left` 被 clamp 到 `safeRight - effectiveWidth` → **弹窗贴屏幕右缘**，而指示器静止态在左侧数百像素处（1200 宽详情区半程位移 ≈ 600px，1600 宽 ≈ 800px；含 clamp 后残差为推算值，非实测）→ 即主人所见「弹窗停在动画半程的指示器位置上」。窄屏（如 390 宽）弹层宽度接近屏宽、clamp 上限贴近静止值，残差仅数像素 → **症状以宽屏/桌面为主**。垂直方向不受影响（滑动为纯水平，`anchorRect.top` 全程不变）。
+  - 预期：自动打开路径**等本页入场转场播完**（`ModalRoute.of(context)!.animation!.status == AnimationStatus.completed`）再弹，锚点取静止态坐标；手动点按指示器（:748 / :1134 `onTap: _showContextPopover`）行为不变（人手点按时页面已静止），无新增延迟。
+- 修复方向（待主人拍板，先不动码）：
+  - A（推荐·最小）：`chat_input_bar.dart` 新增 `Future<void> _awaitEntranceTransition()`——取 `ModalRoute.of(context)?.animation`；为 `null` 或 `isCompleted` 时立即返回；否则一次性 `addStatusListener` 等 `AnimationStatus.completed`，并加**超时兜底**（建议 `route.transitionDuration + 200ms`，或固定 600ms）后照常打开，`finally` 移除监听；`_tryAutoOpenContextPopover` 与 listener 回调 `await` 后再 `_showContextPopover()`，全程 `mounted` 守卫（等待期间 `_pendingAutoOpen` 已置 false，天然防重复弹出）。**禁用 `route.completed`**：SDK `TransitionRoute.completed`（`routes.dart:115-121`）只在路由被 pop 后完成，语义不符。
+  - B（可选加固，非本次必需）：`showAdaptivePopover` 增加「实时跟随锚点」模式（`LayerLink` + `CompositedTransformFollower`）——影响全仓弹层调用方（会话菜单/工作区/模型下拉等），风险面大。
+  - C（不推荐）：固定 `Future.delayed(350ms)`——与转场时长硬耦合，改时长即回归。
+- 禁区：不动「新建会话」业务流程与 `markCreated` 标记/清除时序（:108-112 的 microtask clear）；不动手动点按弹窗路径；不动路由转场 300ms（主人 2026-09-02 拍板值）。
+- 测试：新增 widget 用例——用 `HermesPageRoute` push 一个含 `ChatInputBar` 的页面（预置 `markCreated(sid)` + 开关开启 + snapshot 就绪），`pump(150ms)` 断言弹层**尚未**出现（`AdaptivePopover.activeOverlayCount == 0`），`pumpAndSettle()` 后断言弹层出现；再补一条「快照在动画已完成后才到达 → 立即弹出」守住 listener 分支不被延迟吞掉。
+- 验收：`C:/tmp/f.bat analyze` 零告警 + `C:/tmp/f.bat test` 全绿（金照零变更）；**实机取证（本机 Windows 宽窗）**：开开关 + 新建会话 → 弹窗在滑入完成后出现、水平位置与指示器静止态对齐（右缘 ≈ 指示器右缘，而非贴屏幕右缘）；窄屏同流程无错位；手动点图标无延迟。
+- 状态：待开工（2026-09-14 主人报告，柚子源码级取证；未实机复现、未动码）。
+
+---
+
+## #118 自动检查更新形同虚设：无启动检查 + 结果无人消费 + 版本基准常量漂移（主人 2026-09-14 报告，柚子源码级取证 + 探针实测）
+
+> 主人原话：自动检查更新的时机是什么？感觉现在的自动检查更新无效。
+
+- 现状 · 唯一触发时机（临时 widget 探针实跑取证，探针已删、工作区干净）：
+  - 全仓仅 `lib/features/settings/settings_page.dart:2202` watch `autoCheckUpdateEnabledProvider`；检查由该 Notifier 的 `build()` 发起（`lib/core/update/update_providers.dart:23-37`）。`lib/main.dart` / `lib/app.dart` 零涉更新模块 → **冷启动 / 开机自启 / 托盘 / 后台都不检查**。
+  - PROBE A：进「设置」页且**完全不滚动** → `checkForUpdates(isManual:false)` 被调用 1 次（`SliverToBoxAdapter` 立即 build，无需滚到关于区）。
+  - PROBE B：开关 off → 不发起。PROBE C：同一 App 运行期间离开再回设置页 → 总次数仍为 **1**（provider 非 autoDispose 常驻，`update_providers.dart:48-51`）。
+  - 频控 24h：与上次检查间隔 <24h 直接跳过（`update_checker_service.dart:206-214`）；**失败也写时间戳**（catch 内 `_recordCheckTime`，:255）→ 一次网络抖动即锁死 24h。
+- 根因 1 · 结果无人消费（"跑了但没人听"）：`update_providers.dart:35` `unawaited(service.checkForUpdates(isManual: false))` 返回值直接丢弃；全仓 `hasUpdate` 仅在 `settings_page.dart:2129` 手动路径被用 → 静默检查即使发现新版本也**无任何 UI 反馈**（无红点 / badge / toast），自动检查实质空转。
+- 根因 2 · 版本基准硬编码漂移（硬伤）：`lib/core/update/version_info.dart:5` `appVersion = '0.1.31'`，自 #101 交付（f4d53d1）后从未随发版更新；登记时（2026-09-14）`pubspec.yaml:19` 已达 `0.1.48+54`（常量未纳发版流程 → 漂移随每次发布继续扩大）、远端 latest Release `v0.1.47`。PROBE D 实测 `newer('v0.1.47', appVersion) == true` → **即使装的正是 v0.1.47 也永远判「有新版本」**（手动检查必误报）。而设置页版本号走另一条路径（`settings_providers.dart:25` `appVersionProvider` 动态读 pubspec）→ 同一页面「显示 0.1.47 / 判定基准 0.1.31」自相矛盾。
+- 根因 3 · 开关重开不触发：`AutoCheckUpdateController.setEnabled`（`update_providers.dart:40-44`）只改 state 不检查，仅 Notifier 首次 build 查一次；关掉再打开无任何反应。
+- 复现：① 装任意 release 包后**从不进设置页** → 永远不检查；② 进设置页（不滚动）→ 检查确已发生但界面零提示；③ 当前版本为最新时点「设置 → 关于 → 检查更新」→ 误报「发现新版本 v0.1.47」。
+- 现状 vs 预期：现状 = 不进设置页永不检查、检查到也不提示、基准漂移必误报；预期 = 启动后自动检查一次 + 发现新版本有可见入口 + 判定基准与实际版本一致。
+- 修复方向（待主人拍板，先不动码）：
+  - A（必做·消漂移）：`appVersion` 改由 pubspec / 平台通道动态取（或发版脚本强制同步），并加契约测试断言常量与 `pubspec.yaml` 一致。
+  - B（必做·结果可见）：静默检查结果落 `updateAvailableProvider`，设置入口挂红点；或首次发现新版本弹一次可关闭提示。
+  - C（时机前移）：启动后延迟数秒做一次（桌面端可加托盘菜单入口），设置页保留。
+  - D（频控分账）：失败不写 `last_check_at`（或只写短重试窗口），避免一次网络抖动锁死 24h。
+- 禁区：不动 `_checkUpdate` 手动弹窗交互与双端资产匹配（`handleDownloadOrOpenRelease`，含安卓确认框）；不动 24h 频控阈值本身（只改失败记账）；不动既有 l10n key 命名（新增文案须 zh+en 同补）。
+- 测试：`test/core/update/` 增补——prod 启动触发一次 / 开关关闭不触发 / 24h 内跳过 / 失败不锁频；新增「`appVersion` 常量 == pubspec version」契约用例；「发现新版本 → 红点或提示出现」widget 用例。
+- 验收：`C:/tmp/f.bat analyze` 零告警 + `C:/tmp/f.bat test` 全绿（金照零变更）；实机取证 = 本机 Windows 冷启动后不做任何操作，若远端有新版则出现可见提示；当前版本为最新时手动检查显示「已是最新版本」而非误报。
+- 状态：待开工（2026-09-14 主人报告，柚子源码级取证 + 探针实测；未动码）。
+
+---
