@@ -34,6 +34,7 @@ class WorkManagerRegistrationSnapshot {
     required this.initialized,
     this.creation,
     this.error,
+    this.chain,
   });
 
   /// 探针调用当下 `WorkManager.getInstance()` 是否成功。
@@ -46,12 +47,18 @@ class WorkManagerRegistrationSnapshot {
   /// 初始化异常描述（`异常类名: message`），无异常时为 null。
   final String? error;
 
+  /// #118 插件链快照：Rust/cargokit 库能否加载 + 尾部插件是否真有实例。
+  /// 形如 `rustLib=loaded urlLauncher=true wakelock=true workmanager=true`；
+  /// 老版本原生侧不认这个分支时为 null（探针静默降级）。
+  final String? chain;
+
   /// 单行描述，直接拼进诊断日志。
   String describe() {
     return [
       'initialized=$initialized',
       if (creation != null) 'creation=$creation',
       if (error != null) 'error=$error',
+      if (chain != null) 'chain=$chain',
     ].join(' ');
   }
 }
@@ -78,10 +85,12 @@ class MethodChannelWorkManagerRegistrationProbe
           creation: 'unavailable',
         );
       }
+      final chain = await _probePluginChain();
       return WorkManagerRegistrationSnapshot(
         initialized: raw['initialized'] == true,
         creation: raw['creation'] as String?,
         error: raw['error'] as String?,
+        chain: chain,
       );
     } on Object {
       // 探针不可用（非 Android / 通道未注册 / 原生异常）：静默降级。
@@ -89,6 +98,22 @@ class MethodChannelWorkManagerRegistrationProbe
         initialized: false,
         creation: 'unavailable',
       );
+    }
+  }
+
+  /// #118 插件链取证：把原生侧「库能否加载 / 尾部插件在不在」压成一行。
+  ///
+  /// 与 WorkManager 本身无关，只在 channel-error 归因时才有价值，所以单独一次
+  /// 调用、失败一律静默（老包不认这个分支）。
+  Future<String?> _probePluginChain() async {
+    try {
+      final raw = await channel.invokeMapMethod<String, Object?>(
+        'probePluginChain',
+      );
+      if (raw == null || raw.isEmpty) return null;
+      return raw.entries.map((e) => '${e.key}=${e.value}').join(' ');
+    } on Object {
+      return null;
     }
   }
 }

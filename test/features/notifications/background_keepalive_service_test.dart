@@ -622,6 +622,34 @@ void main() {
       expect(text, contains('creation=already-initialized'));
     });
 
+    test('插件链快照（#118）→ 连坐判据一并写进诊断说明', () async {
+      // 场景：WorkManager 自身正常，但上游 Rust 插件缺 .so 抛 Error，把
+      // GeneratedPluginRegistrant 从中间截断，其后插件全部静默失联。
+      // 探针这两项（库能否加载 + 尾部插件在不在）就是判据本身。
+      final probe = _RecordingRegistrationProbe(
+        const WorkManagerRegistrationSnapshot(
+          initialized: true,
+          creation: 'already-initialized',
+          chain:
+              'rustLib=java.lang.UnsatisfiedLinkError: dlopen failed: library '
+              '"libsuper_native_extensions.so" not found '
+              'urlLauncher=false wakelock=false workmanager=false',
+        ),
+      );
+      final service = ProductionBackgroundKeepaliveService(
+        registrationProbe: probe,
+      );
+
+      final text = await service.describeWorkManagerInitFailure(
+        PlatformException(code: 'channel-error', message: 'unbound'),
+      );
+
+      expect(probe.calls, 1);
+      expect(text, contains('chain='));
+      expect(text, contains('rustLib=java.lang.UnsatisfiedLinkError'));
+      expect(text, contains('workmanager=false'));
+    });
+
     test('非 channel-error 失败 → 不调探针、不加说明', () async {
       final probe = _RecordingRegistrationProbe(
         const WorkManagerRegistrationSnapshot(initialized: true),

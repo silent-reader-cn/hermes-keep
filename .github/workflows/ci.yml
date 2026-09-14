@@ -83,6 +83,11 @@ jobs:
       # 仓库外手改 pub-cache 绕过；此处收敛为入仓幂等步骤（细节见脚本模块文档）。
       - run: python3 tools/patch_android_pub_cache.py
       - run: flutter build apk --debug
+      # #118 拼包护栏：cargokit 插件（super_native_extensions）的 .so 必须真的进 APK。
+      # 没进包时构建不报错，而是让该插件注册期抛 Error、把 GeneratedPluginRegistrant
+      # 从中间截断（其后 url_launcher/wakelock_plus/workmanager 静默失联，应用还不闪退），
+      # 2026-09-14 整整查了一轮才发现这层连坐——故把「产物在不在」固化成硬失败。
+      - run: python3 tools/verify_apk_native_libs.py build/app/outputs/flutter-apk/app-debug.apk
 
   fake-gateway:
     runs-on: ubuntu-latest

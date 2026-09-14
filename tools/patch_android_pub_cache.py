@@ -64,9 +64,6 @@ TARGET_FALLBACK_NAMESPACE = {
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VENDORED_CARGOKIT = PROJECT_ROOT / "tools" / "vendor" / "cargokit_gradle9_plugin.gradle"
 
-# CargoKit 缓存副本「已含 Gradle 9 兼容改动」的判定标记。
-CARGOKIT_PATCHED_MARKER = "_findFlutterPluginLegacy"
-
 MANIFEST_PACKAGE_RE = re.compile(r'package\s*=\s*"([^"]+)"')
 GRADLE_ANDROID_BLOCK_RE = re.compile(r"^(\s*android\s*\{\s*)$", re.MULTILINE)
 APP_COMPILE_SDK_RE = re.compile(r"compileSdk(?:Version)?\s*=?\s*(\d+)")
@@ -200,20 +197,26 @@ def patch_gradle_module(pkg: Path, dry_run: bool) -> list[str]:
 
 
 def patch_cargokit(pkg: Path, dry_run: bool) -> str:
-    """缓存副本的 cargokit plugin.gradle 缺 Gradle 9 兼容时，用 vendored 版替换。"""
+    """缓存副本与 vendored cargokit 不一致时，用 vendored 版替换。
+
+    幂等判定按**内容比对**（而非标记字符串）：vendored 文件会继续演进
+    （Gradle 9 兼容 → #118 拼包时序修复），标记式判定会让旧副本永远留在
+    cache 里、悄悄复现旧 bug。比对与写入都走文本模式（顺带把行尾归一为
+    平台默认，避免 CRCRLF 之类的混入）。
+    """
     target = pkg / "cargokit" / "gradle" / "plugin.gradle"
     if not target.is_file():
         return "cargokit: skip（无 cargokit）"
 
-    text = target.read_text(encoding="utf-8", errors="replace")
-    if CARGOKIT_PATCHED_MARKER in text:
-        return "cargokit: ok（已含 Gradle 9 兼容）"
-
     if not VENDORED_CARGOKIT.is_file():
         return f"cargokit: FAIL（缺 vendored 文件 {VENDORED_CARGOKIT}）"
 
+    vendored_text = VENDORED_CARGOKIT.read_text(encoding="utf-8")
+    if target.read_text(encoding="utf-8", errors="replace") == vendored_text:
+        return "cargokit: ok（与 vendored 一致）"
+
     if not dry_run:
-        target.write_text(VENDORED_CARGOKIT.read_text(encoding="utf-8"), encoding="utf-8")
+        target.write_text(vendored_text, encoding="utf-8")
     return "cargokit: patched ← tools/vendor/cargokit_gradle9_plugin.gradle"
 
 

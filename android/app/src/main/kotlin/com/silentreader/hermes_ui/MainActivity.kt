@@ -15,9 +15,13 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import androidx.work.Configuration
 import androidx.work.WorkManager
+import dev.fluttercommunity.plus.wakelock.WakelockPlusPlugin
+import dev.fluttercommunity.workmanager.WorkmanagerPlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugins.urllauncher.UrlLauncherPlugin
 import java.io.File
 
 class MainActivity : FlutterActivity() {
@@ -65,6 +69,36 @@ class MainActivity : FlutterActivity() {
                 "error" to describeThrowable(firstFailure ?: e),
             )
         }
+    }
+
+    /**
+     * #118 插件链探针：Rust/cargokit 库能否加载 + 尾部插件是否真有实例。
+     *
+     * GeneratedPluginRegistrant 逐插件只 catch Exception，任一插件在注册期抛
+     * Error（缺 .so → UnsatisfiedLinkError）会截断整条注册链，其后插件全部静默
+     * 失联。这两项直接指认「当前这次运行是不是被连坐」：rustLib 报错 + 后三个
+     * 插件 false，就是典型的「链被上游插件截断」。
+     */
+    private fun probePluginChain(engine: FlutterEngine?): Map<String, Any?> {
+        val rustLib: String = try {
+            System.loadLibrary("super_native_extensions")
+            "loaded"
+        } catch (t: Throwable) {
+            describeThrowable(t) ?: "load-failed"
+        }
+        val attached: (Class<out FlutterPlugin>) -> Any = { cls ->
+            try {
+                engine?.plugins?.get(cls) != null
+            } catch (t: Throwable) {
+                describeThrowable(t) ?: "probe-failed"
+            }
+        }
+        return mapOf(
+            "rustLib" to rustLib,
+            "urlLauncher" to attached(UrlLauncherPlugin::class.java),
+            "wakelock" to attached(WakelockPlusPlugin::class.java),
+            "workmanager" to attached(WorkmanagerPlugin::class.java),
+        )
     }
 
     /** 探针：报告当下 WorkManager 是否可用 + 冷启动兜底动作 + 异常描述。 */
@@ -185,6 +219,7 @@ class MainActivity : FlutterActivity() {
             try {
                 when (call.method) {
                     "probeWorkManager" -> result.success(probeWorkManagerNow())
+                    "probePluginChain" -> result.success(probePluginChain(flutterEngine))
                     else -> result.notImplemented()
                 }
             } catch (e: Exception) {

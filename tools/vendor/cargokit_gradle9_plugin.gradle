@@ -186,6 +186,38 @@ class CargoKitPlugin implements Plugin<Project> {
                 }
                 project.tasks.each onTask
                 project.tasks.whenTaskAdded onTask
+                // -----------------------------------------------------------
+                // #118 patch (project-local, NOT upstream cargokit behaviour)
+                //
+                // Upstream only makes the **plugin module** javaPreCompileXxx depend on
+                // the cargo build. But the built .so only reaches the APK through the
+                // **app module** jniLibs pipeline:
+                //   mergeXxxJniLibFolders -> stripXxxDebugSymbols -> mergeXxxNativeLibs
+                // Those sit on a branch independent of the plugin javac, so ordering is
+                // graph-decided; observed order is app-merge FIRST, cargo SECOND, hence
+                // libsuper_native_extensions.so never landed in the APK.
+                //
+                // A missing .so is not "one feature less": the plugin static block calls
+                // System.loadLibrary("super_native_extensions"), which throws
+                // UnsatisfiedLinkError (an Error - the registrant only catches Exception).
+                // That aborts the whole GeneratedPluginRegistrant mid-loop and silently
+                // unregisters every plugin after it (url_launcher / wakelock_plus /
+                // workmanager). The engine invokes the registrant reflectively and only
+                // logs one logcat line, so the app never crashes and the loss is invisible.
+                //
+                // Fix: make every jniLibs-consuming app task wait for the cargo build.
+                // -----------------------------------------------------------
+                def appProject = plugin.project
+                def onAppTask = { newTask ->
+                    def n = newTask.name
+                    if (n == "merge${buildType.capitalize()}JniLibFolders" ||
+                        n == "strip${buildType.capitalize()}DebugSymbols" ||
+                        n == "merge${buildType.capitalize()}NativeLibs") {
+                        newTask.dependsOn task
+                    }
+                }
+                appProject.tasks.each onAppTask
+                appProject.tasks.whenTaskAdded onAppTask
             }
         }
     }
