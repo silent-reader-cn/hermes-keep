@@ -5,6 +5,7 @@ import 'dart:math';
 
 import '../../core/install/install_detector.dart';
 import '../../core/install/webui_bootstrap.dart';
+import '../../core/platform_paths.dart';
 import 'webui_sidecar_config.dart';
 import 'webui_sidecar_models.dart';
 
@@ -93,6 +94,7 @@ class DefaultSidecarFileSystem implements SidecarFileSystem {
     this.customEnvRoot,
     this.customLocalAppData,
     this.customAgentDir,
+    this.customIsWindows,
   });
 
   /// 自定义 exe 路径（测试注入用）。
@@ -107,8 +109,17 @@ class DefaultSidecarFileSystem implements SidecarFileSystem {
   /// 自定义 Hermes Agent 根目录（测试注入用）。
   final String? customAgentDir;
 
+  /// 自定义平台判定（测试注入用；缺省走真实 [Platform.isWindows]）。
+  ///
+  /// 平台判定是**决策输入**而非环境事实：依赖它的每个分支都必须能被覆写，
+  /// 否则非 Windows 宿主（CI Linux/macOS）上无法构造 Windows 语义用例。
+  final bool? customIsWindows;
+
   @override
-  bool get isWindows => Platform.isWindows;
+  bool get isWindows => customIsWindows ?? Platform.isWindows;
+
+  /// 路径分隔符：由 [isWindows] 推导，**不读宿主平台**。
+  String get _sep => platformPathSeparator(isWindows);
 
   @override
   String? get envSidecarRoot =>
@@ -117,28 +128,28 @@ class DefaultSidecarFileSystem implements SidecarFileSystem {
   @override
   String get defaultSidecarDir {
     final exe = customExePath ?? Platform.resolvedExecutable;
-    return '${File(exe).parent.path}${Platform.pathSeparator}webui';
+    return '${platformParentDir(exe)}${_sep}webui';
   }
 
   String get _localAppData =>
       customLocalAppData ??
       Platform.environment['LOCALAPPDATA'] ??
-      (Platform.isWindows
+      (isWindows
           ? 'C:\\Users\\${Platform.environment['USERNAME'] ?? 'User'}\\AppData\\Local'
           : '');
 
   /// Hermes Agent 安装根目录（`%LOCALAPPDATA%\hermes\hermes-agent`）。
   String get hermesAgentDir =>
       customAgentDir ??
-      '$_localAppData${Platform.pathSeparator}hermes${Platform.pathSeparator}hermes-agent';
+      '$_localAppData${_sep}hermes${_sep}hermes-agent';
 
   @override
   String get logDirectoryPath =>
-      '$_localAppData${Platform.pathSeparator}hermes${Platform.pathSeparator}webui-bundled${Platform.pathSeparator}logs';
+      '$_localAppData${_sep}hermes${_sep}webui-bundled${_sep}logs';
 
   @override
   String get logFilePath =>
-      '$logDirectoryPath${Platform.pathSeparator}webui.log';
+      '$logDirectoryPath${_sep}webui.log';
 
   @override
   bool fileExists(String path) => File(path).existsSync();
@@ -183,14 +194,14 @@ class DefaultSidecarFileSystem implements SidecarFileSystem {
     if (env != null && env.isNotEmpty) {
       // #76 二期：安装包不再捆绑 embedded python，包目录只按 server\server.py 判定。
       final directServer =
-          '$env${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
+          '$env${_sep}server${_sep}server.py';
       if (fileExists(directServer)) {
         return env;
       }
       final nestedServer =
-          '$env${Platform.pathSeparator}webui${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
+          '$env${_sep}webui${_sep}server${_sep}server.py';
       if (fileExists(nestedServer)) {
-        return '$env${Platform.pathSeparator}webui';
+        return '$env${_sep}webui';
       }
       return env;
     }
@@ -203,7 +214,7 @@ class DefaultSidecarFileSystem implements SidecarFileSystem {
     final bundleDir = resolveBundleDir();
     // #76 二期：只校验 server\server.py（embedded python 不再随包分发）。
     final server =
-        '$bundleDir${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
+        '$bundleDir${_sep}server${_sep}server.py';
     return fileExists(server);
   }
 }
@@ -224,7 +235,7 @@ extension SidecarFileSystemAgentExtension on SidecarFileSystem {
       }
     } catch (_) {}
     final logDir = fs.logDirectoryPath;
-    final sep = Platform.pathSeparator;
+    final sep = platformPathSeparator(fs.isWindows);
     final hermesIdx = logDir.lastIndexOf('${sep}hermes$sep');
     if (hermesIdx != -1) {
       final base = logDir.substring(0, hermesIdx);
@@ -232,7 +243,7 @@ extension SidecarFileSystemAgentExtension on SidecarFileSystem {
     }
     final base =
         Platform.environment['LOCALAPPDATA'] ??
-        (Platform.isWindows
+        (isWindows
             ? 'C:\\Users\\${Platform.environment['USERNAME'] ?? 'User'}\\AppData\\Local'
             : '');
     return '$base${sep}hermes${sep}hermes-agent';
@@ -253,7 +264,7 @@ String? resolveAgentPythonPath(
   String? customAgentDir,
 ]) {
   final targetAgentDir = customAgentDir ?? fileSystem.hermesAgentDir;
-  final sep = Platform.pathSeparator;
+  final sep = platformPathSeparator(fileSystem.isWindows);
   final venvPy = '$targetAgentDir${sep}venv${sep}Scripts${sep}python.exe';
   if (fileSystem.fileExists(venvPy)) {
     return venvPy;
@@ -549,8 +560,8 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
 
     final bundleDir = fileSystem.resolveBundleDir();
     final targetAgentDir = agentDir;
-    final serverPath =
-        '$bundleDir${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
+    final startSep = platformPathSeparator(fileSystem.isWindows);
+    final serverPath = '$bundleDir${startSep}server${startSep}server.py';
 
     // 解释器解析（#76 二期）：只认 agent venv，无 embedded 兜底；缺失即明确
     // 失败且不 spawn（不伪造进程），由一期门禁引导安装 Hermes Agent。

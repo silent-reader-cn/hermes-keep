@@ -50,6 +50,7 @@ import '../helpers/fake_tasks_api.dart';
 import '../helpers/fake_workspace_api.dart';
 import '../helpers/in_memory_secure_storage.dart';
 import 'golden_helpers.dart';
+import 'golden_platform.dart';
 
 // ---------------------------------------------------------------------------
 // 测试数据构造（刻意用长文案驱动换行 / 省略 / 溢出路径，供人工核对）
@@ -146,7 +147,8 @@ Future<List<Override>> sessionListOverrides() async {
 // 截图用例注册
 // ---------------------------------------------------------------------------
 
-/// 为 [pageName] 注册浅色 + 深色两枚截图用例（PNG 输出到 test/golden/goldens/）。
+/// 为 [pageName] 注册浅色 + 深色两枚截图用例
+/// （PNG 输出到 test/golden/goldens/<平台>/，见 golden_platform.dart）。
 ///
 /// [size] 透传给 pump（缺省竖屏 390x844 逻辑尺寸）。
 void goldenPair(
@@ -158,6 +160,9 @@ void goldenPair(
   for (final brightness in Brightness.values) {
     final themeName = brightness == Brightness.light ? 'light' : 'dark';
     testWidgets('$pageName $themeName', (tester) async {
+      // 金照基线按平台分目录：本平台无基线时跳过（不是回归）。
+      final name = '${pageName}_$themeName';
+      if (skipIfNoGoldenBaseline(name)) return;
       await pumpHermesPage(
         tester,
         page: page(),
@@ -167,7 +172,7 @@ void goldenPair(
       );
       await expectLater(
         find.byType(CupertinoApp),
-        matchesGoldenFile('goldens/${pageName}_$themeName.png'),
+        matchesGoldenFile(goldenKey(name)),
       );
       await unmountHermesPage(tester);
     });

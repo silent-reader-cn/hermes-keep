@@ -221,7 +221,8 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
         await dir.create(recursive: true);
       } catch (_) {}
     }
-    if (Platform.isWindows) {
+    // 平台判定走注入接缝（宿主在 CI 上是 Linux）。
+    if (fs.isWindows) {
       await Process.run('explorer', [logDir]);
     }
   }

@@ -3,6 +3,9 @@
 用法:
     python smoke_test.py            # 自动起一个临时进程并测试
     python smoke_test.py --no-start # 假设 main.py 已在 30003 运行，只测
+
+可从任意 cwd 调用（CI 即从仓库根跑 `python tools/fake_gateway/smoke_test.py`）：
+被拉起的 main.py 一律按**脚本所在目录**解析，不依赖当前工作目录。
 """
 from __future__ import annotations
 
@@ -12,9 +15,18 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
+from pathlib import Path
 
 import httpx
+
+# 脚本自身所在目录：main.py 必须相对它解析（见模块 docstring）。
+SCRIPT_DIR = Path(__file__).resolve().parent
+MAIN_PY = SCRIPT_DIR / "main.py"
+# 就绪探活预算：循环次数 × 0.25s。
+READY_ATTEMPTS = 40
+READY_INTERVAL_S = 0.25
 
 PORT = os.environ.get("FAKE_GATEWAY_PORT", "30003")
 BASE = f"http://127.0.0.1:{PORT}"
@@ -29,6 +41,7 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 def main(no_start: bool = False) -> None:
     proc = None
+    log_file = None
     port = PORT
     if not no_start:
         # 自动选择可用端口，避免本机已有 30003 服务污染结果。
@@ -37,22 +50,38 @@ def main(no_start: bool = False) -> None:
             port = str(sock.getsockname()[1])
         global BASE
         BASE = f"http://127.0.0.1:{port}"
+        # 输出落临时文件而不是 DEVNULL：子进程起不来时能回显根因
+        # （DEVNULL 会把 "can't open file ..." / ImportError 全部吞掉，
+        #  这正是该 job 长期只报「未就绪」、无法定位的原因）。
+        log_file = tempfile.TemporaryFile()
         proc = subprocess.Popen(
-            [sys.executable, "main.py"],
+            [sys.executable, str(MAIN_PY)],
+            cwd=str(SCRIPT_DIR),
             env={**os.environ, "FAKE_GATEWAY_PORT": port},
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
         )
-        # 等待端口就绪
-        for _ in range(40):
+        # 等待端口就绪：只认 200，避免把 404/500 误判成就绪。
+        for _ in range(READY_ATTEMPTS):
             try:
-                httpx.get(f"{BASE}/api/health", timeout=0.5)
-                break
+                if httpx.get(f"{BASE}/api/health", timeout=0.5).status_code == 200:
+                    break
             except Exception:
-                time.sleep(0.25)
+                pass
+            time.sleep(READY_INTERVAL_S)
         else:
-            print("FAIL: fake gateway 未在 5s 内就绪")
+            budget = READY_ATTEMPTS * READY_INTERVAL_S
+            print(f"FAIL: fake gateway 未在 {budget:.0f}s 内就绪（{MAIN_PY}）")
             proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
+            log_file.seek(0)
+            child_out = log_file.read().decode("utf-8", "replace").strip()
+            print("--- 子进程输出（stdout+stderr）---")
+            print(child_out[-2000:] if child_out else "(无输出：进程可能已被信号终止)")
+            log_file.close()
             sys.exit(1)
 
     try:
@@ -125,6 +154,8 @@ def main(no_start: bool = False) -> None:
         if proc is not None:
             proc.terminate()
             proc.wait(timeout=5)
+            if log_file is not None:
+                log_file.close()
 
 
 if __name__ == "__main__":

@@ -113,6 +113,7 @@ docs/                              # specs/ + PROTOCOL_NOTES.md + REPO_MAP.md + 
 - 每个文件一个主类型；import 顺序：`dart:` → `package:` → 相对路径，空行分隔
 - 私有成员一律 `_` 前缀；公开 API 必须有 doc comment（`///`）
 - `const` 能加就加；`final` 优先于 `var`
+- **平台语义一律走注入接缝**：不得直接读 `Platform.isWindows` / `Platform.pathSeparator` / `File(x).parent` 做决策或拼路径——它们套用**宿主**规则，而宿主（CI = Linux）往往不是被测语义所在平台。决策读注入的 `isWindows`（`SidecarFileSystem.isWindows`、`InstallDetector.isWindows`、`DefaultSidecarFileSystem(customIsWindows:)`、`DefaultInstallDetector` 的 `FileSystemAdapter.isWindows`），路径拼接用 `lib/core/platform_paths.dart` 的 `platformPathSeparator` / `platformParentDir`；宿主平台只允许出现在「默认值来源」这一处
 - 禁止 `dynamic` 滥用（JSON 解析边界除外）；禁止 `print()` 调试（用 `dart:developer log`）
 - 字符串用单引号；格式化用 `dart format`（跟随 `flutter_lints` 默认，不自定义行宽）
 - 错误处理：业务层抛自定义异常（继承 `ApiException`），UI 层 catch 展示；不吞异常
@@ -202,16 +203,19 @@ python tools/fake_gateway/smoke_test.py
 
 > Windows 宿主在 MSYS bash 下跑 flutter/dart 需走封装 bat `C:/tmp/f.bat`，避免 HOME/PATH 污染。详见 `windows-terminal` skill 的 `references/flutter-toolchain-msys-setup.md`。
 
+> **金照基线按平台分目录**：`test/golden/goldens/<windows|linux|macos>/`（逻辑见 `test/golden/golden_platform.dart`）。金照是**渲染环境**的产物——字体度量、CJK 字形回退随宿主平台变，故各平台只与自己那份比对；本平台**无基线时用例自动 skip**（记 `markTestSkipped`）而非失败，杜绝「拿 Windows 基线在 Linux 上比」的必然假红。补某平台基线：在该平台跑 `flutter test --update-goldens test/golden/` 后提交对应目录；CI 亦可 `workflow_dispatch` 选 `update_goldens=true` 生成并下载 artifact。金照字体源见 `golden_helpers.dart`（Windows 用系统 SimHei，其余平台退回仓库自带 MiSans）。
+
 ### 8.3 CI 流水线（`.github/workflows/ci.yml`）
 
 | Job | runs-on | 触发 | 步骤 |
 |---|---|---|---|
-| analyze-test | ubuntu | push main / tag `v*` / PR / 手动 | checkout → flutter-action 3.47.0 stable → setup-java 17 → `flutter pub get` → `flutter analyze` → `flutter test` |
-| android-debug | ubuntu | 依赖 analyze-test | 同上 → `flutter build apk --debug` |
-| fake-gateway | ubuntu | 独立 | checkout → setup-python 3.12 → `pip install -r tools/fake_gateway/requirements.txt` → `python tools/fake_gateway/smoke_test.py` |
-| windows-installer | windows | 依赖 analyze-test，仅 main / tag / 手动 | Inno Setup（choco）→ `flutter build windows --release` → 组装 WebUI sidecar → 编译安装包 → 上传 `hermes-ui-windows-setup` 产物 |
+| analyze-test | ubuntu | push main / tag `v*` / PR / 手动 | checkout → flutter-action 3.47.0 stable → setup-java 17 → `flutter pub get` → `flutter analyze` → `flutter test`（`update_goldens=true` 时改跑 `--update-goldens test/golden/` 并上传基线 artifact；失败时上传 `test/golden/failures/` 诊断产物） |
+| android-debug | ubuntu | **独立**（不 `needs: analyze-test`） | 同上 → `flutter build apk --debug` |
+| fake-gateway | ubuntu | 独立 | checkout → setup-python 3.12 → `pip install -r tools/fake_gateway/requirements.txt` → `python tools/fake_gateway/smoke_test.py`（脚本按 `__file__` 解析 main.py，任意 cwd 可调用；子进程输出在失败时回显） |
+| windows-installer | windows | **独立**，仅 main / tag / 手动 | Inno Setup（choco）→ `flutter build windows --release` → 组装 WebUI sidecar → 编译安装包 → 上传 `hermes-ui-windows-setup` 产物 |
 
-> 合并到 main 前必须全绿（analyze-test / android-debug / fake-gateway；windows-installer 按上表触发条件）；新增端点/模型需同步更新 `tools/fake_gateway` 契约。CI 带 `concurrency`，同 ref 的旧跑会被取消。
+> 两个建包 job **刻意不依赖** analyze-test：测试红不该连坐掉「包能不能构建」的验证（连坐期间 129 次 run 里它们从未真正执行过一次）。
+> 合并到 main 前必须全绿（analyze-test / fake-gateway；android-debug 与 windows-installer 按上表触发条件）；新增端点/模型需同步更新 `tools/fake_gateway` 契约。CI 带 `concurrency`，同 ref 的旧跑会被取消。
 
 ### 8.4 完成标准
 

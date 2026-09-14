@@ -23,11 +23,14 @@ const Size goldenLandscapeSize = Size(2560, 1600);
 ///
 /// - [loadAppFonts]：应用 FontManifest（MaterialIcons + CupertinoIcons）；
 /// - Roboto：引擎默认字族（fontFamily 缺省文本）英文 + 粗体；
-/// - SimHei（simhei.ttf）：中文字形回退（Roboto 无 CJK 字形），
-///   同时覆盖 CupertinoTextThemeData 默认的 CupertinoSystemText/Display 字族。
+/// - CJK 回退（见 [cjkFallbackFontCandidates]）：Windows 宿主用系统 SimHei，
+///   其余宿主（CI Linux/macOS）退回仓库自带 MiSans，避免中文渲染成豆腐块、
+///   导致本平台基线无法人工核对；同时覆盖 CupertinoTextThemeData 默认的
+///   CupertinoSystemText/Display 字族。
 ///
-/// 字体文件缺失的环境（如 CI Linux）静默跳过：中文退化为方块，测试仍可运行，
-/// 只是截图不具人工核对价值（符合「无字体环境不稳」的预期）。
+/// 字体文件缺失的环境静默跳过（[File.existsSync] 为假）。**金照基线按平台
+/// 分目录**（`test/golden/goldens/<平台>/`，见 golden_platform.dart），各平台
+/// 用自己的字体渲染、与自己那份基线比对，故不存在跨平台字形漂移问题。
 Future<void> loadHermesGoldenFonts() async {
   await loadAppFonts();
   // flutter_tester.exe → <flutter>/bin/cache/artifacts/engine/<platform>/，
@@ -37,11 +40,16 @@ Future<void> loadHermesGoldenFonts() async {
   final materialFontsDir = '$flutterRoot/bin/cache/artifacts/material_fonts';
   await _registerFontFile('Roboto', '$materialFontsDir/roboto-regular.ttf');
   await _registerFontFile('Roboto', '$materialFontsDir/roboto-bold.ttf');
-  await _registerFontFile('Roboto', r'C:\Windows\Fonts\simhei.ttf');
-  await _registerFontFile('CupertinoSystemText', r'C:\Windows\Fonts\simhei.ttf');
-  await _registerFontFile(
+  // CJK 回退字体：Windows 宿主用系统 simhei，其余宿主退回仓库自带 MiSans。
+  // 各平台基线独立成目录，故字体差异不会造成跨平台假红。
+  await _registerFontFirstExisting('Roboto', cjkFallbackFontCandidates);
+  await _registerFontFirstExisting(
+    'CupertinoSystemText',
+    cjkFallbackFontCandidates,
+  );
+  await _registerFontFirstExisting(
     'CupertinoSystemDisplay',
-    r'C:\Windows\Fonts\simhei.ttf',
+    cjkFallbackFontCandidates,
   );
   // 注册全局字体 MiSans（保证无论环境是否加载 asset bundle，字族都完整注册）
   await _registerFontFile('MiSans', 'assets/fonts/MiSans-Regular.ttf');
@@ -66,6 +74,41 @@ Future<void> _registerFontFile(String family, String path) async {
   final loader = FontLoader(family)
     ..addFont(Future.value(ByteData.sublistView(bytes)));
   await loader.load();
+}
+
+/// Windows 系统中文字体（SimHei）路径。
+const String simheiFontPath = 'C:\\Windows\\Fonts\\simhei.ttf';
+
+/// CJK 回退字体候选（按序取第一个存在的文件）。
+///
+/// 顺序只需保证**同一平台内稳定**：Windows 命中 SimHei，其余平台退回仓库自带
+/// MiSans。各平台基线独立成目录，故不同平台取到不同字体是预期行为。
+final List<String> cjkFallbackFontCandidates = <String>[
+  simheiFontPath,
+  'assets/fonts/MiSans-Regular.ttf',
+];
+
+/// 返回 [candidates] 中第一个存在的字体文件路径；都不存在则返回 null。
+String? firstExistingFont(List<String> candidates) {
+  for (final path in candidates) {
+    if (File(path).existsSync()) {
+      return path;
+    }
+  }
+  return null;
+}
+
+/// 把 [candidates] 里第一个存在的字体注册进 [family]（都不存在则静默跳过）。
+Future<void> _registerFontFirstExisting(
+  String family,
+  List<String> candidates,
+) async {
+  for (final path in candidates) {
+    if (File(path).existsSync()) {
+      await _registerFontFile(family, path);
+      return;
+    }
+  }
 }
 
 /// 以 [brightness] 主题挂载 [page]（注入 [overrides]），等异步加载与入场动画

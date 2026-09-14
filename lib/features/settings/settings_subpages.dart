@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +7,7 @@ import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../session_list/session_entry_visibility.dart';
 import '../session_list/session_row_subtitle_settings.dart';
+import '../webui_sidecar/webui_sidecar_providers.dart';
 import 'auxiliary_models_section.dart';
 import 'extensions_section.dart';
 import 'mcp_section.dart';
@@ -356,11 +356,16 @@ class SessionRowSubtitleSection extends ConsumerWidget {
 // 6. 桌面设置二级页
 // ---------------------------------------------------------------------------
 
-class DesktopSettingsPage extends StatelessWidget {
+/// 桌面设置二级页。
+///
+/// 「内置 WebUI 服务」分组按**注入的平台判定**（`SidecarFileSystem.isWindows`）
+/// 决定是否渲染，而不是宿主 `Platform.isWindows`：平台语义是决策输入，
+/// 必须能被测试覆写，否则 CI（Linux）上该分组永远缺席、用例只能假红。
+class DesktopSettingsPage extends ConsumerWidget {
   const DesktopSettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     return SettingsSurfaces.page(
       context,
@@ -373,7 +378,8 @@ class DesktopSettingsPage extends StatelessWidget {
         child: ListView(
           children: [
             const DesktopSection(),
-            if (Platform.isWindows) const WebuiSidecarSection(),
+            if (ref.watch(sidecarFileSystemProvider).isWindows)
+              const WebuiSidecarSection(),
           ],
         ),
       ),
