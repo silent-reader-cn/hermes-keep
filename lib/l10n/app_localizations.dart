@@ -526,6 +526,8 @@ class AppLocalizations {
       case 'grep_search':
       case 'ripgrep':
         return isEnglish ? 'Search' : '搜索';
+      case 'grep_code':
+        return isEnglish ? 'Code Search' : '代码搜索';
       case 'glob':
         return isEnglish ? 'Glob' : '文件检索';
       case 'list_dir':

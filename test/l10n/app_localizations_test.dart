@@ -242,6 +242,7 @@ void main() {
       expect(l10n.localizeToolName('web_extract'), '网页提取');
       expect(l10n.localizeToolName('agent'), '智能体');
       expect(l10n.localizeToolName('grep'), '搜索');
+      expect(l10n.localizeToolName('grep_code'), '代码搜索');
       expect(l10n.localizeToolName('glob'), '文件检索');
       expect(l10n.localizeToolName('thinking'), '思考');
       expect(l10n.localizeToolName('reasoning'), '思考');

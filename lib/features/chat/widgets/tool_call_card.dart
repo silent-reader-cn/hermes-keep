@@ -694,6 +694,7 @@ IconData _toolIconFor(String name) {
     case 'search':
     case 'grep':
     case 'grep_search':
+    case 'grep_code':
     case 'ripgrep':
     case 'find':
     case 'find_by_name':
