@@ -49,7 +49,15 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Bundled WebUI sidecar runtime and source -> {app}\webui
+; NOTE (#76 phase 2): the bundle no longer carries an embedded Python runtime;
+; the sidecar runs on the Hermes Agent venv interpreter only.
 Source: "..\build\webui-bundle\*"; DestDir: "{app}\webui"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+; #76 phase 2: drop the embedded Python runtime shipped by older installs
+; (~33 MB under {app}\webui\python) so upgrades actually reclaim the space
+; and stale interpreters cannot be picked up.
+Type: filesandordirs; Name: "{app}\webui\python"
 
 [Icons]
 ; AppUserModelID binds the Start Menu shortcut to the AUMID set in

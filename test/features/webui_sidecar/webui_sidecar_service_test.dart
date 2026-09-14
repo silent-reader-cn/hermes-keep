@@ -562,8 +562,7 @@ void main() {
       },
     );
 
-    test('解释器探测分支 3：venv 与 .venv 均缺失 -> 兜底使用 embedded python 并注入 HERMES_WEBUI_AGENT_DIR', () async {
-      final expectedEmbeddedPy = '${fakeFs.root}\\python\\python.exe';
+    test('解释器探测分支 3：venv 与 .venv 均缺失 -> 落「解释器缺失」失败态且不 spawn（#76 二期已删 embedded 兜底）', () async {
       fakeFs.fileExistsOverride = (path) {
         if (path.contains('hermes-agent')) return false;
         return true;
@@ -572,26 +571,16 @@ void main() {
       final service = createService();
       await service.start();
 
-      expect(service.currentState.status, SidecarStatus.running);
-      expect(fakeExecutor.startCalls.length, 1);
-      final call = fakeExecutor.startCalls.first;
-      expect(call['executable'], expectedEmbeddedPy);
-
-      final env = call['environment'] as Map<String, String>;
-      expect(env['HERMES_WEBUI_AGENT_DIR'], fakeFs.agentDir);
-      expect(env['HERMES_WEBUI_HOST'], '127.0.0.1');
-      expect(env['HERMES_WEBUI_PORT'], '8787');
-      expect(env['HERMES_WEBUI_PASSWORD'], 'my_secret_token_xyz');
-      expect(env['PYTHONDONTWRITEBYTECODE'], '1');
-
-      await service.stop();
+      // 不再回落 embedded python：明确失败，且绝不拉起任何子进程。
+      expect(service.currentState.status, SidecarStatus.failed);
+      expect(service.currentState.detail, contains('解释器缺失'));
+      expect(fakeExecutor.startCalls, isEmpty);
     });
 
-    test('resolvePythonPath 探测优先级：venv > .venv > embedded python 兜底', () {
+    test('resolvePythonPath 探测优先级：venv > .venv > null（#76 二期无 embedded 兜底）', () {
       final service = createService();
       final venvPy = '${fakeFs.agentDir}\\venv\\Scripts\\python.exe';
       final dotVenvPy = '${fakeFs.agentDir}\\.venv\\Scripts\\python.exe';
-      final embeddedPy = '${fakeFs.root}\\python\\python.exe';
 
       // 1. 两者皆有时优先 venv
       fakeFs.fileExistsOverride = (path) => path == venvPy || path == dotVenvPy;
@@ -601,9 +590,9 @@ void main() {
       fakeFs.fileExistsOverride = (path) => path == dotVenvPy;
       expect(service.resolvePythonPath(), dotVenvPy);
 
-      // 3. 都不在，兜底 embedded
+      // 3. 都不在 -> null（安装包已不捆绑 embedded python）
       fakeFs.fileExistsOverride = (path) => false;
-      expect(service.resolvePythonPath(), embeddedPy);
+      expect(service.resolvePythonPath(), isNull);
     });
 
     test('watchdog 进程崩溃重启自愈保持相同解释器与 HERMES_WEBUI_AGENT_DIR', () async {

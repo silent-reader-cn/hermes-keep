@@ -81,7 +81,7 @@ abstract interface class SidecarFileSystem {
   /// 探测并解析当前有效的 WebUI 根目录。
   String resolveBundleDir();
 
-  /// 校验内置包关键依赖是否存在（`python\python.exe` 与 `server\server.py`）。
+  /// 校验内置包关键依赖是否存在（`server\server.py`；#76 二期起不再要求 embedded python）。
   bool isBundleAvailable();
 }
 
@@ -181,18 +181,15 @@ class DefaultSidecarFileSystem implements SidecarFileSystem {
   String resolveBundleDir() {
     final env = envSidecarRoot;
     if (env != null && env.isNotEmpty) {
-      final directPy =
-          '$env${Platform.pathSeparator}python${Platform.pathSeparator}python.exe';
+      // #76 二期：安装包不再捆绑 embedded python，包目录只按 server\server.py 判定。
       final directServer =
           '$env${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
-      if (fileExists(directPy) && fileExists(directServer)) {
+      if (fileExists(directServer)) {
         return env;
       }
-      final nestedPy =
-          '$env${Platform.pathSeparator}webui${Platform.pathSeparator}python${Platform.pathSeparator}python.exe';
       final nestedServer =
           '$env${Platform.pathSeparator}webui${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
-      if (fileExists(nestedPy) && fileExists(nestedServer)) {
+      if (fileExists(nestedServer)) {
         return '$env${Platform.pathSeparator}webui';
       }
       return env;
@@ -204,11 +201,10 @@ class DefaultSidecarFileSystem implements SidecarFileSystem {
   bool isBundleAvailable() {
     if (!isWindows) return false;
     final bundleDir = resolveBundleDir();
-    final py =
-        '$bundleDir${Platform.pathSeparator}python${Platform.pathSeparator}python.exe';
+    // #76 二期：只校验 server\server.py（embedded python 不再随包分发）。
     final server =
         '$bundleDir${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
-    return fileExists(py) && fileExists(server);
+    return fileExists(server);
   }
 }
 
@@ -336,19 +332,12 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
 
   /// 探测并解析用于启动 WebUI 的 Python 解释器路径。
   ///
-  /// 优先级（方案 B′）：
-  /// 1. `%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\python.exe` 存在 → 优先使用（自带完整 agent 运行环境）；
-  /// 2. `%LOCALAPPDATA%\hermes\hermes-agent\.venv\Scripts\python.exe` 存在 → 次选使用；
-  /// 3. 都不存在 → 兜底使用内置包 embedded python（`<bundleDir>\python\python.exe`）。
-  String resolvePythonPath([String? bundleDir]) {
-    final agentPy = resolveAgentPythonPath(fileSystem, customAgentDir);
-    if (agentPy != null) {
-      return agentPy;
-    }
-    final root = bundleDir ?? fileSystem.resolveBundleDir();
-    final sep = Platform.pathSeparator;
-    return '$root${sep}python${sep}python.exe';
-  }
+  /// 只认 Hermes Agent 自身的虚拟环境（[resolveAgentPythonPath]：venv > .venv）。
+  /// **#76 二期起安装包不再捆绑 embedded python**，故没有兜底解释器：
+  /// 两者皆无 → 返回 null，由调用方落「解释器缺失」失败态，并由一期门禁
+  /// （引导页/设置页 agent 缺失卡）引导安装 Hermes Agent。
+  String? resolvePythonPath() =>
+      resolveAgentPythonPath(fileSystem, customAgentDir);
 
   /// 提取缺失的 Python 依赖模块名称。
   static String extractMissingDependency(String output) {
@@ -560,9 +549,23 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
 
     final bundleDir = fileSystem.resolveBundleDir();
     final targetAgentDir = agentDir;
-    final pyPath = resolvePythonPath(bundleDir);
     final serverPath =
         '$bundleDir${Platform.pathSeparator}server${Platform.pathSeparator}server.py';
+
+    // 解释器解析（#76 二期）：只认 agent venv，无 embedded 兜底；缺失即明确
+    // 失败且不 spawn（不伪造进程），由一期门禁引导安装 Hermes Agent。
+    final pyPath = resolvePythonPath();
+    if (pyPath == null) {
+      _updateState(
+        const SidecarState(
+          status: SidecarStatus.failed,
+          reason: SidecarFailureReason.startFailed,
+          // 与 preflight 的「解释器缺失」口径一致；可操作指引由一期门禁给出。
+          detail: '解释器缺失',
+        ),
+      );
+      return;
+    }
 
     // 前置检查：解释器文件存在 + venv python -c "import yaml, cryptography" 探活
     final preflightError = await runPreflight(pyPath);

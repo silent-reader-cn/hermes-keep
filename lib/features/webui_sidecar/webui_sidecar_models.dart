@@ -23,7 +23,7 @@ enum SidecarFailureReason {
   /// 端口已被外部进程占用且 /health 探测失败。
   portOccupied,
 
-  /// 内置 WebUI 依赖包缺失（python.exe 或 server.py 未找到）。
+  /// 内置 WebUI 依赖包缺失（#76 二期：server.py 未找到）。
   missingBundle,
 
   /// 启动子进程后轮询 /health 接口 30s 超时。

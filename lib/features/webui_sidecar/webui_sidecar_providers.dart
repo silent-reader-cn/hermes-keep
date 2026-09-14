@@ -16,7 +16,8 @@ final webuiSidecarConfigStorageProvider = Provider<WebuiSidecarConfigStorage>(
   (ref) => WebuiSidecarConfigStorage(),
 );
 
-/// 内置 WebUI 包可用性探测 Provider（仅 Windows 且 python/server 完整时为 true）。
+/// 内置 WebUI 包可用性探测 Provider（仅 Windows 且包内含 server/server.py 时为 true；
+/// #76 二期起不再要求 embedded python）。
 final bundledWebuiAvailableProvider = Provider<bool>((ref) {
   final fs = ref.watch(sidecarFileSystemProvider);
   return fs.isBundleAvailable();
