@@ -1,8 +1,8 @@
 {
-  "line_coverage_pct": 80.73,
-  "lines_hit": 31525,
-  "lines_countable": 39048,
-  "files_measured": 232,
+  "line_coverage_pct": 81.61,
+  "lines_hit": 31804,
+  "lines_countable": 38970,
+  "files_measured": 234,
   "note": "Ratchet this upward as tests are added; never lower it silently.",
   "never_loaded_files": [
     "lib/features/settings/profile_section.dart",
