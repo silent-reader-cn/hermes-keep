@@ -635,5 +635,131 @@ void main() {
         expect(liveActivityEvents.last.$3, ChatLiveActivity.finished);
       });
     });
+
+    // -------------------------------------------------------------------------
+    // 13. #127 等待态结束接回推送通道：作答成功后主动探活
+    // -------------------------------------------------------------------------
+    test('13. #127 澄清作答后主动探活（把后台断掉的 SSE 接回来）', () {
+      fakeAsync((async) {
+        final container = buildContainer();
+        final controller = container.read(
+          chatControllerProvider('sess-1').notifier,
+        );
+        async.flushMicrotasks();
+
+        // 建流 + 进入澄清等待态
+        unawaited(controller.send('开始'));
+        async.flushMicrotasks();
+        api.emit(
+          const ClarificationPendingSseEvent({
+            'pending': {'clarify_id': 'c-127', 'question': '请选择'},
+            'pending_count': 1,
+          }),
+        );
+        async.flushMicrotasks();
+
+        final resumesBefore = controller.promptResolvedResumes;
+
+        unawaited(controller.respondToClarification('选 A'));
+        async.flushMicrotasks();
+
+        expect(
+          controller.promptResolvedResumes,
+          greaterThan(resumesBefore),
+          reason:
+              '等待态下 resumed 的主动探活被 !hasPendingPrompt 门控挡掉'
+              '（见 _handleAppLifecycleChange），而 App 在后台期间两条 SSE'
+              '（回合流 + 会话内容通道）会静默断线；清卡路径若不接回通道，'
+              '服务端继续输出也到不了界面 = 「选完澄清回复后聊天不再更新」。',
+        );
+      });
+    });
   });
+
+  // ---------------------------------------------------------------------------
+  // #127 静默兜底巡检：事件驱动恢复链全部漏掉时的最后防线
+  // ---------------------------------------------------------------------------
+  group('#127 静默兜底巡检（通道静默断线的兜底）', () {
+    late FakeChatApi api;
+    late _StallGuardClock clock;
+
+    setUp(() {
+      api = FakeChatApi();
+      clock = _StallGuardClock();
+    });
+
+    ProviderContainer buildContainer() {
+      final container = ProviderContainer(
+        overrides: [
+          chatApiProvider.overrideWithValue(api),
+          chatClockProvider.overrideWithValue(clock.call),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('14. 用户动作后长时间无进展 → 主动拉取会话兜底', () {
+      fakeAsync((async) {
+        final container = buildContainer();
+        final controller = container.read(
+          chatControllerProvider('sess-1').notifier,
+        );
+        async.flushMicrotasks();
+
+        // 用户动作（作答），但通道已断、服务端内容到不了本地。
+        unawaited(controller.respondToClarification('选 A'));
+        async.flushMicrotasks();
+        final before = api.sessionCalls;
+
+        // 注入时钟与巡检定时器同时推进，越过静止阈值（15s）。
+        clock.advance(const Duration(seconds: 25));
+        async.elapse(const Duration(seconds: 25));
+        async.flushMicrotasks();
+
+        expect(
+          api.sessionCalls,
+          greaterThan(before),
+          reason:
+              '事件驱动的恢复链（resumed 探活 / transport-stale 重连 / 作答'
+              '接回通道）任一环节漏掉，界面就会永久静止；兜底巡检必须在'
+              '「用户动作后长时间无进展且无活跃流」时主动拉一次会话，'
+              '把内容兜回来。',
+        );
+      });
+    });
+
+    test('15. 门控：动作后阈值内不抢跑拉取', () {
+      fakeAsync((async) {
+        final container = buildContainer();
+        final controller = container.read(
+          chatControllerProvider('sess-1').notifier,
+        );
+        async.flushMicrotasks();
+
+        unawaited(controller.respondToClarification('选 A'));
+        async.flushMicrotasks();
+        final before = api.sessionCalls;
+
+        // 只走 5s（< 静止阈值 15s）。
+        clock.advance(const Duration(seconds: 5));
+        async.elapse(const Duration(seconds: 5));
+        async.flushMicrotasks();
+
+        expect(
+          api.sessionCalls,
+          before,
+          reason: '动作后静止阈值内不得抢跑拉取，避免与正常 SSE 收流打架。',
+        );
+      });
+    });
+  });
+}
+
+class _StallGuardClock {
+  DateTime now = DateTime(2026, 1, 1);
+
+  DateTime call() => now;
+
+  void advance(Duration duration) => now = now.add(duration);
 }

@@ -142,6 +142,30 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// #124：轮询 pending 为空的连续次数，用于抗抖。
   int _emptyPendingStreak = 0;
 
+  /// #127 静默兜底：最近一次用户动作（发消息/作答）时刻 —— 兜底巡检的激活窗口起点。
+  DateTime? _lastUserActionAt;
+
+  /// #127 静默兜底：冷却截止时刻，避免连续触发重复拉取。
+  DateTime? _stallGuardCooldownUntil;
+
+  /// #127 静默兜底：是否「已发出请求/作答但尚未收到任何服务端进展」。
+  /// 由 `_markUserAction`（发送/作答）置 true、`_markProgress`（收到进展）
+  /// 置 false —— 兜底巡检只在这个未决期待存在时动手，避免回合正常收尾后
+  /// 仍多拉一次（实测会把「无残留请求」类用例打红）。
+  bool _awaitingServerContent = false;
+
+  /// #127：等待态结束走恢复路径的次数（@visibleForTesting 观测点）。
+  int _promptResolvedResumes = 0;
+
+  /// #127 静默兜底：用户动作后多久内允许兜底激活（超出视为空闲会话，不打扰）。
+  static const Duration _stallGuardActiveWindow = Duration(seconds: 90);
+
+  /// #127 静默兜底：多久没有任何服务端进展即视为「疑似静止」。
+  static const Duration _stallGuardStallThreshold = Duration(seconds: 15);
+
+  /// #127 静默兜底：两次兜底拉取的最小间隔。
+  static const Duration _stallGuardCooldown = Duration(seconds: 20);
+
   /// 重放期间是否需要逐帧重建时间线断点（仅断点为空的恢复场景为 true）。
   /// 正常 live 重连断点仍在：重放帧全命中时不再补点，避免已展示段在时间线
   /// 尾部重复叠加成簇（底部连续思考/文本卡簇的放大源）。
@@ -193,6 +217,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _liveActivityDetail = '';
     _notifiedClarifyId = null;
     _emptyPendingStreak = 0;
+    _lastUserActionAt = null;
+    _stallGuardCooldownUntil = null;
+    _awaitingServerContent = false;
     _cancelRecoverySentinel();
     _cancelResumeProbeRetry();
     _lastContextPollTime = null;
@@ -1080,10 +1107,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final sessionId = state.sessionId;
     if (sessionId.isEmpty) return false;
     final gen = _generation;
+    _markUserAction();
     try {
       await _api!.respondApproval(sessionId: sessionId, choice: choice);
       if (_disposed || gen != _generation) return false;
       _clearApprovalCard();
+      // #127：等待态结束 → 接回推送通道（见 _resumeChannelsAfterPromptResolved）。
+      _resumeChannelsAfterPromptResolved();
       return true;
     } on ApiException {
       if (_disposed || gen != _generation) return false;
@@ -1096,6 +1126,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final sessionId = state.sessionId;
     if (sessionId.isEmpty) return false;
     final gen = _generation;
+    _markUserAction();
     try {
       await _api!.respondClarification(
         sessionId: sessionId,
@@ -1103,6 +1134,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       if (_disposed || gen != _generation) return false;
       _clearClarificationCard();
+      // #127：等待态结束 → 接回推送通道（见 _resumeChannelsAfterPromptResolved）。
+      _resumeChannelsAfterPromptResolved();
       return true;
     } on ApiException {
       if (_disposed || gen != _generation) return false;
@@ -1120,6 +1153,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   }) async {
     final api = _api;
     if (api == null) return false;
+    _markUserAction();
     _archiveLiveReasoningIfNeeded();
     _archiveLiveToolCallsIfNeeded();
     final messageId = 'local-${uuidV4()}';
@@ -2405,7 +2439,43 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (_disposed) return;
     _clearClarificationCard();
     setNotice('澄清已超时');
+    // #127：等待态结束 → 接回推送通道（agent 可能已继续续跑）。
+    _resumeChannelsAfterPromptResolved();
   }
+
+  /// 等待态（澄清/审批）结束 → 把推送通道接回来（#127）。
+  ///
+  /// 等待期间 App 往往在后台（用户从系统通知点回），两条 SSE（回合流 +
+  /// 会话内容通道 `/api/session/stream`）都会在后台静默断线（无
+  /// onTransportError/onClosed 事件，只能靠时间差识别）；而
+  /// `_handleAppLifecycleChange` 的 resumed 主动探活被
+  /// `!state.pendingAction.hasPendingPrompt` 门控挡掉（等待态下主动探活会
+  /// 误判），清卡路径本身也**没有任何地方**重建通道 → 服务端继续输出却推
+  /// 不到界面 = 「选完澄清回复后聊天不再更新」。
+  /// 作答/超时即视为等待态结束，此处主动补一次探活 + 重建会话内容通道
+  /// （服务端开新回合由该通道的 onServerTurnStarted 接管）。
+  void _resumeChannelsAfterPromptResolved() {
+    if (_disposed) return;
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return;
+    _promptResolvedResumes++;
+    if (state.stream.activeStreamId != null) {
+      return; // 有活跃流：交给 watchdog 的 transport-stale 链与兜底巡检。
+    }
+    // 只重建会话内容通道（内部 stop-then-start，幂等）：它是「服务端开新
+    // 回合 → 客户端接管」的入口（onServerTurnStarted），也是澄清续跑真正
+    // 依赖的通道。
+    //
+    // 刻意**不**在这里立刻 `_checkStatusAndReconnect()`：作答刚提交时服务端
+    // 可能尚未开新回合，此刻探活会拿到 active=false，而既有分支会把 phase
+    // 误落成 idle（实测把「作答后回 streaming」用例打红）。断线后的最终
+    // 兜底交给 `_runStallGuardIfNeeded`（未决期待 + 无进展 → 主动拉取）。
+    _startSessionContentChannel(sessionId);
+  }
+
+  /// 等待态结束走恢复路径的次数（#127 回归观测点）。
+  @visibleForTesting
+  int get promptResolvedResumes => _promptResolvedResumes;
 
   void _clearApprovalCard() {
     state = state.copyWith(
@@ -3766,7 +3836,63 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _recoverStalePrefillIfNeeded();
       _recoverStaleStreamIfNeeded();
       _pollContextWindowIfNeeded();
+      unawaited(_runStallGuardIfNeeded());
     });
+  }
+
+  /// 记录一次用户动作（#127 静默兜底的激活窗口起点）。
+  void _markUserAction() {
+    _lastUserActionAt = _now();
+    _stallGuardCooldownUntil = null;
+    _awaitingServerContent = true;
+  }
+
+  /// 静默兜底巡检（#127）：通道静默断线 + 无人恢复时的最后一道防线。
+  ///
+  /// 现有恢复链**全是事件驱动**的：resumed 探活、transport-stale 重连、
+  /// 作答后接回通道……任一环节漏掉就表现为「界面永远静止」（「选完澄清
+  /// 回复后聊天不再更新」正是如此：等待态下 resumed 探活被
+  /// `!hasPendingPrompt` 门控挡掉，而清卡路径不重建通道）。
+  /// 本巡检不依赖任何单一事件：只要「用户刚有过动作（发消息/作答）」而
+  /// 「一段时间内没有任何服务端进展」，就主动拉一次会话把内容兜回来
+  /// （`syncMissingMessages` 顺带能接管服务端新开的流）。
+  /// 三重门控保证低频、不打扰：仅前台 + 仅无活跃流（有流交给 watchdog 的
+  /// transport-stale 链，避免双路争抢）+ 仅用户动作后的活动窗口内 + 冷却。
+  Future<void> _runStallGuardIfNeeded() async {
+    if (_disposed || _appPaused) return;
+    if (state.sessionId.isEmpty) return;
+    // 有活跃流：交给 watchdog 的 transport-stale 重连链。
+    if (state.stream.activeStreamId != null) return;
+    // 正等用户作答：不该催（卡片自己的生命周期负责）。
+    if (state.pendingAction.hasPendingPrompt) return;
+    // 没有未决期待（收到过内容 / 回合已正常收尾）→ 不打扰。
+    if (!_awaitingServerContent) return;
+    // 仅在「用户刚有过动作」的窗口内激活 → 空闲会话永不触发。
+    final actionAt = _lastUserActionAt;
+    if (actionAt == null) return;
+    final now = _now();
+    if (now.difference(actionAt) > _stallGuardActiveWindow) return;
+    if (_stallGuardCooldownUntil != null &&
+        now.isBefore(_stallGuardCooldownUntil!)) {
+      return;
+    }
+    // 静止判据：距「最近一次进展」超过阈值。尚无进展记录（或进展发生在
+    // 本次动作之前）时以动作时刻为基线 —— 否则刚动作就会因
+    // `_lastProgress == null` 被立刻判定静止。
+    final lastProgress = _lastProgress;
+    final baseline =
+        (lastProgress == null || lastProgress.isBefore(actionAt))
+        ? actionAt
+        : lastProgress;
+    if (now.difference(baseline) < _stallGuardStallThreshold) return;
+    _stallGuardCooldownUntil = now.add(_stallGuardCooldown);
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat_stall_guard',
+      message:
+          'Stall guard: 用户动作后 ${now.difference(actionAt).inSeconds}s 无进展且无活跃流，主动拉取会话兜底',
+    );
+    await syncMissingMessages();
   }
 
   void _recoverStalePrefillIfNeeded() {
@@ -4514,6 +4640,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _markProgress() {
     _lastProgress = _now();
     _prefillSince = null;
+    _awaitingServerContent = false;
     // steered 是子相位：收到任意 progress 事件回到 streaming。
     if (state.phase == ChatPhase.steered) {
       state = state.copyWith(phase: ChatPhase.streaming);
