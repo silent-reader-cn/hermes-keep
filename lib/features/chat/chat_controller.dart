@@ -702,6 +702,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       final mergedMessages = diffMergeMessages(
         localMessages: state.messages,
         serverMessages: serverMessages,
+        liveStreamingMessageId: state.stream.streamingAssistantMessageId,
       );
       _applySessionDetail(detail: detail, mergedMessages: mergedMessages);
     } on Object {
@@ -789,6 +790,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         final mergedMessages = diffMergeMessages(
           localMessages: local,
           serverMessages: loaded,
+          liveStreamingMessageId: state.stream.streamingAssistantMessageId,
         );
         _applySessionDetail(detail: detail, mergedMessages: mergedMessages);
       }

@@ -379,6 +379,53 @@ bool _listEqualsTranscript(
   return true;
 }
 
+/// 活跃回合 live 层对本回合服务端行的正文覆盖情况（#121）。
+///
+/// live（流式）层渲染的是流式消息的累积正文；回合中途 transcript 重载会把本回合
+/// 已落库的 assistant 行并入消息列表，若这些行再按常规 transcript 行渲染，同一段
+/// 正文就会出现两遍（真机表现：首行吞掉全轮正文 + 其后各行正文重复一次）。
+/// 仅在「行正文已被 live 正文覆盖」时跳过，故不会隐藏 live 未渲染的内容。
+class _LiveCoverage {
+  const _LiveCoverage({required this.liveContent, required this.turnStartIndex});
+
+  /// live 层当前渲染的正文（流式消息 content，已 trim）。
+  final String liveContent;
+
+  /// 本回合起点：最后一个可见 user 行下标（无 user 边界时为 -1）。
+  final int turnStartIndex;
+
+  bool covers(ChatMessage message) {
+    if (message.role != 'assistant') return false;
+    final text = message.content?.trim() ?? '';
+    if (text.isEmpty) return false;
+    return liveContent.contains(text);
+  }
+}
+
+/// live 层存活且已有正文时返回覆盖信息；否则 null（此时按原样渲染）。
+_LiveCoverage? _liveCoverage(List<ChatMessage> messages, String? streamingId) {
+  if (streamingId == null || streamingId.isEmpty) return null;
+  String? liveContent;
+  for (final message in messages) {
+    if (message.messageId != streamingId) continue;
+    final content = message.content?.trim() ?? '';
+    if (content.isNotEmpty) liveContent = content;
+    break;
+  }
+  if (liveContent == null) return null;
+  var turnStartIndex = -1;
+  for (var i = messages.length - 1; i >= 0; i--) {
+    if (TranscriptTurnClassifier.isUserTurnBoundary(messages[i])) {
+      turnStartIndex = i;
+      break;
+    }
+  }
+  return _LiveCoverage(
+    liveContent: liveContent,
+    turnStartIndex: turnStartIndex,
+  );
+}
+
 /// 展示层转录消息（过滤 tool 消息 / 纯工具结果消息 / 流式消息；renderId 稳定）。
 final transcriptMessagesProvider =
     Provider.family<List<TranscriptMessage>, String>((ref, sessionId) {
@@ -387,12 +434,21 @@ final transcriptMessagesProvider =
       final offset = state.messagesOffset;
       final streamingId = state.stream.streamingAssistantMessageId;
       final completedToolGroups = state.completedToolCallGroups;
+      // #121：活跃回合的 live 层已渲染的正文，transcript 不得再渲染一遍。
+      // 只在 live 层存活（流式消息仍在消息列表里且已有正文）时生效；
+      // 未被 live 覆盖的行照常渲染，故不会丢内容。
+      final liveCoverage = _liveCoverage(messages, streamingId);
       final result = <TranscriptMessage>[];
       for (var i = 0; i < messages.length; i++) {
         final message = messages[i];
         if (message.role == 'tool') continue;
         if (TranscriptTurnClassifier.isToolResultOnlyMessage(message)) continue;
         if (message.messageId != null && message.messageId == streamingId) {
+          continue;
+        }
+        if (liveCoverage != null &&
+            i > liveCoverage.turnStartIndex &&
+            liveCoverage.covers(message)) {
           continue;
         }
 
