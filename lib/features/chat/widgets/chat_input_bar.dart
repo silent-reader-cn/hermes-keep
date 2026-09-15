@@ -117,6 +117,60 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     }
   }
 
+  /// 自动打开弹窗前等待本页入场转场播完的兜底超时。
+  ///
+  /// 转场时长见 `HermesPageRoute.transitionDuration`（300ms）；超时仅为防止
+  /// 「动画永不完成」把自动打开整个吞掉，正常路径一律由 completed 触发。
+  static const Duration _entranceTransitionTimeout = Duration(
+    milliseconds: 600,
+  );
+
+  /// 等待本页入场转场（`HermesPageRoute` 300ms 滑动）播完。
+  ///
+  /// #115 根因：弹层定位在 `showAdaptivePopover` 调用瞬间一次性快照锚点
+  /// RenderBox 坐标（`adaptive_popover.dart` 无 LayerLink 跟随，弹层插入根
+  /// Overlay 不随页面平移），若自动打开抢在转场半程触发，弹窗会永久冻结在
+  /// 「半程」指示器坐标上（宽屏被 clamp 到屏幕右缘）。故自动打开路径必须先等
+  /// 页面静止。无动画 / 已完成（`home:` 首屏 `didAdd` 即 upperBound）→ 立即返回。
+  Future<void> _awaitEntranceTransition() {
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || animation.isCompleted) {
+      return Future<void>.value();
+    }
+    final completer = Completer<void>();
+    void onStatusChanged(AnimationStatus status) {
+      if (status != AnimationStatus.completed || completer.isCompleted) {
+        return;
+      }
+      completer.complete();
+    }
+
+    animation.addStatusListener(onStatusChanged);
+    return completer.future
+        .timeout(_entranceTransitionTimeout, onTimeout: () {})
+        .whenComplete(() => animation.removeStatusListener(onStatusChanged))
+        .then((_) => _settleAfterTransition());
+  }
+
+  /// 转场状态置位后，再等两帧绘制完成。
+  ///
+  /// 实测（widget 用例探针）：动画 `value` 到 1.0 的那一帧 status 仍是
+  /// `forward`，`completed` 在下一帧 tick 阶段才置位，而 **status 置位瞬间的
+  /// 渲染树几何仍是两帧前的**——直接取锚点会残留约 53px 的滑动位移。等两帧结束
+  /// 可确保页面已绘制在最终静止坐标上。
+  Future<void> _settleAfterTransition() async {
+    await WidgetsBinding.instance.endOfFrame;
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  /// 自动打开路径：等入场转场播完后再弹（#115）。手动点按指示器不走此路径，
+  /// 保持零延迟。
+  Future<void> _autoOpenContextPopover() async {
+    await _awaitEntranceTransition();
+    if (!mounted) return;
+    await _showContextPopover();
+  }
+
   void _tryAutoOpenContextPopover() {
     if (!_pendingAutoOpen || !mounted) return;
     final snapshot = ref
@@ -124,7 +178,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         .contextWindowSnapshot;
     if (snapshot == null) return;
     _pendingAutoOpen = false;
-    unawaited(_showContextPopover());
+    unawaited(_autoOpenContextPopover());
   }
 
   /// 从本会话草稿存储恢复输入框（仅当输入框为空时，避免覆盖 prefill）。
@@ -201,7 +255,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         _pendingAutoOpen = false;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            unawaited(_showContextPopover());
+            // 等本页入场转场播完再弹（#115），避免锚点取到滑动半程坐标。
+            unawaited(_autoOpenContextPopover());
           }
         });
       }
