@@ -141,10 +141,12 @@ jobs:
   # 于是「删测试换绿」「新增一大片没人测的代码」都能安静地进 main。
   #
   # 两处刻意设计：
-  #  1) 测试步骤 continue-on-error：analyze-test 上有一批已知的 Linux 平台性失败
-  #     （另立条目追踪），会让 `flutter test` 非零退出，但 lcov.info 仍然完整生成。
-  #     覆盖率结论与「测试是否全绿」是两件事，不该互相掩盖——Linux 测试修复后
-  #     应删除该行，让两者都硬失败。
+  #  1) 测试步骤**不再** continue-on-error：analyze-test 上那批 Linux 平台性失败
+  #     已修复（2026-09-15 实测 analyze-test 与 fake-gateway 均绿），故让
+  #     `flutter test` 硬失败——覆盖率结论与「测试是否全绿」不该互相掩盖。
+  #  1b) --tolerance 0.5 有实测依据：同一次提交在 Windows 跑 80.73%、
+  #     Linux（CI）跑 80.68%，可统计行数两端一致（39048），观测差异仅 0.05pp，
+  #     0.5 留了 10 倍安全边际（早先拍脑袋给的 1.0 过松）。
   #  2) 门禁脚本自己解析 lcov，只对「lib/ 行覆盖率」负责，口径与排除项集中写在
   #     tools/coverage_summary.py 顶部：生成代码、以及**从未被任何测试加载**的
   #     源文件都要算进分母，否则删掉一个测试文件就能把数字刷上去。
@@ -165,7 +167,6 @@ jobs:
       - run: flutter pub get
 
       - name: Run tests with coverage
-        continue-on-error: true
         run: flutter test --coverage
 
       - name: Coverage gate
@@ -174,7 +175,7 @@ jobs:
             --lcov coverage/lcov.info \
             --check-unloaded \
             --baseline tools/coverage_baseline.json \
-            --tolerance 1.0 \
+            --tolerance 0.5 \
             --json coverage/summary.json
 
       - name: Upload coverage report
