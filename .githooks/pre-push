@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# .githooks/pre-push — 本地推前闸门
+#
+# 【为什么存在】
+# 1. 对照 CI 门禁：CI analyze-test 步骤对 info 级也退非零（本地 flutter analyze
+#    报出 prefer_single_quotes / prefer_const_constructors 等 info 即 exit 1）。
+# 2. 避免推完才发现红：最近两次 CI 红均为推完后才在远端暴露（例如 #128 遗留的
+#    prefer_const_constructors，或版本号兜底常量漂移被护栏打红）。
+# 3. 提效与分级保护：把格式化与静态检查搬到推送前拦截；对纯文档提交（无 .dart 改动）
+#    实现秒过放行；对有代码改动的推送，只对改动文件跑 format，全仓 analyze，
+#    并按启发式运行相关测试目录，避免每次推送等待 6 分钟全量测试。
+#
+# 【逃生阀】
+# - 环境变量：HERMES_SKIP_HOOKS=1 git push
+# - Git 自带：git push --no-verify
+# ==============================================================================
+
+# --- 逃生阀检查 ---------------------------------------------------------------
+if [ "${HERMES_SKIP_HOOKS:-0}" = "1" ]; then
+    echo "[pre-push] HERMES_SKIP_HOOKS=1 触发逃生阀：跳过所有推前检查直接放行。"
+    exit 0
+fi
+
+# 确保在仓库根目录执行
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$REPO_ROOT" ]; then
+    cd "$REPO_ROOT" || exit 1
+fi
+
+# --- 查找可执行工具 -----------------------------------------------------------
+resolve_dart() {
+    if [ -n "${DART_BIN:-}" ] && ([ -f "$DART_BIN" ] || command -v "$DART_BIN" >/dev/null 2>&1); then
+        echo "$DART_BIN"
+        return 0
+    fi
+    if command -v dart >/dev/null 2>&1; then
+        command -v dart
+        return 0
+    fi
+    for cand in \
+        "$HOME/flutter/bin/dart.bat" \
+        "${USERPROFILE:-}/flutter/bin/dart.bat" \
+        "C:/Users/Admin/flutter/bin/dart.bat" \
+        "$HOME/flutter/bin/dart" \
+        "C:/Users/Admin/flutter/bin/dart"; do
+        if [ -n "$cand" ] && [ -f "$cand" ]; then
+            echo "$cand"
+            return 0
+        fi
+    done
+    return 1
+}
+
+resolve_flutter() {
+    if [ -n "${FLUTTER_BIN:-}" ] && ([ -f "$FLUTTER_BIN" ] || command -v "$FLUTTER_BIN" >/dev/null 2>&1); then
+        echo "$FLUTTER_BIN"
+        return 0
+    fi
+    if command -v flutter >/dev/null 2>&1; then
+        command -v flutter
+        return 0
+    fi
+    for cand in \
+        "C:/tmp/f.bat" \
+        "$HOME/flutter/bin/flutter.bat" \
+        "${USERPROFILE:-}/flutter/bin/flutter.bat" \
+        "C:/Users/Admin/flutter/bin/flutter.bat" \
+        "$HOME/flutter/bin/flutter" \
+        "C:/Users/Admin/flutter/bin/flutter"; do
+        if [ -n "$cand" ] && [ -f "$cand" ]; then
+            echo "$cand"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# --- 读取 stdin 推送范围 ------------------------------------------------------
+# 格式: <local ref> <local sha> <remote ref> <remote sha>
+# remote sha 全 0 代表推送到新分支；local sha 全 0 代表删除远程分支
+ref_lines=()
+while IFS= read -r line; do
+    [ -n "$line" ] && ref_lines+=("$line")
+done
+
+all_changed_files=""
+
+if [ ${#ref_lines[@]} -eq 0 ]; then
+    # 手动触发或 stdin 为空时：尝试检测当前 HEAD 相对 origin/main 的改动
+    mb=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || true)
+    if [ -n "$mb" ]; then
+        all_changed_files=$(git diff --name-only --diff-filter=ACMR "${mb}..HEAD" 2>/dev/null || true)
+    else
+        all_changed_files=$(git diff --name-only --diff-filter=ACMR HEAD~1..HEAD 2>/dev/null || true)
+    fi
+else
+    for line in "${ref_lines[@]}"; do
+        read -r local_ref local_sha remote_ref remote_sha <<< "$line"
+
+        # 删除远程分支时跳过
+        if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+            continue
+        fi
+
+        diff_ok=0
+        changed=""
+
+        # 优先: git diff <remote_sha>..<local_sha>
+        if [ -n "$remote_sha" ] && [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+            if changed=$(git diff --name-only --diff-filter=ACMR "${remote_sha}..${local_sha}" 2>/dev/null); then
+                diff_ok=1
+            fi
+        fi
+
+        # remote_sha 全 0 (新分支) 或上述 diff 失败时，退化为与 origin/main 的 merge-base 比较
+        if [ $diff_ok -eq 0 ]; then
+            mb=$(git merge-base "$local_sha" origin/main 2>/dev/null || git merge-base "$local_sha" main 2>/dev/null || true)
+            if [ -n "$mb" ]; then
+                if changed=$(git diff --name-only --diff-filter=ACMR "${mb}..${local_sha}" 2>/dev/null); then
+                    diff_ok=1
+                fi
+            fi
+        fi
+
+        # 任一失败或变动为空时，退化为「检查全部改动」（包含工作区改动与未跟踪文件）而不是崩溃
+        if [ $diff_ok -eq 0 ] || [ -z "$changed" ]; then
+            wt_diff=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null || true)
+            wt_untracked=$(git ls-files --others --exclude-standard 2>/dev/null || true)
+            commit_diff=$(git diff-tree --no-commit-id --name-only -r "$local_sha" 2>/dev/null \
+                          || git diff --name-only --diff-filter=ACMR HEAD~1..HEAD 2>/dev/null \
+                          || true)
+            changed="$changed $wt_diff $wt_untracked $commit_diff"
+        fi
+
+        all_changed_files="$all_changed_files $changed"
+    done
+fi
+
+# --- 筛选改动的 .dart 文件 ----------------------------------------------------
+dart_files=()
+for f in $all_changed_files; do
+    case "$f" in
+        *.dart)
+            if [ -f "$f" ]; then
+                already_in=0
+                for d in "${dart_files[@]}"; do
+                    if [ "$d" = "$f" ]; then
+                        already_in=1
+                        break
+                    fi
+                done
+                if [ $already_in -eq 0 ]; then
+                    dart_files+=("$f")
+                fi
+            fi
+            ;;
+    esac
+done
+
+# 无 .dart 改动 → 立即通过（纯文档提交秒过）
+if [ ${#dart_files[@]} -eq 0 ]; then
+    echo "[pre-push] 推送范围无 .dart 文件改动，推前检查秒过。"
+    exit 0
+fi
+
+echo "[pre-push] 检测到 ${#dart_files[@]} 个 .dart 文件变动，进入本地闸门检查…"
+
+# --- 闸门 1: dart format（只拦「弄脏」，不拦「本来就脏」）-----------------------
+# 仓库里有 298/543 个 .dart 文件未格式化（Dart 3.7 起 formatter 换 tall style，存量
+# 是旧风格）。若硬性要求「改动文件必须格式洁净」，那么对任何一个存量文件做一行修改
+# 都会被逼夹带整篇重排：diff 失真、review 失效、与并行 worktree 的冲突面成倍放大。
+# 故规则定为**不许弄脏**：HEAD 本来就洁净的文件，改完必须仍洁净；本来就脏的只提醒。
+# 判据细节：dart format 对**不存在的路径也返回 0**，所以只以「git show HEAD:<file>
+# 成功且探针文件存在」为前提才认它的 0；否则一律视为「本来就脏」（提醒而非拦截）。
+# 另：探针文件必须落在原生可见路径且带 .dart 后缀（MSYS 的 /tmp 原生 dart 读不到）。
+DART_EXEC=$(resolve_dart || true)
+if [ -z "$DART_EXEC" ]; then
+    echo "[pre-push] 警告：未找到 dart 可执行文件，跳过 dart format 检查。"
+else
+    echo "[pre-push] [1/3] 检查 dart format（改动文件 ${#dart_files[@]} 个）..."
+    newly_dirty=()
+    pre_dirty=()
+    probe_dir=$(mktemp -d)
+    probe_dir_native=$(cygpath -w "$probe_dir" 2>/dev/null || echo "$probe_dir")
+    probe_idx=0
+    for f in "${dart_files[@]}"; do
+        if "$DART_EXEC" format --output=none --set-exit-if-changed "$f" >/dev/null 2>&1; then
+            continue
+        fi
+        probe_idx=$((probe_idx + 1))
+        probe_file="${probe_dir_native}\head_probe_${probe_idx}.dart"
+        probe_file_msys="${probe_dir}/head_probe_${probe_idx}.dart"
+        if git show "HEAD:$f" > "$probe_file_msys" 2>/dev/null && [ -s "$probe_file_msys" ]; then
+            if "$DART_EXEC" format --output=none --set-exit-if-changed "$probe_file" >/dev/null 2>&1; then
+                newly_dirty+=("$f")   # HEAD 洁净 → 改完变脏，拦截
+            else
+                pre_dirty+=("$f")     # HEAD 本就未格式化 → 只提醒
+            fi
+        else
+            pre_dirty+=("$f")         # 新增文件或取不到 HEAD 版本 → 只提醒
+        fi
+    done
+    rm -rf "$probe_dir"
+    if [ ${#newly_dirty[@]} -gt 0 ]; then
+        echo ""
+        echo "[pre-push] ❌ dart format 检查未通过：以下文件由「已格式化」变成「未格式化」。"
+        for f in "${newly_dirty[@]}"; do echo "    $f"; done
+        echo "[pre-push] 修复命令（可直接复制执行）："
+        echo "    $DART_EXEC format ${newly_dirty[*]}"
+        exit 1
+    fi
+    if [ ${#pre_dirty[@]} -gt 0 ]; then
+        echo "[pre-push] 提醒：以下文件在 HEAD 中本就未格式化（存量风格，不拦截；顺手 \`$DART_EXEC format <文件>\` 可逐步清理）："
+        for f in "${pre_dirty[@]}"; do echo "    $f"; done
+    fi
+    echo "[pre-push] ✅ [1/3] dart format 通过（无「弄脏」）。"
+fi
+
+# --- 闸门 2: flutter analyze --------------------------------------------------
+FLUTTER_EXEC=$(resolve_flutter || true)
+if [ -z "$FLUTTER_EXEC" ]; then
+    echo "[pre-push] 警告：未找到 flutter 可执行文件，跳过 flutter analyze 检查。"
+else
+    echo "[pre-push] [2/3] 运行 flutter analyze（全仓）..."
+    if ! "$FLUTTER_EXEC" analyze; then
+        echo ""
+        echo "[pre-push] ❌ flutter analyze 检查未通过！"
+        echo "[pre-push] 排查命令（可直接复制执行）："
+        echo "    $FLUTTER_EXEC analyze"
+        exit 1
+    fi
+    echo "[pre-push] ✅ [2/3] flutter analyze 零告警通过。"
+fi
+
+# --- 闸门 3: 启发式运行相关测试 -----------------------------------------------
+# 规则:
+# lib/core/x/... -> test/core/x/
+# lib/features/x/... -> test/features/x/
+# lib/app/x... -> test/app/
+test_candidates=()
+for f in "${dart_files[@]}"; do
+    norm_f=$(echo "$f" | tr '\\' '/')
+    case "$norm_f" in
+        lib/core/*/*)
+            sub=$(echo "$norm_f" | cut -d'/' -f3)
+            test_candidates+=("test/core/$sub/")
+            ;;
+        lib/core/*)
+            test_candidates+=("test/core/")
+            ;;
+        lib/features/*/*)
+            sub=$(echo "$norm_f" | cut -d'/' -f3)
+            test_candidates+=("test/features/$sub/")
+            ;;
+        lib/features/*)
+            test_candidates+=("test/features/")
+            ;;
+        lib/app/*)
+            test_candidates+=("test/app/")
+            ;;
+        test/core/*/*)
+            sub=$(echo "$norm_f" | cut -d'/' -f3)
+            test_candidates+=("test/core/$sub/")
+            ;;
+        test/core/*)
+            test_candidates+=("test/core/")
+            ;;
+        test/features/*/*)
+            sub=$(echo "$norm_f" | cut -d'/' -f3)
+            test_candidates+=("test/features/$sub/")
+            ;;
+        test/features/*)
+            test_candidates+=("test/features/")
+            ;;
+        test/app/*)
+            test_candidates+=("test/app/")
+            ;;
+        test/*)
+            if [ -f "$norm_f" ]; then
+                test_candidates+=("$norm_f")
+            fi
+            ;;
+    esac
+done
+
+# 过滤出存在的测试目标并去重
+test_targets=()
+for cand in "${test_candidates[@]}"; do
+    [ -z "$cand" ] && continue
+    if [ -d "$cand" ] || [ -f "$cand" ]; then
+        already_in=0
+        for t in "${test_targets[@]}"; do
+            if [ "$t" = "$cand" ]; then
+                already_in=1
+                break
+            fi
+        done
+        if [ $already_in -eq 0 ]; then
+            test_targets+=("$cand")
+        fi
+    fi
+done
+
+if [ -z "$FLUTTER_EXEC" ]; then
+    echo "[pre-push] 警告：未找到 flutter 可执行文件，跳过 flutter test 步骤。"
+elif [ ${#test_targets[@]} -eq 0 ]; then
+    echo "[pre-push] [3/3] 未命中相关测试目录，跳过测试步骤（默认不跑全量测试）。"
+else
+    echo "[pre-push] [3/3] 运行相关测试目录: ${test_targets[*]} …"
+    if ! "$FLUTTER_EXEC" test "${test_targets[@]}"; then
+        echo ""
+        echo "[pre-push] ❌ flutter test 未通过！"
+        echo "[pre-push] 复现排查命令（可直接复制执行）："
+        echo "    $FLUTTER_EXEC test ${test_targets[*]}"
+        exit 1
+    fi
+    echo "[pre-push] ✅ [3/3] 相关测试全部通过。"
+fi
+
+echo "[pre-push] 本地闸门全部通过，放行推送。"
+exit 0

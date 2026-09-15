@@ -258,3 +258,10 @@ python tools/fake_gateway/smoke_test.py
 - 目录明细（自动生成，勿手改）：`docs/REPO_MAP.md`（`python tools/gen_repo_map.py`）
 - 对外发布口径：`README.md` / `README.zh-CN.md` / `CHANGELOG.md` / `THIRD-PARTY-NOTICES.md`
 - 流水线：`.github/workflows/ci.yml`（四 job）
+
+## 13. 本地闸门（推前必须绿）
+
+- **安装**：`python tools/install_git_hooks.py`（设置 `core.hooksPath = .githooks`，幂等）。
+- **检查**：推前改动含 `.dart` 时依次跑 `dart format`（仅改动文件）、`flutter analyze`（全仓零告警含 info）、相关测试目录（启发式）；纯文档提交秒过。
+- **逃生阀**：`HERMES_SKIP_HOOKS=1 git push` 或 `git push --no-verify` 可直接跳过。
+

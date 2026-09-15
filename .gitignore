@@ -60,3 +60,7 @@ TODO.md
 /.todo/
 /TODO.md
 test/golden/failures/
+
+# Python
+__pycache__/
+

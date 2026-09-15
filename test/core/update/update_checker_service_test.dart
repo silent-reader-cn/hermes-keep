@@ -298,7 +298,7 @@ void main() {
 
       final result = await service.checkForUpdates(isManual: true);
 
-      // 兜底常量为 0.1.50 > v0.1.47 → 不应误报「发现新版本 v0.1.47」
+      // 兜底常量 appVersion > v0.1.47 → 不应误报「发现新版本 v0.1.47」
       expect(result.currentVersion, appVersion);
       expect(result.status, UpdateCheckStatus.upToDate);
       expect(result.hasUpdate, isFalse);
