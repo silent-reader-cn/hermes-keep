@@ -646,6 +646,12 @@ class LocalNotificationsTurnNotificationService
 
   @override
   Future<void> clearAll() async {
+    // 必须先初始化插件（与 clearDownloadProgress / requestPermission 等同
+    // 类方法一致）：`cancelAll` 在未初始化时抛
+    // `Bad state: Flutter Local Notifications must be initialized before use`，
+    // 该异常被下方 catch 吞掉 → 清除通知静默失效，旧通知残留在通知栏。
+    // 触发路径：App 回到前台时 notification_lifecycle_observer 自动调用本方法。
+    await _ensureInitialized();
     try {
       await _plugin.cancelAll();
       DiagnosticsService.instance.log(

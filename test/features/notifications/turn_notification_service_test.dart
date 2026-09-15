@@ -359,6 +359,24 @@ void main() {
         await service.clearAll();
         verify(() => plugin.cancelAll()).called(1);
       });
+
+      test('未初始化时先初始化插件再取消（回归：cancelAll 抛 must be initialized）',
+          () async {
+        // 触发路径：App 回到前台时 notification_lifecycle_observer 直接调
+        // clearAll，此时插件可能尚未初始化。修复前 cancelAll 抛
+        // `Bad state: Flutter Local Notifications must be initialized
+        // before use`，异常被 catch 吞掉 → 通知清除静默失效。
+        await service.clearAll();
+        verify(
+          () => plugin.initialize(
+            settings: any(named: 'settings'),
+            onDidReceiveNotificationResponse: any(
+              named: 'onDidReceiveNotificationResponse',
+            ),
+          ),
+        ).called(1);
+        verify(() => plugin.cancelAll()).called(1);
+      });
     });
 
     group('点击通知回调', () {
