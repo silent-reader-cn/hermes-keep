@@ -22,6 +22,7 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
     this.brightness = Brightness.light,
     this.compactHeader = false,
     this.searchField,
+    this.onTitleTap,
   });
 
   /// 顶部安全区高度（状态栏），由页面在 build 时以
@@ -53,6 +54,12 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   /// 紧凑模式下的搜索框组件（桌面端并入单行头部）。
   final Widget? searchField;
+
+  /// 单击标题回调（#128 窄屏「点击大标题 = 点击右侧 ▾」）。
+  ///
+  /// 仅在非紧凑模式且确有 [titleTrailing]（▾）时由页面接线；为 `null` 时
+  /// 标题不可点（行为与改动前一致）。
+  final VoidCallback? onTitleTap;
 
   /// 收起态导航栏高度（对齐 iOS `_kNavBarPersistentHeight`）。
   static const double barHeight = 44.0;
@@ -102,7 +109,42 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
       oldDelegate.topPadding != topPadding ||
       oldDelegate.brightness != brightness ||
       oldDelegate.compactHeader != compactHeader ||
-      oldDelegate.searchField != searchField;
+      oldDelegate.searchField != searchField ||
+      oldDelegate.onTitleTap != onTitleTap;
+
+  /// 收起态中标题（17pt 居左，随展开进度淡出）。
+  Widget _collapsedTitleLabel(double collapsed, Color labelColor) {
+    return Opacity(
+      opacity: collapsed,
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          color: labelColor,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  /// 展开态大标题（34pt 居左，随展开进度淡入）。
+  Widget _largeTitleLabel(double progress, Color labelColor) {
+    return Opacity(
+      opacity: progress,
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 34,
+          fontWeight: FontWeight.w700,
+          color: labelColor,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
 
   /// 展开进度：1 = 完全展开（大标题可见），0 = 完全收起。
   double _expandProgress(double shrinkOffset) {
@@ -232,40 +274,30 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
         // 背景：固定不透明主题 bar 底色（不随滚动变灰/透明）。
         ColoredBox(color: barColor),
         // 收起态中标题（左对齐）。
+        // #128：点击标题 = 点击右侧 ▾（打开快捷导航下拉）；未接线时保持原样
+        // （不加 GestureDetector，命中行为零变化）。
         Positioned(
           left: 20,
           top: collapsedTitleCenterY - 12,
-          child: Opacity(
-            opacity: collapsed,
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: labelColor,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+          child: onTitleTap == null
+              ? _collapsedTitleLabel(collapsed, labelColor)
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onTitleTap,
+                  child: _collapsedTitleLabel(collapsed, labelColor),
+                ),
         ),
         // 大标题（左对齐，紧贴状态栏，随滚动上移淡出）。
         Positioned(
           left: 20,
           top: largeTitleTop,
-          child: Opacity(
-            opacity: progress,
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 34,
-                fontWeight: FontWeight.w700,
-                color: labelColor,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+          child: onTitleTap == null
+              ? _largeTitleLabel(progress, labelColor)
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onTitleTap,
+                  child: _largeTitleLabel(progress, labelColor),
+                ),
         ),
         // 紧贴标题右侧的尾随组件（如窄屏快捷导航下拉按钮 ▾），随展开/收起平滑过渡。
         if (titleTrailing != null)

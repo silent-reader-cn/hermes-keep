@@ -72,6 +72,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   final ScrollController _scrollController = ScrollController();
   Timer? _searchDebounce;
 
+  /// 窄屏「点击大标题 = 点击 ▾」的请求通道（#128）。
+  ///
+  /// 「会话」大标题由 [SessionListHeaderDelegate] 自绘，触达不了
+  /// [NarrowNavigationDropdownButton] 内部状态，故由页面持有通道：
+  /// 标题 onTap → 自增 → ▾ 打开同一个快捷导航下拉（锚点仍是 ▾）。
+  final ValueNotifier<int> _narrowNavOpenSignal = ValueNotifier<int>(0);
+
   // FAB 悬浮加号长按工作区滑选状态与弹层
   OverlayEntry? _fabWorkspaceOverlayEntry;
   Timer? _fabLongPressTimer;
@@ -94,6 +101,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     _searchDebounce?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
+    _narrowNavOpenSignal.dispose();
     super.dispose();
   }
 
@@ -153,6 +161,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                         : null,
                     titleTrailing: !isWide && !isSearchMode
                         ? _buildNarrowNavigationAction()
+                        : null,
+                    // #128：窄屏点击「会话」大标题（及收起态中标题）= 点击 ▾；
+                    // 条件与 titleTrailing 完全一致（无 ▾ 则不接线、点击无效）。
+                    onTitleTap: !isWide && !isSearchMode
+                        ? _requestNarrowNavMenu
                         : null,
                     actions: [
                       if (!isSearchMode) _buildFilterAction(state),
@@ -298,10 +311,21 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   /// 头部窄屏快捷导航下拉按钮（大标题右侧向下箭头，点击展开 5 个功能入口）。
+  ///
+  /// #128：透传打开通道 —— 点击「会话」大标题即视同点击本按钮。
   Widget _buildNarrowNavigationAction() {
-    return const NarrowNavigationDropdownButton(
-      buttonKey: ValueKey('session-list-narrow-nav'),
+    return NarrowNavigationDropdownButton(
+      buttonKey: const ValueKey('session-list-narrow-nav'),
+      openSignal: _narrowNavOpenSignal,
     );
+  }
+
+  /// 大标题（含收起态中标题）点击 → 请求打开窄屏快捷导航下拉（#128）。
+  ///
+  /// 以实例方法 tear-off 传给 [SessionListHeaderDelegate]：引用稳定，
+  /// 不会让 `shouldRebuild` 因闭包身份每次 build 都判真而重建头部。
+  void _requestNarrowNavMenu() {
+    _narrowNavOpenSignal.value = _narrowNavOpenSignal.value + 1;
   }
 
   /// 头部筛选入口按钮（「会话」右侧向下箭头，点击展开筛选弹层）。

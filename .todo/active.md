@@ -126,3 +126,51 @@
 - [x] 用例 15「门控：阈值内不抢跑拉取」
 - [x] `clarify_lifecycle_test.dart` 15 例全绿
 - [ ] 主人真机复验：从系统通知点回 → 选澄清 → agent 续跑应正常逐字更新；若仍出现静止，诊断日志应出现 `chat_stall_guard` 兜底记录
+
+## #128 窄屏点击大标题 = 点击右侧快捷导航 ▾
+
+**分类**：方向（交互一致性）　**状态**：代码已交付 @ce49f39（待主人真机复验）　**发现**：2026-09-15（主人截图报告）
+
+### 现象（现状 vs 预期）
+- **现状**：窄屏（width < 900）各页大标题右侧的 ▾（`NarrowNavigationDropdownButton`，44×44 热区）是唯一入口；点击标题文字「会话」等**无任何反应**，必须精准点到那个小三角。
+- **预期**：点击大标题文字 = 点击它右侧的 ▾（打开同一个快捷导航下拉菜单，弹层锚点与位置不变）。滚动后收起态的中标题同样可点。
+
+### 位置（源码行号）
+| 角色 | 文件 | 关键行 |
+|---|---|---|
+| 会话列表页头部（基准） | `lib/features/session_list/session_list_header.dart` | 大标题 253-269、收起态中标题 235-251、▾ 271-276 |
+| 其他功能页共用头部 | `lib/app/widgets/large_title_sliver_header.dart` | 大标题 300-329、收起态中标题 244-296、▾ 334-345、`_wrapTitle` 126-133 |
+| 窄屏 ▾ 落地处 | `lib/app/widgets/adaptive_sliver_navigation_bar.dart` | 116-118（`const NarrowNavigationDropdownButton()`） |
+| ▾ 组件（打开逻辑） | `lib/app/widgets/narrow_navigation_dropdown.dart` | `_openMenu` 45-106、build 108-127 |
+| 会话页自建 ▾ | `lib/features/session_list/session_list_page.dart` | 302 |
+| 双击回顶（唯一使用者） | `lib/features/settings/settings_page.dart` | 94（`onTitleDoubleTap: _scrollToTop`） |
+
+覆盖页面：`AdaptiveSliverNavigationBar` 全部窄屏使用者 —— tasks / kanban / workspaces / workspace / skills / insights / memory / git / settings / session_list（共 10 处入口）。
+
+### 实现要点
+1. 新增「打开请求」通道：`NarrowNavigationDropdownButton` 增加可选 `Listenable openSignal`（页面/导航栏持有的 `ValueNotifier<int>`），监听后调用既有 `_openMenu`；不改弹层锚点（仍在 ▾）。
+2. `AdaptiveSliverNavigationBar` 改 StatefulWidget 持有该 notifier（9 个页面零改动），窄屏把 `onTitleTap` 传给 delegate；`showNarrowNavigationDropdown == false` 的页面不接线（点击仍无效）。
+3. 两个 delegate 各增 `onTitleTap`：`_wrapTitle` 同时挂 `onTap`（打开菜单）与既有 `onDoubleTap`（回顶）。**主人拍板：保留双击回顶，单击因双击判定窗口延迟约 0.3s，全页面一致。**
+4. 热区 = 标题文字盒自然宽（展开态 34pt 行 / 收起态 17pt 行），**不含**标题左侧 20pt 留白与右上角 actions 区（防误触、防抢按钮点击）；仅注册 tap 手势，不影响滚动手势竞技场。
+5. 宽屏（≥ 900）与横屏（无大标题行）行为不变。
+
+### 交付实现（2026-09-15）
+| 文件 | 改动 |
+|---|---|
+| `lib/app/widgets/narrow_navigation_dropdown.dart` | 新增 `Listenable? openSignal`：被通知即等同点击 ▾，复用同一 `_openMenu`/锚点；`initState`/`didUpdateWidget`/`dispose` 全生命周期管监听 |
+| `lib/app/widgets/adaptive_sliver_navigation_bar.dart` | 改 StatefulWidget 持有 `ValueNotifier<int>` 通道（9 个页面零改动）；窄屏把 `onTitleTap` 接线给 delegate，`titleTrailing` 传 `openSignal` |
+| `lib/app/widgets/large_title_sliver_header.dart` | 新增 `onTitleTap`（含 `shouldRebuild` 比较）；`_wrapTitle` 同时挂 `onTap` + `onDoubleTap` |
+| `lib/features/session_list/session_list_header.dart` | 新增 `onTitleTap`；大标题 / 收起态中标题抽出 `_largeTitleLabel` / `_collapsedTitleLabel`，未接线时不加 GestureDetector（命中零变化） |
+| `lib/features/session_list/session_list_page.dart` | 页面持有通道 + `_requestNarrowNavMenu`（tear-off 稳定，避免 delegate 每帧 rebuild）；条件与 ▾ 同源 `!isWide && !isSearchMode` |
+| `test/app/narrow_title_tap_test.dart` | 新增 9 例（含 1 源码接线护栏） |
+
+### 验收
+- [x] 窄屏会话列表页：点「会话」→ 弹层与点 ▾ 完全一致（同 items、同位置、同 key）
+- [x] 其余功能页同断言（`AdaptiveSliverNavigationBar` 头部路径，测试覆盖同组件）
+- [x] 滚动后收起态中标题可点（同菜单）
+- [x] 设置页：单击标题 → 菜单（≤ 双击窗口内到位）；双击标题 → 回顶且**不**弹菜单
+- [x] `showsAny == false`（无 ▾）时点标题无弹层；`showNarrowNavigationDropdown: false` 同理
+- [x] 宽屏（≥ 900）零变化；`session_title_alignment_test` 几何不回归
+- [x] 反向验证：禁掉 `onTap: onTitleTap` 3 处 → 5 例变红（负向用例仍绿），护栏非空转
+- [x] `flutter analyze` 零告警 + 全量 `flutter test` 3002 通过（金照零变更）
+- [ ] 主人真机复验：窄屏点「会话」/「技能」/「设置」等标题都能弹出右侧 ▾ 的菜单

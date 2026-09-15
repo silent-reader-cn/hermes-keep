@@ -22,6 +22,7 @@ class NarrowNavigationDropdownButton extends ConsumerStatefulWidget {
     this.buttonKey = const ValueKey('narrow-nav-dropdown'),
     this.icon = CupertinoIcons.chevron_down,
     this.iconSize = 20.0,
+    this.openSignal,
   });
 
   /// 按钮组件的 Key（用于测试定位）。
@@ -33,6 +34,14 @@ class NarrowNavigationDropdownButton extends ConsumerStatefulWidget {
   /// 图标大小。
   final double iconSize;
 
+  /// 外部「打开请求」通道（`Listenable` 语义：被通知即等同点击本按钮）。
+  ///
+  /// 供窄屏大标题点击使用（#128：点击标题 = 点击 ▾）：标题所在的 header
+  /// delegate 触达不到本组件内部状态，改由持有方（导航栏 / 会话列表页）创建
+  /// `ValueNotifier`，标题被点击即通知本组件打开同一个下拉菜单；弹层锚点仍是
+  /// 本按钮的 [_anchorKey]，位置与直接点击 ▾ 完全一致。
+  final Listenable? openSignal;
+
   @override
   ConsumerState<NarrowNavigationDropdownButton> createState() =>
       _NarrowNavigationDropdownButtonState();
@@ -41,6 +50,35 @@ class NarrowNavigationDropdownButton extends ConsumerStatefulWidget {
 class _NarrowNavigationDropdownButtonState
     extends ConsumerState<NarrowNavigationDropdownButton> {
   final GlobalKey _anchorKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.openSignal?.addListener(_handleOpenSignal);
+  }
+
+  @override
+  void didUpdateWidget(covariant NarrowNavigationDropdownButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.openSignal != widget.openSignal) {
+      oldWidget.openSignal?.removeListener(_handleOpenSignal);
+      widget.openSignal?.addListener(_handleOpenSignal);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.openSignal?.removeListener(_handleOpenSignal);
+    super.dispose();
+  }
+
+  /// 外部（大标题 / 中标题点击）请求打开下拉：与点击 ▾ 同一入口、同一锚点。
+  void _handleOpenSignal() {
+    if (!mounted) return;
+    final visibility = ref.read(sessionEntryVisibilityProvider);
+    if (!visibility.showsAny) return;
+    unawaited(_openMenu(context, AppLocalizations.of(context), visibility));
+  }
 
   Future<void> _openMenu(
     BuildContext context,

@@ -31,6 +31,7 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
     this.padding,
     this.bottom,
     this.onTitleDoubleTap,
+    this.onTitleTap,
     this.portrait = true,
   });
 
@@ -66,6 +67,12 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   /// 双击标题回调（回顶）。
   final VoidCallback? onTitleDoubleTap;
+
+  /// 单击标题回调（#128 窄屏「点击大标题 = 点击右侧 ▾」）。
+  ///
+  /// 与 [onTitleDoubleTap] 同时存在时，单击需等双击判定窗口（约 0.3s）后才触发
+  /// —— 主人拍板的取舍：保留双击回顶，全页面行为一致。
+  final VoidCallback? onTitleTap;
 
   /// 是否竖屏大标题模式（对齐系统行为：`CupertinoSliverNavigationBar` 在
   /// 横屏下 largeTitle 扩展高度为 0，标题以 17pt 中标题呈现）。
@@ -114,6 +121,7 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
       oldDelegate.padding != padding ||
       oldDelegate.bottom != bottom ||
       oldDelegate.onTitleDoubleTap != onTitleDoubleTap ||
+      oldDelegate.onTitleTap != onTitleTap ||
       oldDelegate.portrait != portrait;
 
   /// 展开进度：1 = 完全展开（大标题可见），0 = 完全收起。
@@ -124,9 +132,12 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   Widget _wrapTitle(Widget child) {
-    if (onTitleDoubleTap == null) return child;
+    if (onTitleTap == null && onTitleDoubleTap == null) return child;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      // 单击 = 点击右侧 ▾（打开快捷导航）；双击 = 回顶。两者共存时单击
+      // 由双击判定窗口延迟触发（Flutter gesture arena 语义，主人已拍板）。
+      onTap: onTitleTap,
       onDoubleTap: onTitleDoubleTap,
       child: child,
     );
