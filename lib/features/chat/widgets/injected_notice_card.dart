@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show SelectableText;
 
 import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/utils/injected_message.dart';
 import '../../../l10n/app_localizations.dart';
@@ -36,16 +37,31 @@ class InjectedNoticeCard extends StatelessWidget {
       LightSurfaces.cardBorder,
       dark: CupertinoColors.separator,
     );
-    final bg = LightSurfaces.resolve(
-      context,
-      LightSurfaces.card,
-      dark: CupertinoColors.secondarySystemBackground,
-    );
     final labelColor = CupertinoColors.label.resolveFrom(context);
     final secondaryLabel = LightSurfaces.resolve(
       context,
       LightSurfaces.textSecondary,
       dark: CupertinoColors.secondaryLabel,
+    );
+    // 失败态委派告警复用工具卡同一套红（`tool_call_card.dart`：statusRedText +
+    // tintError），让「兄弟还在跑、这个已经死了」在滚动里一眼可辨；
+    // 其余类型维持淡色中性（spec §3.2「不为每类另起一套」）。
+    final failed = kind == InjectedNoticeKind.subagentTaskFailed;
+    final accent = failed
+        ? LightSurfaces.resolve(
+            context,
+            statusRedText.resolveFrom(context),
+            dark: CupertinoColors.systemRed,
+          )
+        : secondaryLabel;
+    final bg = LightSurfaces.resolve(
+      context,
+      failed ? LightSurfaces.tintError : LightSurfaces.card,
+      dark: failed
+          ? CupertinoColors.systemRed
+                .resolveFrom(context)
+                .withValues(alpha: 0.08)
+          : CupertinoColors.secondarySystemBackground,
     );
     final codeBg = LightSurfaces.resolve(
       context,
@@ -72,7 +88,7 @@ class InjectedNoticeCard extends StatelessWidget {
                 header: true,
                 child: Row(
                   children: [
-                    Icon(_iconForKind(kind), size: 13, color: secondaryLabel),
+                    Icon(_iconForKind(kind), size: 13, color: accent),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -83,7 +99,7 @@ class InjectedNoticeCard extends StatelessWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.04 * 11,
-                          color: secondaryLabel,
+                          color: accent,
                         ),
                       ),
                     ),
@@ -145,6 +161,11 @@ class InjectedNoticeCard extends StatelessWidget {
       case InjectedNoticeKind.backgroundProcessAggregated:
       case InjectedNoticeKind.subagentAggregated:
       case InjectedNoticeKind.overflow:
+        return CupertinoIcons.command;
+      case InjectedNoticeKind.subagentTaskFailed:
+        return CupertinoIcons.exclamationmark_triangle;
+      case InjectedNoticeKind.subagentBatchComplete:
+      case InjectedNoticeKind.subagentComplete:
         return CupertinoIcons.command;
       case InjectedNoticeKind.skill:
       case InjectedNoticeKind.skillBundle:

@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show SelectableText;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
+import 'package:hermes_ui/app/theme/status_colors.dart';
 import 'package:hermes_ui/core/models/chat_message.dart';
 import 'package:hermes_ui/core/utils/injected_message.dart';
 import 'package:hermes_ui/features/chat/widgets/injected_notice_card.dart';
@@ -72,11 +74,7 @@ void main() {
     testWidgets('展开态：正文进 SelectableText（挂 #81 右键菜单抑制器）+ 400 上限 + 「收起」', (
       tester,
     ) async {
-      await _pumpCard(
-        tester,
-        message: _msg(backgroundContent),
-        expanded: true,
-      );
+      await _pumpCard(tester, message: _msg(backgroundContent), expanded: true);
 
       expect(find.text(backgroundSummaryUpper), findsOneWidget);
       expect(find.text('收起'), findsOneWidget);
@@ -103,11 +101,7 @@ void main() {
     });
 
     testWidgets('content 为 null 时正文渲染空串（?? 兜底）', (tester) async {
-      await _pumpCard(
-        tester,
-        message: _msg(null),
-        expanded: true,
-      );
+      await _pumpCard(tester, message: _msg(null), expanded: true);
 
       expect(
         tester.widget<SelectableText>(find.byType(SelectableText)).data,
@@ -180,6 +174,21 @@ void main() {
         CupertinoIcons.command,
       ),
       (
+        'subagentTaskFailed → exclamationmark_triangle',
+        '[ASYNC DELEGATION TASK FAILED — deleg_841a0035, task 1/3]',
+        CupertinoIcons.exclamationmark_triangle,
+      ),
+      (
+        'subagentBatchComplete → command',
+        '[ASYNC DELEGATION BATCH COMPLETE — deleg_b1c2d3e4f5]',
+        CupertinoIcons.command,
+      ),
+      (
+        'subagentComplete → command',
+        '[ASYNC DELEGATION COMPLETE — deleg_y]',
+        CupertinoIcons.command,
+      ),
+      (
         'overflow → command',
         '[IMPORTANT: Background process proc_x overflow watch_disabled',
         CupertinoIcons.command,
@@ -249,11 +258,7 @@ void main() {
         '[System note: The following is recalled memory context, NOT new user input.]',
         CupertinoIcons.info_circle,
       ),
-      (
-        'none（普通正文）→ command',
-        'hello world',
-        CupertinoIcons.command,
-      ),
+      ('none（普通正文）→ command', 'hello world', CupertinoIcons.command),
     ];
 
     for (final (name, content, icon) in cases) {
@@ -270,6 +275,115 @@ void main() {
       });
     }
   });
+
+  // 2026-09-16 新增：异步委派失败告警卡（spec §10）。
+  group('InjectedNoticeCard 失败态委派告警', () {
+    const failedContent =
+        '[ASYNC DELEGATION TASK FAILED — deleg_841a0035, task 1/3]';
+    const failedFull =
+        '[ASYNC DELEGATION TASK FAILED — deleg_841a0035, task 1/3]\n'
+        'One subagent in a background fan-out you dispatched has failed.\n'
+        'Status: failed   Duration: 533.88s\n'
+        'Error: HTTP 500: EOF\n'
+        'Live transcript: C:/tmp/live/task-0.log';
+
+    Future<void> pumpAsync(
+      WidgetTester tester, {
+      required String content,
+      required bool expanded,
+      Brightness brightness = Brightness.light,
+    }) async {
+      await tester.pumpWidget(
+        CupertinoApp(
+          locale: const Locale('zh'),
+          supportedLocales: const [Locale('zh'), Locale('en')],
+          localizationsDelegates: _delegates,
+          theme: CupertinoThemeData(brightness: brightness),
+          home: CupertinoPageScaffold(
+            child: InjectedNoticeCard(
+              message: _msg(content),
+              expanded: expanded,
+              onToggle: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('折叠态标题 = 本地化摘要（渲染为大写），并挂到语义标签', (tester) async {
+      await pumpAsync(tester, content: failedContent, expanded: false);
+
+      expect(find.text('委派任务 DELEG_841A0035 · 任务 1/3 失败'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('委派任务 deleg_841a0035 · 任务 1/3 失败'),
+        findsWidgets,
+      );
+      // 折叠时正文不构建
+      expect(find.byType(SelectableText), findsNothing);
+    });
+
+    testWidgets('失败态图标与标题走红（复用工具卡 statusRedText）', (tester) async {
+      await pumpAsync(tester, content: failedContent, expanded: false);
+
+      final ctx = tester.element(find.byType(InjectedNoticeCard));
+      final expected = statusRedText.resolveFrom(ctx);
+      expect(
+        tester
+            .widget<Icon>(find.byIcon(CupertinoIcons.exclamationmark_triangle))
+            .color,
+        expected,
+      );
+      expect(
+        tester
+            .widget<Text>(find.text('委派任务 DELEG_841A0035 · 任务 1/3 失败'))
+            .style!
+            .color,
+        expected,
+      );
+    });
+
+    testWidgets('非失败类型不误染红（仍是中性次要色）', (tester) async {
+      await pumpAsync(tester, content: backgroundContent, expanded: false);
+
+      final ctx = tester.element(find.byType(InjectedNoticeCard));
+      final neutral = LightSurfaces.resolve(
+        ctx,
+        LightSurfaces.textSecondary,
+        dark: CupertinoColors.secondaryLabel,
+      );
+      expect(tester.widget<Icon>(find.byType(Icon)).color, neutral);
+    });
+
+    testWidgets('展开态正文 = 原始报文（Task/Status/Error/Transcript 四段原样可读）', (
+      tester,
+    ) async {
+      await pumpAsync(tester, content: failedFull, expanded: true);
+
+      final selectable = tester.widget<SelectableText>(
+        find.byType(SelectableText),
+      );
+      expect(selectable.data, failedFull);
+      expect(find.text('收起'), findsOneWidget);
+    });
+
+    testWidgets('深色模式失败态同样解析到红（动态色不写死）', (tester) async {
+      await pumpAsync(
+        tester,
+        content: failedContent,
+        expanded: false,
+        brightness: Brightness.dark,
+      );
+
+      final ctx = tester.element(find.byType(InjectedNoticeCard));
+      expect(
+        tester
+            .widget<Icon>(find.byIcon(CupertinoIcons.exclamationmark_triangle))
+            .color,
+        CupertinoColors.systemRed.resolveFrom(ctx),
+      );
+    });
+  });
 }
 
 /// 与上面用例表一一对应的 kind 期望值（显式列全，避免测试自我循环）。
@@ -283,6 +397,12 @@ InjectedNoticeKind _expectedKindFor(String content) {
       return InjectedNoticeKind.backgroundProcessAggregated;
     case '[IMPORTANT: Background subagent delegations completed: 3':
       return InjectedNoticeKind.subagentAggregated;
+    case '[ASYNC DELEGATION TASK FAILED — deleg_841a0035, task 1/3]':
+      return InjectedNoticeKind.subagentTaskFailed;
+    case '[ASYNC DELEGATION BATCH COMPLETE — deleg_b1c2d3e4f5]':
+      return InjectedNoticeKind.subagentBatchComplete;
+    case '[ASYNC DELEGATION COMPLETE — deleg_y]':
+      return InjectedNoticeKind.subagentComplete;
     case '[IMPORTANT: Background process proc_x overflow watch_disabled':
       return InjectedNoticeKind.overflow;
     case '[IMPORTANT: The user has invoked the "foo" skill':

@@ -175,3 +175,52 @@ bool _isInjectedNotice(String text) {
 - 用例包含 `[System: The previous response was cut off ...]`（network cut）中英文摘要断言，及 `gatewayRecovery / sessionReset / memoryRecall / codexNudge` 全覆盖。
 - `C:/tmp/f.bat analyze` 零告警，`C:/tmp/f.bat test` 全绿。
 
+## 10. 扩展：异步委派家族 `[ASYNC DELEGATION …]`（2026-09-16）
+
+> 背景（主人报告）：`[ASYNC DELEGATION TASK FAILED …]` 这类「后台扇出里某个子代理已经死了、兄弟还在跑」的提前告警，
+> 原先**完全不折叠**，以普通蓝色 user 气泡把整段英文报文（含 Task/Status/Error/Live transcript 四段）裸铺在聊天里，
+> 与真实用户输入混淆、且刷屏。本次把该家族三形态全部收进同一套折叠卡片。
+
+### 10.1 触发点（运行版源码，权威）
+
+| 形态 | 生成函数（`hermes-agent/tools/process_registry_notifications.py`） | 触发条件 |
+|---|---|---|
+| `TASK FAILED` | `_format_task_failure_notice()` L152 | `evt["task_failure_notice"] is True`（`tools/async_delegation.push_task_failure_notice`） |
+| `BATCH COMPLETE` | `_format_batch_delegation()` L171 | `evt["is_batch"]` 或 `results` 为 list |
+| `COMPLETE` | `_format_async_delegation()` L238 | 单条子代理收口（其余分支） |
+
+> 该前缀同时被 `agent/context_compressor.py` 的 `_synthetic_prefixes`（L901-905，含 `"[ASYNC DELEGATION"`）列为
+> producer-owned 合成行 —— 故检测用**整串前缀白名单**，无需关键词二次确认（现实输入不可能手打）。
+
+### 10.2 三形态与摘要
+
+| kind | 首行（实产，em dash `—`） | 摘要 zh | 摘要 en | 图标 |
+|---|---|---|---|---|
+| `subagentTaskFailed` | `[ASYNC DELEGATION TASK FAILED — deleg_841a0035, task 1/3]` | `委派任务 deleg_841a0035 · 任务 1/3 失败` | `Subagent deleg_841a0035 · task 1/3 failed` | `exclamationmark_triangle` |
+| `subagentBatchComplete` | `[ASYNC DELEGATION BATCH COMPLETE — deleg_x]` | `委派任务 deleg_x · 批次完成` | `Subagent deleg_x · batch complete` | `command` |
+| `subagentComplete` | `[ASYNC DELEGATION COMPLETE — deleg_y]` | `委派任务 deleg_y · 已完成` | `Subagent deleg_y · completed` | `command` |
+
+- 摘要骨架对齐后台进程卡：`<类型别名> <id> · <状态>`（对照 `后台进程 PROC_x · 已完成 (EXIT 0)`）。
+- **分类必须在 `background subagent` 兜底之前**：`COMPLETE` 形态的引导句 `A background subagent you dispatched earlier…`
+  会被旧兜底吞成 `subagentAggregated`（旧行为摘要退化为 `[ASYNC DELEGATION COMPLETE — deleg_y` 原始串），必须先行判定。
+- 容错：分隔符认 `—` / `–` / `-`（连字符与 en dash 历史兼容）；id >22 字符按「前 10…后 8」中段省略（与 sid 同规则，
+  抽 `_elideMiddle` 双族复用）；首行不符合实产模板时回退首行截断（≤64）且**去掉孤立 `[`**（`_firstLineStripped`
+  只认 `[IMPORTANT:`/`[SYSTEM:` 前缀，对本族会留一个左括号）。
+
+### 10.3 失败态配色（唯一一处类型着色）
+
+- `subagentTaskFailed` 的图标与标题走红、卡片底色转错误色，**复用工具卡（`tool_call_card.dart`）同一套 token**：
+  浅色 `statusRedText` + `LightSurfaces.tintError`，深色 `CupertinoColors.systemRed` + 同色 8% alpha。
+- 其余所有 kind 维持中性次要色（`secondaryLabel` / `card` + `secondarySystemBackground`），不新增色板。
+- 理由：「兄弟还在跑、这个已经死了」是需要**立刻**被看见的告警，全族同款淡色会让失败与完成在滚动中不可区分；
+  同时沿用本 App 既有失败语义色，不引入第二套红。
+
+### 10.4 验收增量
+
+- `test/core/utils/injected_message_test.dart`：三形态检测/分类/中英摘要、id 省略、畸形首行回退、
+  `-`/`–` 分隔符容错、`[IMPORTANT: N background subagent delegations completed]` 仍归 `subagentAggregated`（防回归）。
+- `test/features/chat/injected_notice_card_extra_test.dart`：三形态图标分派 + 失败态折叠标题（大写渲染与语义标签）+
+  失败/中性配色断言（深浅双模式）+ 展开态正文原文一致性。
+- `C:/tmp/f.bat analyze` 零告警，`C:/tmp/f.bat test` 全绿。
+
+

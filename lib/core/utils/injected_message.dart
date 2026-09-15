@@ -13,6 +13,15 @@ enum InjectedNoticeKind {
   backgroundProcessWatch,
   backgroundProcessAggregated,
   subagentAggregated,
+
+  /// 异步委派：`[ASYNC DELEGATION TASK FAILED — {id}, task i/n]`（兄弟仍在跑时的提前告警）。
+  subagentTaskFailed,
+
+  /// 异步委派：`[ASYNC DELEGATION BATCH COMPLETE — {id}]`（扇出批量收口）。
+  subagentBatchComplete,
+
+  /// 异步委派：`[ASYNC DELEGATION COMPLETE — {id}]`（单个子代理收口）。
+  subagentComplete,
   overflow,
   cron,
   skill,
@@ -126,6 +135,23 @@ class InjectedMessage {
     caseSensitive: false,
   );
 
+  // 异步委派家族（producer-owned；`tools/process_registry_notifications.py`
+  // `_format_task_failure_notice` / `_format_batch_delegation` / `_format_async_delegation`）。
+  // 分隔符实产为 em dash `—`，历史/容错同时认 `-` 与 en dash。
+  static final RegExp _asyncDelegationPrefixRegExp = RegExp(
+    r'^\[\s*async delegation',
+    caseSensitive: false,
+  );
+  static final RegExp _leadingBracketRegExp = RegExp(r'^\[\s*');
+  static final RegExp _asyncTaskFailedRegExp = RegExp(
+    r'^\[\s*ASYNC DELEGATION TASK FAILED\s*[-\u2014\u2013]+\s*(\S+?)\s*,?\s*task\s*(\d+)\s*/\s*(\d+)\s*\]',
+    caseSensitive: false,
+  );
+  static final RegExp _asyncCompleteRegExp = RegExp(
+    r'^\[\s*ASYNC DELEGATION\s+(?:BATCH\s+)?COMPLETE\s*[-\u2014\u2013]+\s*(\S+?)\s*\]',
+    caseSensitive: false,
+  );
+
   static const Set<String> _sidBlacklist = <String>{
     'completed',
     'failed',
@@ -177,6 +203,10 @@ class InjectedMessage {
       // 除记忆/裸 nudge 外，其余注入均以 [ 开头
       return false;
     }
+    // 异步委派的三种形态均以 `[ASYNC DELEGATION` 整串前缀开口，且该前缀在
+    // `context_compressor._synthetic_prefixes` 里同列（producer-owned 合成行），
+    // 现实输入不可能手打 → 窄白名单直接收口，不参与关键词二次确认。
+    if (_asyncDelegationPrefixRegExp.hasMatch(lower)) return true;
     if (lower.startsWith('[important: background process')) return true;
     if (lower.startsWith('[important: you are running as a scheduled cron')) {
       return true;
@@ -320,6 +350,19 @@ class InjectedMessage {
       return InjectedNoticeKind.codexNudge;
     }
 
+    // 异步委派家族：必须在 `background subagent` 兜底之前判，否则
+    // `[ASYNC DELEGATION COMPLETE …]` 的引导句（"A background subagent you
+    // dispatched earlier…"）会把它吞进 subagentAggregated。
+    if (_asyncDelegationPrefixRegExp.hasMatch(lower)) {
+      if (lower.startsWith('[async delegation task failed')) {
+        return InjectedNoticeKind.subagentTaskFailed;
+      }
+      if (lower.startsWith('[async delegation batch complete')) {
+        return InjectedNoticeKind.subagentBatchComplete;
+      }
+      return InjectedNoticeKind.subagentComplete;
+    }
+
     if (lower.contains('background subagent delegations completed') ||
         lower.contains('background subagent')) {
       return InjectedNoticeKind.subagentAggregated;
@@ -348,8 +391,7 @@ class InjectedMessage {
         lower.contains('skill is auto loaded')) {
       return InjectedNoticeKind.skillAutoLoaded;
     }
-    if (lower.contains('the user has invoked the') &&
-        lower.contains('skill')) {
+    if (lower.contains('the user has invoked the') && lower.contains('skill')) {
       return InjectedNoticeKind.skill;
     }
     if (lower.contains('mcp servers have been reloaded')) {
@@ -380,10 +422,7 @@ class InjectedMessage {
   /// - Cron/MCP：固定标题
   /// - 新增 6+ 类型：本地化固定标题（网络中断续写/输出截断续写/网关已恢复/会话已重置等）
   /// - 兜底：首行去 `[IMPORTANT:` 前缀后 ≤48
-  static String extractSummary(
-    ChatMessage message, [
-    AppLocalizations? l10n,
-  ]) {
+  static String extractSummary(ChatMessage message, [AppLocalizations? l10n]) {
     final InjectedNoticeKind kind = classify(message);
     if (kind == InjectedNoticeKind.none) return '';
     final String raw = message.content ?? '';
@@ -397,6 +436,10 @@ class InjectedMessage {
       case InjectedNoticeKind.backgroundProcessAggregated:
       case InjectedNoticeKind.subagentAggregated:
         return _firstLineStripped(firstLine, 64);
+      case InjectedNoticeKind.subagentTaskFailed:
+      case InjectedNoticeKind.subagentBatchComplete:
+      case InjectedNoticeKind.subagentComplete:
+        return _asyncDelegationSummary(firstLine, kind, l10n);
       case InjectedNoticeKind.cron:
         return _cronTitle(l10n);
       case InjectedNoticeKind.mcp:
@@ -438,9 +481,6 @@ class InjectedMessage {
       final String lowerToken = rawSid.toLowerCase();
       if (!_sidBlacklist.contains(lowerToken)) {
         sid = rawSid;
-        if (sid.length > 22) {
-          sid = '${sid.substring(0, 10)}…${sid.substring(sid.length - 8)}';
-        }
       }
     }
 
@@ -479,10 +519,59 @@ class InjectedMessage {
     }
 
     final String baseTitle = _backgroundTitle(l10n);
-    final String sidPart = sid.isEmpty ? '' : ' $sid';
+    final String sidPart = sid.isEmpty ? '' : ' ${_elideMiddle(sid)}';
     final String exitPart = exitCode == null ? '' : ' (exit $exitCode)';
     return '$baseTitle$sidPart · $statusText$exitPart';
   }
+
+  /// 异步委派卡摘要：`<别名> <委派 id> · <状态>`（对齐后台进程卡的
+  /// `<类型> <sid> · <状态 (exit n)>` 骨架）。
+  static String _asyncDelegationSummary(
+    String firstLine,
+    InjectedNoticeKind kind,
+    AppLocalizations? l10n,
+  ) {
+    final String? id = _asyncDelegationId(firstLine, kind);
+    if (id == null) {
+      // 畸形首行（无 id/分隔符）兜底：`_firstLineStripped` 只认 [IMPORTANT:/[SYSTEM:
+      // 前缀，对本族会留下一个孤立 `[`，这里补一次去括号。
+      return _firstLineStripped(
+        firstLine,
+        64,
+      ).replaceFirst(_leadingBracketRegExp, '');
+    }
+
+    final String label = _subagentLabel(l10n);
+    final String head = '$label ${_elideMiddle(id)}';
+
+    if (kind == InjectedNoticeKind.subagentTaskFailed) {
+      final RegExpMatch? m = _asyncTaskFailedRegExp.firstMatch(firstLine);
+      final String index = m?.group(2) ?? '';
+      final String total = m?.group(3) ?? '';
+      if (index.isNotEmpty && total.isNotEmpty) {
+        return '$head · ${_taskFailedText(l10n, index, total)}';
+      }
+      return '$head · ${_statusTaskFailed(l10n)}';
+    }
+    if (kind == InjectedNoticeKind.subagentBatchComplete) {
+      return '$head · ${_statusBatchComplete(l10n)}';
+    }
+    return '$head · ${_statusCompleted(l10n)}';
+  }
+
+  /// 提取委派 id；首行不符合该 kind 的实产模板时返回 `null`（调用方回退截断）。
+  static String? _asyncDelegationId(String firstLine, InjectedNoticeKind kind) {
+    final RegExpMatch? m = kind == InjectedNoticeKind.subagentTaskFailed
+        ? _asyncTaskFailedRegExp.firstMatch(firstLine)
+        : _asyncCompleteRegExp.firstMatch(firstLine);
+    final String id = (m?.group(1) ?? '').trim();
+    return id.isEmpty ? null : id;
+  }
+
+  /// 长 id 中段省略（与后台进程 sid 同一规则，便于两族卡片视觉对齐）。
+  static String _elideMiddle(String id) => id.length > 22
+      ? '${id.substring(0, 10)}…${id.substring(id.length - 8)}'
+      : id;
 
   static String _skillSummary(
     String firstLine,
@@ -493,8 +582,9 @@ class InjectedMessage {
     final String? name = m?.group(1)?.trim();
     final String skillLabel = _skillLabel(l10n);
     if (name != null && name.isNotEmpty) {
-      final String suffix =
-          kind == InjectedNoticeKind.skillBundle ? ' bundle' : '';
+      final String suffix = kind == InjectedNoticeKind.skillBundle
+          ? ' bundle'
+          : '';
       return '$skillLabel · $name$suffix';
     }
     return _firstLineStripped(firstLine, 64);
@@ -597,6 +687,30 @@ class InjectedMessage {
     if (l10n == null) return 'exited';
     return l10n.isEnglish ? 'exited' : '已退出';
   }
+
+  static String _subagentLabel(AppLocalizations? l10n) {
+    if (l10n == null) return 'Subagent';
+    return l10n.isEnglish ? 'Subagent' : '委派任务';
+  }
+
+  static String _statusTaskFailed(AppLocalizations? l10n) {
+    if (l10n == null) return 'task failed';
+    return l10n.isEnglish ? 'task failed' : '任务失败';
+  }
+
+  static String _statusBatchComplete(AppLocalizations? l10n) {
+    if (l10n == null) return 'batch complete';
+    return l10n.isEnglish ? 'batch complete' : '批次完成';
+  }
+
+  static String _taskFailedText(
+    AppLocalizations? l10n,
+    String index,
+    String total,
+  ) {
+    if (l10n == null) return 'task $index/$total failed';
+    return l10n.isEnglish ? 'task $index/$total failed' : '任务 $index/$total 失败';
+  }
 }
 
 /// 是否为注入通知（转发至 [InjectedMessage.isInjectedNotice]）。
@@ -628,6 +742,11 @@ extension InjectedNoticeKindDisplay on InjectedNoticeKind {
       case InjectedNoticeKind.subagentAggregated:
         if (l10n == null) return 'Background process';
         return l10n.isEnglish ? 'Background process' : '后台进程';
+      case InjectedNoticeKind.subagentTaskFailed:
+      case InjectedNoticeKind.subagentBatchComplete:
+      case InjectedNoticeKind.subagentComplete:
+        if (l10n == null) return 'Subagent';
+        return l10n.isEnglish ? 'Subagent' : '委派任务';
       case InjectedNoticeKind.cron:
         if (l10n == null) return 'Scheduled task';
         return l10n.isEnglish ? 'Scheduled task' : '定时任务';
