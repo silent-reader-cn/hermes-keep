@@ -1,11 +1,10 @@
 {
-  "line_coverage_pct": 81.61,
-  "lines_hit": 31804,
-  "lines_countable": 38970,
+  "line_coverage_pct": 82.7,
+  "lines_hit": 32134,
+  "lines_countable": 38857,
   "files_measured": 234,
   "note": "Ratchet this upward as tests are added; never lower it silently.",
   "never_loaded_files": [
-    "lib/features/settings/profile_section.dart",
     "lib/app/theme/status_colors.dart",
     "lib/driver_main.dart",
     "lib/core/cache/app_database_connection_web.dart",

@@ -52,6 +52,11 @@ GENERATED_MARKERS = ("l10n/app_localizations",)
 EXPECTED_UNLOADED = (
     "lib/driver_main.dart",              # flutter_driver integration entrypoint
     "lib/core/cache/app_database_connection_web.dart",  # conditional-import stub
+    "lib/core/cache/app_database_connection.dart",      # conditional-import stub
+    # Pure top-level `const` library: Dart constant-folds it at compile time, so it
+    # has no executable lines and can never appear in lcov. Counting it as uncovered
+    # would punish code that has nothing to cover.
+    "lib/app/theme/status_colors.dart",
 )
 
 
@@ -205,7 +210,11 @@ def main() -> int:
     unloaded_exec = 0
     if args.check_unloaded:
         unloaded = find_unloaded(files, args.repo_root)
-        unloaded_exec = sum(n for _rel, n in unloaded)
+        # Only files OUTSIDE the expected list are folded into the denominator:
+        # the listed ones have no executable lines for tests to reach.
+        unloaded_exec = sum(
+            n for rel, n in unloaded if rel not in EXPECTED_UNLOADED
+        )
         found += unloaded_exec
 
     pct = (100.0 * hit / found) if found else 0.0
