@@ -158,7 +158,7 @@ lint 取舍**以 `analysis_options.yaml` 为准**（`include: package:flutter_li
 - 自适应阈值：`kAdaptiveBreakpoint = 900.0`，`MediaQuery.sizeOf(context).width >= 900` 为宽屏（`DESIGN.md` §2，避开 Flutter 测试默认 800×600 视口）
 - 宽屏：`AdaptiveShell` → 左 320px `SessionSidebar`（工具条 + 完整 `SessionListPage` + 1px separator）+ 右 `Expanded` 内容区；窄屏直接透传 `child`
 - 路由进壳（`router.dart` 为准，`ShellRoute` 内）：`/`、`/chat`、`/chat/:sessionId`、`/settings`、`/tasks`、`/skills`、`/memory`、`/workspace/:sessionId`、`/workspaces`、`/kanban`、`/git/:sessionId`、`/insights`、`/downloads`；顶层独立不进壳：`/onboarding`、`/install-guide`（`DESIGN.md` §4）
-- 品牌资产：`assets/branding/hermes-agent-icon-1024.png`、`tray_icon.ico` / `tray_icon_16.png` / `tray_icon_32.png`
+- 品牌资产：`assets/branding/hermes-agent-icon-1024.png`、`hermes-agent-notify-mark-1024.png`（通知小图标专用源稿）、`tray_icon.ico` / `tray_icon_16.png` / `tray_icon_32.png`
 
 ### 5.4 无障碍与本地化
 

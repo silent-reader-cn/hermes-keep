@@ -2,7 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 Icon generation pipeline for Hermes client.
-Generates all platform icons from a single source: assets/branding/hermes-agent-icon-1024.png
+Generates all platform icons from the brand masters in assets/branding/:
+  - hermes-agent-icon-1024.png         app icon (all platforms, incl. the large
+                                       notification icon's ink/paper derivation)
+  - hermes-agent-notify-mark-1024.png  notification SMALL icon (setSmallIcon)
 Target platforms: Android, Windows, macOS.
 """
 
@@ -16,7 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 try:
-    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+    from PIL import Image
 except ImportError:
     print("[ERROR] Pillow is required. Please run: pip install pillow", file=sys.stderr)
     sys.exit(1)
@@ -50,13 +53,27 @@ NOTIFICATION_ICON_SIZES: Dict[str, int] = {
 }
 NOTIFICATION_ICON_NAME = "ic_hermes_agent"
 
-# 处理模式（来源图是近二值黑墨＋白底色，所以反色后“黑墨”就是可见区）：
-#   "solid"  — 反色 + 灌水补齐内部孔洞（实心剪影），24dp 最清晰，当前线上方案
-#   "faithful" — 仅反色 + 去噪，保留原图的白脸/白耳机孔洞（小尺寸会碎成碎斑）
-#   "clean"    — 仅反色 + 闭/开运算去碎点（孔洞仍在，居中间档）
-NOTIFICATION_ICON_MODE = "solid"
-# 墨区阈值（源图 <64 与 >192 各占 ~40% / ~57%，中间仅 ~2%）
-NOTIFICATION_INK_THRESHOLD = 128
+# 通知小图标（setSmallIcon）有**独立源稿**，与 app 图标稿分开维护。
+#
+# 为什么不能拿 app 图标稿反色：24dp 就是 24×24 个真实像素，插画缩下去只剩
+# 一团无法辨认的白块（五官全丢，实测只有外轮廓），主人反馈「看不太出来」。
+# 小图标必须单独设计成「大块面 + 明确负空间」的记号才能在状态栏成立。
+#
+# 源稿是纯黑实心剪影 / 纯白纸，抠图极性是“白纸黑墨”：可见区 = 墨，alpha = 墨。
+# 不灌水补洞——这张稿里的负空间都是设计出来的，补掉等于毁掉图形。
+#
+# 生成溯源（WisArt nano-banana-pro 图生图，参考 assets/branding/hermes-agent-icon-1024.png）：
+#   "Redraw this character as a single solid black silhouette on a pure white
+#    background - one connected black shape with no holes, no interior detail,
+#    no facial features, no line work, only two tones. Preserve the outer contour
+#    only: blunt bangs, long side hair, the bump of the headphone band and the
+#    headphone earcup on the head, the shoulder line. Simplify the contour
+#    massively - remove every small bump and hair strand, keep only large
+#    unambiguous shapes. ... recognizable when reduced to 24x24 pixels."
+NOTIFICATION_SOURCE_PATH = REPO_ROOT / "assets" / "branding" / "hermes-agent-notify-mark-1024.png"
+# 墨区阈值：源稿是纯二值黑白，实测阈值切出的墨迹恰好是**单连通域、零碎点**，
+# 故只做阈值不做形态学（开/闭运算会啃掉细笔画，反而伤图形）。
+NOTIFICATION_INK_THRESHOLD = 140
 NOTIFICATION_MASTER_SIZE = 96  # xxxhdpi 24dp
 
 # 内部大图标（通知 setLargeIcon）：反色 + 透明底，并按系统昼夜分两套
@@ -319,42 +336,23 @@ def generate_macos_icons(source_img: Image.Image) -> List[Path]:
     return generated
 
 
-def build_notification_mask(source_img: Image.Image, mode: str = NOTIFICATION_ICON_MODE) -> Image.Image:
-    """Turn the near-binary black-on-white artwork into an alpha-only mask.
+def build_notification_mask(source_img: Image.Image) -> Image.Image:
+    """Turn the purpose-drawn black-on-white mark into an alpha-only mask.
 
     A notification small icon must be alpha-only: the system replaces every
-    pixel with its own tint, so the artwork's identity lives entirely in the
-    ALPHA channel. Here the black ink becomes visible (255) and the white
-    negative space (face, headphone) becomes transparent (0) - i.e. "invert
-    the artwork" in the sense the source was designed for.
+    pixel with its own tint, so the glyph's identity lives entirely in the
+    ALPHA channel. On this source the ink is what should be visible, so
+    alpha = ink (dark pixels), and every negative space stays transparent.
 
-    Pure PIL on purpose: this script only requires Pillow (no numpy/scipy),
-    so morphology is done with Min/MaxFilter and holes are filled by
-    flood-filling the outside with ImageDraw.floodfill.
+    No hole filling, no morphology: the mark's negative space is deliberate,
+    and measured on this source the plain threshold already yields exactly one
+    connected ink component with zero specks - opening/closing would only eat
+    the thinner strokes. Pure PIL on purpose (no numpy/scipy needed).
     """
     flat = Image.alpha_composite(
         Image.new("RGBA", source_img.size, (255, 255, 255, 255)), source_img
     ).convert("L")
-    ink = flat.point(
-        lambda v: 255 if v < NOTIFICATION_INK_THRESHOLD else 0, mode="1"
-    ).convert("L")
-
-    if mode == "faithful":
-        # Only despeckle: keeps every original hole (small sizes get muddy).
-        return ink.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.MinFilter(3))
-
-    if mode == "clean":
-        # Closing fills tiny holes, opening removes specks; big holes remain.
-        mask = ink.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.MinFilter(5))
-        return mask.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
-
-    # "solid" (default): fill every interior hole; outermost contour is kept,
-    # so the glyph survives 16-24dp without turning into specks.
-    outside = ink.point(lambda v: 0 if v >= 128 else 255)
-    ImageDraw.floodfill(outside, (0, 0), 128)
-    holes = outside.point(lambda v: 255 if v == 255 else 0)
-    solid = ImageChops.lighter(ink, holes)
-    return solid.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.MinFilter(3))
+    return flat.point(lambda v: 255 if v < NOTIFICATION_INK_THRESHOLD else 0)
 
 
 def trim_square(mask: Image.Image, margin_ratio: float = 0.06) -> Image.Image:
@@ -377,8 +375,10 @@ def generate_android_notification_icons(source_img: Image.Image) -> List[Path]:
     """Write ic_hermes_agent.png for every density (24dp small icon).
 
     Replaces the hand-traced vector that used to live in drawable/: traced
-    shapes drifted from the real artwork (and read as headphones at 24dp),
-    while this path derives the glyph straight from the brand source image.
+    shapes drifted from the real artwork (and read as headphones at 24dp).
+    Now keyed from the dedicated notification master rather than from the
+    app-icon artwork: at 24x24 real pixels a downscaled illustration is just
+    an unreadable blob, so the small icon has its own purpose-drawn source.
     """
     master = trim_square(build_notification_mask(source_img))
     generated: List[Path] = []
@@ -741,7 +741,10 @@ def main() -> None:
     tray_icons = generate_tray_icons(source_img)
 
     print("\n6. Generating Android notification small icon (Live Update / status bar)...")
-    notification_icons = generate_android_notification_icons(source_img)
+    notify_src = load_source_image(NOTIFICATION_SOURCE_PATH)
+    print(f"Notification Master: {NOTIFICATION_SOURCE_PATH.relative_to(REPO_ROOT)}"
+          f" ({notify_src.size[0]}x{notify_src.size[1]}, mode={notify_src.mode})")
+    notification_icons = generate_android_notification_icons(notify_src)
     for p in notification_icons:
         print(f"   -> {p.relative_to(REPO_ROOT)}")
 
