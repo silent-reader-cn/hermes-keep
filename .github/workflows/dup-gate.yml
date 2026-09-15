@@ -1,0 +1,67 @@
+name: Code Duplication Gate
+
+# 独立的重复率闸门（刻意不并进 ci.yml）。
+#
+# 为什么独立：
+#  1) 关注点独立——重复率与「能不能构建 / 测试过不过」是两件事，红的时候一眼能看出是哪类问题；
+#     需要时可单独 disable，不影响主流水线。
+#  2) 它只依赖 Node（jscpd）+ Python，不需要 Flutter SDK，跑起来是秒级而非分钟级。
+#  3) 不与 ci.yml 抢文件：改这里不会碰到主 CI 的 job 定义。
+#
+# 口径：
+#  - jscpd 4.3.0（版本号写死在 tools/dup_report.py，避免浮动版本导致数字漂移）
+#  - 阈值 min-lines=5 / min-tokens=50（业界常用的「有意义的重复」下限，避免把三行样板算进去）
+#  - 只对 `lib/` 生产代码设闸门：测试里的重复是另一回事（helper 尚未收敛），
+#    先守住生产代码，测试侧的数字可用 `--scope lib+test` 手动查看。
+#  - 基线存 tools/dup_baseline.json；`--tolerance 0.5` 表示允许 0.5 个百分点的自然增长，
+#    超出即失败（提示要么重构、要么用 --update-baseline 显式接受新水位）。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'tools/dup_report.py'
+      - 'tools/dup_baseline.json'
+      - '.github/workflows/dup-gate.yml'
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'tools/dup_report.py'
+      - 'tools/dup_baseline.json'
+      - '.github/workflows/dup-gate.yml'
+  workflow_dispatch:
+
+jobs:
+  dup-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # jscpd 由 dup_report.py 通过 npx 拉起，因此 runner 需要 Node。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Measure duplication and compare against baseline
+        run: |
+          python tools/dup_report.py \
+            --scope lib \
+            --baseline tools/dup_baseline.json \
+            --tolerance 0.5 \
+            --json dup-summary.json
+
+      - name: Upload duplication report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duplication-report
+          path: |-
+            dup-summary.json
+          if-no-files-found: ignore
