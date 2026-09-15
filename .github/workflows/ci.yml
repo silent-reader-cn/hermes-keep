@@ -21,7 +21,82 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 改动集闸门：文档-only 提交（.todo/、docs/、*.md、sketches/）不该跑 android 501s
+  # + windows 375s 的构建——main 上一天可达 41 次 push，其中大量是收口/文档提交。
+  # 判定用**白名单**而非 paths-ignore 黑名单：夹带代码改动的「文档提交」必须照样跑，
+  # 黑名单会把它们静默放过去（那比慢更危险）。
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        name: Compute changed paths
+        shell: bash
+        run: |
+          set -uo pipefail
+          code=true
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.ref_type }}" = "tag" ]; then
+            # 手动触发 = 发布/验收，要全量；tag 推送尤其不能按 diff 判定——tag 的
+            # event.before 是它之前的那个提交，若那提交恰好只动文档就会把安装包跳过。
+            echo "workflow_dispatch / tag → 一律视为代码改动（发布要出安装包）"
+          else
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              base="${{ github.event.pull_request.base.sha }}"
+              head="${{ github.event.pull_request.head.sha }}"
+            else
+              base="${{ github.event.before }}"
+              head="${{ github.sha }}"
+            fi
+            # 新分支/新 tag 的 before 是全 0，force-push 或浅克隆也可能取不到 base。
+            # 这几种情况**不能**退化成「只看最后一个提交」——那会让「分支 tip 是文档
+            # 提交、底下压着代码提交」被误判成纯文档，重活被静默跳过。取不到基准就
+            # 保守视为代码改动。
+            if [ -z "$base" ] \
+               || [ "$base" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              echo "取不到比对基准（新分支/新 tag/浅克隆/force-push）→ 保守视为代码改动"
+            elif ! changed=$(git diff --name-only --diff-filter=ACMR "$base" "$head" 2>/dev/null); then
+              echo "git diff 失败 → 保守视为代码改动"
+            else
+              echo "改动文件（$base..$head）："
+              printf '%s\n' "$changed"
+              if [ -z "$changed" ]; then
+                code=false
+                echo "无文件变化 → 跳过重活"
+              elif printf '%s\n' "$changed" | grep -Eq '^(lib/|test/|android/|ios/|linux/|macos/|web/|windows/|third_party/|tools/|scripts/|assets/|pubspec\.(yaml|lock)|analysis_options\.yaml|\.github/)'; then
+                code=true
+                echo "命中代码路径 → 重活照跑"
+              else
+                code=false
+                echo "改动仅命中非代码路径 → 跳过重活（guard/fake-gateway 仍会跑）"
+              fi
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  # 秒级护栏（永远跑，不被 changes 闸门跳过）：tools 脚本可编译 + 版本号两处不漂移。
+  # 拆出来的理由：这两项各 <5s，此前只能挂在 6 分钟的 analyze-test 后面，而
+  # analyze-test 在文档提交上会被闸门跳过——那正是漂移最容易漏掉的场景
+  # （v0.1.51 bump 把 CI 打红一次，见 .todo/active.md #131）。
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: tools/ 脚本可编译
+        run: python -m py_compile $(git ls-files 'tools/*.py' 'tools/**/*.py')
+      - name: 版本号两处一致（pubspec.yaml ⇄ appVersion）
+        run: python tools/bump_version.py --check
+
   analyze-test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,6 +140,8 @@ jobs:
   # 刻意不依赖 analyze-test：测试红不该连坐掉「包能不能构建」的验证。
   # 这两者原为 needs: analyze-test，令历史 129 次 run 从未真正执行过一次。
   android-debug:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -101,9 +178,16 @@ jobs:
       # 子进程输出在失败时回显，避免「未就绪」类报错无根因可查。
       - run: python tools/fake_gateway/smoke_test.py
 
+  # Windows 侧的两件事（#133）：
+  #  1) main 每次 push 都要构建（否则 Windows-only 编译断裂要到发版才发现），但
+  #     Inno 打包 + webui bundle 克隆只在 tag/dispatch 上做——发布用的安装包一直是
+  #     本地打的，CI 那份是给「能不能打出来」兜底，不是发布产物。
+  #  2) 构建后**必须启动一次产物**：CI 以前只 build 不跑，于是 #119 那类
+  #     「构建绿、装上崩」在流水线上完全不可见。
   windows-installer:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
 
@@ -117,7 +201,18 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Flutter build windows
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      # 判据刻意不用「存活 N 秒」：本机已装版在跑时，新实例会 1s 内干净退出
+      # （单实例保护，exit 0），那不是崩溃——详见 tools/smoke_windows_exe.py 头部。
+      - name: Smoke test built exe
+        run: python tools/smoke_windows_exe.py build/windows/x64/runner/Release/hermes_ui.exe --strict
+
       - name: Install Inno Setup
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           # Primary: choco install innosetup. Alternative: choco install jrsoftware.iscc
@@ -126,12 +221,8 @@ jobs:
             "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding ascii
           }
 
-      - name: Flutter build windows
-        run: |
-          flutter pub get
-          flutter build windows --release
-
       - name: Assemble WebUI sidecar bundle
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $webuiRef = "${{ github.event.inputs.webui_ref }}"
@@ -142,10 +233,12 @@ jobs:
           }
 
       - name: Compile Inno Setup installer
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File scripts/packaging/build_installer.ps1
 
       - name: Upload Windows Installer Artifact
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: hermes-ui-windows-setup
