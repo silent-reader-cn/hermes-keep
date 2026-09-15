@@ -5,10 +5,15 @@ import '../../core/models/chat_message.dart';
 /// - 以 [serverMessages] 窗口为权威基准，匹配并原地更新 [localMessages] 中已有项；
 /// - 补入服务端存在但本地缺失的消息；
 /// - 保留本地历史分页消息（头部）及未落库乐观消息（尾部），不做删除；
-/// - 兼容 `messageId == null` 或 `local-` 前缀的乐观消息指纹匹配。
+/// - 兼容 `messageId == null` 或 `local-` 前缀的乐观消息指纹匹配；
+/// - [liveStreamingMessageId]：活跃流式行**必须保住本地身份**（见 #121）——
+///   该行承载本回合 live 累积正文与时间线断点，若被服务端行替换：
+///   `streamingAssistantMessageId` 悬空 → live 层整层消失 → 服务端本回合首行
+///   吸收整轮正文并被当普通行渲染、其后各行正文再渲染一遍（正文重复）。
 List<ChatMessage> diffMergeMessages({
   required List<ChatMessage> localMessages,
   required List<ChatMessage> serverMessages,
+  String? liveStreamingMessageId,
 }) {
   if (localMessages.isEmpty) {
     return _dedupeServerUserMessages(serverMessages);
@@ -84,7 +89,24 @@ List<ChatMessage> diffMergeMessages({
         currentLocalIdx++;
       }
       final localOrig = localMessages[matchedLIdx];
-      result.add(_patchMessage(localOrig, sMsg));
+      // 活跃流式行分流（#121）：
+      // - 缓冲已「超出」该服务端行（本回合多段正文已在流式侧渲染在手，该行只是
+      //   其中一段）→ 保住本地身份 + 服务端行另行入列，渲染侧按「live 覆盖」
+      //   去重；若让该行承接身份，本回合首行会被塞进整轮正文、其余各行再渲染
+      //   一遍（真机「文字重复塞进某一段」）。
+      // - 缓冲等于/落后该行 → 沿用既有承接语义（重连 replay 游标按行内容对齐、
+      //   收尾按 transcript 定稿都依赖它）。
+      final isLiveRow =
+          liveStreamingMessageId != null &&
+          liveStreamingMessageId.isNotEmpty &&
+          localOrig.messageId == liveStreamingMessageId;
+      if (isLiveRow && _liveBufferAhead(localOrig, sMsg)) {
+        // 服务端行照旧入列（工具/思考分组锚点、offset 记账都依赖它）。
+        result.add(sMsg);
+        result.add(_patchLiveRow(localOrig, sMsg));
+      } else {
+        result.add(_patchMessage(localOrig, sMsg));
+      }
       if (matchedLIdx + 1 > currentLocalIdx) {
         currentLocalIdx = matchedLIdx + 1;
       }
@@ -306,6 +328,44 @@ ChatMessage _patchMessage(ChatMessage local, ChatMessage server) {
   }
   return server.copyWith(
     content: content,
+    turnTps: server.turnTps ?? local.turnTps,
+  );
+}
+
+/// 活跃流式缓冲是否已「超出」该服务端行（#121）。
+///
+/// 成立条件：缓冲区非空、服务端行非空、且缓冲区**严格更长并完整包含**该行正文
+/// —— 即本回合已流式在手的不止这一段（真机案例：缓冲 s1+s2+s3、服务端行仅 s1）。
+/// 此时该行不得承接流式身份；等长或落后则返回 false，沿用既有承接语义。
+bool _liveBufferAhead(ChatMessage live, ChatMessage server) {
+  final liveText = (live.content ?? '').trim();
+  final serverText = (server.content ?? '').trim();
+  if (liveText.isEmpty || serverText.isEmpty) return false;
+  return liveText.length > serverText.length && liveText.contains(serverText);
+}
+
+/// 活跃流式行（`messageId == liveStreamingMessageId`）的服务端补齐（#121）。
+///
+/// 与 [_patchMessage] 的区别只有一点、但很关键：**保留本地身份与本地内容**。
+/// - 身份：id 必须仍是本地流式 id，`streamingAssistantMessageId` /
+///   `transcriptMessagesProvider` 的跳过判定 / `liveTimelineProvider` 的查找
+///   全部依赖它；被服务端 id 顶替后 live 层整层消失。
+/// - 内容：本地累积正文即 live 层已渲染的文本，只能被「服务端更长的前缀扩展」
+///   补齐（对齐 [_patchMessage] 前缀取更长，防可见文本回缩），不能被较短的
+///   服务端行覆盖 —— 覆盖会让本回合正文在 transcript 侧再渲染一遍。
+ChatMessage _patchLiveRow(ChatMessage local, ChatMessage server) {
+  final localContent = local.content ?? '';
+  final serverContent = server.content ?? '';
+  final content =
+      (localContent.isNotEmpty &&
+          serverContent.startsWith(localContent) &&
+          serverContent.length > localContent.length)
+      ? serverContent
+      : local.content;
+  return local.copyWith(
+    content: content,
+    timestamp: local.timestamp ?? server.timestamp,
+    reasoning: local.reasoning ?? server.reasoning,
     turnTps: server.turnTps ?? local.turnTps,
   );
 }
