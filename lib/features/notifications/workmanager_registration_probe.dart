@@ -47,7 +47,7 @@ class WorkManagerRegistrationSnapshot {
   /// 初始化异常描述（`异常类名: message`），无异常时为 null。
   final String? error;
 
-  /// #118 插件链快照：Rust/cargokit 库能否加载 + 尾部插件是否真有实例。
+  /// #119 插件链快照：Rust/cargokit 库能否加载 + 尾部插件是否真有实例。
   /// 形如 `rustLib=loaded urlLauncher=true wakelock=true workmanager=true`；
   /// 老版本原生侧不认这个分支时为 null（探针静默降级）。
   final String? chain;
@@ -101,7 +101,7 @@ class MethodChannelWorkManagerRegistrationProbe
     }
   }
 
-  /// #118 插件链取证：把原生侧「库能否加载 / 尾部插件在不在」压成一行。
+  /// #119 插件链取证：把原生侧「库能否加载 / 尾部插件在不在」压成一行。
   ///
   /// 与 WorkManager 本身无关，只在 channel-error 归因时才有价值，所以单独一次
   /// 调用、失败一律静默（老包不认这个分支）。

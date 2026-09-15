@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """APK 原生库护栏：确认关键 .so 真的进了包（缺库时构建不会报错，线上却是静默连坐）。
 
-背景（#118，2026-09-14）
+背景（#119，2026-09-14）
 ----------------------
 ``super_native_extensions`` 是 Rust/cargokit 插件，它的 Java 类静态块里写着
 ``System.loadLibrary("super_native_extensions")``。这个 .so 一旦没被打进 APK：
@@ -90,7 +90,7 @@ def main() -> int:
             "  缺库不会让构建失败，但会让该插件注册期抛 Error 并截断整条"
             " GeneratedPluginRegistrant（其后插件静默失联、应用不闪退）。\n"
             "  排查方向：cargokit 的 jniLibs 接线是否被 AGP 变体源集采纳"
-            "（见 android/app/build.gradle.kts 的 #118 说明）。"
+            "（见 android/app/build.gradle.kts 的 #119 说明）。"
         )
         return 1
 

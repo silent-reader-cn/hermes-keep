@@ -72,7 +72,7 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * #118 插件链探针：Rust/cargokit 库能否加载 + 尾部插件是否真有实例。
+     * #119 插件链探针：Rust/cargokit 库能否加载 + 尾部插件是否真有实例。
      *
      * GeneratedPluginRegistrant 逐插件只 catch Exception，任一插件在注册期抛
      * Error（缺 .so → UnsatisfiedLinkError）会截断整条注册链，其后插件全部静默

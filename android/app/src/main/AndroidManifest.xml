@@ -72,7 +72,7 @@
          https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin.
-         #118 追加：http(s) 浏览 / 包安装器 / 文件选择 / 分享面板的包可见性声明。
+         #119 追加：http(s) 浏览 / 包安装器 / 文件选择 / 分享面板的包可见性声明。
          缺声明时 canLaunchUrl、resolveActivity 一律判空（「打不开链接也不报错」）。 -->
     <queries>
         <intent>

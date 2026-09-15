@@ -200,7 +200,7 @@ def patch_cargokit(pkg: Path, dry_run: bool) -> str:
     """缓存副本与 vendored cargokit 不一致时，用 vendored 版替换。
 
     幂等判定按**内容比对**（而非标记字符串）：vendored 文件会继续演进
-    （Gradle 9 兼容 → #118 拼包时序修复），标记式判定会让旧副本永远留在
+    （Gradle 9 兼容 → #119 拼包时序修复），标记式判定会让旧副本永远留在
     cache 里、悄悄复现旧 bug。比对与写入都走文本模式（顺带把行尾归一为
     平台默认，避免 CRCRLF 之类的混入）。
     """

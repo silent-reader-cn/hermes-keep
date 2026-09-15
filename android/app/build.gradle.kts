@@ -82,13 +82,13 @@ dependencies {
 }
 
 // ---------------------------------------------------------------------------
-// #118 故障隔离：放宽 Flutter 生成的插件注册器的异常捕获。
+// #119 故障隔离：放宽 Flutter 生成的插件注册器的异常捕获。
 //
 // io.flutter.plugins.GeneratedPluginRegistrant 逐插件只 `catch (Exception)`，
 // 任一插件在注册期抛 Error（典型：Rust/cargokit 插件缺 .so → UnsatisfiedLinkError）
 // 会让整条注册循环就此中断，**其后所有插件静默失联**——引擎是用反射调用注册器并
 // catch Exception 的，只留一行 logcat，应用不闪退，用户侧只表现为「某些功能莫名
-// 不可用」（#118 的 url_launcher 打不开链接 + workmanager channel-error 即此）。
+// 不可用」（#119 的 url_launcher 打不开链接 + workmanager channel-error 即此）。
 //
 // 该文件在 android/.gitignore 内（插件集变化时由 flutter 工具重新生成），因此这里
 // 在构建期就地放宽为 `catch (Throwable)`：单个插件失败只影响它自己，失败照常打日志。
@@ -104,7 +104,7 @@ fun relaxPluginRegistrantCatch() {
         original.replace("catch (Exception e)", "catch (Throwable e)"),
     )
     logger.lifecycle(
-        "[hermes] GeneratedPluginRegistrant: catch(Exception) -> catch(Throwable)（#118 故障隔离）",
+        "[hermes] GeneratedPluginRegistrant: catch(Exception) -> catch(Throwable)（#119 故障隔离）",
     )
 }
 
@@ -117,7 +117,7 @@ tasks.matching {
 }
 
 // ---------------------------------------------------------------------------
-// #118 Rust/cargokit 产物（libsuper_native_extensions.so）拼包。
+// #119 Rust/cargokit 产物（libsuper_native_extensions.so）拼包。
 //
 // cargokit 自己是把 build/jniLibs/<buildType> 挂到 `android.sourceSets` 上，但在
 // AGP 8 + 本工程实测**不生效**：那个 srcDir 从未进入变体源集，.so 一次都没进过 APK
@@ -128,7 +128,7 @@ tasks.matching {
 // 而 GeneratedPluginRegistrant 只 catch Exception），整条插件注册链自该插件起被截断，
 // 其后 url_launcher / wakelock_plus / workmanager 全部静默失联——引擎用反射调用
 // 注册器并 catch Exception，只留一行 logcat，应用不闪退，用户侧只看到「某些功能
-// 莫名不可用」（#118 的「打不开仓库链接」+「WorkManager channel-error」即此）。
+// 莫名不可用」（#119 的「打不开仓库链接」+「WorkManager channel-error」即此）。
 //
 // 这里改走 Flutter 自己也在用的变体 API：variant.sources.jniLibs 静态源目录
 // （FlutterPlugin.kt 用同族 API 的 addGeneratedSourceDirectory 塞 libapp.so），

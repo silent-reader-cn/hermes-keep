@@ -187,7 +187,7 @@ class CargoKitPlugin implements Plugin<Project> {
                 project.tasks.each onTask
                 project.tasks.whenTaskAdded onTask
                 // -----------------------------------------------------------
-                // #118 patch (project-local, NOT upstream cargokit behaviour)
+                // #119 patch (project-local, NOT upstream cargokit behaviour)
                 //
                 // Upstream only makes the **plugin module** javaPreCompileXxx depend on
                 // the cargo build. But the built .so only reaches the APK through the
