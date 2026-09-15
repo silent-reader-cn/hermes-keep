@@ -456,6 +456,10 @@ Future<void> main(List<String> args) async {
             );
           },
         ),
+        // 回合实时活动 → 实况通知（灵动岛）hook（#120：事件驱动、退后台即时上岛）。
+        chatLiveActivityCallbackProvider.overrideWith(
+          (ref) => ref.watch(chatLiveActivityHookProvider),
+        ),
         // 启用生产持久缓存数据库：会话列表 / 消息 /（未来）媒体的离线缓存
         // 真正落盘（默认 appDatabaseProvider 为内存库，重启即清空）。
         // 单例注入：全进程唯一实例，避免 drift 同名库双开。

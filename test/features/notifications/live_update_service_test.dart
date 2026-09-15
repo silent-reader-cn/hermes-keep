@@ -198,4 +198,222 @@ void main() {
       expect(calls.where((c) => c.method == 'cancel'), hasLength(2));
     });
   });
+
+  group('LiveUpdateService.notifyActivity（#120 回合实时活动）', () {
+    test('thinking/output → 正文为动作文案，chip 仍为「生成中」', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '我的会话',
+        activity: LiveUpdateActivity.thinking,
+      );
+      var args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], 'Hermes · 回合进行中');
+      expect(args['text'], '正在思考…');
+      expect(args['shortCriticalText'], '生成中');
+      expect(args['indeterminate'], isTrue);
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '我的会话',
+        activity: LiveUpdateActivity.output,
+      );
+      args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '正在输出…');
+      expect(args['shortCriticalText'], '生成中');
+    });
+
+    test('tool 带工具名 → 「正在调用 terminal…」；空名退化为通用文案', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.tool,
+        detail: 'terminal',
+      );
+      var args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '正在调用 terminal…');
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.tool,
+        detail: '   ',
+      );
+      args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '正在调用工具…');
+    });
+
+    test('等待态 → #48 定稿 chip「请回复」/「请批准」', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.waitingReply,
+      );
+      var args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '等待你的回复');
+      expect(args['shortCriticalText'], '请回复');
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.waitingApproval,
+      );
+      args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '等待你的批准');
+      expect(args['shortCriticalText'], '请批准');
+    });
+
+    test('英文模式 → 等待态 chip「Reply」/「Allow」（≤6 字符硬约束）', () async {
+      installMock();
+      LocaleResolver.updateMode(AppLocaleMode.en);
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.waitingReply,
+      );
+      var args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['shortCriticalText'], 'Reply');
+      expect((args['shortCriticalText']! as String).length, lessThanOrEqualTo(6));
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.waitingApproval,
+      );
+      args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['shortCriticalText'], 'Allow');
+      expect((args['shortCriticalText']! as String).length, lessThanOrEqualTo(6));
+    });
+
+    test('活动优先于列表总览：正文用动作、标题保留多会话计数', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 3, titles: ['会话 A', '会话 B']);
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '会话 A',
+        activity: LiveUpdateActivity.output,
+      );
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], 'Hermes · 回合进行中 · 3 个会话');
+      expect(args['text'], '正在输出…');
+    });
+
+    test('幂等：同活动连续上报 → 只 show 一次', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.thinking,
+      );
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.thinking,
+      );
+
+      expect(calls.where((c) => c.method == 'show'), hasLength(1));
+    });
+
+    test('activity=null（收尾）→ cancel 且清活动态（列表链路回退总览文案）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.output,
+      );
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: null,
+      );
+      expect(calls.where((c) => c.method == 'cancel'), hasLength(1));
+
+      // 活动态已清：多会话场景下由列表链路重新点亮时正文回退为会话标题。
+      await service.sync(activeCount: 1, titles: ['会话 A']);
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '会话 A');
+    });
+
+    test('活动态存在时列表报 0 不误撤（列表滞后场景）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 1, titles: ['会话 A']);
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.thinking,
+      );
+      await service.sync(activeCount: 0);
+
+      expect(calls.where((c) => c.method == 'cancel'), isEmpty);
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '正在思考…');
+    });
+
+    test('开关关闭 → 活动上报零通道调用', () async {
+      SharedPreferences.setMockInitialValues({
+        LiveUpdateService.prefsKeyLiveUpdateEnabled: false,
+      });
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.waitingReply,
+      );
+
+      expect(calls, isEmpty);
+    });
+
+    test('低版本设备（isSupported=false）→ 活动上报不发通知', () async {
+      installMock(supported: false);
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.thinking,
+      );
+
+      expect(calls.map((c) => c.method), ['isSupported']);
+    });
+
+    test('非 Android 平台 → 活动上报静默零调用', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.thinking,
+      );
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: null,
+      );
+
+      expect(calls, isEmpty);
+    });
+  });
 }

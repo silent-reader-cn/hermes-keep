@@ -132,6 +132,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// resumed 后直接铺全文并重新校准看门狗基线。
   bool _appPaused = false;
 
+  /// 回合实时活动（#120 实况通知/灵动岛）：最近一次上报的活动与 detail。
+  ChatLiveActivity? _liveActivity;
+  String _liveActivityDetail = '';
+
   /// 重放期间是否需要逐帧重建时间线断点（仅断点为空的恢复场景为 true）。
   /// 正常 live 重连断点仍在：重放帧全命中时不再补点，避免已展示段在时间线
   /// 尾部重复叠加成簇（底部连续思考/文本卡簇的放大源）。
@@ -179,6 +183,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealQueue.clear();
     _revealQueueStart = null;
     _appPaused = false;
+    _liveActivity = null;
+    _liveActivityDetail = '';
     _cancelRecoverySentinel();
     _cancelResumeProbeRetry();
     _lastContextPollTime = null;
@@ -1089,6 +1095,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       clearPrefillLabel: true,
       turnStartedMillis: _now().millisecondsSinceEpoch,
     );
+    // #120：回合开始即上报「思考中」——岛在发送瞬间就出现，不等首个 SSE 事件。
+    _reportLiveActivity(ChatLiveActivity.thinking, force: true);
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.info,
       tag: 'chat',
@@ -1411,14 +1419,19 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     switch (event) {
       case TokenSseEvent(:final text):
         if (_appendAssistantToken(text)) _markProgress();
+        _reportLiveActivity(ChatLiveActivity.output);
       case InterimAssistantSseEvent(:final text, :final alreadyStreamed):
         _handleInterimAssistant(text, alreadyStreamed);
       case ReasoningSseEvent(:final text):
         if (_appendReasoning(text)) _markProgress();
+        _reportLiveActivity(ChatLiveActivity.thinking);
       case ToolStartedSseEvent(:final event):
         _appendToolCall(event);
+        _reportLiveActivity(ChatLiveActivity.tool, detail: event.name ?? '');
       case ToolCompletedSseEvent(:final event):
         _completeToolCall(event);
+        // 工具完成 → 回到推理（下一段可能是新工具或正文）。
+        _reportLiveActivity(ChatLiveActivity.thinking);
       case TitleSseEvent(:final sessionId, :final title):
         _handleTitle(sessionId, title);
       case MeteringSseEvent(
@@ -1435,20 +1448,28 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         );
       case DoneSseEvent(:final event):
         _applyDone(event);
+        _reportLiveActivity(ChatLiveActivity.finished);
       case ContextStatusSseEvent(:final status, :final label):
         _handleContextStatus(status, label);
       case ApprovalPendingSseEvent(:final payload):
         _applyApprovalUpdate(payload);
+        // #120：等待批准——主人离开时最需要被叫回的状态。
+        _reportLiveActivity(ChatLiveActivity.waitingApproval);
       case ClarificationPendingSseEvent(:final payload):
         _applyClarificationUpdate(payload);
+        // #120：等待回复——主人离开时最需要被叫回的状态。
+        _reportLiveActivity(ChatLiveActivity.waitingReply);
       case PendingSteerLeftoverSseEvent(:final text):
         _handlePendingSteerLeftover(text);
       case StreamEndSseEvent():
         _handleStreamEnd();
+        _reportLiveActivity(ChatLiveActivity.finished);
       case CancelledSseEvent():
         _handleCancelled();
+        _reportLiveActivity(ChatLiveActivity.finished);
       case ErrorSseEvent(:final message):
         _handleErrorEvent(message);
+        _reportLiveActivity(ChatLiveActivity.finished);
       case TransportErrorSseEvent(:final message):
         _handleTransportError(message);
       case HeartbeatSseEvent():
@@ -1576,6 +1597,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           ),
         );
       } catch (_) {}
+      // #120：退后台/锁屏立刻上报一次当前活动，使实况通知（灵动岛）即时出现
+      // ——不再依赖会话列表刷新（后台期间列表轮询与 SSE 均已停）。
+      if (_hasActiveTurn) {
+        _reportLiveActivity(_inferLiveActivity(), force: true);
+      }
       return;
     }
     DiagnosticsService.instance.log(
@@ -2900,6 +2926,64 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (sessionId.isEmpty) return;
     ref.read(chatSessionErrorCallbackProvider)(sessionId, title, preview);
   }
+
+  // -------------------------------------------------------------------------
+  // #120 回合实时活动 → 实况通知（灵动岛）
+  // -------------------------------------------------------------------------
+
+  /// 上报回合实时活动。
+  ///
+  /// 与上次上报相同则跳过：token 级高频事件（输出中）不得穿透到平台通道。
+  /// [force] 供生命周期变化点使用——退后台时即使活动未变也要上报一次。
+  /// 新会话（sessionId 为空）跳过：通知点击需要可跳转的会话。
+  void _reportLiveActivity(
+    ChatLiveActivity activity, {
+    String detail = '',
+    bool force = false,
+  }) {
+    if (_disposed) return;
+    final sessionId = state.sessionId;
+    if (sessionId.isEmpty) return;
+    if (!force && _liveActivity == activity && _liveActivityDetail == detail) {
+      return;
+    }
+    _liveActivity = activity;
+    _liveActivityDetail = detail;
+    try {
+      ref.read(chatLiveActivityCallbackProvider)(
+        sessionId,
+        state.displayTitle,
+        activity,
+        detail,
+      );
+    } catch (_) {}
+  }
+
+  /// 推断当前活动（退后台强制上报与等待态判定用）。
+  ChatLiveActivity _inferLiveActivity() {
+    final pending = state.pendingAction;
+    if (pending.clarificationPrompt != null) {
+      return ChatLiveActivity.waitingReply;
+    }
+    if (pending.approvalPrompt != null) {
+      return ChatLiveActivity.waitingApproval;
+    }
+    final current = _liveActivity;
+    if (current != null && current != ChatLiveActivity.finished) {
+      return current;
+    }
+    return ChatLiveActivity.thinking;
+  }
+
+  /// 当前是否处于「回合进行中」（对齐保活上报的 isStreaming 判定）。
+  bool get _hasActiveTurn =>
+      state.stream.activeStreamId != null ||
+      state.phase == ChatPhase.sending ||
+      state.phase == ChatPhase.streaming ||
+      state.phase == ChatPhase.steered ||
+      state.phase == ChatPhase.approvalPending ||
+      state.phase == ChatPhase.clarifyPending ||
+      state.phase == ChatPhase.recovering;
 
   /// 最近一条非空 assistant 消息内容（通知预览用）；无则空串。
   String _lastAssistantContent(ChatState state) {

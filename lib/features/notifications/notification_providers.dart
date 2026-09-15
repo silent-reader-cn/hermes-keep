@@ -441,3 +441,37 @@ final sessionErrorNotificationHookProvider = Provider<ChatSessionErrorCallback>(
     };
   },
 );
+
+/// 回合实时活动 → 实况通知（灵动岛）hook（#120）。
+///
+/// chat_controller 在 SSE 事件分派点（推理/工具/输出/等待态）与生命周期变化点
+/// 调用；活动变化即刻刷新通知正文与状态栏 chip，退后台时**强制**再上报一次，
+/// 使岛在后台立刻出现（修复「退后台延迟上岛」）。收到
+/// [ChatLiveActivity.finished] 时撤销。
+///
+/// LIVE 是增强功能：异常在 service 内部已静默吞掉，这里再兜一层，绝不影响
+/// 回合主流程。
+final chatLiveActivityHookProvider =
+    Provider<ChatLiveActivityCallback>((ref) {
+      return (sessionId, title, activity, detail) {
+        final mapped = switch (activity) {
+          ChatLiveActivity.thinking => LiveUpdateActivity.thinking,
+          ChatLiveActivity.tool => LiveUpdateActivity.tool,
+          ChatLiveActivity.output => LiveUpdateActivity.output,
+          ChatLiveActivity.waitingReply => LiveUpdateActivity.waitingReply,
+          ChatLiveActivity.waitingApproval => LiveUpdateActivity.waitingApproval,
+          // finished → null：收尾撤销。
+          ChatLiveActivity.finished => null,
+        };
+        unawaited(
+          LiveUpdateService.instance
+              .notifyActivity(
+                sessionId: sessionId,
+                title: title,
+                activity: mapped,
+                detail: detail,
+              )
+              .catchError((Object _) {}),
+        );
+      };
+    });

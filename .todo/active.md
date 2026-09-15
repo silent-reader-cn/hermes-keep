@@ -52,3 +52,12 @@
 - `ProgressStyle` 增强：`setProgressTrackerIcon` 随状态动态换（20dp，或官方 sample 的 40×20 胶囊）；`addProgressPoint` 每次工具调用落一点使内容随回合增长。**进度条保持 indeterminate**——agent 回合无真实百分比、段长不可预测，套 `Segment` 会出现"条走完还在跑"（截图里那条 1/5 填充已在造假进度，勿加剧）。
 - 前置改造（成本大头）：现通知**仅在活跃会话集合变化时**刷新（`lib/features/session_list/session_auto_refresh.dart:164-186`，集合相同即早退），阶段变化根本不触发。需新建回合实时状态回调链路（对标 `turnNotificationHookProvider`），并把 `ChatPhase`（`lib/features/chat/chat_state.dart:11`）的等待态（`clarifyPending` 待回复／`approvalPending` 待批准）一并上岛——那是主人离开时最需要被叫回的状态。
 - 参考：同赛道标杆 Capsulyric（小米 15 / HyperOS 3.0.300.7 实机验证：走 AOSP Live Update 通道即可映射到超级岛，**无需 Root/Shizuku**；小米私有超级岛接口才需特权，不碰）。
+
+## #120 实况通知（灵动岛）后台/阶段延迟上岛 → 回合实时事件驱动（主人 2026-09-15 报告）
+
+- 现象：退到后台时若有正在进行的会话，灵动岛不马上显示，要等一会才出现。
+- 根因（已取证到行号）：LIVE 全仓**唯一 show 入口**是 `session_auto_refresh.dart:164-187`（活跃会话集合边沿触发 → `syncOngoingNotification` → `LiveUpdateService.sync`）。退后台 `_onFocusLost`（:248-252）当场停 30s 轮询 + SSE → 后台再无「列表数据变化」→ 无 sync 调用。后台唯一还跑的 WorkManager 加急任务（`background_keepalive_service.dart:706` initialDelay **1 分钟**）/ 周期任务（:354）其 `handleTask`（:908-1213）**从不调用 LiveUpdateService**，只刷保活常驻通知。另：窄屏聊天页时列表页未挂载（`session_list_page.dart:129`，项目自认于 `notification_providers.dart:361-362`）→ 前台发消息时就未上岛。
+- 现状 vs 预期：现状 = 上岛由「会话列表集合变化」**单一**驱动，后台冻结、阶段变化不刷新、正文只有会话标题；预期 = **回合实时事件驱动**（活动/相位变化即刷新），**退后台立即上岛**，等待态（待回复/待批准）上岛并可被叫回，后台兜底撤销。
+- 范围：`chat_providers.dart`（新回调 typedef+provider）、`chat_controller.dart`（`_handleSseEvent` 分派点上报 + 退后台强制上报）、`live_update_service.dart`（活动文案态合成 + 幂等键扩展）、`notification_providers.dart`（hook 实现）、`main.dart`（override 注入）、`l10n`（zh/en + 手写类）、`background_keepalive_service.dart`（handleTask 流结束兜底撤岛）。**不动**：列表链路 `sync(activeCount,titles)` 既有语义（保留为多会话总览兜底）、`ProgressStyle` 进度语义（仍 indeterminate，禁伪造百分比）、渠道/ID（1501）。
+- 禁区：不改「过程胶囊时间线 / text 唯一分隔符」等既定语义；LIVE 是增强功能，任何异常必须静默吞掉不影响主流程；chip 文案须沿用 #48 定稿五态（生成中/请回复/请批准，英文 ≤6 字符）。
+- 验收：analyze 零告警 + test 全绿 + 金照零破坏；单测覆盖「退后台强制上报 → show」「活动变化 → 文案更新」「finished → cancel」「低版本/开关关 → 不发」「后台兜底撤岛」；真机复验＝退后台 1s 内岛出现、等待回复/批准时 chip 变「请回复/请批准」。

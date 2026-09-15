@@ -16,5 +16,13 @@
   "liveUpdateDefaultText": "Generating reply…",
   "liveUpdateChip": "Live",
   "liveUpdateSwitchTitle": "Live Updates (Dynamic Island)",
-  "liveUpdateSwitchSubtitle": "Promoted ongoing notifications on Android 16+ / HyperOS 3.1; silently ignored on older systems"
+  "liveUpdateSwitchSubtitle": "Promoted ongoing notifications on Android 16+ / HyperOS 3.1; silently ignored on older systems",
+  "liveUpdateActivityThinking": "Thinking…",
+  "liveUpdateActivityTool": "Running {name}…",
+  "liveUpdateActivityToolFallback": "Using tools…",
+  "liveUpdateActivityOutput": "Writing reply…",
+  "liveUpdateActivityWaitingReply": "Waiting for your reply",
+  "liveUpdateActivityWaitingApproval": "Waiting for approval",
+  "liveUpdateChipReply": "Reply",
+  "liveUpdateChipApproval": "Allow"
 }

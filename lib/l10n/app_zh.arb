@@ -16,5 +16,13 @@
   "liveUpdateDefaultText": "正在生成回复…",
   "liveUpdateChip": "生成中",
   "liveUpdateSwitchTitle": "实况通知（灵动岛）",
-  "liveUpdateSwitchSubtitle": "安卓 16+/HyperOS 3.1 实况通知生效，其他系统自动降级、不受影响"
+  "liveUpdateSwitchSubtitle": "安卓 16+/HyperOS 3.1 实况通知生效，其他系统自动降级、不受影响",
+  "liveUpdateActivityThinking": "正在思考…",
+  "liveUpdateActivityTool": "正在调用 {name}…",
+  "liveUpdateActivityToolFallback": "正在调用工具…",
+  "liveUpdateActivityOutput": "正在输出…",
+  "liveUpdateActivityWaitingReply": "等待你的回复",
+  "liveUpdateActivityWaitingApproval": "等待你的批准",
+  "liveUpdateChipReply": "请回复",
+  "liveUpdateChipApproval": "请批准"
 }

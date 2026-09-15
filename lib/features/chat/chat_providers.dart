@@ -308,6 +308,49 @@ final chatSessionErrorCallbackProvider = Provider<ChatSessionErrorCallback>(
   (ref) => (sessionId, title, preview) {},
 );
 
+/// 回合实时活动（#120：实况通知/灵动岛正文与状态栏 chip 的来源）。
+///
+/// 与「相位」的区别：相位是 UI 主分支（九态），活动是**面向岛的一句话动作**
+/// （思考中／调用工具／输出中／等待回复／等待批准）。二者由 ChatController
+/// 在同一批事件点同时推进，活动粒度更粗、只为通知可读性服务。
+enum ChatLiveActivity {
+  /// 推理中（reasoning 事件持续到达）。
+  thinking,
+
+  /// 工具调用中（tool_started；[ChatLiveActivityCallback] 的 detail 带工具名）。
+  tool,
+
+  /// 正文输出中（token 事件）。
+  output,
+
+  /// 等待主人回复（澄清卡片已弹出，[ChatPhase.clarifyPending]）。
+  waitingReply,
+
+  /// 等待主人批准（审批卡片已弹出，[ChatPhase.approvalPending]）。
+  waitingApproval,
+
+  /// 回合收尾（done / stream_end / cancel / error）→ 撤销实况通知。
+  finished,
+}
+
+/// 回合实时活动回调（活动变化时由 [ChatController] 调用）。
+///
+/// [detail]：工具名等补充信息（无则空串）。
+typedef ChatLiveActivityCallback = void Function(
+  String sessionId,
+  String title,
+  ChatLiveActivity activity,
+  String detail,
+);
+
+/// 回合实时活动回调 Provider（notifications feature 注入点）。
+///
+/// 默认 no-op（测试不受影响）；生产由 main.dart 用 notifications 的
+/// `chatLiveActivityHookProvider` override 注入，驱动实况通知（LIVE）。
+final chatLiveActivityCallbackProvider = Provider<ChatLiveActivityCallback>(
+  (ref) => (sessionId, title, activity, detail) {},
+);
+
 /// 当前相位（UI 主分支只 switch 它）。
 final chatPhaseProvider = Provider.family<ChatPhase, String>((ref, sessionId) {
   return ref.watch(chatControllerProvider(sessionId)).phase;

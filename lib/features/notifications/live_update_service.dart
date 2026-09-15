@@ -13,14 +13,42 @@ import '../diagnostics/diagnostics_service.dart';
 const MethodChannel kLiveUpdateChannel =
     MethodChannel('com.silentreader.hermes_ui/live_update');
 
+/// 实况通知「当前动作」（#120）：面向状态栏/岛的一句话活动文案。
+///
+/// 与 `ChatPhase` 的九态不同，这里是**通知可读性导向**的粗粒度动作：推理／
+/// 工具／输出／等待回复／等待批准。收尾态不在此枚举内——服务层用
+/// `notifyActivity(activity: null)` 表达「撤销」。
+enum LiveUpdateActivity {
+  /// 推理中。
+  thinking,
+
+  /// 工具调用中（[LiveUpdateService.notifyActivity] 的 detail 带工具名）。
+  tool,
+
+  /// 正文输出中。
+  output,
+
+  /// 等待主人回复（澄清卡片已弹出）。
+  waitingReply,
+
+  /// 等待主人批准（审批卡片已弹出）。
+  waitingApproval,
+}
+
 /// #105 安卓 16 Live Updates（Promoted Ongoing 实况通知/状态栏 chip/
 /// HyperOS 3.1 超级岛）服务——经原生 MethodChannel 驱动（flutter_local_notifications
 /// v22.3 不支持 Promoted Ongoing/ProgressStyle，上游 issue #2773 open）。
 ///
 /// 行为契约：
 /// - 仅 Android 生效；任何异常静默吞掉（实况通知是增强功能，绝不影响主流程）；
-/// - [sync] 为活跃回合数变化的幂等入口：与上次展示的 (title,text) 相同则跳过
-///   notify（参考保活常驻通知 `_lastOngoingText` 的做法，避免 SSE 高频抖动 notify 风暴）；
+/// - 两个上报来源，合成**单条**通知（[LiveUpdateService.notifyActivity] /
+///   [LiveUpdateService.sync]），唯一出口 [_flush]：
+///   1. **回合实时活动**（#120，优先）：活动或相位变化即刻刷新正文与 chip，
+///      解决「后台/阶段变化不刷新」与「退后台延迟上岛」；
+///   2. **会话列表总览**（既有，保留为兜底）：活跃会话集合变化时上报计数与
+///      首个会话标题。
+/// - 幂等：与上次展示的 (title, text, chip) 相同则跳过 notify（防 SSE 高频
+///   抖动 notify 风暴）；文案相同的高频上报须零平台通道调用；
 /// - 低版本安卓 `isSupported()==false` 时不发通知（不产生与保活常驻通知重复的
 ///   普通 ongoing 通知，自动降级无感）；
 /// - 设置开关 `bg_live_update_enabled`（默认 true，关=回退现状）。
@@ -49,8 +77,20 @@ class LiveUpdateService {
   /// Android 平台判定覆盖（测试注入用；null = 真实 defaultTargetPlatform）。
   final bool? _androidPlatformOverride;
 
-  /// 上次成功展示的 (title,text) 幂等缓存；null = 当前无展示中的实况通知。
-  (String, String)? _lastShown;
+  /// 上次成功展示的 (title, text, chip) 幂等缓存；null = 当前无展示中的实况通知。
+  (String, String, String)? _lastShown;
+
+  /// 来源一：会话列表活跃会话数（多会话总览兜底）。
+  int _listActiveCount = 0;
+
+  /// 来源一：首个非空会话标题（列表链路正文）。
+  String? _listTitle;
+
+  /// 来源二：回合实时活动正文（null = 当前无实时活动）。
+  String? _activityText;
+
+  /// 来源二：回合实时活动对应的状态栏 chip 短文案。
+  String? _activityChip;
 
   bool get _isAndroid =>
       _androidPlatformOverride ??
@@ -59,7 +99,7 @@ class LiveUpdateService {
   /// 当前设备是否支持 Promoted Ongoing（安卓 16+ 且用户允许实况通知）。
   ///
   /// 不缓存：用户可能在系统设置中随时开/关实况通知资格，且本方法仅在
-  /// sync 文案变化时被动调用（非 token 级高频），单次 channel 往返可忽略。
+  /// 文案变化时被动调用（非 token 级高频），单次 channel 往返可忽略。
   Future<bool> isSupported() async {
     if (!_isAndroid) return false;
     try {
@@ -72,54 +112,114 @@ class LiveUpdateService {
     }
   }
 
-  /// 幂等同步实况通知：[activeCount]<=0 → cancel；>0 → 组装本地化文案后 show。
+  /// 回合实时活动上报（#120）：[activity] 为 null 表示回合收尾（撤销）。
   ///
   /// 文案与语言经 [AppLocalizations]（服务层无 BuildContext，取
   /// LocaleResolver.resolve()，对齐 turn_notification_service 风格）。
+  /// [detail] 用于工具名等补充（工具活动为空时退化为通用「正在调用工具…」）。
+  Future<void> notifyActivity({
+    required String sessionId,
+    required String title,
+    required LiveUpdateActivity? activity,
+    String detail = '',
+  }) async {
+    if (!_isAndroid) return;
+    if (activity == null) {
+      // 收尾：清活动态并撤销（多会话时由列表链路的下一次上报重新点亮）。
+      await cancelAll();
+      return;
+    }
+    final l10n = AppLocalizations(LocaleResolver.resolve());
+    _activityText = switch (activity) {
+      LiveUpdateActivity.thinking => l10n.liveUpdateActivityThinking,
+      LiveUpdateActivity.tool => l10n.liveUpdateActivityTool(detail),
+      LiveUpdateActivity.output => l10n.liveUpdateActivityOutput,
+      LiveUpdateActivity.waitingReply => l10n.liveUpdateActivityWaitingReply,
+      LiveUpdateActivity.waitingApproval =>
+        l10n.liveUpdateActivityWaitingApproval,
+    };
+    _activityChip = switch (activity) {
+      LiveUpdateActivity.waitingReply => l10n.liveUpdateChipReply,
+      LiveUpdateActivity.waitingApproval => l10n.liveUpdateChipApproval,
+      _ => l10n.liveUpdateChip,
+    };
+    await _flush();
+  }
+
+  /// 会话列表链路上报（既有入口）：活跃会话数 + 标题列表。
+  ///
+  /// 保留为**多会话总览兜底**；有实时活动时由活动文案优先（见 [_compose]）。
   Future<void> sync({
     required int activeCount,
     List<String> titles = const [],
   }) async {
     if (!_isAndroid) return;
+    _listActiveCount = activeCount;
+    _listTitle = titles.firstWhere(
+      (t) => t.trim().isNotEmpty,
+      orElse: () => '',
+    );
+    await _flush();
+  }
+
+  /// 合成当前应展示的 (title, text, chip)；null = 应撤销。
+  ///
+  /// 优先级：实时活动 > 列表总览 > 撤销。
+  (String, String, String)? _compose() {
+    final l10n = AppLocalizations(LocaleResolver.resolve());
+    final count = _listActiveCount;
+    final title = count > 1
+        ? l10n.liveUpdateTitleMulti(count)
+        : l10n.liveUpdateTitle;
+
+    final activityText = _activityText;
+    if (activityText != null && activityText.trim().isNotEmpty) {
+      return (title, activityText, _activityChip ?? l10n.liveUpdateChip);
+    }
+    if (count > 0) {
+      final listTitle = (_listTitle ?? '').trim();
+      return (
+        title,
+        listTitle.isNotEmpty ? listTitle : l10n.liveUpdateDefaultText,
+        l10n.liveUpdateChip,
+      );
+    }
+    return null;
+  }
+
+  /// 单一出口：读开关 → 合成 → 幂等比较 → 资格判定 → show / cancel。
+  Future<void> _flush() async {
+    if (!_isAndroid) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final enabled = prefs.getBool(prefsKeyLiveUpdateEnabled) ?? true;
       if (!enabled) return;
-      if (activeCount <= 0) {
+      final composed = _compose();
+      if (composed == null) {
         await cancelAll();
         return;
       }
-      final l10n = AppLocalizations(LocaleResolver.resolve());
-      final title = activeCount > 1
-          ? l10n.liveUpdateTitleMulti(activeCount)
-          : l10n.liveUpdateTitle;
-      final firstTitle = titles.firstWhere(
-        (t) => t.trim().isNotEmpty,
-        orElse: () => '',
-      );
-      final text = firstTitle.trim().isNotEmpty
-          ? firstTitle.trim()
-          : l10n.liveUpdateDefaultText;
       // 幂等：文案未变则不重复 notify（防 SSE/列表刷新抖动风暴），且先于
       // isSupported 通道往返——同文案高频同步须零平台通道调用。
-      if (_lastShown == (title, text)) return;
+      if (_lastShown == composed) return;
       if (!await isSupported()) return;
+      final (title, text, chip) = composed;
       final shown = await _channel.invokeMethod<bool>('show', {
         'id': kLiveUpdateNotificationId,
         'channelId': kLiveUpdateChannelId,
         'title': title,
         'text': text,
         // 状态栏 chip 短文案（≤6 字符硬约束，Kotlin 侧再兜底截断）。
-        'shortCriticalText': l10n.liveUpdateChip,
+        'shortCriticalText': chip,
         // 回合无确定进度 → 不定量动画（Kotlin 侧勿伪造百分比）。
         'indeterminate': true,
       });
       if (shown == true) {
-        _lastShown = (title, text);
+        _lastShown = composed;
       }
     } on Object catch (e, st) {
       developer.log(
-        'LiveUpdateService.sync 失败: $e',
+        'LiveUpdateService._flush 失败: $e',
         name: 'live_update',
         error: e,
         stackTrace: st,
@@ -133,7 +233,7 @@ class LiveUpdateService {
     }
   }
 
-  /// 撤销实况通知并清空幂等缓存（回合结束 / 开关关闭 / 完成态通知兜底）。
+  /// 撤销实况通知并清空幂等缓存与活动态（回合结束 / 开关关闭 / 完成态兜底）。
   ///
   /// 与 sync(0) 的自动 cancel 等效，供外部链路显式兜底调用。**不依赖内存缓存
   /// 门控**：实况通知由系统托管、可跨进程存活（app 被杀后仍在），冷启动后
@@ -142,6 +242,8 @@ class LiveUpdateService {
   Future<void> cancelAll() async {
     if (!_isAndroid) return;
     _lastShown = null;
+    _activityText = null;
+    _activityChip = null;
     try {
       await _channel.invokeMethod<void>('cancel', {
         'id': kLiveUpdateNotificationId,

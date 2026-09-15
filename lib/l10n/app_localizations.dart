@@ -1850,6 +1850,41 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
   String get liveUpdateSwitchSubtitle => isEnglish
       ? 'Promoted ongoing notifications on Android 16+ / HyperOS 3.1; silently ignored on older systems'
       : '安卓 16+/HyperOS 3.1 实况通知生效，其他系统自动降级、不受影响';
+
+  // ---------------------------------------------------------------------------
+  // #120 实况通知回合实时活动（正文与 chip 随活动变化）
+  // ---------------------------------------------------------------------------
+
+  /// 活动正文：推理中。
+  String get liveUpdateActivityThinking =>
+      isEnglish ? 'Thinking…' : '正在思考…';
+
+  /// 活动正文：工具调用（[name] 为空时用通用文案）。
+  String liveUpdateActivityTool(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return isEnglish ? 'Using tools…' : '正在调用工具…';
+    }
+    return isEnglish ? 'Running $trimmed…' : '正在调用 $trimmed…';
+  }
+
+  /// 活动正文：正文输出中。
+  String get liveUpdateActivityOutput =>
+      isEnglish ? 'Writing reply…' : '正在输出…';
+
+  /// 活动正文：等待主人回复（澄清卡片已弹出）。
+  String get liveUpdateActivityWaitingReply =>
+      isEnglish ? 'Waiting for your reply' : '等待你的回复';
+
+  /// 活动正文：等待主人批准（审批卡片已弹出）。
+  String get liveUpdateActivityWaitingApproval =>
+      isEnglish ? 'Waiting for approval' : '等待你的批准';
+
+  /// 状态栏 chip 短文案（#48 定稿五态之一：请回复；系统硬限 ≤6 字符）。
+  String get liveUpdateChipReply => isEnglish ? 'Reply' : '请回复';
+
+  /// 状态栏 chip 短文案（#48 定稿五态之一：请批准）。
+  String get liveUpdateChipApproval => isEnglish ? 'Allow' : '请批准';
 }
 
 // ---------------------------------------------------------------------------

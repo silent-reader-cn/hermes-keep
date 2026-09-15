@@ -1094,6 +1094,12 @@ class ProductionBackgroundKeepaliveService
                 }
               }
 
+              // #120：后台兜底撤销实况通知（LIVE）。后台 isolate 没有 MainActivity
+              // 的引擎，自定义 MethodChannel 不可用，故走 flutter_local_notifications
+              // 按固定 ID 直接 cancel（原生 NotificationManagerCompat.cancel 对任意
+              // ID 生效，不限于本插件创建的通知）。
+              await _cancelLiveUpdateNotification();
+
               // 清理 activeStream 状态并取消 OneOff
               await prefs.setString(keyActiveStreamId, '');
               await prefs.setBool(keyIsStreaming, false);
@@ -1245,6 +1251,27 @@ class ProductionBackgroundKeepaliveService
       );
     } catch (e) {
       developer.log('showBackgroundNotification error: $e');
+    }
+  }
+
+  /// 后台兜底撤销实况通知（LIVE，#120）。
+  ///
+  /// 后台 isolate 无法使用 MainActivity 注册的自定义 MethodChannel，因此绕开
+  /// [LiveUpdateService]，直接按固定 ID 走 flutter_local_notifications 的
+  /// cancel——原生侧即 `NotificationManagerCompat.cancel(id)`，对**任意**通知
+  /// ID 生效（不限于本插件创建的通知），对不存在的通知是无操作。
+  static Future<void> _cancelLiveUpdateNotification() async {
+    try {
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.initialize(
+        settings: const InitializationSettings(
+          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        ),
+      );
+      await plugin.cancel(id: LiveUpdateService.kLiveUpdateNotificationId);
+    } catch (e) {
+      // 增强功能，失败只记日志（不阻断后台任务与回合通知）。
+      developer.log('cancelLiveUpdateNotification error: $e');
     }
   }
 }
