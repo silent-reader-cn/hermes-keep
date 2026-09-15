@@ -64,3 +64,6 @@ test/golden/failures/
 # Python
 __pycache__/
 
+
+# 测试覆盖率产物（flutter test --coverage 生成，不入库）
+coverage/

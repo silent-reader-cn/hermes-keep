@@ -137,6 +137,57 @@ jobs:
           path: test/golden/failures/
           if-no-files-found: ignore
 
+  # 覆盖率门禁：在此之前 CI 从不跑 `--coverage`，覆盖率对流水线完全不可见——
+  # 于是「删测试换绿」「新增一大片没人测的代码」都能安静地进 main。
+  #
+  # 两处刻意设计：
+  #  1) 测试步骤 continue-on-error：analyze-test 上有一批已知的 Linux 平台性失败
+  #     （另立条目追踪），会让 `flutter test` 非零退出，但 lcov.info 仍然完整生成。
+  #     覆盖率结论与「测试是否全绿」是两件事，不该互相掩盖——Linux 测试修复后
+  #     应删除该行，让两者都硬失败。
+  #  2) 门禁脚本自己解析 lcov，只对「lib/ 行覆盖率」负责，口径与排除项集中写在
+  #     tools/coverage_summary.py 顶部：生成代码、以及**从未被任何测试加载**的
+  #     源文件都要算进分母，否则删掉一个测试文件就能把数字刷上去。
+  coverage:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: flutter pub get
+
+      - name: Run tests with coverage
+        continue-on-error: true
+        run: flutter test --coverage
+
+      - name: Coverage gate
+        run: |
+          python tools/coverage_summary.py \
+            --lcov coverage/lcov.info \
+            --check-unloaded \
+            --baseline tools/coverage_baseline.json \
+            --tolerance 1.0 \
+            --json coverage/summary.json
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ runner.os }}
+          path: |
+            coverage/summary.json
+            coverage/lcov.info
+          if-no-files-found: warn
+
+
   # 刻意不依赖 analyze-test：测试红不该连坐掉「包能不能构建」的验证。
   # 这两者原为 needs: analyze-test，令历史 129 次 run 从未真正执行过一次。
   android-debug:
