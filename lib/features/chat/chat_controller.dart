@@ -241,12 +241,17 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       messageOffset: state.messagesOffset,
       coalesce: coalesce,
     );
+    final reanchoredExistingToolGroups = _reanchorGroupsToMessages(
+      state.completedToolCallGroups,
+      state.messages,
+      messageOffset: state.messagesOffset,
+    );
     if (serverDerivedGroups.isNotEmpty) {
       state = state.copyWith(completedToolCallGroups: serverDerivedGroups);
-    } else if (state.completedToolCallGroups.isNotEmpty) {
+    } else if (reanchoredExistingToolGroups.isNotEmpty) {
       final nextToolGroups = ToolCallGroup.merging(
         primaryGroups: serverDerivedGroups,
-        fallbackGroups: state.completedToolCallGroups,
+        fallbackGroups: reanchoredExistingToolGroups,
       );
       state = state.copyWith(completedToolCallGroups: nextToolGroups);
     }
@@ -760,17 +765,27 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           messageOffset: newOffset,
           coalesce: _coalesceTools,
         );
+        final reanchoredExistingToolGroups = _reanchorGroupsToMessages(
+          state.completedToolCallGroups,
+          allMessages,
+          messageOffset: newOffset,
+        );
         final nextToolGroups = ToolCallGroup.merging(
           primaryGroups: serverDerivedGroups,
-          fallbackGroups: state.completedToolCallGroups,
+          fallbackGroups: reanchoredExistingToolGroups,
         );
         final serverDerivedReasoning = ReasoningGroup.groups(
           messages: allMessages,
           messageOffset: newOffset,
         );
+        final reanchoredExistingReasoningGroups = _reanchorReasoningToMessages(
+          state.completedReasoningGroups,
+          allMessages,
+          messageOffset: newOffset,
+        );
         final nextReasoningGroups = ReasoningGroup.merging(
           primaryGroups: serverDerivedReasoning,
-          fallbackGroups: state.completedReasoningGroups,
+          fallbackGroups: reanchoredExistingReasoningGroups,
         );
         state = state.copyWith(
           messages: allMessages,
@@ -882,42 +897,60 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final isLiveActive =
         state.stream.activeStreamId != null &&
         !state.stream.hasCompletedResponse;
+
+    final existingToolGroups = _reanchorGroupsToMessages(
+      state.completedToolCallGroups,
+      mergedMessages,
+      messageOffset: newOffset,
+      oldStreamingId: state.stream.streamingAssistantMessageId,
+    );
+    final existingReasoningGroups = _reanchorReasoningToMessages(
+      state.completedReasoningGroups,
+      mergedMessages,
+      messageOffset: newOffset,
+      oldStreamingId: state.stream.streamingAssistantMessageId,
+    );
+
     if (hasServerTools) {
       // 服务端 transcript 已含工具 → 以服务端为准合并已有完成组保底；
       // 非 live 态才清空 live（历史/收尾路径），live 活跃时保留继续切片展示。
       nextCompletedGroups = ToolCallGroup.merging(
         primaryGroups: serverDerivedGroups,
-        fallbackGroups: state.completedToolCallGroups,
+        fallbackGroups: existingToolGroups,
       );
       nextLiveToolCalls = isLiveActive ? state.liveToolCalls : const [];
     } else {
       if (state.liveToolCalls.isNotEmpty) {
-        final anchor =
-            state.stream.toolCallAnchorMessageId ??
-            state.stream.streamingAssistantMessageId ??
-            _lastAssistantMessageId(mergedMessages);
+        final anchor = _resolveLiveArchiveAnchor(
+          messages: mergedMessages,
+          messageOffset: newOffset,
+          candidateId: state.stream.toolCallAnchorMessageId ??
+              state.stream.streamingAssistantMessageId,
+        );
         final liveGroup = ToolCallGroup.live(
           anchorMessageID: anchor,
           toolCalls: List<ToolCall>.of(state.liveToolCalls),
         );
         nextCompletedGroups = ToolCallGroup.merging(
-          primaryGroups: state.completedToolCallGroups,
+          primaryGroups: existingToolGroups,
           fallbackGroups: [liveGroup],
         );
         // live 时间线需要保留 liveToolCalls 继续切片展示（重连/恢复场景）；
         // 归档组仅作流式结束后的 transcript fallback，不双显（transcript 会跳过
         // 流式消息自身）。
       } else {
-        nextCompletedGroups = state.completedToolCallGroups;
+        nextCompletedGroups = existingToolGroups;
       }
     }
 
     final liveReasoningList = <ReasoningGroup>[];
     if (state.liveReasoningText.isNotEmpty) {
-      final anchor =
-          state.stream.reasoningAnchorMessageId ??
-          state.stream.streamingAssistantMessageId ??
-          _lastAssistantMessageId(mergedMessages);
+      final anchor = _resolveLiveArchiveAnchor(
+        messages: mergedMessages,
+        messageOffset: newOffset,
+        candidateId: state.stream.reasoningAnchorMessageId ??
+            state.stream.streamingAssistantMessageId,
+      );
       liveReasoningList.add(
         ReasoningGroup(anchorMessageId: anchor, text: state.liveReasoningText),
       );
@@ -925,7 +958,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     var nextCompletedReasoning = ReasoningGroup.merging(
       primaryGroups: serverDerivedReasoning,
-      fallbackGroups: [...state.completedReasoningGroups, ...liveReasoningList],
+      fallbackGroups: [...existingReasoningGroups, ...liveReasoningList],
     );
     // 历史思考归档：从已加载消息的 reasoning 字段提取，补入 completedReasoningGroups
     final persistedReasoning = _reasoningGroupsFromMessages(
@@ -943,6 +976,19 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         }
       }
     }
+
+    nextCompletedGroups = _reanchorGroupsToMessages(
+      nextCompletedGroups,
+      mergedMessages,
+      messageOffset: newOffset,
+      oldStreamingId: state.stream.streamingAssistantMessageId,
+    );
+    nextCompletedReasoning = _reanchorReasoningToMessages(
+      nextCompletedReasoning,
+      mergedMessages,
+      messageOffset: newOffset,
+      oldStreamingId: state.stream.streamingAssistantMessageId,
+    );
 
     state = state.copyWith(
       messages: mergedMessages,
@@ -2664,13 +2710,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       messageOffset: state.messagesOffset,
       coalesce: _coalesceTools,
     );
-    final lastAssistant = _lastAssistantMessageId(merged);
     final liveGroups = _archiveLiveToolCallsToGroups();
     final reanchoredLiveGroups = _reanchorGroupsToMessages(
       liveGroups,
       merged,
-      currentStreamingId,
-      lastAssistant,
+      messageOffset: state.messagesOffset,
+      oldStreamingId: currentStreamingId,
     );
     final groups = ToolCallGroup.merging(
       primaryGroups: persistedGroups,
@@ -2684,8 +2729,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final reanchoredLiveReasoning = _reanchorReasoningToMessages(
       liveReasoning,
       merged,
-      currentStreamingId,
-      lastAssistant,
+      messageOffset: state.messagesOffset,
+      oldStreamingId: currentStreamingId,
     );
     final reasoningGroups = ReasoningGroup.merging(
       primaryGroups: serverDerivedReasoning,
@@ -2856,10 +2901,22 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _prefillSince = null;
     final nextToolGroups = _archiveLiveToolCallsToGroups();
     final nextReasoningGroups = _archiveLiveReasoningToGroups();
+    final reanchoredToolGroups = _reanchorGroupsToMessages(
+      nextToolGroups,
+      state.messages,
+      messageOffset: state.messagesOffset,
+      oldStreamingId: state.stream.streamingAssistantMessageId,
+    );
+    final reanchoredReasoningGroups = _reanchorReasoningToMessages(
+      nextReasoningGroups,
+      state.messages,
+      messageOffset: state.messagesOffset,
+      oldStreamingId: state.stream.streamingAssistantMessageId,
+    );
     state = state.copyWith(
       phase: ChatPhase.idle,
-      completedToolCallGroups: nextToolGroups,
-      completedReasoningGroups: nextReasoningGroups,
+      completedToolCallGroups: reanchoredToolGroups,
+      completedReasoningGroups: reanchoredReasoningGroups,
       liveToolCalls: const [],
       liveReasoningText: '',
       liveTimelinePoints: const [],
@@ -4015,13 +4072,67 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
+  String? _resolveLiveArchiveAnchor({
+    required List<ChatMessage> messages,
+    int? messageOffset,
+    String? candidateId,
+  }) {
+    final offset = messageOffset ?? 0;
+    if (candidateId != null && candidateId.isNotEmpty) {
+      // 1. 如果 candidateId 命中某个消息的 messageId
+      final index = messages.indexWhere((m) => m.messageId == candidateId);
+      if (index != -1) {
+        return TranscriptTurnClassifier.anchorID(
+          messages[index],
+          at: index,
+          messageOffset: offset,
+        );
+      }
+      // 2. 如果 candidateId 本身就是某个消息的 anchorID（例如 raw:1 或持久化 uuid）
+      for (var i = 0; i < messages.length; i++) {
+        final aid = TranscriptTurnClassifier.anchorID(
+          messages[i],
+          at: i,
+          messageOffset: offset,
+        );
+        if (aid == candidateId) {
+          return candidateId;
+        }
+      }
+    }
+    // 3. 回退到当前/最后一个 assistant 消息的 anchorID
+    for (var i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role == 'assistant') {
+        return TranscriptTurnClassifier.anchorID(
+          messages[i],
+          at: i,
+          messageOffset: offset,
+        );
+      }
+    }
+    // 4. 若无 assistant 消息，且 candidateId 并非临时 ID，保留 candidateId
+    if (candidateId != null &&
+        !candidateId.startsWith('stream-') &&
+        !candidateId.startsWith('local-') &&
+        candidateId != 'unanchored') {
+      return candidateId;
+    }
+    // 5. 若为临时流式 ID 且当前没有 assistant 消息，尝试以当前消息槽位推断 raw 锚点
+    if (messages.isNotEmpty) {
+      return 'raw:${(offset < 0 ? 0 : offset) + messages.length}';
+    }
+    return null;
+  }
+
   List<ReasoningGroup> _archiveLiveReasoningToGroups([String? overrideAnchor]) {
     if (state.liveReasoningText.isEmpty) return state.completedReasoningGroups;
-    final anchor =
-        overrideAnchor ??
-        state.stream.reasoningAnchorMessageId ??
-        state.stream.streamingAssistantMessageId ??
-        _lastAssistantMessageId(state.messages);
+    final anchor = _resolveLiveArchiveAnchor(
+      messages: state.messages,
+      messageOffset: state.messagesOffset,
+      candidateId: overrideAnchor ??
+          state.stream.reasoningAnchorMessageId ??
+          state.stream.streamingAssistantMessageId,
+    );
     final group = ReasoningGroup(
       anchorMessageId: anchor,
       text: state.liveReasoningText,
@@ -4044,11 +4155,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   List<ToolCallGroup> _archiveLiveToolCallsToGroups([String? overrideAnchor]) {
     if (state.liveToolCalls.isEmpty) return state.completedToolCallGroups;
-    final anchor =
-        overrideAnchor ??
-        state.stream.toolCallAnchorMessageId ??
-        state.stream.streamingAssistantMessageId ??
-        _lastAssistantMessageId(state.messages);
+    final anchor = _resolveLiveArchiveAnchor(
+      messages: state.messages,
+      messageOffset: state.messagesOffset,
+      candidateId: overrideAnchor ??
+          state.stream.toolCallAnchorMessageId ??
+          state.stream.streamingAssistantMessageId,
+    );
     final group = ToolCallGroup.live(
       anchorMessageID: anchor,
       toolCalls: List<ToolCall>.of(state.liveToolCalls),
@@ -4061,58 +4174,229 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   List<ToolCallGroup> _reanchorGroupsToMessages(
     List<ToolCallGroup> groups,
-    List<ChatMessage> messages,
+    List<ChatMessage> messages, {
+    int? messageOffset,
     String? oldStreamingId,
-    String? newAnchorId,
-  ) {
-    if (groups.isEmpty || newAnchorId == null || newAnchorId.isEmpty) {
-      return groups;
+    String? fallbackAnchorId,
+  }) {
+    if (groups.isEmpty) return groups;
+    final offset = messageOffset ?? 0;
+    final validAnchors = <String>{};
+    for (var i = 0; i < messages.length; i++) {
+      validAnchors.add(
+        TranscriptTurnClassifier.anchorID(
+          messages[i],
+          at: i,
+          messageOffset: offset,
+        ),
+      );
+      final mid = messages[i].messageId;
+      if (mid != null &&
+          !mid.startsWith('stream-') &&
+          !mid.startsWith('local-') &&
+          mid != 'unanchored') {
+        validAnchors.add(mid);
+      }
     }
-    final messageIds = messages
-        .map((m) => m.messageId)
-        .whereType<String>()
-        .toSet();
+
+    String? latestAssistantAnchor;
+    for (var i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role == 'assistant') {
+        latestAssistantAnchor = TranscriptTurnClassifier.anchorID(
+          messages[i],
+          at: i,
+          messageOffset: offset,
+        );
+        break;
+      }
+    }
+
     return groups.map((g) {
       final anchor = g.anchorMessageID;
-      final needsReanchor =
-          anchor == null ||
+      final isDead = anchor == null ||
           anchor == oldStreamingId ||
-          ((anchor.startsWith('local-') || anchor == 'unanchored') &&
-              !messageIds.contains(anchor));
-      if (needsReanchor) {
+          anchor.startsWith('stream-') ||
+          anchor.startsWith('local-') ||
+          anchor == 'unanchored' ||
+          !validAnchors.contains(anchor);
+
+      if (!isDead) {
+        return g;
+      }
+
+      String? newAnchor;
+
+      if (anchor != null && anchor.isNotEmpty) {
+        final idx = messages.indexWhere((m) => m.messageId == anchor);
+        if (idx != -1) {
+          newAnchor = TranscriptTurnClassifier.anchorID(
+            messages[idx],
+            at: idx,
+            messageOffset: offset,
+          );
+        }
+      }
+      if (newAnchor == null && oldStreamingId != null && oldStreamingId.isNotEmpty) {
+        final idx = messages.indexWhere((m) => m.messageId == oldStreamingId);
+        if (idx != -1) {
+          newAnchor = TranscriptTurnClassifier.anchorID(
+            messages[idx],
+            at: idx,
+            messageOffset: offset,
+          );
+        }
+      }
+
+      if (newAnchor == null && anchor != null && anchor.startsWith('raw:')) {
+        final rawNum = int.tryParse(anchor.substring(4));
+        if (rawNum != null) {
+          final localIdx = rawNum - offset;
+          if (localIdx >= 0 && localIdx < messages.length) {
+            newAnchor = TranscriptTurnClassifier.assistantAnchorID(
+                  localIdx,
+                  messages,
+                  messageOffset: offset,
+                ) ??
+                TranscriptTurnClassifier.anchorID(
+                  messages[localIdx],
+                  at: localIdx,
+                  messageOffset: offset,
+                );
+          }
+        }
+      }
+
+      if (newAnchor == null) {
+        if (fallbackAnchorId != null && validAnchors.contains(fallbackAnchorId)) {
+          newAnchor = fallbackAnchorId;
+        } else if (latestAssistantAnchor != null) {
+          newAnchor = latestAssistantAnchor;
+        }
+      }
+
+      if (newAnchor != null && validAnchors.contains(newAnchor)) {
         return ToolCallGroup(
-          id: g.id,
-          anchorMessageID: newAnchorId,
+          id: g.id.startsWith('live-tools-') ? 'live-tools-$newAnchor' : g.id,
+          anchorMessageID: newAnchor,
+          precedingMessageID: g.precedingMessageID,
+          isAboveContent: g.isAboveContent,
           toolCalls: g.toolCalls,
         );
       }
+
       return g;
     }).toList();
   }
 
   List<ReasoningGroup> _reanchorReasoningToMessages(
     List<ReasoningGroup> groups,
-    List<ChatMessage> messages,
+    List<ChatMessage> messages, {
+    int? messageOffset,
     String? oldStreamingId,
-    String? newAnchorId,
-  ) {
-    if (groups.isEmpty || newAnchorId == null || newAnchorId.isEmpty) {
-      return groups;
+    String? fallbackAnchorId,
+  }) {
+    if (groups.isEmpty) return groups;
+    final offset = messageOffset ?? 0;
+    final validAnchors = <String>{};
+    for (var i = 0; i < messages.length; i++) {
+      validAnchors.add(
+        TranscriptTurnClassifier.anchorID(
+          messages[i],
+          at: i,
+          messageOffset: offset,
+        ),
+      );
+      final mid = messages[i].messageId;
+      if (mid != null &&
+          !mid.startsWith('stream-') &&
+          !mid.startsWith('local-') &&
+          mid != 'unanchored') {
+        validAnchors.add(mid);
+      }
     }
-    final messageIds = messages
-        .map((m) => m.messageId)
-        .whereType<String>()
-        .toSet();
+
+    String? latestAssistantAnchor;
+    for (var i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role == 'assistant') {
+        latestAssistantAnchor = TranscriptTurnClassifier.anchorID(
+          messages[i],
+          at: i,
+          messageOffset: offset,
+        );
+        break;
+      }
+    }
+
     return groups.map((g) {
       final anchor = g.anchorMessageId;
-      final needsReanchor =
-          anchor == null ||
+      final isDead = anchor == null ||
           anchor == oldStreamingId ||
-          ((anchor.startsWith('local-') || anchor == 'unanchored') &&
-              !messageIds.contains(anchor));
-      if (needsReanchor) {
-        return ReasoningGroup(anchorMessageId: newAnchorId, text: g.text);
+          anchor.startsWith('stream-') ||
+          anchor.startsWith('local-') ||
+          anchor == 'unanchored' ||
+          !validAnchors.contains(anchor);
+
+      if (!isDead) {
+        return g;
       }
+
+      String? newAnchor;
+
+      if (anchor != null && anchor.isNotEmpty) {
+        final idx = messages.indexWhere((m) => m.messageId == anchor);
+        if (idx != -1) {
+          newAnchor = TranscriptTurnClassifier.anchorID(
+            messages[idx],
+            at: idx,
+            messageOffset: offset,
+          );
+        }
+      }
+      if (newAnchor == null && oldStreamingId != null && oldStreamingId.isNotEmpty) {
+        final idx = messages.indexWhere((m) => m.messageId == oldStreamingId);
+        if (idx != -1) {
+          newAnchor = TranscriptTurnClassifier.anchorID(
+            messages[idx],
+            at: idx,
+            messageOffset: offset,
+          );
+        }
+      }
+
+      if (newAnchor == null && anchor != null && anchor.startsWith('raw:')) {
+        final rawNum = int.tryParse(anchor.substring(4));
+        if (rawNum != null) {
+          final localIdx = rawNum - offset;
+          if (localIdx >= 0 && localIdx < messages.length) {
+            newAnchor = TranscriptTurnClassifier.assistantAnchorID(
+                  localIdx,
+                  messages,
+                  messageOffset: offset,
+                ) ??
+                TranscriptTurnClassifier.anchorID(
+                  messages[localIdx],
+                  at: localIdx,
+                  messageOffset: offset,
+                );
+          }
+        }
+      }
+
+      if (newAnchor == null) {
+        if (fallbackAnchorId != null && validAnchors.contains(fallbackAnchorId)) {
+          newAnchor = fallbackAnchorId;
+        } else if (latestAssistantAnchor != null) {
+          newAnchor = latestAssistantAnchor;
+        }
+      }
+
+      if (newAnchor != null && validAnchors.contains(newAnchor)) {
+        return ReasoningGroup(
+          anchorMessageId: newAnchor,
+          text: g.text,
+        );
+      }
+
       return g;
     }).toList();
   }

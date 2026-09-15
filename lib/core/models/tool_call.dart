@@ -576,25 +576,66 @@ class ToolCallGroup {
           ? null
           : '$anchorMessageID:${fallbackGroup.isAboveContent}';
       final groupIndex = key == null ? null : groupIndexesByKey[key];
-      if (groupIndex == null) {
-        if (key != null) {
-          groupIndexesByKey[key] = merged.length;
-        }
-        merged.add(fallbackGroup);
+      if (groupIndex != null) {
+        final existingGroup = merged[groupIndex];
+        merged[groupIndex] = ToolCallGroup(
+          id: existingGroup.id,
+          anchorMessageID: existingGroup.anchorMessageID,
+          precedingMessageID: existingGroup.precedingMessageID,
+          isAboveContent: existingGroup.isAboveContent,
+          toolCalls: _mergingToolCalls(
+            primaryToolCalls: existingGroup.toolCalls,
+            fallbackToolCalls: fallbackGroup.toolCalls,
+          ),
+        );
         continue;
       }
 
-      final existingGroup = merged[groupIndex];
-      merged[groupIndex] = ToolCallGroup(
-        id: existingGroup.id,
-        anchorMessageID: existingGroup.anchorMessageID,
-        precedingMessageID: existingGroup.precedingMessageID,
-        isAboveContent: existingGroup.isAboveContent,
-        toolCalls: _mergingToolCalls(
-          primaryToolCalls: existingGroup.toolCalls,
-          fallbackToolCalls: fallbackGroup.toolCalls,
-        ),
-      );
+      // 指纹兜底比对：在 fallbackGroup 未通过 anchor key 匹配到既有组时，
+      // 检查 merged 中是否已有内容指纹相等或互为子集的组，防锚点空间漂移（如 stream- 临时 id vs raw:）。
+      var matchedFingerprintIndex = -1;
+      for (var i = 0; i < merged.length; i++) {
+        final existing = merged[i];
+        if (existing.isAboveContent != fallbackGroup.isAboveContent) continue;
+        if (_isToolCallsEqual(existing.toolCalls, fallbackGroup.toolCalls) ||
+            _isToolCallsSubset(fallbackGroup.toolCalls, existing.toolCalls) ||
+            _isToolCallsSubset(existing.toolCalls, fallbackGroup.toolCalls)) {
+          matchedFingerprintIndex = i;
+          break;
+        }
+      }
+
+      if (matchedFingerprintIndex != -1) {
+        final existingGroup = merged[matchedFingerprintIndex];
+        final bool fallbackIsSuperset = _isToolCallsSubset(
+          existingGroup.toolCalls,
+          fallbackGroup.toolCalls,
+        );
+        merged[matchedFingerprintIndex] = ToolCallGroup(
+          id: existingGroup.id,
+          anchorMessageID: existingGroup.anchorMessageID,
+          precedingMessageID: existingGroup.precedingMessageID,
+          isAboveContent: existingGroup.isAboveContent,
+          toolCalls: fallbackIsSuperset
+              ? _mergingToolCalls(
+                  primaryToolCalls: fallbackGroup.toolCalls,
+                  fallbackToolCalls: existingGroup.toolCalls,
+                )
+              : _mergingToolCalls(
+                  primaryToolCalls: existingGroup.toolCalls,
+                  fallbackToolCalls: fallbackGroup.toolCalls,
+                ),
+        );
+        if (key != null) {
+          groupIndexesByKey[key] = matchedFingerprintIndex;
+        }
+        continue;
+      }
+
+      if (key != null) {
+        groupIndexesByKey[key] = merged.length;
+      }
+      merged.add(fallbackGroup);
     }
     return merged;
   }
@@ -768,11 +809,77 @@ class ToolCallGroup {
       }
     }
 
+    // 指纹比对预处理：扫描互为相等或子集的组（防死锚/空间漂移产生的重复卡）
+    final deduped = <ToolCallGroup>[];
+    for (final group in groups) {
+      final groupAnchorIdx = group.anchorMessageID == null
+          ? -1
+          : (messageIndexesByID[group.anchorMessageID] ?? -1);
+
+      var matchedIndex = -1;
+      for (var j = 0; j < deduped.length; j++) {
+        final existing = deduped[j];
+        if (existing.isAboveContent != group.isAboveContent) continue;
+
+        final existingAnchorIdx = existing.anchorMessageID == null
+            ? -1
+            : (messageIndexesByID[existing.anchorMessageID] ?? -1);
+
+        // 两组都在当前 messages 且属于不同回合（有文本打断）→ 保守：绝不跨回合去重
+        if (existingAnchorIdx >= 0 &&
+            groupAnchorIdx >= 0 &&
+            (hasTextBetween(existingAnchorIdx, groupAnchorIdx) ||
+                (existingAnchorIdx != groupAnchorIdx &&
+                    (textAnchorIDs.contains(group.anchorMessageID) ||
+                        textAnchorIDs.contains(existing.anchorMessageID))))) {
+          continue;
+        }
+
+        final isEqual = _isToolCallsEqual(existing.toolCalls, group.toolCalls);
+        final isSub = _isToolCallsSubset(group.toolCalls, existing.toolCalls);
+        final isSuper = _isToolCallsSubset(existing.toolCalls, group.toolCalls);
+
+        if (isEqual || isSub || isSuper) {
+          matchedIndex = j;
+          final targetAnchor = (existingAnchorIdx < 0 && groupAnchorIdx >= 0)
+              ? group.anchorMessageID
+              : existing.anchorMessageID;
+          final targetId = (existingAnchorIdx < 0 && groupAnchorIdx >= 0)
+              ? group.id
+              : existing.id;
+          final targetPreceding = (existingAnchorIdx < 0 && groupAnchorIdx >= 0)
+              ? group.precedingMessageID
+              : existing.precedingMessageID;
+
+          deduped[j] = ToolCallGroup(
+            id: targetId,
+            anchorMessageID: targetAnchor,
+            precedingMessageID: targetPreceding,
+            isAboveContent: existing.isAboveContent,
+            toolCalls: isSuper
+                ? _mergingToolCalls(
+                    primaryToolCalls: group.toolCalls,
+                    fallbackToolCalls: existing.toolCalls,
+                  )
+                : _mergingToolCalls(
+                    primaryToolCalls: existing.toolCalls,
+                    fallbackToolCalls: group.toolCalls,
+                  ),
+          );
+          break;
+        }
+      }
+
+      if (matchedIndex == -1) {
+        deduped.add(group);
+      }
+    }
+
     final merged = <ToolCallGroup>[];
     final anchorIndexes = <String, int>{};
     final groupOrderIndexes = <String, int>{};
-    for (var i = 0; i < groups.length; i++) {
-      final group = groups[i];
+    for (var i = 0; i < deduped.length; i++) {
+      final group = deduped[i];
       groupOrderIndexes[group.id] = i;
       if (group.anchorMessageID != null) {
         anchorIndexes[group.id] =
@@ -780,14 +887,14 @@ class ToolCallGroup {
       }
     }
 
-    final orderedIds = groups.map((g) => g.id).toList()
+    final orderedIds = deduped.map((g) => g.id).toList()
       ..sort((a, b) {
         final ia = anchorIndexes[a] ?? (1 << 62) - groupOrderIndexes[a]!;
         final ib = anchorIndexes[b] ?? (1 << 62) - groupOrderIndexes[b]!;
         final cmp = ia.compareTo(ib);
         if (cmp != 0) return cmp;
-        final ga = groups.firstWhere((g) => g.id == a);
-        final gb = groups.firstWhere((g) => g.id == b);
+        final ga = deduped.firstWhere((g) => g.id == a);
+        final gb = deduped.firstWhere((g) => g.id == b);
         if (ga.isAboveContent != gb.isAboveContent) {
           return ga.isAboveContent ? -1 : 1;
         }
@@ -797,23 +904,46 @@ class ToolCallGroup {
     ToolCallGroup? current;
     int? currentAnchorIndex;
     for (final id in orderedIds) {
-      final group = groups.firstWhere((g) => g.id == id);
+      final group = deduped.firstWhere((g) => g.id == id);
       final anchorIndex = anchorIndexes[id] ?? -1;
-      if (current == null) {
+      final currIdx = currentAnchorIndex;
+      if (current == null || currIdx == null) {
         current = group;
         currentAnchorIndex = anchorIndex;
         continue;
       }
-      final canMerge =
-          currentAnchorIndex != null &&
-          currentAnchorIndex >= 0 &&
+      final isAnchoredMerge =
+          currIdx >= 0 &&
           anchorIndex >= 0 &&
           current.isAboveContent == group.isAboveContent &&
-          !hasTextBetween(currentAnchorIndex, anchorIndex) &&
-          !(anchorIndex != currentAnchorIndex &&
+          !hasTextBetween(currIdx, anchorIndex) &&
+          !(anchorIndex != currIdx &&
               textAnchorIDs.contains(group.anchorMessageID));
+
+      // C（可选加固）：coalescingAdjacent 对 anchorIndex < 0 的组按 isAboveContent + 最近有锚组归并，
+      // 触发条件：相邻两组卡位方向一致，且其中一方为未命中 messages 的死锚组（anchorIndex < 0）。
+      final isUnanchoredLeakMerge =
+          current.isAboveContent == group.isAboveContent &&
+          ((currIdx >= 0 && anchorIndex < 0) ||
+              (currIdx < 0 && anchorIndex >= 0));
+
+      final canMerge = isAnchoredMerge || isUnanchoredLeakMerge;
       if (canMerge) {
-        current = _mergingToolCallGroup(current, group);
+        if (currIdx < 0 && anchorIndex >= 0) {
+          current = ToolCallGroup(
+            id: group.id,
+            anchorMessageID: group.anchorMessageID,
+            precedingMessageID: group.precedingMessageID,
+            isAboveContent: group.isAboveContent,
+            toolCalls: _mergingToolCalls(
+              primaryToolCalls: group.toolCalls,
+              fallbackToolCalls: current.toolCalls,
+            ),
+          );
+          currentAnchorIndex = anchorIndex;
+        } else {
+          current = _mergingToolCallGroup(current, group);
+        }
         continue;
       }
       merged.add(current);
@@ -1297,8 +1427,67 @@ class ToolCallGroup {
     ].join(':');
   }
 
+  static bool _toolCallsMatch(ToolCall a, ToolCall b) {
+    if (a.isThinking != b.isThinking) return false;
+    if (a.isThinking) {
+      return (a.thinking ?? '').trim() == (b.thinking ?? '').trim();
+    }
+    final aStable = !_isGeneratedToolID(a.id) && a.id.trim().isNotEmpty;
+    final bStable = !_isGeneratedToolID(b.id) && b.id.trim().isNotEmpty;
+    if (aStable && bStable) {
+      return a.id == b.id;
+    }
+    return _toolCallFingerprint(a) == _toolCallFingerprint(b);
+  }
+
+  static bool _isToolCallsEqual(List<ToolCall> a, List<ToolCall> b) {
+    if (a.isEmpty || b.isEmpty) return false;
+    if (a.length != b.length) return false;
+    var allMatch = true;
+    for (var i = 0; i < a.length; i++) {
+      if (!_toolCallsMatch(a[i], b[i])) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) return true;
+
+    final matchedIndices = <int>{};
+    for (final callA in a) {
+      var found = false;
+      for (var j = 0; j < b.length; j++) {
+        if (!matchedIndices.contains(j) && _toolCallsMatch(callA, b[j])) {
+          matchedIndices.add(j);
+          found = true;
+          break;
+        }
+      }
+      if (!found) return false;
+    }
+    return matchedIndices.length == b.length;
+  }
+
+  static bool _isToolCallsSubset(List<ToolCall> sub, List<ToolCall> sup) {
+    if (sub.isEmpty || sup.isEmpty) return false;
+    if (sub.length >= sup.length) return false;
+
+    final matchedIndices = <int>{};
+    for (final callSub in sub) {
+      var found = false;
+      for (var j = 0; j < sup.length; j++) {
+        if (!matchedIndices.contains(j) && _toolCallsMatch(callSub, sup[j])) {
+          matchedIndices.add(j);
+          found = true;
+          break;
+        }
+      }
+      if (!found) return false;
+    }
+    return true;
+  }
+
   static bool _isGeneratedToolID(String id) {
-    return id.startsWith('live-tool-') ||
+    return id.startsWith('live-') ||
         id.startsWith('message-tool-') ||
         id.startsWith('persisted-tool-');
   }

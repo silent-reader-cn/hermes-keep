@@ -614,4 +614,129 @@ void main() {
       expect(call2.summary, isNull);
     });
   });
+
+  group('TASK #112 归档组死锚与指纹去重', () {
+    test('归档组锚 = 流式 id + 派生组锚 = raw: → re-anchor/指纹去重后单卡', () {
+      final derivedGroup = ToolCallGroup(
+        id: 'persisted-tools-raw:1',
+        anchorMessageID: 'raw:1',
+        toolCalls: [
+          ToolCall(
+            id: 'call_1',
+            name: 'terminal',
+            args: {'cmd': const JsonString('ls')},
+            isCompleted: true,
+          ),
+        ],
+      );
+      final archivedGroup = ToolCallGroup(
+        id: 'live-archive-group',
+        anchorMessageID: 'stream-temp-uuid',
+        toolCalls: [
+          ToolCall(
+            id: 'live-tool-0',
+            name: 'terminal',
+            args: {'cmd': const JsonString('ls')},
+            isCompleted: true,
+          ),
+        ],
+      );
+
+      final merged = ToolCallGroup.merging(
+        primaryGroups: [derivedGroup],
+        fallbackGroups: [archivedGroup],
+      );
+
+      expect(merged, hasLength(1));
+      expect(merged.first.anchorMessageID, 'raw:1');
+      expect(merged.first.toolCalls, hasLength(1));
+    });
+
+    test('指纹相等 → 去重', () {
+      final groupA = ToolCallGroup(
+        id: 'group-a',
+        anchorMessageID: 'raw:1',
+        toolCalls: [
+          ToolCall.thinking('思考中...'),
+          ToolCall(
+            id: 'call_1',
+            name: 'todo_list',
+            args: {'action': const JsonString('show')},
+          ),
+        ],
+      );
+      final groupB = ToolCallGroup(
+        id: 'group-b',
+        anchorMessageID: 'dead-anchor-id',
+        toolCalls: [
+          ToolCall.thinking('思考中...'),
+          ToolCall(
+            id: 'live-todo',
+            name: 'todo_list',
+            args: {'action': const JsonString('show')},
+          ),
+        ],
+      );
+
+      final merged = ToolCallGroup.merging(
+        primaryGroups: [groupA],
+        fallbackGroups: [groupB],
+      );
+
+      expect(merged, hasLength(1));
+      expect(merged.first.id, 'group-a');
+      expect(merged.first.anchorMessageID, 'raw:1');
+      expect(merged.first.toolCalls, hasLength(2));
+    });
+
+    test('指纹为子集 → 合并且不吞内容', () {
+      final supersetGroup = ToolCallGroup(
+        id: 'group-super',
+        anchorMessageID: 'raw:1',
+        toolCalls: [
+          ToolCall.thinking('think1'),
+          ToolCall(
+            id: 'call_1',
+            name: 'terminal',
+            args: {'cmd': const JsonString('ls')},
+          ),
+          ToolCall.thinking('think2'),
+          ToolCall(
+            id: 'call_2',
+            name: 'terminal',
+            args: {'cmd': const JsonString('pwd')},
+          ),
+        ],
+      );
+      final subsetGroup = ToolCallGroup(
+        id: 'group-sub',
+        anchorMessageID: 'stream-ghost-id',
+        toolCalls: [
+          ToolCall.thinking('think1'),
+          ToolCall(
+            id: 'live-1',
+            name: 'terminal',
+            args: {'cmd': const JsonString('ls')},
+            duration: 42,
+          ),
+        ],
+      );
+
+      final merged = ToolCallGroup.merging(
+        primaryGroups: [supersetGroup],
+        fallbackGroups: [subsetGroup],
+      );
+
+      expect(merged, hasLength(1));
+      expect(merged.first.id, 'group-super');
+      expect(merged.first.toolCalls, hasLength(4));
+      expect(
+        merged.first.toolCalls
+            .map((c) => c.isThinking ? c.thinking : c.name)
+            .toList(),
+        ['think1', 'terminal', 'think2', 'terminal'],
+      );
+      expect(merged.first.toolCalls[1].duration, 42);
+    });
+  });
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/api/sse_client.dart';
+import 'package:hermes_ui/core/models/chat_message.dart';
 import 'package:hermes_ui/features/chat/chat_controller.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/chat_state.dart';
@@ -1258,6 +1259,106 @@ void main() {
         expect(api.sessionCalls, greaterThan(sessionCallsBefore));
         state = container.read(chatControllerProvider(''));
         expect(state.responseCompletionNeedsTranscriptRefresh, isFalse);
+      });
+    });
+
+    test('TASK #112: 模拟 done → refresh 序列，completedToolCallGroups 无死锚残留', () {
+      fakeAsync((async) {
+        final api = _FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('跑一下测试'));
+        async.flushMicrotasks();
+
+        // 流式期间收到工具调用
+        api.emit(
+          const ToolStartedSseEvent(
+            ToolStreamEvent(
+              stableId: 'call_1',
+              name: 'terminal',
+              args: {'cmd': 'flutter test'},
+            ),
+          ),
+        );
+        api.emit(
+          const ToolCompletedSseEvent(
+            ToolStreamEvent(
+              stableId: 'call_1',
+              name: 'terminal',
+              duration: 120,
+            ),
+          ),
+        );
+        async.flushMicrotasks();
+
+        var state = container.read(chatControllerProvider(''));
+        expect(state.liveToolCalls, hasLength(1));
+
+        // done 到达（无 transcript，触发 needsTranscriptRefresh）
+        api.emit(
+          const DoneSseEvent(DoneStreamEvent(session: {'session_id': 's1'})),
+        );
+        state = container.read(chatControllerProvider(''));
+        expect(state.phase, ChatPhase.idle);
+        expect(state.responseCompletionNeedsTranscriptRefresh, isTrue);
+
+        // 服务端 state.db 读取路径：消息不携带 message_id（ChatMessage.messageId = null）
+        api.sessionResult = {
+          'session': {
+            'session_id': 's1',
+            'messages': [
+              {'role': 'user', 'content': '跑一下测试'},
+              {'role': 'assistant', 'content': '测试已完成'},
+            ],
+            'tool_calls': [
+              {
+                'name': 'terminal',
+                'args': {'cmd': 'flutter test'},
+                'assistant_msg_idx': 1,
+                'tid': 'call_1',
+              },
+            ],
+          },
+        };
+
+        // 推进 600ms 触发 refreshTranscriptIfCompleted 轮询
+        async.elapse(const Duration(milliseconds: 600));
+        async.flushMicrotasks();
+
+        state = container.read(chatControllerProvider(''));
+        expect(state.responseCompletionNeedsTranscriptRefresh, isFalse);
+
+        // 收集当前 messages 的所有合法 anchorID（含 assistant anchorID）
+        final currentAnchors = <String>{
+          for (var i = 0; i < state.messages.length; i++) ...[
+            TranscriptTurnClassifier.anchorID(
+              state.messages[i],
+              at: i,
+              messageOffset: state.messagesOffset,
+            ),
+            if (state.messages[i].messageId != null)
+              state.messages[i].messageId!,
+          ],
+        };
+
+        // 断言：completedToolCallGroups 必须非空且全部命中当前 anchor 集合，无死锚残留（如 stream- 临时 id）
+        expect(state.completedToolCallGroups, isNotEmpty);
+        for (final group in state.completedToolCallGroups) {
+          expect(group.anchorMessageID, isNotNull);
+          expect(
+            currentAnchors.contains(group.anchorMessageID),
+            isTrue,
+            reason:
+                'Group ${group.id} 锚点 ${group.anchorMessageID} 是不在当前 anchor 集合内的死锚',
+          );
+          expect(
+            group.anchorMessageID!.startsWith('stream-'),
+            isFalse,
+            reason: 'Group ${group.id} 仍残留流式临时 id: ${group.anchorMessageID}',
+          );
+        }
+        // 且经去重合并后仅有 1 张卡
+        expect(state.completedToolCallGroups, hasLength(1));
       });
     });
 

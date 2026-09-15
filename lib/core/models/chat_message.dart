@@ -363,7 +363,12 @@ class TranscriptTurnClassifier {
     int? messageOffset,
   }) {
     final messageId = _nonEmpty(message.messageId);
-    if (messageId != null) return messageId;
+    if (messageId != null &&
+        !messageId.startsWith('stream-') &&
+        !messageId.startsWith('local-') &&
+        messageId != 'unanchored') {
+      return messageId;
+    }
     final offset = messageOffset ?? 0;
     return 'raw:${(offset < 0 ? 0 : offset) + at}';
   }
