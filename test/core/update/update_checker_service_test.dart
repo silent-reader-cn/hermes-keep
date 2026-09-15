@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/update/update_checker_service.dart';
+import 'package:hermes_ui/core/update/version_info.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -215,6 +216,119 @@ void main() {
 
       expect(result.status, UpdateCheckStatus.failed);
       expect(result.error, isNotNull);
+    });
+
+    test('10. #122 未注入版本时用解析器取真实版本作比对基准（远端同版 → 无更新）',
+        () async {
+      when(() => mockDio.get<dynamic>(any(), options: any(named: 'options')))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: kGithubReleasesLatestUrl),
+          statusCode: 200,
+          data: {
+            'tag_name': 'v0.1.50',
+            'html_url': 'https://github.com/releases/v0.1.50',
+            'name': 'v0.1.50',
+            'body': 'Current',
+          },
+        ),
+      );
+
+      final service = UpdateCheckerService(
+        dio: mockDio,
+        currentVersionResolver: () async => '0.1.50+56',
+        prefsResolver: SharedPreferences.getInstance,
+      );
+
+      final result = await service.checkForUpdates(isManual: true);
+
+      expect(result.status, UpdateCheckStatus.upToDate);
+      expect(result.currentVersion, '0.1.50+56');
+      expect(result.hasUpdate, isFalse);
+    });
+
+    test('11. #122 装了更新一版后不得再报同一版（0.1.50 装 0.1.50 → 无更新）', () async {
+      when(() => mockDio.get<dynamic>(any(), options: any(named: 'options')))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: kGithubReleasesLatestUrl),
+          statusCode: 200,
+          data: {
+            'tag_name': 'v0.1.50',
+            'html_url': 'https://github.com/releases/v0.1.50',
+            'name': 'v0.1.50',
+            'body': 'Current',
+          },
+        ),
+      );
+
+      // 旧实现在此路径会用硬编码常量（停在 0.1.31）当基准 → 永远误报有更新。
+      final service = UpdateCheckerService(
+        dio: mockDio,
+        currentVersionResolver: () async => '0.1.50',
+        prefsResolver: SharedPreferences.getInstance,
+      );
+
+      final result = await service.checkForUpdates(isManual: true);
+
+      expect(result.status, UpdateCheckStatus.upToDate);
+      expect(result.hasUpdate, isFalse);
+    });
+
+    test('12. #122 版本解析失败 → 安全回退兜底常量，不崩且不误报有更新', () async {
+      when(() => mockDio.get<dynamic>(any(), options: any(named: 'options')))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: kGithubReleasesLatestUrl),
+          statusCode: 200,
+          data: {
+            'tag_name': 'v0.1.47',
+            'html_url': 'https://github.com/releases/v0.1.47',
+            'name': 'v0.1.47',
+            'body': 'Older than fallback',
+          },
+        ),
+      );
+
+      final service = UpdateCheckerService(
+        dio: mockDio,
+        currentVersionResolver: () async => throw StateError('no platform'),
+        prefsResolver: SharedPreferences.getInstance,
+      );
+
+      final result = await service.checkForUpdates(isManual: true);
+
+      // 兜底常量为 0.1.50 > v0.1.47 → 不应误报「发现新版本 v0.1.47」
+      expect(result.currentVersion, appVersion);
+      expect(result.status, UpdateCheckStatus.upToDate);
+      expect(result.hasUpdate, isFalse);
+    });
+
+    test('13. #122 未注入且未指定解析器 → 默认解析器在无平台通道下安全降级', () async {
+      when(() => mockDio.get<dynamic>(any(), options: any(named: 'options')))
+          .thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: kGithubReleasesLatestUrl),
+          statusCode: 200,
+          data: {
+            'tag_name': 'v0.1.47',
+            'html_url': 'https://github.com/releases/v0.1.47',
+            'name': 'v0.1.47',
+            'body': 'x',
+          },
+        ),
+      );
+
+      final service = UpdateCheckerService(
+        dio: mockDio,
+        prefsResolver: SharedPreferences.getInstance,
+      );
+
+      final result = await service.checkForUpdates(isManual: true);
+
+      // 单测环境无原生通道 → package_info 解析失败 → 回退兜底常量，不抛异常
+      expect(result.currentVersion, isNotEmpty);
+      expect(result.status, isA<UpdateCheckStatus>());
     });
   });
 }

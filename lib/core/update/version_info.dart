@@ -1,8 +1,13 @@
-/// 当前应用版本常量。
+/// 应用版本的**兜底**常量（仅保留 X.Y.Z，不含 +buildNumber）。
 ///
-/// 当 `pubspec.yaml` 的 version 升级时，同步更新此处的 [appVersion]
-/// （注意：仅保留 X.Y.Z，不含 +buildNumber）。
-const String appVersion = '0.1.31';
+/// **运行时的真实版本来自 `package_info_plus`**（由 `UpdateCheckerService`
+/// 解析系统安装信息，与设置页展示的版本同源）；本常量只在平台通道不可用时兜底。
+///
+/// 历史教训（#122）：它曾作为更新检查的主数据源，而每次 `pubspec` 升版都容易
+/// 忘记同步（实测从 `0.1.31` 起漂了 18 个版本），导致「当前版本」永远落后 →
+/// 装了最新版仍反复提示有更新。故降级为兜底，并由 `version_info_test` 强制它与
+/// `pubspec.yaml` 的 X.Y.Z 一致，杜绝再次漂移。
+const String appVersion = '0.1.50';
 
 /// 比较版本号 [remote] 是否比 [current] 新。
 ///

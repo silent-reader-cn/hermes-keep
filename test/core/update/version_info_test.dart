@@ -1,10 +1,24 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/update/version_info.dart';
 
 void main() {
   group('version_info', () {
-    test('appVersion matches expected pubspec baseline version', () {
-      expect(appVersion, '0.1.31');
+    test('appVersion 兜底常量与 pubspec.yaml 的 X.Y.Z 一致（防漂移护栏 #122）', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      final match = RegExp(
+        r'^version:\s*([0-9]+\.[0-9]+\.[0-9]+)',
+        multiLine: true,
+      ).firstMatch(pubspec);
+      expect(match, isNotNull, reason: '未能从 pubspec.yaml 解析 version');
+
+      expect(
+        appVersion,
+        match!.group(1),
+        reason: 'appVersion 兜底常量与 pubspec 版本漂移了：它虽已降级为兜底，'
+            '仍需同步，否则误导后来人（历史漂了 18 个版本）',
+      );
     });
 
     group('newer() semver comparison', () {
