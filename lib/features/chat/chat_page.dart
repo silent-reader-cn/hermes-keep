@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io' show FileSystemEntity, Platform, Process;
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, mapEquals;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -869,12 +869,29 @@ class _PendingPromptCard extends ConsumerStatefulWidget {
   }
 }
 
+/// #124：判断是否需要重新初始化澄清卡片倒计时 Timer。
+/// 只有在倒计时未启动，或者 prompt/id 确实发生变化时才返回 true。
+bool shouldReinitClarifyCountdown({
+  required bool hasActiveTimer,
+  required String? lastId,
+  required String? currentId,
+  required Map<String, Object?>? lastPrompt,
+  required Map<String, Object?>? currentPrompt,
+}) {
+  if (!hasActiveTimer) return true;
+  if (currentId != null && currentId.isNotEmpty) {
+    return currentId != lastId;
+  }
+  return !mapEquals(lastPrompt, currentPrompt);
+}
+
 class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
   final TextEditingController _textController = TextEditingController();
   Timer? _countdownTimer;
   int _remainingSeconds = 0;
   bool _isCollapsed = false;
   bool _submitting = false;
+  String? _lastClarifyId;
   Map<String, Object?>? _lastClarifyPrompt;
 
   @override
@@ -902,17 +919,36 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
     if (pending.approvalPrompt != null) {
       _countdownTimer?.cancel();
       _countdownTimer = null;
+      _lastClarifyId = null;
+      _lastClarifyPrompt = null;
       return;
     }
     final clarifyPrompt = pending.clarificationPrompt;
     if (clarifyPrompt == null) {
       _countdownTimer?.cancel();
       _countdownTimer = null;
+      _lastClarifyId = null;
+      _lastClarifyPrompt = null;
       return;
     }
-    if (_lastClarifyPrompt == clarifyPrompt && _countdownTimer != null) {
+    final currentIdRaw =
+        clarifyPrompt['clarify_id'] ?? clarifyPrompt['clarifyId'];
+    final currentId = currentIdRaw?.toString().trim();
+    final hasActiveTimer = _countdownTimer != null;
+
+    final shouldReinit = shouldReinitClarifyCountdown(
+      hasActiveTimer: hasActiveTimer,
+      lastId: _lastClarifyId,
+      currentId: currentId,
+      lastPrompt: _lastClarifyPrompt,
+      currentPrompt: clarifyPrompt,
+    );
+
+    if (!shouldReinit) {
       return;
     }
+
+    _lastClarifyId = currentId;
     _lastClarifyPrompt = clarifyPrompt;
     _initCountdown(clarifyPrompt);
   }

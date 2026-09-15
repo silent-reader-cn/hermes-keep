@@ -136,6 +136,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   ChatLiveActivity? _liveActivity;
   String _liveActivityDetail = '';
 
+  /// #124：已发出通知的 clarify_id，避免轮询/重连重建卡片时重复弹系统通知。
+  String? _notifiedClarifyId;
+
+  /// #124：轮询 pending 为空的连续次数，用于抗抖。
+  int _emptyPendingStreak = 0;
+
   /// 重放期间是否需要逐帧重建时间线断点（仅断点为空的恢复场景为 true）。
   /// 正常 live 重连断点仍在：重放帧全命中时不再补点，避免已展示段在时间线
   /// 尾部重复叠加成簇（底部连续思考/文本卡簇的放大源）。
@@ -185,6 +191,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _appPaused = false;
     _liveActivity = null;
     _liveActivityDetail = '';
+    _notifiedClarifyId = null;
+    _emptyPendingStreak = 0;
     _cancelRecoverySentinel();
     _cancelResumeProbeRetry();
     _lastContextPollTime = null;
@@ -526,10 +534,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// [includeTarget] 为 true 时（默认）keep_count = index + 1（含自己保留）；
   /// 为 false 时 keep_count = index（不含自己保留，删除被编辑消息及其后全部，用于编辑重发）。
   /// 服务端 keep_count 从开头保留条数；越界或只读返回 false。
-  Future<bool> truncateAt(
-    int messageIndex, {
-    bool includeTarget = true,
-  }) async {
+  Future<bool> truncateAt(int messageIndex, {bool includeTarget = true}) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
     final messages = state.messages;
     if (messageIndex < 0 || messageIndex >= messages.length) return false;
@@ -924,7 +929,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         final anchor = _resolveLiveArchiveAnchor(
           messages: mergedMessages,
           messageOffset: newOffset,
-          candidateId: state.stream.toolCallAnchorMessageId ??
+          candidateId:
+              state.stream.toolCallAnchorMessageId ??
               state.stream.streamingAssistantMessageId,
         );
         final liveGroup = ToolCallGroup.live(
@@ -948,7 +954,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       final anchor = _resolveLiveArchiveAnchor(
         messages: mergedMessages,
         messageOffset: newOffset,
-        candidateId: state.stream.reasoningAnchorMessageId ??
+        candidateId:
+            state.stream.reasoningAnchorMessageId ??
             state.stream.streamingAssistantMessageId,
       );
       liveReasoningList.add(
@@ -1411,8 +1418,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           // reconnecting 挂起会封死 resume 主动探活入口），复位回 idle。
           if (!state.stream.hasCompletedResponse &&
               state.stream.activeStreamId != null &&
-              state.stream.recovery !=
-                  ActiveStreamRecoveryState.reconnecting &&
+              state.stream.recovery != ActiveStreamRecoveryState.reconnecting &&
               state.stream.recovery != ActiveStreamRecoveryState.idle) {
             state = state.copyWith(
               stream: state.stream.copyWith(
@@ -1496,7 +1502,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         );
       case DoneSseEvent(:final event):
         _applyDone(event);
-        _reportLiveActivity(ChatLiveActivity.finished);
+        _reportTurnSettled();
       case ContextStatusSseEvent(:final status, :final label):
         _handleContextStatus(status, label);
       case ApprovalPendingSseEvent(:final payload):
@@ -1511,13 +1517,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _handlePendingSteerLeftover(text);
       case StreamEndSseEvent():
         _handleStreamEnd();
-        _reportLiveActivity(ChatLiveActivity.finished);
+        _reportTurnSettled();
       case CancelledSseEvent():
         _handleCancelled();
-        _reportLiveActivity(ChatLiveActivity.finished);
+        _reportTurnSettled();
       case ErrorSseEvent(:final message):
         _handleErrorEvent(message);
-        _reportLiveActivity(ChatLiveActivity.finished);
+        _reportTurnSettled();
       case TransportErrorSseEvent(:final message):
         _handleTransportError(message);
       case HeartbeatSseEvent():
@@ -1645,9 +1651,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           ),
         );
       } catch (_) {}
-      // #120：退后台/锁屏立刻上报一次当前活动，使实况通知（灵动岛）即时出现
-      // ——不再依赖会话列表刷新（后台期间列表轮询与 SSE 均已停）。
-      if (_hasActiveTurn) {
+      // #120 / #124：退后台/锁屏立刻上报一次当前活动，使实况通知（灵动岛）即时出现
+      // ——不再依赖会话列表刷新（后台期间列表轮询与 SSE 均已停）。收尾后 phase
+      // 可能已回 idle，但卡片仍在等主人，此时切后台也必须能上岛。
+      if (_hasActiveTurn || state.pendingAction.hasPendingPrompt) {
         _reportLiveActivity(_inferLiveActivity(), force: true);
       }
       return;
@@ -2343,6 +2350,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           approvalPrompt: Map<String, Object?>.from(pending),
         ),
       );
+      _reportLiveActivity(ChatLiveActivity.waitingApproval);
     } else {
       _clearApprovalCard();
     }
@@ -2352,9 +2360,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _applyClarificationUpdate(Map<String, Object?> payload) {
     final pending = payload['pending'];
     if (pending is Map) {
-      final isNew =
-          state.phase != ChatPhase.clarifyPending ||
-          state.pendingAction.clarificationPrompt == null;
+      final clarifyIdRaw = pending['clarify_id'] ?? pending['clarifyId'];
+      final clarifyId = clarifyIdRaw?.toString().trim();
+      final bool isNew;
+      if (clarifyId != null && clarifyId.isNotEmpty) {
+        isNew = clarifyId != _notifiedClarifyId;
+      } else {
+        isNew =
+            state.phase != ChatPhase.clarifyPending ||
+            state.pendingAction.clarificationPrompt == null;
+      }
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.warn,
         tag: 'chat',
@@ -2367,7 +2382,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           clarificationPrompt: Map<String, Object?>.from(pending),
         ),
       );
+      _reportLiveActivity(ChatLiveActivity.waitingReply);
       if (isNew) {
+        if (clarifyId != null && clarifyId.isNotEmpty) {
+          _notifiedClarifyId = clarifyId;
+        }
         final q = (pending['question'] as String?)?.trim();
         _notifyClarificationNeeded(
           q != null && q.isNotEmpty ? q : 'Agent 需要你澄清问题',
@@ -2393,6 +2412,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           : ChatPhase.idle,
       pendingAction: state.pendingAction.copyWith(clearApproval: true),
     );
+    _reportLiveActivityAfterClearPrompt();
   }
 
   void _clearClarificationCard() {
@@ -2402,6 +2422,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           : ChatPhase.idle,
       pendingAction: state.pendingAction.copyWith(clearClarification: true),
     );
+    _reportLiveActivityAfterClearPrompt();
+  }
+
+  void _reportLiveActivityAfterClearPrompt() {
+    if (_hasActiveTurn || state.pendingAction.hasPendingPrompt) {
+      _reportLiveActivity(_inferLiveActivity());
+    } else {
+      _reportLiveActivity(ChatLiveActivity.finished);
+    }
   }
 
   void _handleContextStatus(ContextPrefillStatus status, String? label) {
@@ -2423,6 +2452,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _startClarifyChannel(String sessionId) {
     if (sessionId.isEmpty) return;
     _stopClarifyChannel();
+    _emptyPendingStreak = 0;
     _connectClarifyStream(sessionId);
     _startClarifyPolling(sessionId);
   }
@@ -2434,6 +2464,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     } catch (_) {}
     _clarifyPollTimer?.cancel();
     _clarifyPollTimer = null;
+    _emptyPendingStreak = 0;
   }
 
   /// 连接 `/api/clarify/stream?session_id=` 独立 SSE 流。
@@ -2481,6 +2512,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         return;
       }
       if (response.pending != null) {
+        _emptyPendingStreak = 0;
         final p = response.pending!;
         _applyClarificationUpdate({
           'pending': {
@@ -2496,7 +2528,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           'pending_count': response.pendingCount ?? 1,
         });
       } else if (state.pendingAction.clarificationPrompt != null) {
-        _clearClarificationCard();
+        _emptyPendingStreak++;
+        if (_emptyPendingStreak >= 2) {
+          _emptyPendingStreak = 0;
+          _clearClarificationCard();
+        }
+      } else {
+        _emptyPendingStreak = 0;
       }
     } catch (_) {
       // 静默容错
@@ -2939,7 +2977,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         replayToolMatchIndex: 0,
         replayAfterSeq: 0,
       ),
-      pendingAction: const ChatPendingActionState(),
+      // #124：流完成不等于澄清已解决（chat_spec §2.3）。
+      // 保持澄清卡片，仅清空 approvalPrompt。
+      pendingAction: state.pendingAction.copyWith(clearApproval: true),
       responseCompletionNeedsTranscriptRefresh: needsTranscriptRefresh,
     );
     if (needsTranscriptRefresh && completedStreamId != null) {
@@ -3016,6 +3056,20 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         detail,
       );
     } catch (_) {}
+  }
+
+  /// #124：收尾时若仍有「等主人行动」的报警态，直接报 finished 会把岛上的
+  /// 「请回复/请批准」一起抹掉（主人实测：从「生成中」切「请回复」会下岛）。
+  /// 有等待态时改报等待态，让岛停在正确状态。
+  void _reportTurnSettled() {
+    final pending = state.pendingAction;
+    if (pending.clarificationPrompt != null) {
+      _reportLiveActivity(ChatLiveActivity.waitingReply);
+    } else if (pending.approvalPrompt != null) {
+      _reportLiveActivity(ChatLiveActivity.waitingApproval);
+    } else {
+      _reportLiveActivity(ChatLiveActivity.finished);
+    }
   }
 
   /// 推断当前活动（退后台强制上报与等待态判定用）。
@@ -3137,7 +3191,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       clearPrefillLabel: true,
       clearTurnStartedMillis: true,
       liveTimelinePoints: const [],
-      pendingAction: const ChatPendingActionState(),
+      // #124：流收尾不等于澄清已解决（chat_spec §2.3「approval/clarify 是主流报警
+      // 事件，流不中断」）。重连/收尾时保留澄清态，避免卡片消失后又被 20s 轮询
+      // 拉回造成「消失→重现」闪烁。撤销只由作答成功 / 服务端 pending 明确为空 /
+      // 真超时三条路径驱动（分别在 respondToClarification、_pollClarifyPending、
+      // handleClarificationTimeout 内）。
+      pendingAction: state.pendingAction.copyWith(clearApproval: true),
       stream: state.stream.copyWith(
         clearActiveStreamId: true,
         clearLastEventId: true,
@@ -3253,9 +3312,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   void _syncSessionListDeleted(String id) {
     if (_disposed || id.isEmpty) return;
     try {
-      ref
-          .read(sessionListControllerProvider.notifier)
-          .applyExternalDeleted(id);
+      ref.read(sessionListControllerProvider.notifier).applyExternalDeleted(id);
     } catch (_) {}
   }
 
@@ -3278,7 +3335,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         ? serverTitle
         : (baseTitle == null ? null : '$baseTitle (fork)');
     try {
-      ref.read(sessionListControllerProvider.notifier).applyExternalBranched(
+      ref
+          .read(sessionListControllerProvider.notifier)
+          .applyExternalBranched(
             SessionSummary(
               sessionId: newId,
               title: resolvedTitle,
@@ -3723,10 +3782,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     if (_now().difference(since) >= _prefillStaleTimeout) {
       _prefillSince = null;
-      state = state.copyWith(
-        clearPrefillStatus: true,
-        clearPrefillLabel: true,
-      );
+      state = state.copyWith(clearPrefillStatus: true, clearPrefillLabel: true);
       if (state.stream.activeStreamId != null &&
           !state.stream.hasCompletedResponse) {
         unawaited(_checkStatusAndReconnect());
@@ -4129,7 +4185,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final anchor = _resolveLiveArchiveAnchor(
       messages: state.messages,
       messageOffset: state.messagesOffset,
-      candidateId: overrideAnchor ??
+      candidateId:
+          overrideAnchor ??
           state.stream.reasoningAnchorMessageId ??
           state.stream.streamingAssistantMessageId,
     );
@@ -4158,7 +4215,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final anchor = _resolveLiveArchiveAnchor(
       messages: state.messages,
       messageOffset: state.messagesOffset,
-      candidateId: overrideAnchor ??
+      candidateId:
+          overrideAnchor ??
           state.stream.toolCallAnchorMessageId ??
           state.stream.streamingAssistantMessageId,
     );
@@ -4213,7 +4271,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
     return groups.map((g) {
       final anchor = g.anchorMessageID;
-      final isDead = anchor == null ||
+      final isDead =
+          anchor == null ||
           anchor == oldStreamingId ||
           anchor.startsWith('stream-') ||
           anchor.startsWith('local-') ||
@@ -4236,7 +4295,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           );
         }
       }
-      if (newAnchor == null && oldStreamingId != null && oldStreamingId.isNotEmpty) {
+      if (newAnchor == null &&
+          oldStreamingId != null &&
+          oldStreamingId.isNotEmpty) {
         final idx = messages.indexWhere((m) => m.messageId == oldStreamingId);
         if (idx != -1) {
           newAnchor = TranscriptTurnClassifier.anchorID(
@@ -4252,7 +4313,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         if (rawNum != null) {
           final localIdx = rawNum - offset;
           if (localIdx >= 0 && localIdx < messages.length) {
-            newAnchor = TranscriptTurnClassifier.assistantAnchorID(
+            newAnchor =
+                TranscriptTurnClassifier.assistantAnchorID(
                   localIdx,
                   messages,
                   messageOffset: offset,
@@ -4267,7 +4329,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }
 
       if (newAnchor == null) {
-        if (fallbackAnchorId != null && validAnchors.contains(fallbackAnchorId)) {
+        if (fallbackAnchorId != null &&
+            validAnchors.contains(fallbackAnchorId)) {
           newAnchor = fallbackAnchorId;
         } else if (latestAssistantAnchor != null) {
           newAnchor = latestAssistantAnchor;
@@ -4329,7 +4392,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
     return groups.map((g) {
       final anchor = g.anchorMessageId;
-      final isDead = anchor == null ||
+      final isDead =
+          anchor == null ||
           anchor == oldStreamingId ||
           anchor.startsWith('stream-') ||
           anchor.startsWith('local-') ||
@@ -4352,7 +4416,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           );
         }
       }
-      if (newAnchor == null && oldStreamingId != null && oldStreamingId.isNotEmpty) {
+      if (newAnchor == null &&
+          oldStreamingId != null &&
+          oldStreamingId.isNotEmpty) {
         final idx = messages.indexWhere((m) => m.messageId == oldStreamingId);
         if (idx != -1) {
           newAnchor = TranscriptTurnClassifier.anchorID(
@@ -4368,7 +4434,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         if (rawNum != null) {
           final localIdx = rawNum - offset;
           if (localIdx >= 0 && localIdx < messages.length) {
-            newAnchor = TranscriptTurnClassifier.assistantAnchorID(
+            newAnchor =
+                TranscriptTurnClassifier.assistantAnchorID(
                   localIdx,
                   messages,
                   messageOffset: offset,
@@ -4383,7 +4450,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }
 
       if (newAnchor == null) {
-        if (fallbackAnchorId != null && validAnchors.contains(fallbackAnchorId)) {
+        if (fallbackAnchorId != null &&
+            validAnchors.contains(fallbackAnchorId)) {
           newAnchor = fallbackAnchorId;
         } else if (latestAssistantAnchor != null) {
           newAnchor = latestAssistantAnchor;
@@ -4391,10 +4459,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       }
 
       if (newAnchor != null && validAnchors.contains(newAnchor)) {
-        return ReasoningGroup(
-          anchorMessageId: newAnchor,
-          text: g.text,
-        );
+        return ReasoningGroup(anchorMessageId: newAnchor, text: g.text);
       }
 
       return g;
@@ -4693,13 +4758,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     String streamId, {
     bool recovered = false,
     double? pendingStartedAt,
-  }) =>
-      _onServerTurnStarted(
-        streamId,
-        sessionId: state.sessionId,
-        recovered: recovered,
-        pendingStartedAt: pendingStartedAt,
-      );
+  }) => _onServerTurnStarted(
+    streamId,
+    sessionId: state.sessionId,
+    recovered: recovered,
+    pendingStartedAt: pendingStartedAt,
+  );
 
   @visibleForTesting
   void onSessionBgTaskCompleteForTesting(Map<String, Object?> payload) =>
@@ -4839,10 +4903,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
 
     if (recovered) {
-      unawaited(_attachRecoveredServerTurn(
-        streamId,
-        pendingStartedAt: pendingStartedAt,
-      ));
+      unawaited(
+        _attachRecoveredServerTurn(
+          streamId,
+          pendingStartedAt: pendingStartedAt,
+        ),
+      );
     } else {
       if (pendingStartedAt != null) {
         state = state.copyWith(
@@ -4888,7 +4954,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final lastAssistant = _lastAssistantMessageId(state.messages);
     if (lastAssistant != null) {
       state = state.copyWith(
-        stream: state.stream.copyWith(streamingAssistantMessageId: lastAssistant),
+        stream: state.stream.copyWith(
+          streamingAssistantMessageId: lastAssistant,
+        ),
       );
     } else {
       _ensureStreamingAssistantMessage();
@@ -4923,4 +4991,3 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _scheduleSessionContentSync();
   }
 }
-
