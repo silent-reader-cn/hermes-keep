@@ -48,6 +48,10 @@ message context menu, producing two menus from one right-click.
   `_buildRichText`, passes it to `SelectableText.rich` **only when
   non-null** (upstream default preserved otherwise; a null explicit
   pass-through would fall back to the legacy controls path).
+- `lib/src/builder.dart`: `onSelectionChanged` callback passes
+  `text.toPlainText()` instead of `text.text` (`text.text` is null when
+  paragraphs contain child spans like bold, code, or links, which left
+  the callback receiving null).
 
 Hosts that want to suppress/replace the native selection toolbar pass
 their own builder (see `lib/features/chat/widgets/chat_text_selection.dart`).

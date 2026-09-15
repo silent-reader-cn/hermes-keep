@@ -1099,7 +1099,7 @@ class MarkdownBuilder implements md.NodeVisitor {
           textAlign: textAlign ?? TextAlign.start,
           onSelectionChanged: onSelectionChanged != null
               ? (TextSelection selection, SelectionChangedCause? cause) =>
-                  onSelectionChanged!(text.text, selection, cause)
+                  onSelectionChanged!(text.toPlainText(), selection, cause)
               : null,
           contextMenuBuilder: contextMenuBuilder,
           onTap: onTapText,
@@ -1112,7 +1112,7 @@ class MarkdownBuilder implements md.NodeVisitor {
         textAlign: textAlign ?? TextAlign.start,
         onSelectionChanged: onSelectionChanged != null
             ? (TextSelection selection, SelectionChangedCause? cause) =>
-                onSelectionChanged!(text.text, selection, cause)
+                onSelectionChanged!(text.toPlainText(), selection, cause)
             : null,
         onTap: onTapText,
         key: k,

@@ -13,12 +13,14 @@ import '../../../l10n/app_localizations.dart';
 
 /// 消息级操作菜单返回的动作 tag。
 ///
+/// - `copy_selection`：复制选中文本；
 /// - `copy`：复制纯文本；
 /// - `copy_md`：复制 Markdown 原文；
 /// - `edit`：用户消息回填输入框；
 /// - `branch`：从此处创建分支；
 /// - `truncate`：从此处截断（确认对话框已通过）。
 abstract final class MessageAction {
+  static const String copySelection = 'copy_selection';
   static const String copy = 'copy';
   static const String copyMd = 'copy_md';
   static const String edit = 'edit';
@@ -39,6 +41,7 @@ Future<String?> showMessageActionMenu(
   BuildContext context, {
   required ChatMessage message,
   Offset? position,
+  String? selectionText,
 }) {
   final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
   if (isWide && position != null) {
@@ -46,18 +49,25 @@ Future<String?> showMessageActionMenu(
       context,
       message: message,
       position: position,
+      selectionText: selectionText,
     );
   }
-  return _showMessageActionSheet(context, message: message);
+  return _showMessageActionSheet(
+    context,
+    message: message,
+    selectionText: selectionText,
+  );
 }
 
 /// 窄屏 / 兜底模式：底部弹出 ActionSheet。
 Future<String?> _showMessageActionSheet(
   BuildContext context, {
   required ChatMessage message,
+  String? selectionText,
 }) {
   final l10n = AppLocalizations.of(context);
   final hasContent = (message.content ?? '').trim().isNotEmpty;
+  final hasSelection = selectionText != null && selectionText.isNotEmpty;
   final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
   final actionStyle = isLight
       ? const TextStyle(color: LightSurfaces.userDetail)
@@ -79,6 +89,13 @@ Future<String?> _showMessageActionSheet(
         ),
       ),
       actions: [
+        if (hasSelection)
+          CupertinoActionSheetAction(
+            key: const ValueKey('msg-action-copy-selection'),
+            onPressed: () =>
+                Navigator.pop(sheetContext, MessageAction.copySelection),
+            child: Text(l10n.copySelection, style: actionStyle),
+          ),
         CupertinoActionSheetAction(
           key: const ValueKey('msg-action-copy'),
           onPressed: hasContent
@@ -149,9 +166,12 @@ Future<String?> _showMessageActionPopover(
   BuildContext context, {
   required ChatMessage message,
   required Offset position,
+  String? selectionText,
 }) async {
   final l10n = AppLocalizations.of(context);
   final hasContent = (message.content ?? '').trim().isNotEmpty;
+  final hasSelection = selectionText != null && selectionText.isNotEmpty;
+  final baseHeight = message.role == 'user' ? 220.0 : 180.0;
   final completer = Completer<String?>();
   var isProcessingAction = false;
 
@@ -161,7 +181,7 @@ Future<String?> _showMessageActionPopover(
     placement: PopoverPlacement.bottom,
     align: PopoverAlign.start,
     preferredWidth: 200,
-    preferredHeight: message.role == 'user' ? 220 : 180,
+    preferredHeight: hasSelection ? baseHeight + 40.0 : baseHeight,
     onClosed: () {
       if (!isProcessingAction && !completer.isCompleted) {
         completer.complete(null);
@@ -175,6 +195,18 @@ Future<String?> _showMessageActionPopover(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (hasSelection)
+                _MessageActionPopoverRow(
+                  key: const ValueKey('msg-action-copy-selection'),
+                  label: l10n.copySelection,
+                  onTap: () {
+                    isProcessingAction = true;
+                    close();
+                    if (!completer.isCompleted) {
+                      completer.complete(MessageAction.copySelection);
+                    }
+                  },
+                ),
               _MessageActionPopoverRow(
                 key: const ValueKey('msg-action-copy'),
                 label: l10n.copyText,

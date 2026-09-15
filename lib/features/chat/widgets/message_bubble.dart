@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,6 +46,7 @@ class ChatMessageBubble extends StatelessWidget {
     this.collapseInjectedEnabled = true,
     this.hideThinking = false,
     this.isStreaming = false,
+    this.onTextSelectionChanged,
   });
 
   final ChatMessage message;
@@ -77,6 +80,9 @@ class ChatMessageBubble extends StatelessWidget {
 
   /// 是否为流式进行中气泡（streaming 期间走轻量文本渲染，done 后走 MarkdownBody）。
   final bool isStreaming;
+
+  /// 选中文本变化回调（由 [ChatMessageList] 传入，用于感知并上报选中文本片段）。
+  final ValueChanged<String?>? onTextSelectionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -135,6 +141,7 @@ class ChatMessageBubble extends StatelessWidget {
               baseUrl: effectiveBaseUrl,
               sessionId: sessionId,
               customHeaders: effectiveHeaders,
+              onTextSelectionChanged: onTextSelectionChanged,
             ),
           );
           return Padding(
@@ -162,11 +169,42 @@ class ChatMessageBubble extends StatelessWidget {
               sessionId: sessionId,
               customHeaders: effectiveHeaders,
               isStreaming: isStreaming,
+              onTextSelectionChanged: onTextSelectionChanged,
             ),
           ),
         );
       },
     );
+  }
+}
+
+/// 选区上报分发：规格 4.2
+/// - text == null → 直接 return；
+/// - selection.isCollapsed → callback(null)（清选区登记）；
+/// - 否则 normalize 并 trim，若非空则 callback(片段)，若空则 callback(null)。
+void _dispatchTextSelectionChanged(
+  String? text,
+  TextSelection selection,
+  ValueChanged<String?>? callback,
+) {
+  if (text == null) return;
+  if (selection.isCollapsed) {
+    callback?.call(null);
+    return;
+  }
+  final rawStart = math.min(selection.baseOffset, selection.extentOffset);
+  final rawEnd = math.max(selection.baseOffset, selection.extentOffset);
+  final start = rawStart.clamp(0, text.length);
+  final end = rawEnd.clamp(0, text.length);
+  if (start >= end) {
+    callback?.call(null);
+    return;
+  }
+  final snippet = text.substring(start, end).trim();
+  if (snippet.isEmpty) {
+    callback?.call(null);
+  } else {
+    callback?.call(snippet);
   }
 }
 
@@ -176,12 +214,14 @@ class _UserContent extends StatelessWidget {
     this.baseUrl,
     this.sessionId,
     this.customHeaders,
+    this.onTextSelectionChanged,
   });
 
   final ChatMessage message;
   final String? baseUrl;
   final String? sessionId;
   final Map<String, String>? customHeaders;
+  final ValueChanged<String?>? onTextSelectionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -226,6 +266,12 @@ class _UserContent extends StatelessWidget {
               selectable: true,
               // #81：右键正文不叠原生「全选」工具条（自定义消息菜单承载操作）。
               contextMenuBuilder: chatMessageTextContextMenu,
+              onSelectionChanged: (text, selection, cause) =>
+                  _dispatchTextSelectionChanged(
+                text,
+                selection,
+                onTextSelectionChanged,
+              ),
               styleSheet: buildUserMarkdownStyleSheet(context),
               // #91 图片块级化：imageBuilder 同源注入 builders（img 独立成块）。
               builders: createUserMarkdownBuilders(
@@ -295,6 +341,7 @@ class _AssistantContent extends StatelessWidget {
     this.sessionId,
     this.customHeaders,
     this.isStreaming = false,
+    this.onTextSelectionChanged,
   });
 
   final ChatMessage message;
@@ -305,6 +352,7 @@ class _AssistantContent extends StatelessWidget {
   final String? sessionId;
   final Map<String, String>? customHeaders;
   final bool isStreaming;
+  final ValueChanged<String?>? onTextSelectionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -364,6 +412,12 @@ class _AssistantContent extends StatelessWidget {
             selectable: true,
             // #81：右键正文不叠原生「全选」工具条（自定义消息菜单承载操作）。
             contextMenuBuilder: chatMessageTextContextMenu,
+            onSelectionChanged: (text, selection, cause) =>
+                _dispatchTextSelectionChanged(
+              text,
+              selection,
+              onTextSelectionChanged,
+            ),
             styleSheet: buildAssistantMarkdownStyleSheet(
               context,
               useLightSurfaces: true,

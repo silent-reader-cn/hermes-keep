@@ -3,7 +3,9 @@ import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -287,6 +289,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   final Set<String> _expandedNoticeIds = <String>{};
   final Set<String> _expandedTurnKeys = <String>{};
   final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
+  final Map<String, String> _selectionByRenderId = <String, String>{};
   _ReadingAnchor? _readingAnchor;
   double? _lastBottomInset;
   double? _lastLayoutHeight;
@@ -562,6 +565,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _expandedNoticeIds.clear();
       _expandedTurnKeys.clear();
       _itemKeys.clear();
+      _selectionByRenderId.clear();
       _readingAnchor = null;
       _lastBottomInset = null;
       _lastLayoutHeight = null;
@@ -636,6 +640,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   @override
   void dispose() {
+    _selectionByRenderId.clear();
     _scrollTriggerSub.close();
     _phaseSub.close();
     _controller.dispose();
@@ -1726,11 +1731,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     ChatMessage message, {
     int? messageIndex,
     Offset? position,
+    String? selectionText,
   }) async {
     final action = await showMessageActionMenu(
       context,
       message: message,
       position: position,
+      selectionText: selectionText,
     );
     if (action == null || !mounted) return;
     final controller = ref.read(
@@ -1757,6 +1764,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
 
     switch (action) {
+      case MessageAction.copySelection:
+        if (selectionText != null && selectionText.isNotEmpty) {
+          unawaited(Clipboard.setData(ClipboardData(text: selectionText)));
+          if (mounted) {
+            controller.setNotice(l10n.copiedToClipboardNotice);
+          }
+        }
       case MessageAction.copy:
       case MessageAction.copyMd:
         // 先提示，再异步写剪贴板（立即反馈，不阻塞菜单关闭）。
@@ -2496,37 +2510,64 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
                       return KeyedSubtree(
                         key: isHighlightTarget ? _highlightKey : entryKey,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onLongPress: () => _showMessageActions(
-                            entry.message,
-                            messageIndex: entry.loadedIndex,
-                          ),
-                          onSecondaryTapDown: (details) => _showMessageActions(
-                            entry.message,
-                            messageIndex: entry.loadedIndex,
-                            position: details.globalPosition,
-                          ),
-                          child: SearchMessageHighlight(
-                            highlight: isHighlightTarget,
-                            child: RepaintBoundary(
-                              child: ChatMessageBubble(
-                                key: ValueKey(entry.renderId),
-                                message: entry.message,
-                                toolGroups: groups,
-                                hideThinking: hideThinking,
-                                collapseInjectedEnabled: collapseEnabled,
-                                injectedExpanded: expanded,
-                                onToggleInjected: () {
-                                  if (!mounted) return;
-                                  setState(() {
-                                    if (_expandedNoticeIds.contains(noticeId)) {
-                                      _expandedNoticeIds.remove(noticeId);
+                        // #134：右键触发改用原始指针监听（Listener 不参与手势
+                        // 竞技场）。根因：正文里 SelectableText 的选字手势会在
+                        // 竞技场中抢赢外层 GestureDetector.onSecondaryTapDown ——
+                        // 快速右键时外层根本收不到回调（实测：自定义菜单 0 个，
+                        // 只弹出原生工具条），慢速右键才收得到。双层菜单正是这条
+                        // 竞态的另一面：谁赢谁弹。改为 Listener 后外层恒定收到
+                        // 右键，配合已抑制的原生工具条 ⇒ 恒定一层自定义菜单。
+                        child: Listener(
+                          onPointerDown: (event) {
+                            if ((event.buttons & kSecondaryMouseButton) == 0) {
+                              return;
+                            }
+                            unawaited(
+                              _showMessageActions(
+                                entry.message,
+                                messageIndex: entry.loadedIndex,
+                                position: event.position,
+                                selectionText:
+                                    _selectionByRenderId[entry.renderId],
+                              ),
+                            );
+                          },
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onLongPress: () => _showMessageActions(
+                              entry.message,
+                              messageIndex: entry.loadedIndex,
+                              selectionText:
+                                  _selectionByRenderId[entry.renderId],
+                            ),
+                            child: SearchMessageHighlight(
+                              highlight: isHighlightTarget,
+                              child: RepaintBoundary(
+                                child: ChatMessageBubble(
+                                  key: ValueKey(entry.renderId),
+                                  message: entry.message,
+                                  toolGroups: groups,
+                                  hideThinking: hideThinking,
+                                  collapseInjectedEnabled: collapseEnabled,
+                                  injectedExpanded: expanded,
+                                  onToggleInjected: () {
+                                    if (!mounted) return;
+                                    setState(() {
+                                      if (_expandedNoticeIds.contains(noticeId)) {
+                                        _expandedNoticeIds.remove(noticeId);
+                                      } else {
+                                        _expandedNoticeIds.add(noticeId);
+                                      }
+                                    });
+                                  },
+                                  onTextSelectionChanged: (t) {
+                                    if (t == null) {
+                                      _selectionByRenderId.remove(entry.renderId);
                                     } else {
-                                      _expandedNoticeIds.add(noticeId);
+                                      _selectionByRenderId[entry.renderId] = t;
                                     }
-                                  });
-                                },
+                                  },
+                                ),
                               ),
                             ),
                           ),

@@ -13,11 +13,13 @@ import 'package:hermes_ui/features/chat/widgets/chat_text_selection.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
-/// #81 桌面右键聊天正文：flutter 原生选择工具条（无选区时仅「全选」一项）
-/// 不得再叠在自定义消息菜单之上（主人截图：双层菜单）。回归断言 =
-/// 右键正文后原生工具条不出现（vendored flutter_markdown 的
-/// contextMenuBuilder 透传 + chatMessageTextContextMenu 抑制生效；
-/// 选字句柄与有选区复制工具条保留）。
+/// #81 → #134 桌面右键聊天正文：Flutter 原生选择工具条不得叠在自定义消息菜单之上。
+///
+/// #81（2026-09-13）只压了「无选区」那一半，有选区时仍放行原生工具条；
+/// #134（2026-09-15 主人拍板）改为：**桌面端**任何选区状态下都抑制原生工具条，
+/// 一次右键恒定只出一层自定义消息菜单，选区复制由菜单项「复制选中文本」承载；
+/// **移动端**保留原生工具条（实测长按选字时自定义菜单不会同现，工具条是移动端
+/// 选中即复制的唯一入口）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -65,7 +67,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  group('#81 右键正文不叠原生选择工具条', () {
+  group('#81/#134 右键正文不叠原生选择工具条', () {
     testWidgets('右键 assistant markdown 正文 → 原生「全选」工具条不弹出', (tester) async {
       await boot(tester, [
         {
@@ -143,8 +145,8 @@ void main() {
     });
   });
 
-  group('#81 chatMessageTextContextMenu 行为', () {
-    testWidgets('空选区 → 零尺寸抑制占位；有选区 → Cupertino 工具条', (tester) async {
+  group('#134 chatMessageTextContextMenu 行为（桌面抑制 / 移动保留）', () {
+    testWidgets('桌面（Windows）：空选区与有选区均返回零尺寸抑制占位', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       final controller = TextEditingController(text: '一二三四五六七八');
       final focusNode = FocusNode();
@@ -183,14 +185,68 @@ void main() {
         reason: 'collapsed 选区右键应抑制原生工具条',
       );
 
-      // 有选区：照常返回 Cupertino 工具条（复制/全选能力保留）。
+      // 有选区：新契约（主人 2026-09-15 拍板：一次右键只出一层自定义菜单，
+      // 选区复制改由自定义菜单项「复制选中文本」承载）——桌面端无条件返回 SizedBox。
+      controller.selection = const TextSelection(baseOffset: 0, extentOffset: 4);
+      await tester.pump();
+      final out = chatMessageTextContextMenu(ctx, state);
+      expect(
+        out,
+        isA<SizedBox>(),
+        reason: '桌面端有选区时也必须返回空 SizedBox 抑制原生工具条',
+      );
+      expect(
+        out.runtimeType.toString().contains('Toolbar'),
+        isFalse,
+        reason: '桌面端不允许出现任何原生文本选择工具条',
+      );
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('移动端（Android）：空选区抑制，有选区保留原生工具条', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final controller = TextEditingController(text: '一二三四五六七八');
+      final focusNode = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focusNode.dispose);
+
+      await tester.pumpWidget(CupertinoApp(
+        localizationsDelegates: const [DefaultMaterialLocalizations.delegate],
+        home: Center(
+          child: SizedBox(
+            width: 200,
+            child: EditableText(
+              controller: controller,
+              focusNode: focusNode,
+              style: const TextStyle(),
+              cursorColor: CupertinoColors.label,
+              backgroundCursorColor: CupertinoColors.systemGrey,
+              readOnly: true,
+              contextMenuBuilder: chatMessageTextContextMenu,
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final editableFinder = find.byType(EditableText);
+      final state = tester.state<EditableTextState>(editableFinder);
+      final ctx = tester.element(editableFinder);
+
+      controller.selection = const TextSelection.collapsed(offset: 0);
+      await tester.pump();
+      expect(chatMessageTextContextMenu(ctx, state), isA<SizedBox>());
+
+      // 移动端长按选字时自定义菜单不会同现（实测：气泡外层长按手势被选字手势抢先，
+      // 只有留白区长按才走自定义菜单），原生工具条是移动端「选中即复制」的唯一入口
+      // → 必须保留，否则移动端失去复制能力。
       controller.selection = const TextSelection(baseOffset: 0, extentOffset: 4);
       await tester.pump();
       final out = chatMessageTextContextMenu(ctx, state);
       expect(
         out.runtimeType.toString(),
         contains('Toolbar'),
-        reason: '有选区时应返回原生（Cupertino 适配）工具条',
+        reason: '移动端有选区时必须保留原生工具条（选中即复制唯一入口）',
       );
       expect(out, isNot(isA<SizedBox>()));
       debugDefaultTargetPlatformOverride = null;

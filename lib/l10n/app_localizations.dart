@@ -395,6 +395,7 @@ class AppLocalizations {
   String get messageActions => isEnglish ? 'Message Actions' : '消息操作';
   String get copyText => isEnglish ? 'Copy Text' : '复制文本';
   String get copyMarkdown => isEnglish ? 'Copy Markdown' : '复制 Markdown';
+  String get copySelection => isEnglish ? 'Copy Selection' : '复制选中文本';
   String get editAndResend => isEnglish ? 'Edit and Resend' : '编辑并重新发送';
   String get branchFromHere => isEnglish ? 'Branch from Here' : '从此处创建分支';
   String get truncateFromHere => isEnglish ? 'Truncate from Here' : '从此处截断';
