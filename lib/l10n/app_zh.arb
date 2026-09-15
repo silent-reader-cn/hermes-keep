@@ -23,8 +23,12 @@
   "liveUpdateActivityOutput": "正在输出…",
   "liveUpdateActivityWaitingReply": "等待你的回复",
   "liveUpdateActivityWaitingApproval": "等待你的批准",
+  "liveUpdateActivityCompleted": "回合已完成",
+  "liveUpdateActivityInterrupted": "回合已中断",
   "liveUpdateChipReply": "请回复",
   "liveUpdateChipApproval": "请批准",
+  "liveUpdateChipDone": "已完成",
+  "liveUpdateChipStopped": "已中断",
   "bgWorkManagerStatusNotApplicable": "不适用（仅限 Android）",
   "bgWorkManagerStatusFailed": "未就绪：{reason}",
   "bgWorkManagerStatusFailedShort": "未就绪"

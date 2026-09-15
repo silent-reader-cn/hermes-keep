@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +14,7 @@ import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/chat_state.dart';
 import 'package:hermes_ui/features/desktop/window_title_service.dart';
 import 'package:hermes_ui/features/notifications/notification_lifecycle_observer.dart';
+import 'package:hermes_ui/features/notifications/live_update_service.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -688,6 +692,90 @@ void main() {
 
       // download: 前缀不抛异常、不跳转 chat
       handleNotificationTap(container, 'download:dl-12345');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // #129 实况通知（灵动岛）撤岛责任边界：与岛语义无关的链路一律不得撤岛
+  // ---------------------------------------------------------------------------
+  group('#129 实况通知（灵动岛）撤岛责任边界', () {
+    const liveChannel = MethodChannel('com.silentreader.hermes_ui/live_update');
+    late List<MethodCall> liveCalls;
+    late LiveUpdateService originalLiveUpdate;
+
+    setUp(() {
+      liveCalls = <MethodCall>[];
+      originalLiveUpdate = LiveUpdateService.instance;
+      LiveUpdateService.instance = LiveUpdateService();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(liveChannel, (call) async {
+        liveCalls.add(call);
+        switch (call.method) {
+          case 'isSupported':
+            return true;
+          case 'show':
+            return true;
+          case 'cancel':
+            return true;
+        }
+        return null;
+      });
+      // 实况通知只在 Android 生效。
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(liveChannel, null);
+      LiveUpdateService.instance = originalLiveUpdate;
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    test('澄清 hook 不再撤岛（#105 遗留的无条件 cancel 已拔除）', () {
+      final service = _FakeTurnNotificationService();
+      final container = ProviderContainer(
+        overrides: [turnNotificationServiceProvider.overrideWithValue(service)],
+      );
+      addTearDown(container.dispose);
+
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.paused);
+      container.read(clarificationNotificationHookProvider)('sess-1', '请澄清');
+
+      expect(
+        liveCalls.where((c) => c.method == 'cancel'),
+        isEmpty,
+        reason: '澄清是等待态，撤岛会把 chat 侧刚上报的「请回复」抹掉',
+      );
+    });
+
+    test('回合完成 hook 不再撤岛（收尾撤岛责任归 chat 事件驱动）', () {
+      final service = _FakeTurnNotificationService();
+      final container = ProviderContainer(
+        overrides: [turnNotificationServiceProvider.overrideWithValue(service)],
+      );
+      addTearDown(container.dispose);
+
+      container
+          .read(appLifecycleStateProvider.notifier)
+          .setState(AppLifecycleState.paused);
+      container.read(turnNotificationHookProvider)('sess-1', '标题', '正文');
+
+      expect(
+        liveCalls.where((c) => c.method == 'cancel'),
+        isEmpty,
+        reason: '收尾由 chat 上报 completed（停留 15s）后自行撤岛，此处再撤即对打死',
+      );
+    });
+
+    test('反向护栏：撤岛能力本身未被拔掉（cancelAll 仍打 cancel）', () async {
+      await LiveUpdateService.instance.cancelAll();
+      expect(
+        liveCalls.where((c) => c.method == 'cancel'),
+        hasLength(1),
+        reason: '证明本组断言非空转（mock 通道确实能记录 cancel）',
+      );
     });
   });
 }

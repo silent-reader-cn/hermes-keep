@@ -376,6 +376,9 @@ class MainActivity : FlutterActivity() {
                     "output" -> R.drawable.ic_live_output
                     "waiting_reply" -> R.drawable.ic_live_reply
                     "waiting_approval" -> R.drawable.ic_live_approval
+                    // #129 完成/中断态：粗勾 / 实心方块（大块面实心，24dp 可辨）。
+                    "completed" -> R.drawable.ic_live_done
+                    "interrupted" -> R.drawable.ic_live_stop
                     else -> R.drawable.ic_hermes_agent
                 }
             } else {

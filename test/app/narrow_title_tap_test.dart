@@ -269,14 +269,14 @@ void main() {
       setNarrow(tester);
       await tester.pumpWidget(
         wrap(
-          CupertinoPageScaffold(
+          const CupertinoPageScaffold(
             child: CustomScrollView(
               slivers: [
-                const SliverPersistentHeader(
+                SliverPersistentHeader(
                   pinned: true,
                   delegate: SessionListHeaderDelegate(title: '会话'),
                 ),
-                const SliverToBoxAdapter(
+                SliverToBoxAdapter(
                   child: SizedBox(height: 1200, width: double.infinity),
                 ),
               ],

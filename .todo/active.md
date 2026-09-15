@@ -174,3 +174,96 @@
 - [x] 反向验证：禁掉 `onTap: onTitleTap` 3 处 → 5 例变红（负向用例仍绿），护栏非空转
 - [x] `flutter analyze` 零告警 + 全量 `flutter test` 3002 通过（金照零变更）
 - [ ] 主人真机复验：窄屏点「会话」/「技能」/「设置」等标题都能弹出右侧 ▾ 的菜单
+
+## #129 选中正文片段后右键弹出两层菜单（原生文本工具条叠自定义消息菜单）
+
+**分类**：问题（bug）　**状态**：进行中（worktree `agy/aug24-ctxmenu`，基线 `4df87ad`）　**发现**：2026-09-15（主人截图报告）
+
+### 现象（现状 vs 预期）
+- **现状**：选中聊天正文任意片段后右键 → **同时**弹出两层菜单：上层深灰 = Flutter 原生文本选择工具条（`复制` / `全选`），下层近黑 = 自定义消息菜单（`复制` / `复制 Markdown` / `从此处创建分支` / `从此处截断`）。
+- **预期**：一次右键 / 一次长按**只出一层**自定义消息菜单；有选区时菜单顶部多一项「复制选中文本」（复制整条消息的能力保留）。
+
+### 位置（源码行号）
+| 角色 | 文件 | 关键行 |
+|---|---|---|
+| 抑制器（**有选区时放行 = 根因**） | `lib/features/chat/widgets/chat_text_selection.dart` | 22-33（`selection.isCollapsed` 分支） |
+| 自定义菜单触发（无条件弹） | `lib/features/chat/widgets/chat_message_list.dart` | 2497-2535（`onSecondaryTapDown` / `onLongPress`）、1724-1804（`_showMessageActions`） |
+| 自定义菜单本体 | `lib/features/chat/widgets/message_action_menu.dart` | 宽屏 popover 148-279、窄屏 ActionSheet 55-145 |
+| 抑制器接线（4 处） | `message_bubble.dart` 228 / 366、`injected_notice_card.dart` 121、`selected_context_card.dart` 113、`mermaid_block.dart` 137 | |
+| vendored 透传 | `third_party/flutter_markdown/lib/src/builder.dart` | 1095-1119（`contextMenuBuilder` + `onSelectionChanged`）、1069 / 1102 / 1115 |
+| 既有回归（断言需按新契约更新） | `test/features/chat/message_context_menu_native_toolbar_test.dart` | 186-196 |
+
+### 根因（实测）
+#81（`third_party/flutter_markdown/PATCH_NOTES.md` §4，2026-09-13）只压了「无选区」那一半：它认为有选区时原生工具条有价值，故 `chatMessageTextContextMenu` **放行**有选区的工具条；而消息级 `GestureDetector.onSecondaryTapDown` **无条件**弹自定义菜单 → 同一指针事件两条链路各弹一层。既有测试 186-196 明确断言「有选区 → 返回 Cupertino 工具条」，即双层是当初**刻意的取舍**而非疏漏，故本轮属方向变更（主人拍板）。
+
+### 方案（主人 2026-09-15 拍板）
+1. 抑制器**无条件**返回零尺寸占位：任何平台、任何选区状态，正文右键 / 长按都不得出原生工具条。
+2. 选区感知走 vendored `MarkdownBody.onSelectionChanged`（`lib/` 此前零使用者）→ 消息粒度登记选中片段（`ChatMessageListState._selectionByRenderId`，拖动期间不上 `setState`）。
+3. 菜单顶部新增「复制选中文本」（key `msg-action-copy-selection`，l10n `copySelection`），仅在有选区时出现；「复制」保持「整条消息」语义。
+4. 顺带修 vendored 缺陷：`builder.dart` 回调实参 `text.text` → `text.toPlainText()`（含子 span 的段落 `TextSpan.text` 为 null，否则拿不到选中文字）+ PATCH_NOTES 同步。
+
+### 验收（交付后回填）
+- [ ] 有选区右键：原生工具条 **0 个**，自定义菜单**恰 1 层**
+- [ ] 有选区：菜单出现「复制选中文本」，复制内容 == 选中片段（非整条）
+- [ ] 无选区：该菜单项**不出现**
+- [ ] `analyze` 零告警 + 全量 `test` 全绿（含反向验证：改回旧逻辑必须打红）
+- [ ] 主人真机复验（Windows 右键 / 安卓长按）
+
+
+## #129 灵动岛（实况通知）下岛时机重构：「已完成/已中断」态上岛 + 掐断三处误撤
+
+**分类**：问题（bug）+ 方向（#48 五态补齐）　**状态**：代码已交付（待主人真机复验）　**发现**：2026-09-15（主人报告）
+
+### 现象
+1. 岛「莫名其妙下岛」——明明还有状态需要表示（等待回复/等待批准）。
+2. 「已完成」态不显示。
+
+### 根因（源码级：三处独立误撤 + 一处从未实现的态）
+
+**误撤①（真凶，本次回归源头）#126 修好的 `clearAll()` 把岛一起清了**
+- `lib/features/notifications/notification_lifecycle_observer.dart:60`：AppLifecycleState.resumed → `clearAll()`（本意只清**普通**通知）。
+- `lib/features/notifications/turn_notification_service.dart` `clearAll()` → `_plugin.cancelAll()`。
+- flutter_local_notifications 22.3.0 `FlutterLocalNotificationsPlugin.java:1869-1871`：`cancelAllNotifications()` → `NotificationManagerCompat.cancelAll()` —— Android 语义是**清掉本 App 发布的全部通知**，不认 ID、不认发布者。
+- 岛由 `android/.../MainActivity.kt:398` 用**同一个** `NotificationManagerCompat.from(this).notify(id=1501, …)` 挂载 → 一并被清。
+- **为什么是「现在」**：`clearAll()` 原先漏 `_ensureInitialized()`，未初始化即抛 `Bad state: …must be initialized`，异常被 catch 吞掉 = 什么都没清；#126（`72e4733`，2026-09-15 15:08）补上守卫后它才真正开始执行 `cancelAll` → 表现为该提交之后的回归。
+
+**误撤② 澄清 hook 无条件撤岛（等待态上不了岛的元凶）**
+- `lib/features/chat/chat_controller.dart` `_applyClarificationUpdate`：先 `_reportLiveActivity(waitingReply)`（:2421）**再** `_notifyClarificationNeeded`（:2427）。
+- `lib/features/notifications/notification_providers.dart` 澄清 hook 内 `LiveUpdateService.instance.cancelAll()` 无条件执行，其同步前缀必然覆盖刚上报的等待态。
+- **叠加放大**：`LiveUpdateService.cancelAll()` 只清**服务侧** `_activity/_lastShown`；chat 侧 `_liveActivity` 去重表无人重置 → 之后 20s 澄清轮询重建卡片走到 `_reportLiveActivity(waitingReply)` 被去重跳过 → **岛再也回不来**（#124 E「轮询重建卡片即自动回岛」因此空转）。
+
+**误撤③ 回合完成 hook 无条件撤岛**
+- 同文件 `turnNotificationHookProvider` 顶部 `cancelAll()`（位于开关判定**之前**）。#105 时代岛只是「会话列表总览」时的兜底；**#120 改事件驱动后**该调用成为对打死。
+
+**缺失态「已完成 / 已中断」**
+- `ChatLiveActivity.finished` 在 `chatLiveActivityHookProvider` 被映射成 `null` = 撤岛；#120 的交付定义就是「收尾→撤销」。
+- l10n 只有 `生成中/请回复/请批准/下载中` 四个 chip，#48 定稿的「已完成/已中断」从未落地（HERMES.md #49 状态为「待主人开批」）。
+
+### 修复（主人拍板：A + B 一起做，已完成停留 15s）
+| # | 位置 | 改动 |
+|---|------|------|
+| 1 | `turn_notification_service.dart` `clearAll()` | Android 改**按分区 ID 精确清**（1001/1101/1201/1301/1401），**不碰 1501**；非 Android 保持 `cancelAll()`（该平台无实况岛） |
+| 2 | `notification_providers.dart` 澄清 hook | **删除**无条件 `cancelAll()` |
+| 3 | `notification_providers.dart` 回合完成 hook | 同上删除（撤岛责任全归 chat 事件驱动） |
+| 4 | `chat_controller.dart` `_reportLiveActivity` | 等待态（waitingReply/waitingApproval）**豁免 chat 侧去重**：外部撤岛后轮询重建卡片即可自动回岛（服务层 `_lastShown` 幂等仍兜住平台通道调用 → 无 notify 风暴） |
+| 5 | `chat_controller.dart` `_reportTurnSettled` | 分「已完成 / 已中断」：done·stream_end → completed；cancel·error → interrupted；等待态仍稳压岛 |
+| 6 | `chat_controller.dart` 新增 `liveActivityDwell = 15s` | 完成/中断态上岛后停留 15s，到期报 `finished` 撤岛；期间任何进行中/等待态上报即**取消计时**（新活动接管）；`_dispose` 清理计时器 |
+| 7 | `chat_providers.dart` | `ChatLiveActivity` 增 `completed` / `interrupted` |
+| 8 | `live_update_service.dart` | `LiveUpdateActivity` 增 `completed` / `interrupted`：文案「回合已完成/回合已中断」、chip「已完成 Done / 已中断 Stop」（#48 定稿）、trackerIcon `completed`/`interrupted`；**completed 走确定进度条 100%**（满载=完成、停止动画），interrupted 保持 indeterminate |
+| 9 | `MainActivity.kt` + 新增矢量 | trackerIcon 增 `completed → ic_live_done`（粗勾）/ `interrupted → ic_live_stop`（圆角实心方块）；均为大块面实心，24dp 可辨（#50 教训：细线族在 24px 必断） |
+| 10 | l10n | `app_localizations.dart` + `app_zh.arb` + `app_en.arb` 补齐 4 键 |
+
+### 撤岛责任划分（修复后唯一真相）
+- **收尾撤岛** = chat 事件驱动（完成/中断态停留 15s → `finished`）
+- **后台兜底** = 后台 isolate `_cancelLiveUpdateNotification()`（keepalive）
+- **会话列表归零** = `sync(activeCount: 0)` → `_compose()==null`
+- **开关关闭** = 设置页 `cancelAll()`
+- 不再存在「回前台 / 回合完成 / 澄清弹出」这类与岛语义无关的撤岛
+
+### 验收
+- [x] `flutter analyze` **零告警（含 info）**——顺手清零 #128 遗留的 `narrow_title_tap_test.dart` 2 条 `prefer_const_constructors`（同 #126 批次的「同批顺手修」惯例）
+- [x] 新增/升级用例：服务层完成/中断态文案+chip+图标+确定进度条；clearAll 按 ID 清且 `verifyNever(cancelAll)`/`verifyNever(cancel 1501)`；chat 侧 15s 停留、中断语义、停留期新活动接管、等待态豁免去重；hook 不再撤岛（含反向护栏证明断言非空转）
+- [x] 全量 `flutter test`：**3012 通过 / 8 skipped / 0 失败**，金照零变更（无需 `--update-goldens`）
+- [ ] 主人真机复验：① 澄清弹出时岛上显示「请回复」且不再消失；② 回合完成岛上显示「已完成」约 15s 后消失；③ 取消/报错显示「已中断」；④ 回到前台不再把岛清掉
+
+> 契约升级说明：`stream_end` / 清卡回落不再直接报 `finished` 撤岛，改为 `completed`（15s 后 `finished`）。3 个既有用例随之升级：`chat_live_activity_test` 收尾用例、`clarify_lifecycle_test` 第 10/12 例。

@@ -533,7 +533,7 @@ void main() {
     // -------------------------------------------------------------------------
     // 10. E-无等待态仍报 finished：既无澄清也无审批时收尾上报 finished
     // -------------------------------------------------------------------------
-    test('10. E-无等待态仍报 finished：普通回合收尾上报 finished（不回归）', () {
+    test('10. #129 无等待态收尾上报 completed（停留满额后才 finished，不回归撤岛能力）', () {
       fakeAsync((async) {
         final container = buildContainer();
         final controller = container.read(
@@ -562,10 +562,16 @@ void main() {
         api.emit(const StreamEndSseEvent());
         async.flushMicrotasks();
 
+        // #129：收尾先上「已完成」，不再立刻撤岛。
+        expect(liveActivityEvents.last.$3, ChatLiveActivity.completed);
         expect(
           liveActivityEvents.any((e) => e.$3 == ChatLiveActivity.finished),
-          isTrue,
+          isFalse,
         );
+
+        // 停留满额 → 自动撤岛（撤岛能力未丢）。
+        async.elapse(const Duration(seconds: 16));
+        expect(liveActivityEvents.last.$3, ChatLiveActivity.finished);
       });
     });
 
@@ -604,7 +610,7 @@ void main() {
     // -------------------------------------------------------------------------
     // 12. E-清卡回落：作答成功后卡片清空 → 上报 finished 回落态
     // -------------------------------------------------------------------------
-    test('12. E-清卡回落：作答成功卡片清空后，上报 finished 回落态', () {
+    test('12. #129 清卡回落：作答成功卡片清空后，上报 completed（停留后 finished）', () {
       fakeAsync((async) {
         final container = buildContainer();
         final controller = container.read(
@@ -631,7 +637,10 @@ void main() {
         unawaited(controller.respondToClarification('作答确认'));
         async.flushMicrotasks();
 
-        // 断言已上报 finished 回落态，不在 waitingReply 驻留
+        // #129：清卡且回合已收 → 与回合收尾同口径（先上「已完成」），
+        // 不再直接撤岛；不再在 waitingReply 驻留。
+        expect(liveActivityEvents.last.$3, ChatLiveActivity.completed);
+        async.elapse(const Duration(seconds: 16));
         expect(liveActivityEvents.last.$3, ChatLiveActivity.finished);
       });
     });

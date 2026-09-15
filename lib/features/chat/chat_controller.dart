@@ -311,6 +311,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _prefillSince = null;
     _transcriptRefreshTimer?.cancel();
     _cancelReconnectTimer();
+    // #129：完成/中断态停留计时器随控制器销毁一并清理。
+    _cancelLiveActivityDismiss();
     _cancelJitterTimers();
     _cancelRecoverySentinel();
     _cancelResumeProbeRetry();
@@ -1556,10 +1558,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _reportTurnSettled();
       case CancelledSseEvent():
         _handleCancelled();
-        _reportTurnSettled();
+        // #129：中断语义（岛上 chip「已中断」），不是「已完成」。
+        _reportTurnSettled(interrupted: true);
       case ErrorSseEvent(:final message):
         _handleErrorEvent(message);
-        _reportTurnSettled();
+        // #129：异常中断 → 岛上 chip「已中断」。
+        _reportTurnSettled(interrupted: true);
       case TransportErrorSseEvent(:final message):
         _handleTransportError(message);
       case HeartbeatSseEvent():
@@ -2501,7 +2505,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (_hasActiveTurn || state.pendingAction.hasPendingPrompt) {
       _reportLiveActivity(_inferLiveActivity());
     } else {
-      _reportLiveActivity(ChatLiveActivity.finished);
+      // #129：等待态结束且回合已收 → 与回合收尾同口径（「已完成」停留 15s
+      // 再撤岛），不再直接撤岛。
+      _reportLiveActivity(ChatLiveActivity.completed);
+      _scheduleLiveActivityDismiss();
     }
   }
 
@@ -3115,8 +3122,25 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (_disposed) return;
     final sessionId = state.sessionId;
     if (sessionId.isEmpty) return;
-    if (!force && _liveActivity == activity && _liveActivityDetail == detail) {
+    // #129 等待态豁免去重：等待态是「需主人行动」的报警态，一旦被外部链路撤岛
+    // （后台兜底 / 列表归零 / 开关），去重表会让后续澄清轮询重建卡片的上报被
+    // 静默跳过 → 岛再也回不来（#124 E 的「轮询重建即自动回岛」因此空转）。
+    // 放行等待态使其每次上报都重新合成；服务层 `_lastShown` 幂等仍兜住平台通道
+    // 调用（文案未变 → 零通道往返），故无 notify 风暴风险。
+    final sticky =
+        activity == ChatLiveActivity.waitingReply ||
+        activity == ChatLiveActivity.waitingApproval;
+    if (!force &&
+        !sticky &&
+        _liveActivity == activity &&
+        _liveActivityDetail == detail) {
       return;
+    }
+    // #129：出现新的进行中/等待活动 → 取消「已完成/已中断」的停留计时
+    // （新活动已接管岛，停留不再需要）。
+    if (activity != ChatLiveActivity.completed &&
+        activity != ChatLiveActivity.interrupted) {
+      _cancelLiveActivityDismiss();
     }
     _liveActivity = activity;
     _liveActivityDetail = detail;
@@ -3133,15 +3157,50 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// #124：收尾时若仍有「等主人行动」的报警态，直接报 finished 会把岛上的
   /// 「请回复/请批准」一起抹掉（主人实测：从「生成中」切「请回复」会下岛）。
   /// 有等待态时改报等待态，让岛停在正确状态。
-  void _reportTurnSettled() {
+  ///
+  /// #129：无等待态时不再直接撤岛，改报「已完成 / 已中断」并停留
+  /// [liveActivityDwell]（主人拍板 15s）后自动撤岛；[interrupted] 用于
+  /// cancel / error 收尾，语义为「已中断」而非「已完成」。
+  void _reportTurnSettled({bool interrupted = false}) {
     final pending = state.pendingAction;
     if (pending.clarificationPrompt != null) {
       _reportLiveActivity(ChatLiveActivity.waitingReply);
-    } else if (pending.approvalPrompt != null) {
-      _reportLiveActivity(ChatLiveActivity.waitingApproval);
-    } else {
-      _reportLiveActivity(ChatLiveActivity.finished);
+      return;
     }
+    if (pending.approvalPrompt != null) {
+      _reportLiveActivity(ChatLiveActivity.waitingApproval);
+      return;
+    }
+    _reportLiveActivity(
+      interrupted ? ChatLiveActivity.interrupted : ChatLiveActivity.completed,
+    );
+    _scheduleLiveActivityDismiss();
+  }
+
+  /// #129「已完成 / 已中断」态在岛上的停留时长（主人拍板 15s）。
+  static const Duration liveActivityDwell = Duration(seconds: 15);
+
+  Timer? _liveActivityDismissTimer;
+
+  /// #129：完成/中断态上岛后停留 [liveActivityDwell]，到期再报 finished 撤岛。
+  void _scheduleLiveActivityDismiss() {
+    _liveActivityDismissTimer?.cancel();
+    _liveActivityDismissTimer = Timer(liveActivityDwell, () {
+      _liveActivityDismissTimer = null;
+      if (_disposed) return;
+      // 停留期间若已转回进行中/等待态（新回合或等待态接管），不撤岛。
+      final current = _liveActivity;
+      if (current != ChatLiveActivity.completed &&
+          current != ChatLiveActivity.interrupted) {
+        return;
+      }
+      _reportLiveActivity(ChatLiveActivity.finished);
+    });
+  }
+
+  void _cancelLiveActivityDismiss() {
+    _liveActivityDismissTimer?.cancel();
+    _liveActivityDismissTimer = null;
   }
 
   /// 推断当前活动（退后台强制上报与等待态判定用）。

@@ -17,8 +17,11 @@ const MethodChannel kLiveUpdateChannel = MethodChannel(
 /// 实况通知「当前动作」（#120）：面向状态栏/岛的一句话活动文案。
 ///
 /// 与 `ChatPhase` 的九态不同，这里是**通知可读性导向**的粗粒度动作：推理／
-/// 工具／输出／等待回复／等待批准。收尾态不在此枚举内——服务层用
-/// `notifyActivity(activity: null)` 表达「撤销」。
+/// 工具／输出／等待回复／等待批准／已完成／已中断。
+///
+/// #129 起补齐 #48 定稿五态的「已完成 / 已中断」：收尾不再一律撤岛，
+/// 由 chat 侧上报完成态、岛上停留 15s 后再报 `activity: null` 撤销；
+/// `notifyActivity(activity: null)` 仍是唯一的「撤销」表达。
 enum LiveUpdateActivity {
   /// 推理中。
   thinking,
@@ -34,6 +37,13 @@ enum LiveUpdateActivity {
 
   /// 等待主人批准（审批卡片已弹出）。
   waitingApproval,
+
+  /// 回合已完成（#129）：正常收尾（done / stream_end），
+  /// 在岛上停留一段（chat 侧 15s）后自动撤销。
+  completed,
+
+  /// 回合已中断（#129）：cancel / error 收尾。
+  interrupted,
 }
 
 /// #105 安卓 16 Live Updates（Promoted Ongoing 实况通知/状态栏 chip/
@@ -190,10 +200,15 @@ class LiveUpdateService {
       LiveUpdateActivity.waitingReply => l10n.liveUpdateActivityWaitingReply,
       LiveUpdateActivity.waitingApproval =>
         l10n.liveUpdateActivityWaitingApproval,
+      LiveUpdateActivity.completed => l10n.liveUpdateActivityCompleted,
+      LiveUpdateActivity.interrupted => l10n.liveUpdateActivityInterrupted,
     };
     _activityChip = switch (activity) {
       LiveUpdateActivity.waitingReply => l10n.liveUpdateChipReply,
       LiveUpdateActivity.waitingApproval => l10n.liveUpdateChipApproval,
+      // #129 #48 定稿五态：已完成 / 已中断（英文 ≤6 字符）。
+      LiveUpdateActivity.completed => l10n.liveUpdateChipDone,
+      LiveUpdateActivity.interrupted => l10n.liveUpdateChipStopped,
       _ => l10n.liveUpdateChip,
     };
     _trackerIconKey = switch (activity) {
@@ -202,6 +217,8 @@ class LiveUpdateService {
       LiveUpdateActivity.output => 'output',
       LiveUpdateActivity.waitingReply => 'waiting_reply',
       LiveUpdateActivity.waitingApproval => 'waiting_approval',
+      LiveUpdateActivity.completed => 'completed',
+      LiveUpdateActivity.interrupted => 'interrupted',
     };
     if (activity == LiveUpdateActivity.tool) {
       if (_progressPoints < kMaxProgressPoints) {
@@ -329,16 +346,19 @@ class LiveUpdateService {
       );
     }
 
-    // 3. 回合其他活动（thinking / tool / output）。
+    // 3. 回合其他活动（thinking / tool / output / completed / interrupted）。
     if (activityText != null && activityText.trim().isNotEmpty) {
+      // #129：已完成态用**确定进度条 100%**（满载=完成、停止动画）；
+      // 其余活动保持 indeterminate（工具落点表达「已发生的动作」而非完成度）。
+      final isCompleted = _activity == LiveUpdateActivity.completed;
       return (
         title,
         activityText,
         _activityChip ?? l10n.liveUpdateChip,
         _trackerIconKey,
         _progressPoints,
-        true,
-        0,
+        !isCompleted,
+        isCompleted ? 100 : 0,
       );
     }
 

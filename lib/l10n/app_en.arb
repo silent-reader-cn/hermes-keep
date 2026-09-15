@@ -23,8 +23,12 @@
   "liveUpdateActivityOutput": "Writing reply…",
   "liveUpdateActivityWaitingReply": "Waiting for your reply",
   "liveUpdateActivityWaitingApproval": "Waiting for approval",
+  "liveUpdateActivityCompleted": "Turn completed",
+  "liveUpdateActivityInterrupted": "Turn interrupted",
   "liveUpdateChipReply": "Reply",
   "liveUpdateChipApproval": "Allow",
+  "liveUpdateChipDone": "Done",
+  "liveUpdateChipStopped": "Stop",
   "bgWorkManagerStatusNotApplicable": "Not applicable (Android only)",
   "bgWorkManagerStatusFailed": "Not ready: {reason}",
   "bgWorkManagerStatusFailedShort": "Not ready"

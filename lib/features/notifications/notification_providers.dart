@@ -494,11 +494,11 @@ final turnNotificationHookProvider = Provider<ChatTurnCompletedCallback>((ref) {
           // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
           .catchError((Object _) {}));
     unawaited(keepalive.cancelOneOffPoll(sessionId));
-    // #105 实况通知兜底 cancel：窄屏聊天页期间会话列表未挂载，sync(0) 回调
-    // 要等返回列表才触发——完成态即撤 LIVE，与 stopForegroundService 同步收口。
-    unawaited(
-      LiveUpdateService.instance.cancelAll().catchError((Object _) {}),
-    );
+    // #129 撤除 #105 遗留的实况通知兜底 cancel：该调用在开关判定之前无条件撤岛，
+    // 而 #120 之后岛改由**回合实时事件驱动**——chat 侧 `_reportTurnSettled` 已在
+    // 同一收尾点上报「已完成 / 已中断」（停留 15s 后自行撤岛），此处再撤一次
+    // 属于对打死。收尾撤岛的唯一责任方是 chat 事件驱动（另见后台兜底
+    // `_cancelLiveUpdateNotification` 与列表归零 `sync(activeCount: 0)`）。
 
     final settings = ref.read(notificationSettingsProvider);
     if (!settings.notifyTurnsEnabled) return;
@@ -534,10 +534,11 @@ final clarificationNotificationHookProvider =
           // setBgForegroundServiceEnabled）；fire-and-forget 调用自吞。
           .catchError((Object _) {}));
         unawaited(keepalive.cancelOneOffPoll(sessionId));
-        // #105 实况通知兜底 cancel（同回合完成 hook，窄屏 sync(0) 滞后）。
-        unawaited(
-          LiveUpdateService.instance.cancelAll().catchError((Object _) {}),
-        );
+        // #129 撤除 #105 遗留的无条件 cancel：澄清是「等主人行动」的报警态，
+        // chat 侧 `_applyClarificationUpdate` 刚上报 waitingReply（让其抢占上岛），
+        // 本 hook 随即撤岛会把等待态抹掉（且 `cancelAll` 只清服务侧 `_activity`，
+        // chat 侧去重表无人重置 → 后续轮询重建卡片也被去重跳过，岛再也回不来）。
+        // 撤岛责任归 chat 事件驱动，见 turnNotificationHookProvider 同段落注释。
 
         final settings = ref.read(notificationSettingsProvider);
         if (!settings.notifyClarifyEnabled) return;
@@ -596,6 +597,9 @@ final chatLiveActivityHookProvider =
           ChatLiveActivity.output => LiveUpdateActivity.output,
           ChatLiveActivity.waitingReply => LiveUpdateActivity.waitingReply,
           ChatLiveActivity.waitingApproval => LiveUpdateActivity.waitingApproval,
+          // #129 完成 / 中断态：上岛停留（chat 侧 15s）后再由 finished 撤销。
+          ChatLiveActivity.completed => LiveUpdateActivity.completed,
+          ChatLiveActivity.interrupted => LiveUpdateActivity.interrupted,
           // finished → null：收尾撤销。
           ChatLiveActivity.finished => null,
         };

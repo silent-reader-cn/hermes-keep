@@ -458,7 +458,7 @@ void main() {
       },
     );
 
-    test('不同活动类型 → trackerIcon 键逐态正确（thinking/tool/output/waiting_reply/waiting_approval）', () async {
+    test('不同活动类型 → trackerIcon 键逐态正确（含 #129 已完成/已中断）', () async {
       installMock();
       final service = LiveUpdateService();
 
@@ -468,6 +468,8 @@ void main() {
         LiveUpdateActivity.output: 'output',
         LiveUpdateActivity.waitingReply: 'waiting_reply',
         LiveUpdateActivity.waitingApproval: 'waiting_approval',
+        LiveUpdateActivity.completed: 'completed',
+        LiveUpdateActivity.interrupted: 'interrupted',
       };
 
       for (final entry in states.entries) {
@@ -486,6 +488,74 @@ void main() {
           reason: 'Activity ${entry.key} should map to ${entry.value}',
         );
       }
+    });
+
+    test('#129 完成态 → #48 定稿 chip「已完成」+ 确定进度条 100%（满载=完成）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.completed,
+      );
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '回合已完成');
+      expect(args['shortCriticalText'], '已完成');
+      expect(args['trackerIcon'], 'completed');
+      // 完成态不再是 indeterminate 转圈，而是确定进度条满载：语义即「已完成」。
+      expect(args['indeterminate'], isFalse);
+      expect(args['progressPercent'], 100);
+    });
+
+    test('#129 中断态 → #48 定稿 chip「已中断」+ 保持 indeterminate（不伪造进度）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.interrupted,
+      );
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], '回合已中断');
+      expect(args['shortCriticalText'], '已中断');
+      expect(args['trackerIcon'], 'interrupted');
+      expect(args['indeterminate'], isTrue);
+    });
+
+    test('#129 英文模式 → 完成/中断 chip「Done」/「Stop」（≤6 字符硬约束）', () async {
+      installMock();
+      LocaleResolver.updateMode(AppLocaleMode.en);
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.completed,
+      );
+      var args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], 'Turn completed');
+      expect(args['shortCriticalText'], 'Done');
+      expect(
+        (args['shortCriticalText']! as String).length,
+        lessThanOrEqualTo(6),
+      );
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 't',
+        activity: LiveUpdateActivity.interrupted,
+      );
+      args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['text'], 'Turn interrupted');
+      expect(args['shortCriticalText'], 'Stop');
+      expect(
+        (args['shortCriticalText']! as String).length,
+        lessThanOrEqualTo(6),
+      );
     });
 
     test(

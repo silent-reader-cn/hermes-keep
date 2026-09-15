@@ -355,9 +355,31 @@ void main() {
     });
 
     group('clearAll', () {
-      test('委托插件 cancelAll', () async {
+      test('非 Android（默认平台）→ 仍走插件 cancelAll（该平台无实况通知岛）', () async {
         await service.clearAll();
         verify(() => plugin.cancelAll()).called(1);
+      });
+
+      test('#129 Android → 按分区 ID 精确清除，绝不调用插件 cancelAll（放过实况通知 1501）',
+          () async {
+        // 回归根因：插件 cancelAll → NotificationManagerCompat.cancelAll()
+        // 会清掉本 App 发布的**所有**通知（不认 ID / 不认发布者），把由
+        // MainActivity 挂载的实况通知（灵动岛，固定 ID 1501）一并清掉。
+        // #126 修好本方法的初始化守卫（此前静默抛异常 = 什么都没清）后，
+        // 该路径才开始真正执行 → 表现为「回到前台/清残留就莫名其妙下岛」。
+        final androidService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: true,
+        );
+        await androidService.clearAll();
+
+        for (final id in const [1001, 1101, 1201, 1301, 1401]) {
+          verify(() => plugin.cancel(id: id)).called(1);
+        }
+        verifyNever(() => plugin.cancelAll());
+        verifyNever(
+          () => plugin.cancel(id: LiveUpdateService.kLiveUpdateNotificationId),
+        );
       });
 
       test('未初始化时先初始化插件再取消（回归：cancelAll 抛 must be initialized）',

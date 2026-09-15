@@ -1883,6 +1883,20 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
   /// 状态栏 chip 短文案（#48 定稿五态之一：请批准）。
   String get liveUpdateChipApproval => isEnglish ? 'Allow' : '请批准';
 
+  /// 活动正文：回合已完成（#129 已完成态，岛上停留 15s 后撤）。
+  String get liveUpdateActivityCompleted =>
+      isEnglish ? 'Turn completed' : '回合已完成';
+
+  /// 活动正文：回合已中断（#129，cancel / error 收尾）。
+  String get liveUpdateActivityInterrupted =>
+      isEnglish ? 'Turn interrupted' : '回合已中断';
+
+  /// 状态栏 chip 短文案（#48 定稿五态之一：已完成）。
+  String get liveUpdateChipDone => isEnglish ? 'Done' : '已完成';
+
+  /// 状态栏 chip 短文案（#48 定稿五态之一：已中断）。
+  String get liveUpdateChipStopped => isEnglish ? 'Stop' : '已中断';
+
   /// 状态栏 chip 短文案（下载中，硬约束 ≤6 字符）。
   String get liveUpdateDownloadChip => isEnglish ? 'Save' : '下载中';
 

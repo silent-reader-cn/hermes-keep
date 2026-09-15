@@ -329,7 +329,14 @@ enum ChatLiveActivity {
   /// 等待主人批准（审批卡片已弹出，[ChatPhase.approvalPending]）。
   waitingApproval,
 
-  /// 回合收尾（done / stream_end / cancel / error）→ 撤销实况通知。
+  /// 回合完成（#129）：done / stream_end 正常收尾 → 岛上显示「已完成」，
+  /// 停留（见 ChatController.liveActivityDwell）后自动撤岛。
+  completed,
+
+  /// 回合中断（#129）：cancel / error 收尾 → 岛上显示「已中断」，同样停留。
+  interrupted,
+
+  /// 撤销实况通知（完成/中断态停留到期，或需立即撤岛时）。
   finished,
 }
 

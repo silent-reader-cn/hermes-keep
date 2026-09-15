@@ -11,6 +11,7 @@ import 'package:hermes_ui/core/cache/cache_service.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/connection_store.dart';
 import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/chat/chat_controller.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
 
@@ -119,7 +120,7 @@ void main() {
       });
     });
 
-    test('回合收尾（stream_end）→ finished（撤销岛）', () {
+    test('#129 回合收尾（stream_end）→ completed，停留 15s 后才 finished 撤岛', () {
       fakeAsync((async) {
         final api = FakeChatApi();
         final reports = <(String, ChatLiveActivity, String)>[];
@@ -136,7 +137,106 @@ void main() {
 
         api.emit(const StreamEndSseEvent());
         async.flushMicrotasks();
+        // #129：收尾不再立刻撤岛，先上「已完成」态。
+        expect(reports.last.$2, ChatLiveActivity.completed);
+
+        // 停留期内不撤岛。
+        async.elapse(const Duration(seconds: 14));
+        expect(
+          reports.any((r) => r.$2 == ChatLiveActivity.finished),
+          isFalse,
+        );
+
+        // 满额 → 自动撤岛。
+        async.elapse(const Duration(seconds: 2));
         expect(reports.last.$2, ChatLiveActivity.finished);
+      });
+    });
+
+    test('#129 取消收尾 → interrupted（「已中断」而非「已完成」），停留后撤岛', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final reports = <(String, ChatLiveActivity, String)>[];
+        final container = _buildContainer(api, reports);
+        final controller = container.read(
+          chatControllerProvider('').notifier,
+        );
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        api.emit(const TokenSseEvent('文本 '));
+        async.flushMicrotasks();
+        expect(reports.last.$2, ChatLiveActivity.output);
+
+        api.emit(const CancelledSseEvent());
+        async.flushMicrotasks();
+        expect(reports.last.$2, ChatLiveActivity.interrupted);
+
+        async.elapse(
+          ChatController.liveActivityDwell + const Duration(seconds: 1),
+        );
+        expect(reports.last.$2, ChatLiveActivity.finished);
+      });
+    });
+
+    test('#129 停留期内新活动接管 → 停留计时作废，不误撤岛', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final reports = <(String, ChatLiveActivity, String)>[];
+        final container = _buildContainer(api, reports);
+        final controller = container.read(
+          chatControllerProvider('').notifier,
+        );
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        api.emit(const StreamEndSseEvent());
+        async.flushMicrotasks();
+        expect(reports.last.$2, ChatLiveActivity.completed);
+
+        // 新回合开始（推理）→ 接管岛。
+        api.emit(const ReasoningSseEvent('再看一下'));
+        async.flushMicrotasks();
+        expect(reports.last.$2, ChatLiveActivity.thinking);
+
+        // 原停留计时已作废：走过 15s 也不得冒出 finished。
+        async.elapse(
+          ChatController.liveActivityDwell + const Duration(seconds: 3),
+        );
+        expect(
+          reports.any((r) => r.$2 == ChatLiveActivity.finished),
+          isFalse,
+        );
+      });
+    });
+
+    test('#129 等待态豁免去重：同一 waitingReply 重复上报仍穿透（外部撤岛后可回岛）', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final reports = <(String, ChatLiveActivity, String)>[];
+        final container = _buildContainer(api, reports);
+        final controller = container.read(
+          chatControllerProvider('').notifier,
+        );
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        // 对照组：非等待态仍去重（防 token 级平台通道风暴）。
+        api.emit(const TokenSseEvent('a '));
+        async.flushMicrotasks();
+        expect(reports.last.$2, ChatLiveActivity.output);
+        final afterOutput = reports.length;
+        api.emit(const TokenSseEvent('b '));
+        async.flushMicrotasks();
+        expect(reports.length, afterOutput);
+
+        // 等待态：同活动重复到达必须继续上报（去重表不得把它按掉）。
+        api.emit(const ClarificationPendingSseEvent(<String, Object?>{}));
+        async.flushMicrotasks();
+        expect(reports.last.$2, ChatLiveActivity.waitingReply);
+        final afterFirst = reports.length;
+
+        api.emit(const ClarificationPendingSseEvent(<String, Object?>{}));
+        async.flushMicrotasks();
+        expect(reports.length, greaterThan(afterFirst));
+        expect(reports.last.$2, ChatLiveActivity.waitingReply);
       });
     });
 

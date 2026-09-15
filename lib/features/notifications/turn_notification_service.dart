@@ -647,13 +647,35 @@ class LocalNotificationsTurnNotificationService
   @override
   Future<void> clearAll() async {
     // 必须先初始化插件（与 clearDownloadProgress / requestPermission 等同
-    // 类方法一致）：`cancelAll` 在未初始化时抛
+    // 类方法一致）：未初始化时插件方法抛
     // `Bad state: Flutter Local Notifications must be initialized before use`，
     // 该异常被下方 catch 吞掉 → 清除通知静默失效，旧通知残留在通知栏。
     // 触发路径：App 回到前台时 notification_lifecycle_observer 自动调用本方法。
     await _ensureInitialized();
     try {
-      await _plugin.cancelAll();
+      // #129 回归修复：Android 侧**不得**使用插件的 `cancelAll()`。
+      // 插件实现（flutter_local_notifications 22.3.0 的
+      // FlutterLocalNotificationsPlugin.java `cancelAllNotifications`）是
+      // `NotificationManagerCompat.cancelAll()` —— Android 语义为「清掉本 App
+      // 发布的**所有**通知」，不认 ID、不认发布者。而实况通知（灵动岛，固定 ID
+      // 1501）由 MainActivity 用同一个 NotificationManagerCompat 挂载，会被一并
+      // 清掉 → 每次回到前台/清残留都「莫名其妙下岛」。#126 修好本方法的初始化
+      // 守卫（原先静默抛异常 = 什么都没清）后才真正开始执行，故表现为该提交
+      // 之后的回归。修复：按分区 ID 精确清除本服务的通知，**放过 1501**。
+      if (_isAndroid) {
+        for (final id in const [
+          notificationTurnsId,
+          notificationClarifyId,
+          notificationErrorsId,
+          notificationDownloadsId,
+          notificationDownloadProgressId,
+        ]) {
+          await _plugin.cancel(id: id);
+        }
+      } else {
+        // 非 Android（Windows Toast 等）无实况通知岛，保持全清语义不变。
+        await _plugin.cancelAll();
+      }
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.debug,
         tag: 'notifications',
