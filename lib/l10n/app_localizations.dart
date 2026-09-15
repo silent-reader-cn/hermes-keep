@@ -412,8 +412,7 @@ class AppLocalizations {
   String get toolFailedStatus => isEnglish ? 'Failed' : '失败';
   String get toolRunningStatus => isEnglish ? 'Running' : '运行中';
   String get noTools => isEnglish ? 'No tools' : '无工具';
-  String get externalToolsLabel =>
-      isEnglish ? 'External Tools' : '外部工具';
+  String get externalToolsLabel => isEnglish ? 'External Tools' : '外部工具';
 
   /// 本地化工具名称（chat / tool_call 聚合）。
   String localizeToolName(String name) {
@@ -1856,8 +1855,7 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
   // ---------------------------------------------------------------------------
 
   /// 活动正文：推理中。
-  String get liveUpdateActivityThinking =>
-      isEnglish ? 'Thinking…' : '正在思考…';
+  String get liveUpdateActivityThinking => isEnglish ? 'Thinking…' : '正在思考…';
 
   /// 活动正文：工具调用（[name] 为空时用通用文案）。
   String liveUpdateActivityTool(String name) {
@@ -1869,8 +1867,7 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
   }
 
   /// 活动正文：正文输出中。
-  String get liveUpdateActivityOutput =>
-      isEnglish ? 'Writing reply…' : '正在输出…';
+  String get liveUpdateActivityOutput => isEnglish ? 'Writing reply…' : '正在输出…';
 
   /// 活动正文：等待主人回复（澄清卡片已弹出）。
   String get liveUpdateActivityWaitingReply =>
@@ -1885,6 +1882,22 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
 
   /// 状态栏 chip 短文案（#48 定稿五态之一：请批准）。
   String get liveUpdateChipApproval => isEnglish ? 'Allow' : '请批准';
+
+  /// 状态栏 chip 短文案（下载中，硬约束 ≤6 字符）。
+  String get liveUpdateDownloadChip => isEnglish ? 'Save' : '下载中';
+
+  /// 活动正文：下载进行中（已知总大小）。
+  String liveUpdateActivityDownload(String fileName, int percent) => isEnglish
+      ? 'Downloading $fileName · $percent%'
+      : '正在下载 $fileName · $percent%';
+
+  /// 活动正文：下载进行中（总大小未知）。
+  String liveUpdateActivityDownloadUnknownSize(String fileName) =>
+      isEnglish ? 'Downloading $fileName' : '正在下载 $fileName';
+
+  /// 活动正文：下载队列排队后缀（仅 queuedCount > 0 时拼接）。
+  String liveUpdateDownloadQueuedSuffix(int count) =>
+      isEnglish ? ' · +$count queued' : ' · 还有 $count 个';
 }
 
 // ---------------------------------------------------------------------------
@@ -1937,12 +1950,10 @@ extension AppLocalizationsWorkManagerStatus113 on AppLocalizations {
       isEnglish ? 'Not applicable (Android only)' : '不适用（仅限 Android）';
 
   /// WorkManager 状态：未就绪（无归因简写）。
-  String get bgWorkManagerStatusFailedShort =>
-      isEnglish ? 'Not ready' : '未就绪';
+  String get bgWorkManagerStatusFailedShort => isEnglish ? 'Not ready' : '未就绪';
 
   /// WorkManager 状态：未就绪（带归因描述）。
   String bgWorkManagerStatusFailed(String reason) => isEnglish
       ? (reason.isEmpty ? 'Not ready' : 'Not ready: $reason')
       : (reason.isEmpty ? '未就绪' : '未就绪：$reason');
 }
-

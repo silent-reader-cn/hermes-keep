@@ -12,6 +12,7 @@ import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
 import '../downloads/download_models.dart';
+import 'live_update_service.dart';
 
 /// 回合/澄清/错误/下载通知服务（抽象接口，平台无关契约）。
 ///
@@ -120,21 +121,22 @@ class LocalNotificationsTurnNotificationService
     this.onTap,
     bool? androidPlatformOverride,
     bool? windowsPlatformOverride,
+
     /// 资产加载器（测试注入用；null = rootBundle.load）。
     Future<ByteData> Function(String key)? assetLoader,
 
     /// logo 落盘目录（测试注入用；null = Directory.systemTemp）。
     Directory? windowsLogoDirectory,
     // ignore: prefer_initializing_formals
-  })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
-        // ignore: prefer_initializing_formals
-        _androidPlatformOverride = androidPlatformOverride,
-        // ignore: prefer_initializing_formals
-        _windowsPlatformOverride = windowsPlatformOverride,
-        // ignore: prefer_initializing_formals
-        _assetLoader = assetLoader,
-        // ignore: prefer_initializing_formals
-        _windowsLogoDirectory = windowsLogoDirectory;
+  }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+       // ignore: prefer_initializing_formals
+       _androidPlatformOverride = androidPlatformOverride,
+       // ignore: prefer_initializing_formals
+       _windowsPlatformOverride = windowsPlatformOverride,
+       // ignore: prefer_initializing_formals
+       _assetLoader = assetLoader,
+       // ignore: prefer_initializing_formals
+       _windowsLogoDirectory = windowsLogoDirectory;
 
   /// Windows Toast 品牌 logo 资产（48px 不透明，appLogoOverride + 注册表 IconUri）。
   static const windowsToastLogoAsset = 'assets/branding/notification_logo.png';
@@ -405,8 +407,7 @@ class LocalNotificationsTurnNotificationService
       );
       await _plugin.show(
         id: notificationClarifyId,
-        title: AppLocalizations(LocaleResolver.resolve())
-            .clarificationNeeded,
+        title: AppLocalizations(LocaleResolver.resolve()).clarificationNeeded,
         body: formatPreview(question),
         notificationDetails: NotificationDetails(
           android: const AndroidNotificationDetails(
@@ -507,8 +508,7 @@ class LocalNotificationsTurnNotificationService
       );
       await _plugin.show(
         id: notificationDownloadsId,
-        title: AppLocalizations(LocaleResolver.resolve())
-            .notifDownloadComplete,
+        title: AppLocalizations(LocaleResolver.resolve()).notifDownloadComplete,
         body: formatPreview(body),
         notificationDetails: NotificationDetails(
           android: const AndroidNotificationDetails(
@@ -545,13 +545,34 @@ class LocalNotificationsTurnNotificationService
     if (!_isAndroid) return;
     await _ensureInitialized();
     try {
+      bool live = false;
+      try {
+        live = await LiveUpdateService.instance.notifyDownloadProgress(
+          fileName: fileName,
+          receivedBytes: receivedBytes,
+          expectedBytes: expectedBytes,
+          queuedCount: queuedCount,
+        );
+      } on Object catch (e) {
+        developer.log(
+          'LiveUpdateService.notifyDownloadProgress 异常: $e',
+          name: 'notifications',
+        );
+      }
+      if (live) {
+        // 岛已承载进度：清掉可能存在的 1401，避免同一进度两条并存。
+        await _plugin.cancel(id: notificationDownloadProgressId);
+        return;
+      }
+
       final hasTotal = expectedBytes > 0;
       final percent = hasTotal ? (receivedBytes * 100 ~/ expectedBytes) : 0;
       final sizeText = hasTotal
           ? '${formatDownloadByteSize(receivedBytes)} / ${formatDownloadByteSize(expectedBytes)}'
           : formatDownloadByteSize(receivedBytes);
       final queueSuffix = queuedCount > 0 ? ' · 还有 $queuedCount 个排队' : '';
-      final body = '$fileName ${sizeText.isNotEmpty ? '($sizeText)' : ''}'
+      final body =
+          '$fileName ${sizeText.isNotEmpty ? '($sizeText)' : ''}'
           '$queueSuffix';
       DiagnosticsService.instance.log(
         level: DiagnosticsLogLevel.debug,
@@ -603,6 +624,14 @@ class LocalNotificationsTurnNotificationService
     if (!_isAndroid) return;
     await _ensureInitialized();
     try {
+      try {
+        await LiveUpdateService.instance.clearDownloadProgress();
+      } on Object catch (e) {
+        developer.log(
+          'LiveUpdateService.clearDownloadProgress 异常: $e',
+          name: 'notifications',
+        );
+      }
       await _plugin.cancel(id: notificationDownloadProgressId);
     } on Object catch (error) {
       developer.log('清除下载进度通知失败: $error', name: 'notifications');

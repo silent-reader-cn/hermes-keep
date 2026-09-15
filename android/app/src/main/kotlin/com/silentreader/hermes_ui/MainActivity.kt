@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
@@ -247,6 +248,7 @@ class MainActivity : FlutterActivity() {
                         val indeterminate = call.argument<Boolean>("indeterminate") ?: true
                         val trackerIcon = call.argument<String>("trackerIcon")
                         val progressPoints = (call.argument<Int>("progressPoints") ?: 0).coerceIn(0, 20)
+                        val progressPercent = call.argument<Int>("progressPercent") ?: 0
                         if (id == null || channelId.isNullOrEmpty() ||
                             title.isNullOrEmpty() || text.isNullOrEmpty()
                         ) {
@@ -262,6 +264,7 @@ class MainActivity : FlutterActivity() {
                             indeterminate = indeterminate,
                             trackerIcon = trackerIcon,
                             progressPoints = progressPoints,
+                            progressPercent = progressPercent,
                         )
                         result.success(ok)
                     }
@@ -301,6 +304,7 @@ class MainActivity : FlutterActivity() {
         indeterminate: Boolean,
         trackerIcon: String? = null,
         progressPoints: Int = 0,
+        progressPercent: Int = 0,
     ): Boolean {
         return try {
             ensureLiveChannel(channelId)
@@ -347,14 +351,21 @@ class MainActivity : FlutterActivity() {
             // 进度样式（实况通知资格条件之一）：兼容层 NotificationCompat
             // 自带低版本降级（坑③：SDK<36 时 ProgressStyle 自动回退默认样式，
             // 绝不可引用 framework Notification.ProgressStyle）。
-            // 回合无确定进度 → 不定量动画（勿伪造百分比）。
             val style = NotificationCompat.ProgressStyle()
-                .setStyledByProgress(false)
             if (indeterminate) {
+                style.setStyledByProgress(false)   // 现状不变：不定量时靠 tracker icon 表达
                 style.setProgressIndeterminate(true)
             } else {
+                style.setStyledByProgress(true)    // 文档默认 true：区分「已走/未走」外观（真进度条语义）
                 style.setProgressIndeterminate(false)
-                style.setProgress(1)
+                // Leader 已实证（javap android.jar API36 + androidx core 1.18.0 双份）：
+                // ProgressStyle **没有** setProgressMax，只有 getProgressMax()；
+                // 官方文档：getProgressMax() = 所有 Segment 长度之和，因此 max 不是固定常量，
+                // 禁止假设 100，必须读真实 max 后按比例换算。
+                val max = style.progressMax.let { if (it <= 0) 100 else it }
+                val value = (progressPercent.coerceIn(0, 100) * max) / 100
+                style.setProgress(value)
+                Log.d("HermesLiveUpdate", "determinate progress=$progressPercent max=$max value=$value")
             }
 
             // #114-P1 动态 tracker icon：随状态切换图形；未知/关闭状态艺术时回退品牌记号 ic_hermes_agent 兜底。

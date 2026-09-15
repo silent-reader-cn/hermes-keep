@@ -1,9 +1,9 @@
-import 'dart:typed_data';
-
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_models.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_service.dart';
+import 'package:hermes_ui/features/notifications/live_update_service.dart';
 import 'package:hermes_ui/features/notifications/turn_notification_service.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +14,8 @@ class _MockAndroidPlugin extends Mock
     implements AndroidFlutterLocalNotificationsPlugin {}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUpAll(() {
     registerFallbackValue(
       const InitializationSettings(
@@ -55,9 +57,7 @@ void main() {
         ),
       ).thenAnswer((_) async {});
       when(() => plugin.cancelAll()).thenAnswer((_) async {});
-      when(
-        () => plugin.cancel(id: any(named: 'id')),
-      ).thenAnswer((_) async {});
+      when(() => plugin.cancel(id: any(named: 'id'))).thenAnswer((_) async {});
     });
 
     group('notifyTurnCompleted 参数组装', () {
@@ -239,8 +239,10 @@ void main() {
           plugin: plugin,
           windowsPlatformOverride: true,
           assetLoader: (key) async {
-            expect(key, LocalNotificationsTurnNotificationService
-                .windowsToastLogoAsset);
+            expect(
+              key,
+              LocalNotificationsTurnNotificationService.windowsToastLogoAsset,
+            );
             return ByteData(8);
           },
         );
@@ -250,29 +252,34 @@ void main() {
         await winService.notifyTurnCompleted('sess-w1', '标题', '正文');
 
         // 1. 初始化 settings 里 iconPath 指向落盘的 logo（注册表 IconUri 来源）
-        final initSettings = verify(
-          () => plugin.initialize(
-            settings: captureAny(named: 'settings'),
-            onDidReceiveNotificationResponse: any(
-              named: 'onDidReceiveNotificationResponse',
-            ),
-          ),
-        ).captured.single as InitializationSettings;
+        final initSettings =
+            verify(
+                  () => plugin.initialize(
+                    settings: captureAny(named: 'settings'),
+                    onDidReceiveNotificationResponse: any(
+                      named: 'onDidReceiveNotificationResponse',
+                    ),
+                  ),
+                ).captured.single
+                as InitializationSettings;
         expect(initSettings.windows, isNotNull);
         expect(initSettings.windows!.iconPath, isNotNull);
         expect(initSettings.windows!.iconPath, endsWith('.png'));
 
         // 2. 通知 details 带 appLogoOverride 图片
-        final details = verify(
-              () => plugin.show(
-                id: 1001,
-                title: '标题',
-                body: '正文',
-                notificationDetails: captureAny(named: 'notificationDetails'),
-                payload: 'sess-w1',
-              ),
-            ).captured.single
-            as NotificationDetails;
+        final details =
+            verify(
+                  () => plugin.show(
+                    id: 1001,
+                    title: '标题',
+                    body: '正文',
+                    notificationDetails: captureAny(
+                      named: 'notificationDetails',
+                    ),
+                    payload: 'sess-w1',
+                  ),
+                ).captured.single
+                as NotificationDetails;
         final windows = details.windows!;
         expect(windows.images, hasLength(1));
         expect(
@@ -294,16 +301,19 @@ void main() {
         );
         await brokenService.notifyTurnCompleted('sess-w2', 't', 'p');
 
-        final details = verify(
-              () => plugin.show(
-                id: 1001,
-                title: 't',
-                body: 'p',
-                notificationDetails: captureAny(named: 'notificationDetails'),
-                payload: 'sess-w2',
-              ),
-            ).captured.single
-            as NotificationDetails;
+        final details =
+            verify(
+                  () => plugin.show(
+                    id: 1001,
+                    title: 't',
+                    body: 'p',
+                    notificationDetails: captureAny(
+                      named: 'notificationDetails',
+                    ),
+                    payload: 'sess-w2',
+                  ),
+                ).captured.single
+                as NotificationDetails;
         expect(details.windows, isNotNull);
         expect(details.windows!.images, isEmpty);
       });
@@ -561,6 +571,159 @@ void main() {
         );
         await androidService.clearDownloadProgress();
         verify(() => plugin.cancel(id: 1401)).called(1);
+      });
+    });
+
+    group('#123 下载进度上岛与 1401 常规通知让位', () {
+      late LiveUpdateService originalLiveUpdateService;
+      late MethodChannel fakeChannel;
+      late List<MethodCall> fakeCalls;
+
+      setUp(() {
+        originalLiveUpdateService = LiveUpdateService.instance;
+        fakeCalls = [];
+        fakeChannel = const MethodChannel(
+          'com.silentreader.hermes_ui/live_update',
+        );
+        SharedPreferences.setMockInitialValues({});
+      });
+
+      tearDown(() {
+        LiveUpdateService.instance = originalLiveUpdateService;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(fakeChannel, null);
+      });
+
+      test('岛可用（isSupported=true）：updateDownloadProgress 转发到岛且不发 1401（仅调 cancel 1401 清场）', () async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(fakeChannel, (call) async {
+              fakeCalls.add(call);
+              if (call.method == 'isSupported') return true;
+              if (call.method == 'show') return true;
+              if (call.method == 'cancel') return true;
+              return null;
+            });
+
+        LiveUpdateService.instance = LiveUpdateService(
+          channel: fakeChannel,
+          androidPlatformOverride: true,
+        );
+
+        final androidService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: true,
+        );
+
+        await androidService.updateDownloadProgress(
+          fileName: 'app-release.apk',
+          receivedBytes: 50,
+          expectedBytes: 100,
+          queuedCount: 1,
+        );
+
+        // 1401 常规通知不应 show
+        verifyNever(
+          () => plugin.show(
+            id: 1401,
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            notificationDetails: any(named: 'notificationDetails'),
+            payload: any(named: 'payload'),
+          ),
+        );
+
+        // 但应 cancel(1401) 清场，防两条并存
+        verify(() => plugin.cancel(id: 1401)).called(1);
+
+        // 岛收到了 show 调用
+        expect(fakeCalls.where((c) => c.method == 'show'), hasLength(1));
+        final showArgs =
+            fakeCalls.firstWhere((c) => c.method == 'show').arguments
+                as Map<Object?, Object?>;
+        expect(showArgs['text'], '正在下载 app-release.apk · 50% · 还有 1 个');
+        expect(showArgs['indeterminate'], isFalse);
+        expect(showArgs['progressPercent'], 50);
+      });
+
+      test(
+        '岛不可用（isSupported=false）：updateDownloadProgress 回退 1401 常规通知',
+        () async {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(fakeChannel, (call) async {
+                fakeCalls.add(call);
+                if (call.method == 'isSupported') return false;
+                return null;
+              });
+
+          LiveUpdateService.instance = LiveUpdateService(
+            channel: fakeChannel,
+            androidPlatformOverride: true,
+          );
+
+          final androidService = LocalNotificationsTurnNotificationService(
+            plugin: plugin,
+            androidPlatformOverride: true,
+          );
+
+          await androidService.updateDownloadProgress(
+            fileName: 'app-release.apk',
+            receivedBytes: 50,
+            expectedBytes: 100,
+            queuedCount: 1,
+          );
+
+          // 1401 常规通知照常发出
+          verify(
+            () => plugin.show(
+              id: 1401,
+              title: any(named: 'title'),
+              body: any(named: 'body'),
+              notificationDetails: any(named: 'notificationDetails'),
+              payload: any(named: 'payload'),
+            ),
+          ).called(1);
+
+          // 岛没有被 show
+          expect(fakeCalls.where((c) => c.method == 'show'), isEmpty);
+        },
+      );
+
+      test('clearDownloadProgress：先清岛（吞异常），再 cancel 1401', () async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(fakeChannel, (call) async {
+              fakeCalls.add(call);
+              if (call.method == 'isSupported') return true;
+              if (call.method == 'show') return true;
+              if (call.method == 'cancel') return true;
+              return null;
+            });
+
+        final liveService = LiveUpdateService(
+          channel: fakeChannel,
+          androidPlatformOverride: true,
+        );
+        LiveUpdateService.instance = liveService;
+
+        // 先上报一次下载进度
+        await liveService.notifyDownloadProgress(
+          fileName: 'temp.zip',
+          receivedBytes: 10,
+          expectedBytes: 100,
+        );
+        expect(fakeCalls.where((c) => c.method == 'show'), hasLength(1));
+
+        final androidService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: true,
+        );
+
+        await androidService.clearDownloadProgress();
+
+        // 1401 被 cancel
+        verify(() => plugin.cancel(id: 1401)).called(1);
+
+        // 岛的 clearDownloadProgress 被触发（无其他活动时 cancel）
+        expect(fakeCalls.where((c) => c.method == 'cancel'), hasLength(1));
       });
     });
 

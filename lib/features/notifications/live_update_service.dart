@@ -10,8 +10,9 @@ import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
 
 /// 原生 Live Updates 通道名（与 MainActivity.kt LIVE_UPDATE_CHANNEL 对齐）。
-const MethodChannel kLiveUpdateChannel =
-    MethodChannel('com.silentreader.hermes_ui/live_update');
+const MethodChannel kLiveUpdateChannel = MethodChannel(
+  'com.silentreader.hermes_ui/live_update',
+);
 
 /// 实况通知「当前动作」（#120）：面向状态栏/岛的一句话活动文案。
 ///
@@ -58,9 +59,11 @@ class LiveUpdateService {
   LiveUpdateService({
     MethodChannel? channel,
     bool? androidPlatformOverride,
+    DateTime Function()? now,
   }) : _channel = channel ?? kLiveUpdateChannel,
        // ignore: prefer_initializing_formals
-       _androidPlatformOverride = androidPlatformOverride;
+       _androidPlatformOverride = androidPlatformOverride,
+       _now = now ?? DateTime.now;
 
   /// 单例实例访问（对齐 BackgroundKeepaliveService.instance 风格；测试可替换）。
   static LiveUpdateService instance = LiveUpdateService();
@@ -82,14 +85,20 @@ class LiveUpdateService {
   /// Android 平台判定覆盖（测试注入用；null = 真实 defaultTargetPlatform）。
   final bool? _androidPlatformOverride;
 
-  /// 上次成功展示的 (title, text, chip, trackerIcon, progressPoints) 幂等缓存；null = 当前无展示中的实况通知。
-  (String, String, String, String, int)? _lastShown;
+  /// 当前时间获取器（测试注入用，禁 Timer 铁律下做确定性节流单测）。
+  final DateTime Function() _now;
+
+  /// 上次成功展示的 (title, text, chip, trackerIcon, progressPoints, indeterminate, progressPercent) 幂等缓存；null = 当前无展示中的实况通知。
+  (String, String, String, String, int, bool, int)? _lastShown;
 
   /// #114-P1 动态 tracker 图标键（thinking / tool / output / waiting_reply / waiting_approval）。
   String _trackerIconKey = 'thinking';
 
   /// #114-P1 当前回合工具调用累计落点数（非完成度，回合收尾归零）。
   int _progressPoints = 0;
+
+  /// 当前活动种类（#123 用于区分等待态与普通回合活动，支持高优先级抢占与自然回落）。
+  LiveUpdateActivity? _activity;
 
   /// 来源一：会话列表活跃会话数（多会话总览兜底）。
   int _listActiveCount = 0;
@@ -102,6 +111,20 @@ class LiveUpdateService {
 
   /// 来源二：回合实时活动对应的状态栏 chip 短文案。
   String? _activityChip;
+
+  /// 来源三：下载状态字段（#123）。
+  String? _downloadFileName;
+  int _downloadReceived = 0;
+  int _downloadExpected = 0;
+  int _downloadQueuedCount = 0;
+  int _downloadPercent = 0;
+
+  @visibleForTesting
+  int get downloadReceived => _downloadReceived;
+
+  /// 下载通知节流：上次实际推送时间与百分比（防 notify 风暴，首次调用不受限）。
+  DateTime? _lastDownloadNotifyTime;
+  int? _lastDownloadNotifiedPercent;
 
   bool get _isAndroid =>
       _androidPlatformOverride ??
@@ -117,10 +140,21 @@ class LiveUpdateService {
       final supported = await _channel.invokeMethod<bool>('isSupported');
       return supported ?? false;
     } on Object catch (e) {
-      developer.log('LiveUpdateService.isSupported 失败: $e',
-          name: 'live_update');
+      developer.log(
+        'LiveUpdateService.isSupported 失败: $e',
+        name: 'live_update',
+      );
       return false;
     }
+  }
+
+  /// 岛正文工具名转译（与工具卡聚合同源，见 tool_call.dart:251）。
+  static String _localizedToolName(AppLocalizations l10n, String raw) {
+    final name = raw.trim();
+    if (name.isEmpty) return '';
+    // 与工具卡 MCP 归并口径一致（聚合层统一「外部工具」）。
+    if (name.startsWith('mcp__')) return l10n.externalToolsLabel;
+    return l10n.localizeToolName(name);
   }
 
   /// 回合实时活动上报（#120）：[activity] 为 null 表示回合收尾（撤销）。
@@ -136,16 +170,22 @@ class LiveUpdateService {
   }) async {
     if (!_isAndroid) return;
     if (activity == null) {
-      // 收尾：清活动态并撤销（多会话时由列表链路的下一次上报重新点亮）。
+      // 收尾：清活动态并刷新（等待态撤销后回落下载/列表链路，全空时 _flush 内调 cancelAll）。
+      _activity = null;
+      _activityText = null;
+      _activityChip = null;
       _trackerIconKey = 'thinking';
       _progressPoints = 0;
-      await cancelAll();
+      await _flush();
       return;
     }
+    _activity = activity;
     final l10n = AppLocalizations(LocaleResolver.resolve());
     _activityText = switch (activity) {
       LiveUpdateActivity.thinking => l10n.liveUpdateActivityThinking,
-      LiveUpdateActivity.tool => l10n.liveUpdateActivityTool(detail),
+      LiveUpdateActivity.tool => l10n.liveUpdateActivityTool(
+        _localizedToolName(l10n, detail),
+      ),
       LiveUpdateActivity.output => l10n.liveUpdateActivityOutput,
       LiveUpdateActivity.waitingReply => l10n.liveUpdateActivityWaitingReply,
       LiveUpdateActivity.waitingApproval =>
@@ -171,6 +211,59 @@ class LiveUpdateService {
     await _flush();
   }
 
+  /// 下载进度上报（#123）：有真实进度时以确定进度条（determinate）展示。
+  ///
+  /// 返回 true 表示本次由实况通知（岛）承载，调用方据此抑制 1401 常规通知。
+  Future<bool> notifyDownloadProgress({
+    required String fileName,
+    required int receivedBytes,
+    required int expectedBytes,
+    int queuedCount = 0,
+  }) async {
+    if (!_isAndroid) return false;
+    if (!await isSupported()) return false;
+
+    final percent = expectedBytes > 0
+        ? (receivedBytes * 100 ~/ expectedBytes).clamp(0, 100)
+        : 0;
+
+    _downloadFileName = fileName;
+    _downloadReceived = receivedBytes;
+    _downloadExpected = expectedBytes;
+    _downloadQueuedCount = queuedCount;
+    _downloadPercent = percent;
+
+    final lastTime = _lastDownloadNotifyTime;
+    final lastPercent = _lastDownloadNotifiedPercent;
+    final now = _now();
+
+    if (lastTime != null && lastPercent != null) {
+      final elapsedMs = now.difference(lastTime).inMilliseconds;
+      final percentDiff = (percent - lastPercent).abs();
+      if (elapsedMs < 500 && percentDiff < 1) {
+        return true;
+      }
+    }
+
+    _lastDownloadNotifyTime = now;
+    _lastDownloadNotifiedPercent = percent;
+    await _flush();
+    return true;
+  }
+
+  /// 清除下载进度态并刷新实况通知（自然回落回合活动 / 撤销 / 列表总览）。
+  Future<void> clearDownloadProgress() async {
+    if (!_isAndroid) return;
+    _downloadFileName = null;
+    _downloadReceived = 0;
+    _downloadExpected = 0;
+    _downloadQueuedCount = 0;
+    _downloadPercent = 0;
+    _lastDownloadNotifyTime = null;
+    _lastDownloadNotifiedPercent = null;
+    await _flush();
+  }
+
   /// 会话列表链路上报（既有入口）：活跃会话数 + 标题列表。
   ///
   /// 保留为**多会话总览兜底**；有实时活动时由活动文案优先（见 [_compose]）。
@@ -187,17 +280,56 @@ class LiveUpdateService {
     await _flush();
   }
 
-  /// 合成当前应展示的 (title, text, chip, trackerIcon, progressPoints)；null = 应撤销。
+  /// 合成当前应展示的 (title, text, chip, trackerIcon, progressPoints, indeterminate, progressPercent)；null = 应撤销。
   ///
-  /// 优先级：实时活动 > 列表总览 > 撤销。
-  (String, String, String, String, int)? _compose() {
+  /// 优先级：等待态（抢占一切） > 下载进行中 > 回合其他活动 > 列表总览 > 撤销。
+  (String, String, String, String, int, bool, int)? _compose() {
     final l10n = AppLocalizations(LocaleResolver.resolve());
     final count = _listActiveCount;
     final title = count > 1
         ? l10n.liveUpdateTitleMulti(count)
         : l10n.liveUpdateTitle;
 
+    // 1. 等待态（waitingReply / waitingApproval）：需主人行动，抢占一切。
+    final isWaiting =
+        _activity == LiveUpdateActivity.waitingReply ||
+        _activity == LiveUpdateActivity.waitingApproval;
     final activityText = _activityText;
+    if (isWaiting && activityText != null && activityText.trim().isNotEmpty) {
+      return (
+        title,
+        activityText,
+        _activityChip ?? l10n.liveUpdateChip,
+        _trackerIconKey,
+        _progressPoints,
+        true,
+        0,
+      );
+    }
+
+    // 2. 下载进行中（#123）。
+    final downloadFileName = _downloadFileName;
+    if (downloadFileName != null && downloadFileName.trim().isNotEmpty) {
+      final hasTotal = _downloadExpected > 0;
+      final baseText = hasTotal
+          ? l10n.liveUpdateActivityDownload(downloadFileName, _downloadPercent)
+          : l10n.liveUpdateActivityDownloadUnknownSize(downloadFileName);
+      final queueSuffix = _downloadQueuedCount > 0
+          ? l10n.liveUpdateDownloadQueuedSuffix(_downloadQueuedCount)
+          : '';
+      final text = '$baseText$queueSuffix';
+      return (
+        title,
+        text,
+        l10n.liveUpdateDownloadChip,
+        'download',
+        0,
+        !hasTotal,
+        hasTotal ? _downloadPercent : 0,
+      );
+    }
+
+    // 3. 回合其他活动（thinking / tool / output）。
     if (activityText != null && activityText.trim().isNotEmpty) {
       return (
         title,
@@ -205,8 +337,12 @@ class LiveUpdateService {
         _activityChip ?? l10n.liveUpdateChip,
         _trackerIconKey,
         _progressPoints,
+        true,
+        0,
       );
     }
+
+    // 4. 会话列表总览。
     if (count > 0) {
       final listTitle = (_listTitle ?? '').trim();
       return (
@@ -215,8 +351,12 @@ class LiveUpdateService {
         l10n.liveUpdateChip,
         _trackerIconKey,
         _progressPoints,
+        true,
+        0,
       );
     }
+
+    // 5. 撤销。
     return null;
   }
 
@@ -232,11 +372,19 @@ class LiveUpdateService {
         await cancelAll();
         return;
       }
-      // 幂等：文案/图标/点数 5 字段未变则不重复 notify（防 SSE/列表刷新抖动风暴），且先于
-      // isSupported 通道往返——同文案高频同步须零平台通道调用。
+      // 幂等：文案/图标/点数/确定性/百分比 7 字段未变则不重复 notify（防 SSE/列表/下载刷新抖动风暴），
+      // 且先于 isSupported 通道往返——同文案/百分比高频同步须零平台通道调用。
       if (_lastShown == composed) return;
       if (!await isSupported()) return;
-      final (title, text, chip, trackerIcon, progressPoints) = composed;
+      final (
+        title,
+        text,
+        chip,
+        trackerIcon,
+        progressPoints,
+        indeterminate,
+        progressPercent,
+      ) = composed;
       final shown = await _channel.invokeMethod<bool>('show', {
         'id': kLiveUpdateNotificationId,
         'channelId': kLiveUpdateChannelId,
@@ -244,10 +392,10 @@ class LiveUpdateService {
         'text': text,
         // 状态栏 chip 短文案（≤6 字符硬约束，Kotlin 侧再兜底截断）。
         'shortCriticalText': chip,
-        // 回合无确定进度 → 不定量动画（Kotlin 侧勿伪造百分比）。
-        'indeterminate': true,
+        'indeterminate': indeterminate,
         'trackerIcon': trackerIcon,
         'progressPoints': progressPoints,
+        'progressPercent': progressPercent,
       });
       if (shown == true) {
         _lastShown = composed;
@@ -277,6 +425,7 @@ class LiveUpdateService {
   Future<void> cancelAll() async {
     if (!_isAndroid) return;
     _lastShown = null;
+    _activity = null;
     _activityText = null;
     _activityChip = null;
     _trackerIconKey = 'thinking';
@@ -286,8 +435,7 @@ class LiveUpdateService {
         'id': kLiveUpdateNotificationId,
       });
     } on Object catch (e) {
-      developer.log('LiveUpdateService.cancelAll 失败: $e',
-          name: 'live_update');
+      developer.log('LiveUpdateService.cancelAll 失败: $e', name: 'live_update');
     }
   }
 }
