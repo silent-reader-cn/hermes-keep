@@ -24,5 +24,8 @@
   "liveUpdateActivityWaitingReply": "等待你的回复",
   "liveUpdateActivityWaitingApproval": "等待你的批准",
   "liveUpdateChipReply": "请回复",
-  "liveUpdateChipApproval": "请批准"
+  "liveUpdateChipApproval": "请批准",
+  "bgWorkManagerStatusNotApplicable": "不适用（仅限 Android）",
+  "bgWorkManagerStatusFailed": "未就绪：{reason}",
+  "bgWorkManagerStatusFailedShort": "未就绪"
 }

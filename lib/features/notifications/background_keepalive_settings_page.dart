@@ -51,6 +51,7 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
     final settings = ref.watch(notificationSettingsProvider);
     final notifier = ref.read(notificationSettingsProvider.notifier);
     final keepalive = ref.watch(backgroundKeepaliveServiceProvider);
+    final wmStatus = ref.watch(workManagerStatusProvider);
     final chevronColor = isLight
         ? LightSurfaces.textSecondary
         : const Color(0xFF8E8E93);
@@ -138,23 +139,60 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
                   style: TextStyle(color: statusRedText.resolveFrom(context)),
                 ),
               ),
-            CupertinoListTile(
-              key: const ValueKey('settings-bg-workmanager-status'),
-              title: Text(l10n.bgWorkManagerStatusTitle),
-              subtitle: Text(
-                l10n.bgWorkManagerStatusSubtitle,
-                style: isLight
-                    ? const TextStyle(color: LightSurfaces.textSecondary)
-                    : null,
-              ),
-              trailing: Icon(
-                CupertinoIcons.checkmark_seal_fill,
-                color: isLight
-                    ? statusGreenText.resolveFrom(context)
-                    : const Color(0xFF34C759),
-                size: 20,
-              ),
-            ),
+            switch (wmStatus.kind) {
+              WorkManagerStatusKind.ready => CupertinoListTile(
+                  key: const ValueKey('settings-bg-workmanager-status'),
+                  title: Text(l10n.bgWorkManagerStatusTitle),
+                  subtitle: Text(
+                    l10n.bgWorkManagerStatusSubtitle,
+                    style: isLight
+                        ? const TextStyle(color: LightSurfaces.textSecondary)
+                        : null,
+                  ),
+                  trailing: Icon(
+                    CupertinoIcons.checkmark_seal_fill,
+                    color: isLight
+                        ? statusGreenText.resolveFrom(context)
+                        : const Color(0xFF34C759),
+                    size: 20,
+                  ),
+                ),
+              WorkManagerStatusKind.notReady => CupertinoListTile(
+                  key: const ValueKey('settings-bg-workmanager-status'),
+                  title: Text(l10n.bgWorkManagerStatusTitle),
+                  subtitle: Text(
+                    (wmStatus.failureReason != null &&
+                            wmStatus.failureReason!.isNotEmpty)
+                        ? l10n.bgWorkManagerStatusFailed(
+                            wmStatus.failureReason!,
+                          )
+                        : l10n.bgWorkManagerStatusFailedShort,
+                    style: TextStyle(
+                      color: statusRedText.resolveFrom(context),
+                    ),
+                  ),
+                  trailing: Icon(
+                    CupertinoIcons.exclamationmark_circle_fill,
+                    color: statusRedText.resolveFrom(context),
+                    size: 20,
+                  ),
+                ),
+              WorkManagerStatusKind.notApplicable => CupertinoListTile(
+                  key: const ValueKey('settings-bg-workmanager-status'),
+                  title: Text(l10n.bgWorkManagerStatusTitle),
+                  subtitle: Text(
+                    l10n.bgWorkManagerStatusNotApplicable,
+                    style: isLight
+                        ? const TextStyle(color: LightSurfaces.textSecondary)
+                        : null,
+                  ),
+                  trailing: Icon(
+                    CupertinoIcons.minus_circle,
+                    color: statusGreyText.resolveFrom(context),
+                    size: 20,
+                  ),
+                ),
+            },
           ],
         ),
         // 系统保活与权限引导：每项独立一行，跳转对应系统设置页。

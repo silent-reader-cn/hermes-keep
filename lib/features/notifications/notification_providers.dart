@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +15,7 @@ import '../desktop/window_title_service.dart';
 import 'background_keepalive_service.dart';
 import 'live_update_service.dart';
 import 'turn_notification_service.dart';
+import 'workmanager_registration_probe.dart';
 
 /// App 生命周期状态（生产由 [NotificationLifecycleObserver] 驱动；测试可
 /// 直接调用 notifier.setState 或 override 注入）。
@@ -251,6 +254,139 @@ final backgroundKeepaliveServiceProvider = Provider<BackgroundKeepaliveService>(
     return BackgroundKeepaliveService.instance;
   },
 );
+
+/// 读取底层保活服务的 wmReady 状态（非侵入式判定）。
+///
+/// 仅有的两个实现（生产 / Fake）都暴露 `wmReady`，用 `is` 判定即可；
+/// 未知实现按「未就绪」处理——Android 上宁可如实报未就绪，也不谎报就绪
+/// （这正是 #113 要修的病根：静态绿勾）。故不做动态读取兜底。
+bool _resolveWmReady(BackgroundKeepaliveService service) {
+  if (service is ProductionBackgroundKeepaliveService) {
+    return service.wmReady;
+  }
+  if (service is FakeBackgroundKeepaliveService) {
+    return service.wmReady;
+  }
+  return false;
+}
+
+/// 测试注入用的目标平台覆盖 Provider（null 表示使用系统真实 defaultTargetPlatform）。
+final workManagerTargetPlatformProvider =
+    Provider<TargetPlatform?>((ref) => null);
+
+/// 判定当前是否为 Android 平台（优先读取 [workManagerTargetPlatformProvider] 覆盖）。
+bool isWorkManagerAndroidPlatform(Ref ref) {
+  final override = ref.watch(workManagerTargetPlatformProvider);
+  if (override != null) {
+    return override == TargetPlatform.android;
+  }
+  return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+}
+
+/// WorkManager 原生注册探针 Provider（#110/#113 测试可注入或直接替换单例）。
+final workManagerRegistrationProbeProvider =
+    Provider<WorkManagerRegistrationProbe>((ref) {
+  return WorkManagerRegistrationProbe.instance;
+});
+
+/// WorkManager 状态三态枚举（#113）。
+enum WorkManagerStatusKind {
+  /// 就绪（Android 且 wmReady == true）
+  ready,
+
+  /// 未就绪（Android 且 wmReady == false）
+  notReady,
+
+  /// 不适用（非 Android 平台）
+  notApplicable,
+}
+
+/// WorkManager 状态只读模型（#113）。
+class WorkManagerStatus {
+  const WorkManagerStatus({
+    required this.kind,
+    this.failureReason,
+  });
+
+  /// 状态三态类型。
+  final WorkManagerStatusKind kind;
+
+  /// 失败归因文本（仅 notReady 态且探针返回后有值）。
+  final String? failureReason;
+
+  /// 是否就绪。
+  bool get isReady => kind == WorkManagerStatusKind.ready;
+
+  /// 是否未就绪。
+  bool get isNotReady => kind == WorkManagerStatusKind.notReady;
+
+  /// 是否不适用。
+  bool get isNotApplicable => kind == WorkManagerStatusKind.notApplicable;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WorkManagerStatus &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          failureReason == other.failureReason;
+
+  @override
+  int get hashCode => Object.hash(kind, failureReason);
+
+  @override
+  String toString() =>
+      'WorkManagerStatus(kind: $kind, failureReason: $failureReason)';
+}
+
+/// WorkManager 状态控制器（#113 只读派生状态）。
+class WorkManagerStatusController extends Notifier<WorkManagerStatus> {
+  @override
+  WorkManagerStatus build() {
+    final service = ref.watch(backgroundKeepaliveServiceProvider);
+    final isAndroid = isWorkManagerAndroidPlatform(ref);
+    if (!isAndroid) {
+      return const WorkManagerStatus(
+        kind: WorkManagerStatusKind.notApplicable,
+      );
+    }
+
+    final isReady = _resolveWmReady(service);
+    if (isReady) {
+      return const WorkManagerStatus(
+        kind: WorkManagerStatusKind.ready,
+      );
+    }
+
+    // Android 且 wmReady == false：初始状态即为 notReady，异步拉取 probe 归因
+    unawaited(_loadAttribution());
+    return const WorkManagerStatus(
+      kind: WorkManagerStatusKind.notReady,
+    );
+  }
+
+  Future<void> _loadAttribution() async {
+    final probe = ref.read(workManagerRegistrationProbeProvider);
+    try {
+      final snapshot = await probe.probe();
+      state = WorkManagerStatus(
+        kind: WorkManagerStatusKind.notReady,
+        failureReason: snapshot.describe(),
+      );
+    } catch (e) {
+      state = WorkManagerStatus(
+        kind: WorkManagerStatusKind.notReady,
+        failureReason: e.toString(),
+      );
+    }
+  }
+}
+
+/// WorkManager 只读状态 Provider（#113）。
+final workManagerStatusProvider =
+    NotifierProvider<WorkManagerStatusController, WorkManagerStatus>(
+      WorkManagerStatusController.new,
+    );
 
 /// 全局路由 Provider 别名（对齐 goRouterProvider 契约命名）。
 final goRouterProvider = routerProvider;

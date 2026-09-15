@@ -31,7 +31,7 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     fakeNotificationService = FakeTurnNotificationService();
-    fakeKeepaliveService = FakeBackgroundKeepaliveService();
+    fakeKeepaliveService = FakeBackgroundKeepaliveService()..wmReady = true;
   });
 
   Widget buildNotificationHost({

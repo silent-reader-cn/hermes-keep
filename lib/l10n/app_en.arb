@@ -24,5 +24,8 @@
   "liveUpdateActivityWaitingReply": "Waiting for your reply",
   "liveUpdateActivityWaitingApproval": "Waiting for approval",
   "liveUpdateChipReply": "Reply",
-  "liveUpdateChipApproval": "Allow"
+  "liveUpdateChipApproval": "Allow",
+  "bgWorkManagerStatusNotApplicable": "Not applicable (Android only)",
+  "bgWorkManagerStatusFailed": "Not ready: {reason}",
+  "bgWorkManagerStatusFailedShort": "Not ready"
 }

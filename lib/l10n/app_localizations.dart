@@ -1928,3 +1928,21 @@ extension AppLocalizationsSessionContent108 on AppLocalizations {
       : '通过当前会话事件流实时同步正文内容与自唤醒回合';
 }
 
+// ---------------------------------------------------------------------------
+// #113 保活设置页 WorkManager 状态三态
+// ---------------------------------------------------------------------------
+extension AppLocalizationsWorkManagerStatus113 on AppLocalizations {
+  /// WorkManager 状态：不适用（非 Android）。
+  String get bgWorkManagerStatusNotApplicable =>
+      isEnglish ? 'Not applicable (Android only)' : '不适用（仅限 Android）';
+
+  /// WorkManager 状态：未就绪（无归因简写）。
+  String get bgWorkManagerStatusFailedShort =>
+      isEnglish ? 'Not ready' : '未就绪';
+
+  /// WorkManager 状态：未就绪（带归因描述）。
+  String bgWorkManagerStatusFailed(String reason) => isEnglish
+      ? (reason.isEmpty ? 'Not ready' : 'Not ready: $reason')
+      : (reason.isEmpty ? '未就绪' : '未就绪：$reason');
+}
+
