@@ -47,8 +47,10 @@ enum LiveUpdateActivity {
 ///      解决「后台/阶段变化不刷新」与「退后台延迟上岛」；
 ///   2. **会话列表总览**（既有，保留为兜底）：活跃会话集合变化时上报计数与
 ///      首个会话标题。
-/// - 幂等：与上次展示的 (title, text, chip) 相同则跳过 notify（防 SSE 高频
-///   抖动 notify 风暴）；文案相同的高频上报须零平台通道调用；
+/// - #114-P1 ProgressStyle 增强：tracker icon 随状态动态换；点数是「已发生的
+///   工具调用落点」，非完成度，进度条仍保持 indeterminate。
+/// - 幂等：与上次展示的 (title, text, chip, trackerIcon, progressPoints) 相同则跳过 notify
+///   （防 SSE 高频抖动 notify 风暴）；文案相同的高频上报须零平台通道调用；
 /// - 低版本安卓 `isSupported()==false` 时不发通知（不产生与保活常驻通知重复的
 ///   普通 ongoing 通知，自动降级无感）；
 /// - 设置开关 `bg_live_update_enabled`（默认 true，关=回退现状）。
@@ -69,6 +71,9 @@ class LiveUpdateService {
   /// 原生通知渠道 ID（importance=LOW、无角标，见 MainActivity.kt）。
   static const String kLiveUpdateChannelId = 'live';
 
+  /// #114-P1 工具调用落点上限（clamp 防溢出）。
+  static const int kMaxProgressPoints = 20;
+
   /// 设置开关 prefs key（默认开启：渐进增强、低版本自动无感）。
   static const String prefsKeyLiveUpdateEnabled = 'bg_live_update_enabled';
 
@@ -77,8 +82,14 @@ class LiveUpdateService {
   /// Android 平台判定覆盖（测试注入用；null = 真实 defaultTargetPlatform）。
   final bool? _androidPlatformOverride;
 
-  /// 上次成功展示的 (title, text, chip) 幂等缓存；null = 当前无展示中的实况通知。
-  (String, String, String)? _lastShown;
+  /// 上次成功展示的 (title, text, chip, trackerIcon, progressPoints) 幂等缓存；null = 当前无展示中的实况通知。
+  (String, String, String, String, int)? _lastShown;
+
+  /// #114-P1 动态 tracker 图标键（thinking / tool / output / waiting_reply / waiting_approval）。
+  String _trackerIconKey = 'thinking';
+
+  /// #114-P1 当前回合工具调用累计落点数（非完成度，回合收尾归零）。
+  int _progressPoints = 0;
 
   /// 来源一：会话列表活跃会话数（多会话总览兜底）。
   int _listActiveCount = 0;
@@ -126,6 +137,8 @@ class LiveUpdateService {
     if (!_isAndroid) return;
     if (activity == null) {
       // 收尾：清活动态并撤销（多会话时由列表链路的下一次上报重新点亮）。
+      _trackerIconKey = 'thinking';
+      _progressPoints = 0;
       await cancelAll();
       return;
     }
@@ -143,6 +156,18 @@ class LiveUpdateService {
       LiveUpdateActivity.waitingApproval => l10n.liveUpdateChipApproval,
       _ => l10n.liveUpdateChip,
     };
+    _trackerIconKey = switch (activity) {
+      LiveUpdateActivity.thinking => 'thinking',
+      LiveUpdateActivity.tool => 'tool',
+      LiveUpdateActivity.output => 'output',
+      LiveUpdateActivity.waitingReply => 'waiting_reply',
+      LiveUpdateActivity.waitingApproval => 'waiting_approval',
+    };
+    if (activity == LiveUpdateActivity.tool) {
+      if (_progressPoints < kMaxProgressPoints) {
+        _progressPoints++;
+      }
+    }
     await _flush();
   }
 
@@ -162,10 +187,10 @@ class LiveUpdateService {
     await _flush();
   }
 
-  /// 合成当前应展示的 (title, text, chip)；null = 应撤销。
+  /// 合成当前应展示的 (title, text, chip, trackerIcon, progressPoints)；null = 应撤销。
   ///
   /// 优先级：实时活动 > 列表总览 > 撤销。
-  (String, String, String)? _compose() {
+  (String, String, String, String, int)? _compose() {
     final l10n = AppLocalizations(LocaleResolver.resolve());
     final count = _listActiveCount;
     final title = count > 1
@@ -174,7 +199,13 @@ class LiveUpdateService {
 
     final activityText = _activityText;
     if (activityText != null && activityText.trim().isNotEmpty) {
-      return (title, activityText, _activityChip ?? l10n.liveUpdateChip);
+      return (
+        title,
+        activityText,
+        _activityChip ?? l10n.liveUpdateChip,
+        _trackerIconKey,
+        _progressPoints,
+      );
     }
     if (count > 0) {
       final listTitle = (_listTitle ?? '').trim();
@@ -182,6 +213,8 @@ class LiveUpdateService {
         title,
         listTitle.isNotEmpty ? listTitle : l10n.liveUpdateDefaultText,
         l10n.liveUpdateChip,
+        _trackerIconKey,
+        _progressPoints,
       );
     }
     return null;
@@ -199,11 +232,11 @@ class LiveUpdateService {
         await cancelAll();
         return;
       }
-      // 幂等：文案未变则不重复 notify（防 SSE/列表刷新抖动风暴），且先于
+      // 幂等：文案/图标/点数 5 字段未变则不重复 notify（防 SSE/列表刷新抖动风暴），且先于
       // isSupported 通道往返——同文案高频同步须零平台通道调用。
       if (_lastShown == composed) return;
       if (!await isSupported()) return;
-      final (title, text, chip) = composed;
+      final (title, text, chip, trackerIcon, progressPoints) = composed;
       final shown = await _channel.invokeMethod<bool>('show', {
         'id': kLiveUpdateNotificationId,
         'channelId': kLiveUpdateChannelId,
@@ -213,6 +246,8 @@ class LiveUpdateService {
         'shortCriticalText': chip,
         // 回合无确定进度 → 不定量动画（Kotlin 侧勿伪造百分比）。
         'indeterminate': true,
+        'trackerIcon': trackerIcon,
+        'progressPoints': progressPoints,
       });
       if (shown == true) {
         _lastShown = composed;
@@ -244,6 +279,8 @@ class LiveUpdateService {
     _lastShown = null;
     _activityText = null;
     _activityChip = null;
+    _trackerIconKey = 'thinking';
+    _progressPoints = 0;
     try {
       await _channel.invokeMethod<void>('cancel', {
         'id': kLiveUpdateNotificationId,

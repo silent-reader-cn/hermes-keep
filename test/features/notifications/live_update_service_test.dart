@@ -416,4 +416,141 @@ void main() {
       expect(calls, isEmpty);
     });
   });
+
+  group('LiveUpdateService ProgressStyle 增强（#114-P1）', () {
+    test('tool 活动连续上报 3 次 → 第 3 次 progressPoints=3，且每次都触发 show（点数驱动幂等刷新）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '我的会话',
+        activity: LiveUpdateActivity.tool,
+        detail: 'read_file',
+      );
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '我的会话',
+        activity: LiveUpdateActivity.tool,
+        detail: 'read_file',
+      );
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '我的会话',
+        activity: LiveUpdateActivity.tool,
+        detail: 'read_file',
+      );
+
+      final showCalls = calls.where((c) => c.method == 'show').toList();
+      expect(showCalls, hasLength(3));
+
+      final args1 = showCalls[0].arguments as Map<Object?, Object?>;
+      expect(args1['trackerIcon'], 'tool');
+      expect(args1['progressPoints'], 1);
+
+      final args2 = showCalls[1].arguments as Map<Object?, Object?>;
+      expect(args2['trackerIcon'], 'tool');
+      expect(args2['progressPoints'], 2);
+
+      final args3 = showCalls[2].arguments as Map<Object?, Object?>;
+      expect(args3['trackerIcon'], 'tool');
+      expect(args3['progressPoints'], 3);
+    });
+
+    test('不同活动类型 → trackerIcon 键逐态正确（thinking/tool/output/waiting_reply/waiting_approval）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      final states = <LiveUpdateActivity, String>{
+        LiveUpdateActivity.thinking: 'thinking',
+        LiveUpdateActivity.tool: 'tool',
+        LiveUpdateActivity.output: 'output',
+        LiveUpdateActivity.waitingReply: 'waiting_reply',
+        LiveUpdateActivity.waitingApproval: 'waiting_approval',
+      };
+
+      for (final entry in states.entries) {
+        await service.notifyActivity(
+          sessionId: 's1',
+          title: '会话',
+          activity: entry.key,
+          detail: 'sub',
+        );
+        final args = calls.where((c) => c.method == 'show').last.arguments as Map<Object?, Object?>;
+        expect(args['trackerIcon'], entry.value, reason: 'Activity ${entry.key} should map to ${entry.value}');
+      }
+    });
+
+    test('收尾（activity=null）→ 调 cancel，且点数归零；新回合首个 tool 上报时 progressPoints=1', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '回合 1',
+        activity: LiveUpdateActivity.tool,
+        detail: 'search',
+      );
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '回合 1',
+        activity: LiveUpdateActivity.tool,
+        detail: 'grep',
+      );
+      var lastArgs = calls.where((c) => c.method == 'show').last.arguments as Map<Object?, Object?>;
+      expect(lastArgs['progressPoints'], 2);
+
+      // 回合收尾
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '回合 1',
+        activity: null,
+      );
+      expect(calls.where((c) => c.method == 'cancel'), hasLength(1));
+
+      // 新回合开始，首次 tool 调用
+      await service.notifyActivity(
+        sessionId: 's2',
+        title: '回合 2',
+        activity: LiveUpdateActivity.tool,
+        detail: 'read',
+      );
+      lastArgs = calls.where((c) => c.method == 'show').last.arguments as Map<Object?, Object?>;
+      expect(lastArgs['progressPoints'], 1);
+    });
+
+    test('点数超过 kMaxProgressPoints → clamp 到上限（不会无限增长）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      for (var i = 0; i < LiveUpdateService.kMaxProgressPoints + 5; i++) {
+        await service.notifyActivity(
+          sessionId: 's1',
+          title: '会话',
+          activity: LiveUpdateActivity.tool,
+          detail: 'step_$i',
+        );
+      }
+
+      final lastArgs = calls.where((c) => c.method == 'show').last.arguments as Map<Object?, Object?>;
+      expect(lastArgs['progressPoints'], LiveUpdateService.kMaxProgressPoints);
+    });
+
+    test('cancelAll 显式调用 → 重置点数与 trackerIconKey', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '会话',
+        activity: LiveUpdateActivity.tool,
+      );
+      await service.cancelAll();
+
+      await service.sync(activeCount: 1, titles: ['新会话']);
+      final lastArgs = calls.where((c) => c.method == 'show').last.arguments as Map<Object?, Object?>;
+      expect(lastArgs['progressPoints'], 0);
+      expect(lastArgs['trackerIcon'], 'thinking');
+    });
+  });
 }

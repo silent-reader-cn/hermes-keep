@@ -12,6 +12,7 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
+import androidx.core.graphics.drawable.IconCompat
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import dev.fluttercommunity.plus.wakelock.WakelockPlusPlugin
@@ -244,6 +245,8 @@ class MainActivity : FlutterActivity() {
                         val text = call.argument<String>("text")
                         val shortCriticalText = call.argument<String>("shortCriticalText")
                         val indeterminate = call.argument<Boolean>("indeterminate") ?: true
+                        val trackerIcon = call.argument<String>("trackerIcon")
+                        val progressPoints = (call.argument<Int>("progressPoints") ?: 0).coerceIn(0, 20)
                         if (id == null || channelId.isNullOrEmpty() ||
                             title.isNullOrEmpty() || text.isNullOrEmpty()
                         ) {
@@ -257,6 +260,8 @@ class MainActivity : FlutterActivity() {
                             text = text,
                             shortCriticalText = shortCriticalText,
                             indeterminate = indeterminate,
+                            trackerIcon = trackerIcon,
+                            progressPoints = progressPoints,
                         )
                         result.success(ok)
                     }
@@ -294,6 +299,8 @@ class MainActivity : FlutterActivity() {
         text: String,
         shortCriticalText: String?,
         indeterminate: Boolean,
+        trackerIcon: String? = null,
+        progressPoints: Int = 0,
     ): Boolean {
         return try {
             ensureLiveChannel(channelId)
@@ -349,6 +356,33 @@ class MainActivity : FlutterActivity() {
                 style.setProgressIndeterminate(false)
                 style.setProgress(1)
             }
+
+            // #114-P1 动态 tracker icon：随状态切换图形；未知/关闭状态艺术时回退品牌记号 ic_hermes_agent 兜底。
+            val trackerRes = if (TRACKER_ICON_STATE_ART) {
+                when (trackerIcon) {
+                    "thinking" -> R.drawable.ic_live_thinking
+                    "tool" -> R.drawable.ic_live_tool
+                    "output" -> R.drawable.ic_live_output
+                    "waiting_reply" -> R.drawable.ic_live_reply
+                    "waiting_approval" -> R.drawable.ic_live_approval
+                    else -> R.drawable.ic_hermes_agent
+                }
+            } else {
+                R.drawable.ic_hermes_agent
+            }
+            style.setProgressTrackerIcon(IconCompat.createWithResource(this, trackerRes))
+
+            // #114-P1 工具调用落点：语义是「已经发生的动作落点」，不是完成度（进度条仍保持 indeterminate，禁伪造百分比）。
+            val clampedPoints = progressPoints.coerceIn(0, 20)
+            if (clampedPoints > 0) {
+                repeat(clampedPoints) { idx ->
+                    style.addProgressPoint(
+                        NotificationCompat.ProgressStyle.Point(idx)
+                            .setColor(0xFF007AFF.toInt())
+                    )
+                }
+            }
+
             builder.setStyle(style)
             NotificationManagerCompat.from(this).notify(id, builder.build())
             true
@@ -385,5 +419,7 @@ class MainActivity : FlutterActivity() {
             "com.silentreader.hermes_ui/keepalive_probe"
         private const val LIVE_UPDATE_CHANNEL =
             "com.silentreader.hermes_ui/live_update"
+        /** #114-P1 是否随状态切换实况通知 tracker icon（false = 统一使用品牌记号 ic_hermes_agent）。 */
+        private const val TRACKER_ICON_STATE_ART = true
     }
 }
