@@ -792,10 +792,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           primaryGroups: serverDerivedReasoning,
           fallbackGroups: reanchoredExistingReasoningGroups,
         );
+        final bool exhausted = fresh.isEmpty;
         state = state.copyWith(
           messages: allMessages,
           messagesOffset: newOffset,
           hasOlderMessages:
+              !exhausted &&
               detail.messageCount != null &&
               detail.messageCount! > state.messages.length + fresh.length,
           completedToolCallGroups: nextToolGroups,

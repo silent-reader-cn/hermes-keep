@@ -294,6 +294,17 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 贴底判定阈值（收紧至 80px，既保障平滑跟随又防止向上轻扫被拽回）。
   static const double _nearBottomThreshold = 80.0;
 
+  /// 分页触发的滞回上沿（#125）：视口离开顶部带（pixels > 200）后重新
+  /// 武装分页触发。缺了这道滞回时，一次上滚把视口留在 <= 80 区间，请求
+  /// 返回后「在途锁」立即释放（`_loadOlderMessages` 的 finally），下一个
+  /// 滚动事件又命中触发条件 → 单次上滚产生多轮加载。
+  static const double _olderLoadRearmThreshold = 200.0;
+
+  /// 连续「零推进」分页上限（#125）：分页返回后既无新增消息、游标也未
+  /// 推进（服务端已无更早历史，或请求失败），连续达到该次数即封顶停手，
+  /// 避免滚动事件把请求打成风暴。
+  static const int _olderLoadStalledLimit = 2;
+
   /// 拖动起始判定敏感阈值（8px，touchSlop 基准附近，排除轻点，#41）。
   static const double _dragSensitivityThreshold = 8.0;
 
@@ -324,6 +335,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
+  /// 顶部带分页触发是否已武装（#125 滞回，见 [_olderLoadRearmThreshold]）。
+  bool _olderLoadArmed = true;
+  /// 连续零推进的分页次数（#125）。
+  int _olderLoadStalled = 0;
+  /// 零推进达到上限后的封顶标志（#125）。
+  bool _olderLoadExhausted = false;
   bool _initialPositioned = false;
   bool _initialPositioning = false;
   bool _restoringOlderPosition = false;
@@ -364,6 +381,15 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   @visibleForTesting
   bool get restoringOlderPosition => _restoringOlderPosition;
+
+  /// 收敛帧预算的已用次数（#125）：每次分页都必须从 0 重启，否则会随
+  /// 分页次数单调累加、撞满上限后放弃锚点归位。
+  @visibleForTesting
+  int get olderRestoreAttempts => _olderRestoreAttempts;
+
+  /// 顶部带分页触发是否已武装（#125 滞回）。
+  @visibleForTesting
+  bool get olderLoadArmed => _olderLoadArmed;
 
   @visibleForTesting
   bool get isGestureActive => _isGestureActive;
@@ -520,6 +546,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _olderRestoreAnchorId = null;
       _olderRestoreAnchorDy = null;
       _olderRestoreAttempts = 0;
+      _olderLoadArmed = true;
+      _olderLoadStalled = 0;
+      _olderLoadExhausted = false;
       _userHasScrolled = false;
       _isUserInteracting = false;
       _pressFollowed = true;
@@ -705,9 +734,18 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         }
       }
     }
-    if (position.pixels <= 80 &&
+    // 分页触发（#125）：滞回武装 —— 视口离开顶部带才重新武装，使「一次
+    // 上滚滚到顶」只触发一次加载。缺此滞回时请求返回后锁即释放，只要
+    // 视口仍留在 <= 80 区间，后续每个滚动事件都会再打一发。
+    if (position.pixels > _olderLoadRearmThreshold) {
+      _olderLoadArmed = true;
+    }
+    if (position.pixels <= _nearBottomThreshold &&
+        _olderLoadArmed &&
+        !_olderLoadExhausted &&
         _initialPositioned &&
         !_restoringOlderPosition) {
+      _olderLoadArmed = false;
       unawaited(_loadOlderMessages());
     }
   }
@@ -915,12 +953,22 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (!state.hasOlderMessages || state.messagesOffset <= 0) return;
     _olderLoadQueued = true;
     _loadingOlder = true;
+    // #125 根因：每次分页都必须从零开始计收敛帧预算。此前该计数器只在
+    // session 切换时归零（didUpdateWidget），收敛成功与预算耗尽两条路径
+    // 都不重置 → 它单调累加，撞满 _maxOlderRestoreAttempts 后此后每次
+    // 分页首帧即判定「预算已尽」（`_olderRestoreAttempts < max` 为假）而
+    // 放弃锚点归位，锚点误差原样留在屏幕上。
+    _olderRestoreAttempts = 0;
+    _olderRestoreAnchorId = null;
+    _olderRestoreAnchorDy = null;
     final beforePixels = _controller.hasClients
         ? _controller.position.pixels
         : 0.0;
     final beforeExtent = _controller.hasClients
         ? _controller.position.maxScrollExtent
         : 0.0;
+    final beforeOffset = state.messagesOffset;
+    final beforeCount = state.messages.length;
     _restoringOlderPosition = true;
     // PATCH(#93): capture a geometric anchor (top-edge visible item + its
     // viewport dy) instead of relying on the lazy ListView's estimated
@@ -946,6 +994,21 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       // request failures and unmounted controllers.
       if (!mounted) _restoringOlderPosition = false;
     }
+    // #125 零推进检测：分页返回后既无新增消息、游标也未推进 → 服务端已无
+    // 更早历史（或本次请求失败）。保持武装以便用户重试，但连续达到
+    // _olderLoadStalledLimit 即封顶停手，杜绝滚动事件把请求打成风暴。
+    if (!mounted) return;
+    final after = ref.read(chatControllerProvider(widget.sessionId));
+    if (after.messagesOffset < beforeOffset ||
+        after.messages.length > beforeCount) {
+      _olderLoadStalled = 0;
+    } else {
+      _olderLoadStalled++;
+      _olderLoadArmed = true;
+      if (_olderLoadStalled >= _olderLoadStalledLimit) {
+        _olderLoadExhausted = true;
+      }
+    }
   }
 
   /// 分页 restore 的几何锚（#93）：分页触发时视口顶缘可见条目的 renderId
@@ -964,7 +1027,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   // keeps the postFrame chain short so it can never stall pending frames
   // (a long chain of postFrame-only callbacks does not schedule new
   // frames — pumpAndSettle/real devices alike stop feeding it).
-  static const int _maxOlderRestoreAttempts = 3;
+  //
+  // #125: 提到 6 帧。长内容条目（代码块 / 图片 / mermaid）异步撑高，
+  // 锚点 dy 在 3 帧内常未稳定；此时预算耗尽会直接放弃归位，误差留在
+  // 屏幕上（用户报告的「加载后位置被推动」）。链仍远短于会挂住帧的
+  // 量级。
+  static const int _maxOlderRestoreAttempts = 6;
   static const double _olderRestoreSettleEpsilon = 1.0;
 
   /// 记录视口顶缘第一条可见条目的 renderId（可见高度 > 0 即可，含部分可见）。
@@ -1035,6 +1103,30 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       }
       final measuredDy = _topEdgeAnchorDy(anchorId);
       if (measuredDy == null) {
+        // #125：锚点条目尚不可见。前插一页（可达数千像素）会把锚点推到
+        // lazy 列表构建范围（视口 ± cacheExtent）之外，而构建范围只随
+        // pixels 移动 —— 纯「等帧」永远不会把它建出来，收敛链只会空转到
+        // 预算耗尽、位置留在原处，用户看到视口被推到历史头部（实测
+        // pixels 停在 0 附近、attempts 撞满预算）。
+        // 因此第一帧先用 extent 增量做一次粗定位，把锚点带回构建范围，
+        // 之后仍由锚点法逐帧精修 —— 估算只当引子，终值精度由锚点保证。
+        if (frame == 0) {
+          final delta = _controller.position.maxScrollExtent - beforeExtent;
+          if (delta.abs() > 0.5) {
+            _controller.jumpTo(
+              (beforePixels + delta).clamp(
+                0.0,
+                _controller.position.maxScrollExtent,
+              ),
+            );
+            _restoreOlderScrollPosition(
+              beforePixels: beforePixels,
+              beforeExtent: beforeExtent,
+              frame: 1,
+            );
+            return;
+          }
+        }
         // Anchored item not (yet) built: keep waiting within budget.
         if (_olderRestoreAttempts < _maxOlderRestoreAttempts) {
           _olderRestoreAttempts++;

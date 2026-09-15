@@ -33,6 +33,9 @@ class FakeChatApi implements ChatServerApi {
 
   SessionResponse? sessionResponse;
   Map<String, Object?>? sessionResult;
+  /// 动态响应构造器（#125）：按 messageBefore 逐页生成响应，优先于
+  /// [sessionResult]。用于「连续多次分页」场景。
+  Map<String, Object?> Function(int? messageBefore)? sessionResultBuilder;
   Object? sessionError;
 
   SessionMutationResponse? renameResponse;
@@ -68,6 +71,8 @@ class FakeChatApi implements ChatServerApi {
   int cancelCalls = 0;
   int statusCalls = 0;
   int sessionCalls = 0;
+  /// 每次 session() 收到的 messageBefore（null = 首页加载），供分页断言。
+  final List<int?> sessionMessageBefore = [];
   int renameCalls = 0;
   int pinCalls = 0;
   int archiveCalls = 0;
@@ -180,8 +185,12 @@ class FakeChatApi implements ChatServerApi {
     bool expandRenderable = false,
   }) async {
     sessionCalls++;
+    sessionMessageBefore.add(messageBefore);
     if (sessionError != null) throw sessionError!;
     if (sessionResponse != null) return sessionResponse!;
+    if (sessionResultBuilder != null) {
+      return SessionResponse.fromJson(sessionResultBuilder!(messageBefore));
+    }
     if (sessionResult != null) {
       return SessionResponse.fromJson(sessionResult!);
     }
