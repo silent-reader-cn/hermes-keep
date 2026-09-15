@@ -95,7 +95,24 @@ def _drain(proc: subprocess.Popen) -> str:
     return out or ""
 
 
+def _force_utf8_output() -> None:
+    """Windows 控制台默认 cp1252/cp936，**中文日志会直接崩**。
+
+    windows-latest runner 实测（2026-09-15，run 34972396947）：`print(f"产物完整：…")`
+    抛 `UnicodeEncodeError: 'charmap' codec can't encode characters`，脚本在启动被测
+    进程之前就挂了——真 runner 与 Linux 开发机（UTF-8 默认）在这点上行为不同，本地
+    永远复现不出来。故在这里显式把输出流切成 UTF-8（写出的字节也是 UTF-8，GitHub
+    日志能正确渲染中文），`errors="replace"` 兜底任何仍有问题的字符。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main() -> int:
+    _force_utf8_output()
     parser = argparse.ArgumentParser(description="启动 Windows 产物并判定是否崩溃")
     parser.add_argument("exe", help="被测 exe 路径")
     parser.add_argument("--seconds", type=float, default=20.0, help="观察窗秒数（默认 20）")
