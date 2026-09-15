@@ -323,13 +323,18 @@ class MainActivity : FlutterActivity() {
                 .setChronometerCountDown(false)
                 .setContentIntent(contentIntent)
                 .setColor(0xFF007AFF.toInt())
-            // #114 largeIcon：展开态/岛展开态的大图标位——**支持彩色位图**，直接摆真应用
-            // 图标。此前从未设置该项，系统只能回落到 small icon，于是主人在岛上看到的永远
-            // 是那枚单色 H（本次修复的根因）。用自适应图标而非位图：它自带 66% 安全区，被
-            // HyperOS 裁成圆形时不会切到主体。本版 androidx 的 setLargeIcon 无 IconCompat
-            // 重载（编译期实测），故用 framework Icon 并加 API 23 守卫（Android 16 恒满足）。
+            // largeIcon（展开态/岛展开态的大图标位）：用**品牌源图派生的反色透明底**素材，
+            // 不再摆 mipmap/ic_launcher。
+            //
+            // 为什么换：自适应启动图标自带白底方块与 66% 安全区的方框感，摆在深色面板/岛上
+            // 是一块亮底贴片，和周围黑色割裂（主人 2026-09-14 意见：反色 + 黑底转透明底）。
+            // 新素材由 tools/icon_pipeline 生成：墨区反色、纸底透明、细节保留（非剪影），
+            // 并按 uiMode 分两套——drawable-night-xxxhdpi 白线条（深色面板可见）、
+            // drawable-xxxhdpi 黑线条（浅色面板可见），单一份透明底必在某一侧隐身。
+            // 本版 androidx 的 setLargeIcon 无 IconCompat 重载（编译期实测），故用 framework
+            // Icon 并加 API 23 守卫（Android 16 恒满足）。
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                builder.setLargeIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))
+                builder.setLargeIcon(Icon.createWithResource(this, R.drawable.ic_hermes_large))
             }
             // 状态栏 chip 短文案（系统硬约束 ≤6 字符）。按**字符数**截断：
             // TextUtils.ellipsize 的宽度参数单位是像素、非字符数（且新建
