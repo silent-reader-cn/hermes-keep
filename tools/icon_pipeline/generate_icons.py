@@ -76,17 +76,6 @@ NOTIFICATION_SOURCE_PATH = REPO_ROOT / "assets" / "branding" / "hermes-agent-not
 NOTIFICATION_INK_THRESHOLD = 140
 NOTIFICATION_MASTER_SIZE = 96  # xxxhdpi 24dp
 
-# 内部大图标（通知 setLargeIcon）：反色 + 透明底，并按系统昼夜分两套
-#   dark  → drawable-night-xxxhdpi：白线条（深色面板/岛上可见）
-#   light → drawable-xxxhdpi：黑线条（浅色面板上可见）
-# 单一份透明底素材必在某一侧「隐身」，故用 uiMode 资源限定符分套。
-NOTIFICATION_LARGE_ICON_NAME = "ic_hermes_large"
-NOTIFICATION_LARGE_ICON_SIZE = 256  # xxxhdpi = 64dp
-NOTIFICATION_LARGE_ICON_DIRS: Dict[str, str] = {
-    "dark": "drawable-night-xxxhdpi",
-    "light": "drawable-xxxhdpi",
-}
-
 ANDROID_VALUES_DIR = ANDROID_RES_DIR / "values"
 ADAPTIVE_CANVAS_SIZE = 432  # xxxhdpi 108dp viewport (108 * 4)
 ADAPTIVE_SAFE_RATIO = 72.0 / 108.0  # 66.67% safe zone ratio (72dp inner circle)
@@ -395,42 +384,6 @@ def generate_android_notification_icons(source_img: Image.Image) -> List[Path]:
     return generated
 
 
-def build_notification_large_icon(source_img: Image.Image, ink_rgb: int) -> Image.Image:
-    """Inverted artwork on a TRANSPARENT background, for setLargeIcon().
-
-    The brand artwork is near-binary black ink on white. Compositing onto
-    white and taking (255 - luminance) as the alpha channel yields "ink
-    visible, paper transparent" with the artwork's detail intact - the
-    large-icon slot wants a real picture, unlike the 24dp small icon where
-    detail has to be traded for a readable silhouette.
-
-    ink_rgb: 0 -> black ink (light surfaces), 255 -> white ink (dark surfaces).
-    """
-    flat = Image.alpha_composite(
-        Image.new("RGBA", source_img.size, (255, 255, 255, 255)), source_img
-    ).convert("L")
-    alpha = flat.point(lambda v: 255 - v)  # ink -> opaque, paper -> transparent
-    solid = Image.new("L", alpha.size, ink_rgb)
-    return Image.merge("RGBA", (solid, solid, solid, alpha))
-
-
-def generate_android_notification_large_icons(source_img: Image.Image) -> List[Path]:
-    """Write ic_hermes_large.png for both night and light resource qualifiers."""
-    generated: List[Path] = []
-    for mode, dir_name in NOTIFICATION_LARGE_ICON_DIRS.items():
-        target_dir = ANDROID_RES_DIR / dir_name
-        target_dir.mkdir(parents=True, exist_ok=True)
-        icon = build_notification_large_icon(source_img, 255 if mode == "dark" else 0)
-        icon = icon.resize(
-            (NOTIFICATION_LARGE_ICON_SIZE, NOTIFICATION_LARGE_ICON_SIZE),
-            Image.Resampling.LANCZOS,
-        )
-        out_file = target_dir / f"{NOTIFICATION_LARGE_ICON_NAME}.png"
-        icon.save(out_file, format="PNG", optimize=True)
-        generated.append(out_file)
-    return generated
-
-
 def generate_tray_icons(source_img: Image.Image) -> List[Path]:
     """Generate dedicated tray icon assets (16x16 PNG, 32x32 PNG, multi-size ICO)
     plus the 48px opaque toast logo (Windows notification appLogoOverride)."""
@@ -655,53 +608,6 @@ def verify_generated_artifacts() -> bool:
                       f"({expected_size}x{expected_size}, ink {coverage:.1%}, "
                       f"{path.stat().st_size} bytes)")
 
-    # 8. Android notification large icon (inverted artwork, transparent bg, night+light)
-    for mode, dir_name in NOTIFICATION_LARGE_ICON_DIRS.items():
-        path = ANDROID_RES_DIR / dir_name / f"{NOTIFICATION_LARGE_ICON_NAME}.png"
-        if not path.exists():
-            print(f"[FAIL] Missing notification large icon: {path.relative_to(REPO_ROOT)}")
-            all_ok = False
-            continue
-        with Image.open(path) as img:
-            rgba = img.convert("RGBA")
-            expected = NOTIFICATION_LARGE_ICON_SIZE
-            if rgba.size != (expected, expected):
-                print(f"[FAIL] {dir_name}/{NOTIFICATION_LARGE_ICON_NAME}.png: expected "
-                      f"{expected}x{expected}, got {rgba.size}")
-                all_ok = False
-                continue
-            alpha = rgba.split()[3]
-            data = list(alpha.getdata())
-            inked = sum(1 for v in data if v > 32) / len(data)
-            corners_clear = all(
-                alpha.getpixel(pos) == 0
-                for pos in ((0, 0), (expected - 1, 0),
-                            (0, expected - 1), (expected - 1, expected - 1))
-            )
-            want_rgb = 255 if mode == "dark" else 0
-            rgb_ok = all(
-                rgba.getpixel((x, y))[:3] == (want_rgb, want_rgb, want_rgb)
-                for x in range(0, expected, 11)
-                for y in range(0, expected, 11)
-                if rgba.getpixel((x, y))[3] > 32
-            )
-            if not 0.05 <= inked <= 0.60:
-                print(f"[FAIL] {dir_name}/{NOTIFICATION_LARGE_ICON_NAME}.png: ink coverage "
-                      f"{inked:.1%} out of sane range 5%-60%")
-                all_ok = False
-            elif not corners_clear:
-                print(f"[FAIL] {dir_name}/{NOTIFICATION_LARGE_ICON_NAME}.png: background must "
-                      f"stay transparent (corners are opaque)")
-                all_ok = False
-            elif not rgb_ok:
-                print(f"[FAIL] {dir_name}/{NOTIFICATION_LARGE_ICON_NAME}.png: ink colour must be "
-                      f"{'white' if mode == 'dark' else 'black'} on every visible pixel")
-                all_ok = False
-            else:
-                print(f"[PASS] Android notification large icon ({mode}): {dir_name}/"
-                      f"{NOTIFICATION_LARGE_ICON_NAME}.png ({expected}x{expected}, ink "
-                      f"{inked:.1%}, transparent bg, {path.stat().st_size} bytes)")
-
     return all_ok
 
 
@@ -748,9 +654,7 @@ def main() -> None:
     for p in notification_icons:
         print(f"   -> {p.relative_to(REPO_ROOT)}")
 
-    print("\n7. Generating Android notification large icon (setLargeIcon, night/light)...")
-    for p in generate_android_notification_large_icons(source_img):
-        print(f"   -> {p.relative_to(REPO_ROOT)}")
+    print("\n7. Tray icons...")
     for p in tray_icons:
         print(f"   -> {p.relative_to(REPO_ROOT)}")
 

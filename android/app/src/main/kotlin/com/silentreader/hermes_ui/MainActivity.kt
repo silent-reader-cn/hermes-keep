@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -308,7 +307,9 @@ class MainActivity : FlutterActivity() {
             )
             val builder = NotificationCompat.Builder(this, channelId)
                 // #114 small icon：应用标识的单色剪影（alpha-only，系统按语境着色）。
-                // 展开态大图标位另由 largeIcon 承担，二者职责不同。
+                // 展开态大图标位**刻意不设**（主人 2026-09-15 拍板删除）：摆品牌插画会与
+                // 单色剪影两种语言打架、观感割裂；不设时系统回落到 small icon，
+                // 状态栏与展开态是同一个记号，反而统一。
                 .setSmallIcon(R.drawable.ic_hermes_agent)
                 .setContentTitle(title)
                 .setContentText(text)
@@ -323,19 +324,6 @@ class MainActivity : FlutterActivity() {
                 .setChronometerCountDown(false)
                 .setContentIntent(contentIntent)
                 .setColor(0xFF007AFF.toInt())
-            // largeIcon（展开态/岛展开态的大图标位）：用**品牌源图派生的反色透明底**素材，
-            // 不再摆 mipmap/ic_launcher。
-            //
-            // 为什么换：自适应启动图标自带白底方块与 66% 安全区的方框感，摆在深色面板/岛上
-            // 是一块亮底贴片，和周围黑色割裂（主人 2026-09-14 意见：反色 + 黑底转透明底）。
-            // 新素材由 tools/icon_pipeline 生成：墨区反色、纸底透明、细节保留（非剪影），
-            // 并按 uiMode 分两套——drawable-night-xxxhdpi 白线条（深色面板可见）、
-            // drawable-xxxhdpi 黑线条（浅色面板可见），单一份透明底必在某一侧隐身。
-            // 本版 androidx 的 setLargeIcon 无 IconCompat 重载（编译期实测），故用 framework
-            // Icon 并加 API 23 守卫（Android 16 恒满足）。
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                builder.setLargeIcon(Icon.createWithResource(this, R.drawable.ic_hermes_large))
-            }
             // 状态栏 chip 短文案（系统硬约束 ≤6 字符）。按**字符数**截断：
             // TextUtils.ellipsize 的宽度参数单位是像素、非字符数（且新建
             // TextPaint 无字体度量），任何文案都会被压成单个「…」而使 chip 失效，
