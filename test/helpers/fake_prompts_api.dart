@@ -21,6 +21,10 @@ class FakePromptsApi implements PromptsApi {
   /// delete 返回 ok==false 时的回显（否则 ok==true）.
   bool deleteOk = true;
 
+  /// 非 null 时 create 返回 `ok: false` 且带该 error 文案（模拟服务端
+  /// 业务层拒绝，如「已达上限 (max 200)」——HTTP 200 但 body 表示失败）。
+  String? createRejectReason;
+
   /// 延迟 gate（测试加载态用）.
   Completer<void>? fetchGate;
 
@@ -49,6 +53,10 @@ class FakePromptsApi implements PromptsApi {
     lastCreateText = text;
     lastCreateLabel = label;
     if (createError != null) throw createError!;
+    final reason = createRejectReason;
+    if (reason != null) {
+      return SavePromptResponse(ok: false, error: reason);
+    }
     final prompt =
         createResult ??
         SavedPrompt(

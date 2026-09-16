@@ -19,6 +19,10 @@ void main() {
         isA<ApiException>(),
       );
       expect(const UploadFileTooLargeException(), isA<ApiException>());
+      expect(
+        const RequestRejectedException('已达上限 (max 200)'),
+        isA<ApiException>(),
+      );
     });
 
     test('switch 穷尽匹配（sealed 语义验证）', () {
@@ -32,8 +36,13 @@ void main() {
         KanbanDispatchMissingResultException() => 'kanban-dispatch',
         KanbanRunningStatusRequiresDispatcherException() => 'kanban-running',
         UploadFileTooLargeException() => 'upload-too-large',
+        RequestRejectedException() => 'request-rejected',
       };
       expect(describe(const UnauthorizedException()), 'unauthorized');
+      expect(
+        describe(const RequestRejectedException('已达上限 (max 200)')),
+        'request-rejected',
+      );
       expect(describe(HttpException.fromBody(404, null)), 'http');
     });
   });

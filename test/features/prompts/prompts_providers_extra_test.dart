@@ -209,7 +209,9 @@ void main() {
       expect(c.read(savedPromptsControllerProvider).valueOrNull, isEmpty);
     });
 
-    test('cachedAt 非 int → 视为未过期（容错：ageOk 默认 true）', () async {
+    // 修复（#17）：畸形时间戳一律视为「已过期」。原用例钉的是旧行为
+    //（`ts is int ? ... : true`，非 int 即豁免 TTL）——缓存被写坏反而永久有效。
+    test('cachedAt 非 int → 视为已过期（畸形缓存不豁免 TTL）', () async {
       SharedPreferences.setMockInitialValues({
         spCacheKey: jsonEncode({
           'prompts': [cachedPromptJson('noTS', 'no ts text')],
@@ -223,17 +225,15 @@ void main() {
       addTearDown(sub.close);
 
       await pumpEventQueue();
-      expect(c.read(savedPromptsControllerProvider).valueOrNull, hasLength(1));
-      expect(
-        c.read(savedPromptsControllerProvider).valueOrNull!.single.id,
-        'noTS',
-      );
+      // 缓存被判过期 ⇒ 不采用；网络仍被 gate 挡住 ⇒ 尚无结果。
+      expect(c.read(savedPromptsControllerProvider).valueOrNull, isNull);
 
       api.fetchGate!.complete();
       await pumpEventQueue();
     });
 
-    test('cachedAt 缺失 → 视为未过期', () async {
+    // 修复（#17）：同上 —— 时间戳缺失也不再豁免 TTL。
+    test('cachedAt 缺失 → 视为已过期（不再默认容错）', () async {
       SharedPreferences.setMockInitialValues({
         spCacheKey: jsonEncode({
           'prompts': [cachedPromptJson('noKey', 'no key text')],
@@ -246,10 +246,7 @@ void main() {
       addTearDown(sub.close);
 
       await pumpEventQueue();
-      expect(
-        c.read(savedPromptsControllerProvider).valueOrNull!.single.id,
-        'noKey',
-      );
+      expect(c.read(savedPromptsControllerProvider).valueOrNull, isNull);
       api.fetchGate!.complete();
       await pumpEventQueue();
     });
@@ -466,6 +463,64 @@ void main() {
           .map((e) => (e as Map)['id'])
           .toList();
       expect(ids, ['r1']);
+    });
+
+    // 修复（#15）：remove 失败时 state 与缓存必须一并回滚。
+    // 原实现只还原 state，而乐观写缓存已经落盘 ⇒ 7 天 TTL 内冷启动会
+    // 先渲染缺失列表、再被后续拉取静默补回（视觉闪变）。
+    test('remove 失败（ok=false）→ state 与缓存一并回滚', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final api = FakePromptsApi(
+        initialPrompts: [prompt('r1', 'keep'), prompt('r2', 'drop')],
+      );
+      final c = makeContainer(api);
+      final sub = c.listen(savedPromptsControllerProvider, (_, _) {});
+      addTearDown(sub.close);
+      await c.read(savedPromptsControllerProvider.future);
+      await pumpEventQueue();
+
+      api.deleteOk = false;
+      await c.read(savedPromptsControllerProvider.notifier).remove('r2');
+      await pumpEventQueue();
+
+      // state 回滚：r2 仍在
+      expect(
+        c.read(savedPromptsControllerProvider).valueOrNull!.map((p) => p.id),
+        ['r1', 'r2'],
+      );
+      // 缓存同样回滚：曾被乐观删掉的 r2 必须回来
+      final prefs = await SharedPreferences.getInstance();
+      final decoded =
+          jsonDecode(prefs.getString(spCacheKey)!) as Map<String, dynamic>;
+      final ids = (decoded['prompts'] as List)
+          .map((e) => (e as Map)['id'])
+          .toList();
+      expect(ids, containsAll(<String>['r1', 'r2']));
+    });
+
+    // 修复（#16）：服务端 ok=false 时把原因透出。原实现直接 return null，
+    // response.error 被丢弃 ⇒ 用户只看到通用「收藏失败」，永远不知道
+    // 该删几条（后端文案如「limit reached (max 200)」到不了用户）。
+    test('create 被服务端拒绝（ok=false + error）→ 抛 RequestRejectedException 带原因', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final api = FakePromptsApi(initialPrompts: const [])
+        ..createRejectReason = 'limit reached (max 200)';
+      final c = makeContainer(api);
+      final sub = c.listen(savedPromptsControllerProvider, (_, _) {});
+      addTearDown(sub.close);
+      await c.read(savedPromptsControllerProvider.future);
+      await pumpEventQueue();
+
+      await expectLater(
+        c.read(savedPromptsControllerProvider.notifier).create(text: 'hello'),
+        throwsA(
+          isA<RequestRejectedException>().having(
+            (e) => e.message,
+            'message',
+            'limit reached (max 200)',
+          ),
+        ),
+      );
     });
   });
 

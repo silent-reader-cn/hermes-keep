@@ -421,6 +421,10 @@ class GitController extends AutoDisposeFamilyAsyncNotifier<GitState, String> {
           branches = (await _api.fetchBranches(_sessionId)).branches;
         } on Exception catch (error) {
           branchesError = gitFriendlyError(error);
+          // 保留已知分支：对齐同文件 reloadBranches 的失败语义。
+          // 否则一次瞬时拉取失败就把 branches 置 null，分支树整块变空白
+          //（真机表现：网络抖动一次 → 分支列表消失）。
+          branches = current.branches;
         }
       }
       return current.copyWith(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../core/api/api_exception.dart';
 import '../../../core/models/saved_prompt.dart';
 import '../../../l10n/app_localizations.dart';
 import '../prompts_providers.dart';
@@ -72,7 +73,10 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
       }
     } catch (error) {
       if (!mounted) return;
-      await _showAlert(l10n.savePromptFailed, error.toString(), isError: true);
+      // ApiException 已带面向用户的中文 message（服务端拒绝原因也走这条，
+      // 如「已达上限 (max 200)」），直接展示；其余异常保留 toString 便于排查。
+      final detail = error is ApiException ? error.message : error.toString();
+      await _showAlert(l10n.savePromptFailed, detail, isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -86,11 +90,8 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
       await ref.read(savedPromptsControllerProvider.notifier).remove(id);
     } catch (error) {
       if (!mounted) return;
-      await _showAlert(
-        l10n.deletePromptFailed,
-        error.toString(),
-        isError: true,
-      );
+      final detail = error is ApiException ? error.message : error.toString();
+      await _showAlert(l10n.deletePromptFailed, detail, isError: true);
     } finally {
       if (mounted) setState(() => _deletingIds.remove(id));
     }

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_prompts.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/cache/app_database.dart';
 import '../../core/cache/cache_providers.dart';
 import '../../core/connections/connection_providers.dart';
@@ -74,10 +75,12 @@ class SavedPromptsController extends AsyncNotifier<List<SavedPrompt>> {
           final list = decoded['prompts'];
           final ts = decoded['cachedAt'];
           if (list is List) {
+            // 时间戳缺失 / 类型不符一律视为「已过期」：畸形缓存比没有缓存更危险
+            //（写坏一次就永久有效，TTL 形同虚设），代价只是多一次网络请求。
             final ageOk = ts is int
                 ? (DateTime.now().millisecondsSinceEpoch - ts) <
                     _spTtl.inMilliseconds
-                : true;
+                : false;
             if (ageOk) {
               final prompts = <SavedPrompt>[];
               for (final e in list) {
@@ -198,6 +201,13 @@ class SavedPromptsController extends AsyncNotifier<List<SavedPrompt>> {
       } catch (_) {}
       return prompt;
     }
+    // 服务端明确拒绝（HTTP 200 但 ok=false）时把原因抛出去：否则
+    // response.error（如「已达上限 (max 200)」）会被调用侧丢弃，
+    // 用户只能看到通用「收藏失败」，永远不知道该删几条。
+    final reason = response.error?.trim();
+    if (reason != null && reason.isNotEmpty) {
+      throw RequestRejectedException(reason);
+    }
     return prompt;
   }
 
@@ -212,7 +222,13 @@ class SavedPromptsController extends AsyncNotifier<List<SavedPrompt>> {
     try {
       final response = await _api.deletePrompt(id);
       if (response.ok == false) {
-        if (previous != null) state = AsyncData(previous);
+        if (previous != null) {
+          state = AsyncData(previous);
+          // state 回滚了，缓存也必须回滚：:210 已乐观写过 next。
+          // 只还原 state 会让 7 天 TTL 内的冷启动先渲染缺失列表、
+          // 再被后续拉取静默补回（视觉闪变）。
+          unawaited(_writeCache(previous));
+        }
         return;
       }
       try {
@@ -222,7 +238,10 @@ class SavedPromptsController extends AsyncNotifier<List<SavedPrompt>> {
         state = AsyncData(list);
       } catch (_) {}
     } on Exception {
-      if (previous != null) state = AsyncData(previous);
+      if (previous != null) {
+        state = AsyncData(previous);
+        unawaited(_writeCache(previous)); // 同上：缓存与 state 一并回滚
+      }
       rethrow;
     }
   }

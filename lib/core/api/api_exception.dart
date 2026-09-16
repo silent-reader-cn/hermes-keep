@@ -201,6 +201,15 @@ class UploadFileTooLargeException extends ApiException {
   const UploadFileTooLargeException([super.message = '附件超过 20MB 上限，无法上传。']);
 }
 
+/// 服务端明确拒绝写入：HTTP 200，但 body `ok: false` 且带 `error` 原因。
+///
+/// 用于「收藏提示词」这类**业务层拒绝**——HTTP 层是成功的、无需重试，
+/// 但服务端给的原因（如「已达上限 (max 200)」）必须透出到 UI：
+/// 否则用户只看到通用「收藏失败」，永远不知道该删掉几条。
+class RequestRejectedException extends ApiException {
+  const RequestRejectedException([super.message = '服务器拒绝了该操作。']);
+}
+
 String? _stringField(Object? value) => value is String ? value : null;
 
 String? _firstNonEmpty(List<Object?> values) {

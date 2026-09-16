@@ -252,7 +252,7 @@ void main() {
   });
 
   group('变更后重载（_reloadAfterMutation）失败路径', () {
-    test('checkout 后分支重载失败 → 切换仍返回 true + branchesError', () async {
+    test('checkout 后分支重载失败 → 切换仍返回 true + branchesError + 保留旧分支', () async {
       final api = FakeGitApi(status: sampleStatus());
       final container = makeContainer(api);
       await container.read(gitControllerProvider('s1').future);
@@ -266,8 +266,10 @@ void main() {
       final state = container.read(gitControllerProvider('s1')).valueOrNull!;
       expect(state.isActionRunning, isFalse);
       expect(state.branchesError, isNotNull);
-      // 重载失败时 branches 被写成 null（实现观察：旧分支未保留）。
-      expect(state.branches, isNull);
+      // 修复（#14）：重载失败时保留已知分支（对齐同文件 reloadBranches），
+      // 不再把 branches 置 null —— 否则一次瞬时抖动就把分支树清空。
+      expect(state.branches, isNotNull);
+      expect(state.branches!.current, 'main');
       expect(state.status!.branch, 'main');
     });
 
