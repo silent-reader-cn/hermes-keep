@@ -1204,17 +1204,14 @@ class SessionDetail {
       isReadOnly: lossyBool(json, 'is_read_only'),
       pendingUserMessage: lossyString(json, 'pending_user_message'),
       pendingAttachments: optJsonValueList(json, 'pending_attachments'),
-      contextLength: firstKey(json, [
-            'context_length',
-            'contextLength',
-          ], lossyInt) ??
+      contextLength:
+          firstKey(json, ['context_length', 'contextLength'], lossyInt) ??
           lossyInt(json, 'context_length'),
-      thresholdTokens: firstKey(json, [
-            'threshold_tokens',
-            'thresholdTokens',
-          ], lossyInt) ??
+      thresholdTokens:
+          firstKey(json, ['threshold_tokens', 'thresholdTokens'], lossyInt) ??
           lossyInt(json, 'threshold_tokens'),
-      lastPromptTokens: firstKey(json, [
+      lastPromptTokens:
+          firstKey(json, [
             'last_prompt_tokens',
             'lastPromptTokens',
           ], lossyInt) ??
@@ -1297,6 +1294,20 @@ class SessionDetail {
     return 'session-$titlePart-$timestamp';
   }
 
+  /// 安全地把任意 Map 转成 `Map<String, Object?>`。
+  ///
+  /// 键含非 String 时返回 null 而**不是抛 TypeError** —— 对齐 `lossy_json.dart`
+  /// 「绝不 throw」的容错口径，由调用方降级到慢路径处理。
+  /// （裸 `Map<String, Object?>.from(raw)` 对非 String 键会直接抛 TypeError，
+  /// 直穿 fromJson 让整个响应解析失败。）
+  static Map<String, Object?>? _toStringKeyedMap(Map<Object?, Object?> raw) {
+    try {
+      return Map<String, Object?>.from(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// messages 容错解码（同 ChatMessage.attachments 的两级兜底模式）。
   static List<ChatMessage>? _decodeMessagesTolerantly(
     Map<String, Object?> json,
@@ -1307,12 +1318,15 @@ class SessionDetail {
     var fastOk = true;
     final fast = <ChatMessage>[];
     for (final element in raw) {
-      if (element is Map) {
-        fast.add(ChatMessage.fromJson(Map<String, Object?>.from(element)));
-      } else {
+      final asMap = element is Map
+          ? _toStringKeyedMap(element as Map<Object?, Object?>)
+          : null;
+      if (asMap == null) {
+        // 不是 Map，或键非 String（后者交由慢路径按 JsonValue 重新解码）
         fastOk = false;
         break;
       }
+      fast.add(ChatMessage.fromJson(asMap));
     }
     if (fastOk) return fast;
 
@@ -1340,14 +1354,14 @@ class SessionDetail {
     var fastOk = true;
     final fast = <PersistedToolCall>[];
     for (final element in raw) {
-      if (element is Map) {
-        fast.add(
-          PersistedToolCall.fromJson(Map<String, Object?>.from(element)),
-        );
-      } else {
+      final asMap = element is Map
+          ? _toStringKeyedMap(element as Map<Object?, Object?>)
+          : null;
+      if (asMap == null) {
         fastOk = false;
         break;
       }
+      fast.add(PersistedToolCall.fromJson(asMap));
     }
     if (fastOk) return fast;
 

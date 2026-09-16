@@ -134,6 +134,7 @@ class _DesktopLifecycleObserverState
     final uri = router.routerDelegate.currentConfiguration.uri;
     final segments = uri.pathSegments;
     String? sessionId;
+    String? chatSessionId;
     if (segments.length >= 2 &&
         (segments[0] == 'chat' ||
             segments[0] == 'workspace' ||
@@ -141,25 +142,47 @@ class _DesktopLifecycleObserverState
       final sid = segments[1].trim();
       if (sid.isNotEmpty) {
         sessionId = sid;
+        // 只有 chat 路由才需要聊天控制器；工作区/Git 详情页不需要
+        //（它们只要列表里的标题，见 activeChatSessionIdProvider 注释）。
+        if (segments[0] == 'chat') {
+          chatSessionId = sid;
+        }
       }
     }
 
     if (ref.read(activeSessionIdProvider) != sessionId) {
       ref.read(activeSessionIdProvider.notifier).state = sessionId;
     }
+    if (ref.read(activeChatSessionIdProvider) != chatSessionId) {
+      ref.read(activeChatSessionIdProvider.notifier).state = chatSessionId;
+    }
   }
 
   void _syncSessionTitle(String sessionId) {
-    // 1. 尝试从已有的 chatController 读取 displayTitle
-    final chatState = ref.read(chatControllerProvider(sessionId));
-    final displayTitle = chatState.displayTitle.trim();
-    if (displayTitle.isNotEmpty &&
-        displayTitle.toLowerCase() != 'untitled' &&
-        displayTitle.toLowerCase() != 'untitled session') {
-      unawaited(
-        ref.read(windowTitleServiceProvider).updateSessionTitle(displayTitle),
-      );
-      return;
+    // 1. 只在 chatController【已经存在】时读它的 displayTitle。
+    //    不能无条件 ref.read(chatControllerProvider(sessionId))：Riverpod 的 read
+    //    在 provider 不存在时会把它初始化，而真实控制器会拉起 clarify/approval/content
+    //    三条通道并 loadMessages()（chat_controller.dart:259-267）。工作区/Git 详情页
+    //    同样要同步标题，若在这里建控制器就是纯开销 —— 本 bug 的根因。
+    String displayTitle = '';
+    // chat 路由下 controller 本就随 ChatPage 建立（用户正要进聊天页），读它是安全的；
+    // 只有【非 chat 路由】（工作区 / Git 详情页）时才必须避免凭空建控制器 —— 那才是
+    // 本 bug 的修复点。故按路由分流，而不是一律要求 provider 已存在。
+    final isChatRoute = ref.read(activeChatSessionIdProvider) == sessionId;
+    final container = ProviderScope.containerOf(context, listen: false);
+    if (isChatRoute || container.exists(chatControllerProvider(sessionId))) {
+      displayTitle = ref
+          .read(chatControllerProvider(sessionId))
+          .displayTitle
+          .trim();
+      if (displayTitle.isNotEmpty &&
+          displayTitle.toLowerCase() != 'untitled' &&
+          displayTitle.toLowerCase() != 'untitled session') {
+        unawaited(
+          ref.read(windowTitleServiceProvider).updateSessionTitle(displayTitle),
+        );
+        return;
+      }
     }
 
     // 2. 尝试从 sessionListController 中查找标题
@@ -207,31 +230,48 @@ class _DesktopLifecycleObserverState
       }
 
       if (previous?.minimizeToTray != next.minimizeToTray) {
-        try {
-          unawaited(windowManager.setPreventClose(next.minimizeToTray));
-        } catch (e) {
-          developer.log(
-            'Failed to update preventClose',
-            name: 'DesktopLifecycleObserver',
-            error: e,
-          );
-        }
+        // catchError 必须挂在返回的 Future 上：setPreventClose 是 async，
+        // 异常经 Future 投递，try/catch 包同步调用永远捕不到（catch 块会成死代码）。
+        unawaited(
+          windowManager.setPreventClose(next.minimizeToTray).catchError((
+            Object e,
+            StackTrace st,
+          ) {
+            developer.log(
+              'Failed to update preventClose',
+              name: 'DesktopLifecycleObserver',
+              error: e,
+              stackTrace: st,
+            );
+          }),
+        );
       }
     });
 
-    ref.listen<String?>(activeSessionIdProvider, (previous, next) {
+    // 标题链路只认 chat 路由（activeChatSessionIdProvider）：
+    // 工作区/Git 详情页也会写 activeSessionIdProvider，但它们不需要聊天控制器，
+    // 若这里用 activeSessionIdProvider，就会为读一个窗口标题把控制器建起来。
+    ref.listen<String?>(activeChatSessionIdProvider, (previous, next) {
       if (!isDesktop) return;
       if (next == null || next.isEmpty) {
-        unawaited(ref.read(windowTitleServiceProvider).resetTitle());
+        // 非 chat 路由：若仍有活跃会话（workspace/git 详情页），用列表标题兜底；
+        // 完全没有活跃会话时才复位默认标题。
+        final sid = ref.read(activeSessionIdProvider);
+        if (sid != null && sid.isNotEmpty) {
+          _syncSessionTitle(sid);
+        } else {
+          unawaited(ref.read(windowTitleServiceProvider).resetTitle());
+        }
       } else {
         _syncSessionTitle(next);
       }
     });
 
-    final activeSessionId = ref.watch(activeSessionIdProvider);
-    if (activeSessionId != null && activeSessionId.isNotEmpty) {
+    final activeChatSessionId = ref.watch(activeChatSessionIdProvider);
+    if (activeChatSessionId != null && activeChatSessionId.isNotEmpty) {
       ref.listen<String>(
-        chatControllerProvider(activeSessionId).select((s) => s.displayTitle),
+        chatControllerProvider(activeChatSessionId)
+            .select((s) => s.displayTitle),
         (previous, next) {
           if (!isDesktop) return;
           unawaited(

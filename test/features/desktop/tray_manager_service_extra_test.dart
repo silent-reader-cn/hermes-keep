@@ -86,18 +86,6 @@ class _ChannelMock {
 late _ChannelMock _trayChannel;
 late _ChannelMock _windowChannel;
 
-/// 反向派发原生 → Dart 的托盘事件（等价于原生侧回调）。
-Future<void> _dispatchTrayEvent(String method, [Object? arguments]) async {
-  await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .handlePlatformMessage(
-        _trayChannelName,
-        const StandardMethodCodec().encodeMethodCall(
-          MethodCall(method, arguments),
-        ),
-        (_) {},
-      );
-}
-
 /// 从托盘菜单序列化载荷里按 key 取菜单项 id。
 int? _menuItemIdByKey(Map<String, dynamic>? menu, String key) {
   final items = menu?['items'];
@@ -208,11 +196,8 @@ class _FixedActiveConnectionController extends ActiveConnectionController {
 
 class _FixedSidecarConfigController extends WebuiSidecarConfigController {
   @override
-  SidecarConfig build() => const SidecarConfig(
-    enabled: true,
-    host: '127.0.0.1',
-    port: 8787,
-  );
+  SidecarConfig build() =>
+      const SidecarConfig(enabled: true, host: '127.0.0.1', port: 8787);
 }
 
 class _FixedSidecarStateController extends WebuiSidecarController {
@@ -237,7 +222,9 @@ ProviderContainer _makeContainer({
         _FixedActiveConnectionController.new,
       ),
       webuiSidecarServiceProvider.overrideWithValue(sidecarService),
-      webuiSidecarConfigProvider.overrideWith(_FixedSidecarConfigController.new),
+      webuiSidecarConfigProvider.overrideWith(
+        _FixedSidecarConfigController.new,
+      ),
       webuiSidecarControllerProvider.overrideWith(
         _FixedSidecarStateController.new,
       ),
@@ -296,9 +283,9 @@ void main() {
       // 写入位置 = Directory.systemTemp（默认 tempDir 分支）。
       final tempEntries = Directory.systemTemp.listSync();
       expect(
-        tempEntries.map((e) => e.path.replaceAll(r'\', '/')).where(
-          (p) => p.endsWith('/hermes_tray_icon_32.png'),
-        ),
+        tempEntries
+            .map((e) => e.path.replaceAll(r'\', '/'))
+            .where((p) => p.endsWith('/hermes_tray_icon_32.png')),
         isNotEmpty,
       );
     });
@@ -464,7 +451,10 @@ void main() {
       );
 
       final openItem = _itemByKey(items, TrayManagerService.menuItemOpenWebui);
-      final statusItem = _itemByKey(items, TrayManagerService.menuItemWebuiStatus);
+      final statusItem = _itemByKey(
+        items,
+        TrayManagerService.menuItemWebuiStatus,
+      );
       expect(openItem.disabled, isFalse);
       expect(statusItem.label, 'WebUI 服务：运行中');
       final recentItem = _itemByKey(items, 'recent_s1');
@@ -523,7 +513,10 @@ void main() {
         _itemByKey(items, TrayManagerService.menuItemQuitApp).onClick,
         isNull,
       );
-      final empty = _itemByKey(items, TrayManagerService.menuItemNoRecentSessions);
+      final empty = _itemByKey(
+        items,
+        TrayManagerService.menuItemNoRecentSessions,
+      );
       expect(empty.disabled, isTrue);
       expect(empty.label, '暂无最近会话');
     });
@@ -599,31 +592,37 @@ void main() {
       await service.dispose();
     });
 
-    test('传入 sessions=null 时 getRecentSessions 优先于 fetchRecentSessions', () async {
-      var fetchCalled = false;
-      final service = TrayManagerService(
-        isDesktop: true,
-        getRecentSessions: () => const [
-          SessionSummary(sessionId: 'cached0', title: '缓存', messageCount: 1),
-        ],
-        fetchRecentSessions: () async {
-          fetchCalled = true;
-          return const [
-            SessionSummary(sessionId: 'remote', title: '远程', messageCount: 1),
-          ];
-        },
-      );
+    test(
+      '传入 sessions=null 时 getRecentSessions 优先于 fetchRecentSessions',
+      () async {
+        var fetchCalled = false;
+        final service = TrayManagerService(
+          isDesktop: true,
+          getRecentSessions: () => const [
+            SessionSummary(sessionId: 'cached0', title: '缓存', messageCount: 1),
+          ],
+          fetchRecentSessions: () async {
+            fetchCalled = true;
+            return const [
+              SessionSummary(sessionId: 'remote', title: '远程', messageCount: 1),
+            ];
+          },
+        );
 
-      await service.updateContextMenu();
+        await service.updateContextMenu();
 
-      expect(fetchCalled, isFalse);
-      expect(
-        _menuItemIdByKey(_trayChannel.lastContextMenuPayload, 'recent_cached0'),
-        isNotNull,
-      );
+        expect(fetchCalled, isFalse);
+        expect(
+          _menuItemIdByKey(
+            _trayChannel.lastContextMenuPayload,
+            'recent_cached0',
+          ),
+          isNotNull,
+        );
 
-      await service.dispose();
-    });
+        await service.dispose();
+      },
+    );
 
     test('getRecentSessions 返回 null 时保留既有缓存', () async {
       final service = TrayManagerService(
@@ -759,8 +758,9 @@ void main() {
       _trayChannel.throwingMethods.add('setContextMenu');
       final service = TrayManagerService(
         isDesktop: true,
-        getRecentSessions: () =>
-            const [SessionSummary(sessionId: 'x', title: 'X', messageCount: 1)],
+        getRecentSessions: () => const [
+          SessionSummary(sessionId: 'x', title: 'X', messageCount: 1),
+        ],
       );
 
       await service.updateContextMenu();
@@ -773,7 +773,7 @@ void main() {
       await service.dispose();
     });
 
-    test('菜单项被原生点击时回调闭包分发到 tray 处理器', () async {
+    test('菜单项一律不挂 onClick（去双回调）+ onTrayMenuItemClick 按 key 各分发一次', () async {
       final hits = <String>[];
       final service = TrayManagerService(
         isDesktop: true,
@@ -794,6 +794,24 @@ void main() {
       final menu = _trayChannel.lastContextMenuPayload;
       expect(menu, isNotNull);
 
+      // ① #12 修复守卫：菜单项一律【不挂】onClick。
+      //    tray_manager 0.5.3 的原生分发会先调 menuItem.onClick，再【无条件】调
+      //    listener.onTrayMenuItemClick（tray_manager.dart:61-64）；两处都接线会让
+      //    每次点击触发两次业务回调（handleQuit 重复 stop sidecar，第二次等满 5s
+      //    超时，退出肉眼可见变慢）。
+      final items = (menu!['items'] as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      expect(items, isNotEmpty);
+      for (final item in items) {
+        expect(
+          item['onClick'],
+          isNull,
+          reason: '菜单项不应挂 onClick：${item['key']}',
+        );
+      }
+
+      // ② 服务侧 key 分发是【唯一】入口：每个菜单项恰好一次。
       for (final key in const [
         TrayManagerService.menuItemShowWindow,
         TrayManagerService.menuItemNewSession,
@@ -803,25 +821,11 @@ void main() {
       ]) {
         final id = _menuItemIdByKey(menu, key);
         expect(id, isNotNull, reason: '$key 应出现在菜单载荷里');
-        await _dispatchTrayEvent('onTrayMenuItemClick', {'id': id});
+        service.onTrayMenuItemClick(MenuItem(key: key, label: ''));
         await pumpEventQueue();
       }
 
-      // tray_manager 原生回调会先触发 menuItem.onClick（我们接的闭包），再触发
-      // listener.onTrayMenuItemClick（服务的 key 分发）——两条链各自命中一次，
-      // 因此同一菜单项点击会产生两次业务回调；此处按真实行为钉死。
-      expect(hits, [
-        'show',
-        'show',
-        'new',
-        'new',
-        'webui',
-        'webui',
-        'open:s3',
-        'open:s3',
-        'quit',
-        'quit',
-      ]);
+      expect(hits, ['show', 'new', 'webui', 'open:s3', 'quit']);
 
       await service.dispose();
     });
@@ -873,30 +877,30 @@ void main() {
   });
 
   group('handleOpenWebui 回退链与失败吞没', () {
-    test('无 getSidecarState/getSidecarConfig 时从 sidecarService 取即时状态', () async {
-      final sidecar = _FakeSidecarService(
-        initialState: const SidecarState(status: SidecarStatus.running),
-      );
-      addTearDown(sidecar.dispose);
-      final launcher = _RecordingUrlLauncher();
-      final oldLauncher = UrlLauncherPlatform.instance;
-      UrlLauncherPlatform.instance = launcher;
-      addTearDown(() => UrlLauncherPlatform.instance = oldLauncher);
+    test(
+      '无 getSidecarState/getSidecarConfig 时从 sidecarService 取即时状态',
+      () async {
+        final sidecar = _FakeSidecarService(
+          initialState: const SidecarState(status: SidecarStatus.running),
+        );
+        addTearDown(sidecar.dispose);
+        final launcher = _RecordingUrlLauncher();
+        final oldLauncher = UrlLauncherPlatform.instance;
+        UrlLauncherPlatform.instance = launcher;
+        addTearDown(() => UrlLauncherPlatform.instance = oldLauncher);
 
-      final service = TrayManagerService(
-        isDesktop: false,
-        sidecarService: sidecar,
-        getSidecarConfig: () => const SidecarConfig(
-          enabled: true,
-          host: '127.0.0.1',
-          port: 8787,
-        ),
-      );
+        final service = TrayManagerService(
+          isDesktop: false,
+          sidecarService: sidecar,
+          getSidecarConfig: () =>
+              const SidecarConfig(enabled: true, host: '127.0.0.1', port: 8787),
+        );
 
-      await service.handleOpenWebui();
+        await service.handleOpenWebui();
 
-      expect(launcher.launchedUrl, 'http://127.0.0.1:8787');
-    });
+        expect(launcher.launchedUrl, 'http://127.0.0.1:8787');
+      },
+    );
 
     test('onOpenWebui 自定义回调短路（不调 url_launcher）', () async {
       final launcher = _RecordingUrlLauncher();
@@ -910,11 +914,8 @@ void main() {
         onOpenWebui: () => opened++,
         getSidecarState: () =>
             const SidecarState(status: SidecarStatus.running),
-        getSidecarConfig: () => const SidecarConfig(
-          enabled: true,
-          host: '127.0.0.1',
-          port: 8787,
-        ),
+        getSidecarConfig: () =>
+            const SidecarConfig(enabled: true, host: '127.0.0.1', port: 8787),
       );
 
       await service.handleOpenWebui();
@@ -923,34 +924,37 @@ void main() {
       expect(launcher.launchedUrl, isNull);
     });
 
-    test('无 getSidecarState 且无 sidecarService 时回退 updateContextMenu 写入的缓存', () async {
-      final launcher = _RecordingUrlLauncher();
-      final oldLauncher = UrlLauncherPlatform.instance;
-      UrlLauncherPlatform.instance = launcher;
-      addTearDown(() => UrlLauncherPlatform.instance = oldLauncher);
+    test(
+      '无 getSidecarState 且无 sidecarService 时回退 updateContextMenu 写入的缓存',
+      () async {
+        final launcher = _RecordingUrlLauncher();
+        final oldLauncher = UrlLauncherPlatform.instance;
+        UrlLauncherPlatform.instance = launcher;
+        addTearDown(() => UrlLauncherPlatform.instance = oldLauncher);
 
-      // 全新实例：缓存是 initial(stopped)，无任何即时状态源 → 不应打开。
-      final cacheCold = TrayManagerService(isDesktop: true);
-      await cacheCold.handleOpenWebui();
-      expect(launcher.launchedUrl, isNull);
+        // 全新实例：缓存是 initial(stopped)，无任何即时状态源 → 不应打开。
+        final cacheCold = TrayManagerService(isDesktop: true);
+        await cacheCold.handleOpenWebui();
+        expect(launcher.launchedUrl, isNull);
 
-      // 先用 updateContextMenu 把 running / enabled=true 写进缓存。
-      final service = TrayManagerService(isDesktop: true);
-      await service.updateContextMenu(
-        sidecarStatus: SidecarStatus.running,
-        sidecarEnabled: true,
-      );
+        // 先用 updateContextMenu 把 running / enabled=true 写进缓存。
+        final service = TrayManagerService(isDesktop: true);
+        await service.updateContextMenu(
+          sidecarStatus: SidecarStatus.running,
+          sidecarEnabled: true,
+        );
 
-      await service.handleOpenWebui();
+        await service.handleOpenWebui();
 
-      expect(launcher.launchedUrl, 'http://127.0.0.1:8787');
-      expect(
-        launcher.lastOptions?.mode,
-        PreferredLaunchMode.externalApplication,
-      );
+        expect(launcher.launchedUrl, 'http://127.0.0.1:8787');
+        expect(
+          launcher.lastOptions?.mode,
+          PreferredLaunchMode.externalApplication,
+        );
 
-      await service.dispose();
-    });
+        await service.dispose();
+      },
+    );
 
     test('launchUrl 抛错被吞没', () async {
       final launcher = _RecordingUrlLauncher()..throwOnLaunch = true;
@@ -962,11 +966,8 @@ void main() {
         isDesktop: false,
         getSidecarState: () =>
             const SidecarState(status: SidecarStatus.running),
-        getSidecarConfig: () => const SidecarConfig(
-          enabled: true,
-          host: '0.0.0.0',
-          port: 6553,
-        ),
+        getSidecarConfig: () =>
+            const SidecarConfig(enabled: true, host: '0.0.0.0', port: 6553),
       );
 
       // 不应抛出：异常在 handleOpenWebui 内部被吞没。
@@ -1090,29 +1091,32 @@ void main() {
       expect(_windowChannel.called('focus'), isFalse);
     });
 
-    test('Provider 回调：getRecentSessions / fetchRecentSessions 读同一份列表源', () async {
-      final listApi = FakeSessionListApi(
-        sessions: const [
-          SessionSummary(sessionId: 'p1', title: '来自列表', messageCount: 1),
-        ],
-      );
-      final container = _makeContainer(listApi: listApi);
-      addTearDown(container.dispose);
-      final service = container.read(trayManagerServiceProvider);
+    test(
+      'Provider 回调：getRecentSessions / fetchRecentSessions 读同一份列表源',
+      () async {
+        final listApi = FakeSessionListApi(
+          sessions: const [
+            SessionSummary(sessionId: 'p1', title: '来自列表', messageCount: 1),
+          ],
+        );
+        final container = _makeContainer(listApi: listApi);
+        addTearDown(container.dispose);
+        final service = container.read(trayManagerServiceProvider);
 
-      // 首帧：会话列表 controller 的异步 build 尚未完成 → valueOrNull 为 null。
-      expect(service.getRecentSessions!(), isNull);
+        // 首帧：会话列表 controller 的异步 build 尚未完成 → valueOrNull 为 null。
+        expect(service.getRecentSessions!(), isNull);
 
-      await container.read(sessionListControllerProvider.future);
-      final fromController = service.getRecentSessions!();
-      expect(fromController, isNotNull);
-      expect(fromController!.single.sessionId, 'p1');
+        await container.read(sessionListControllerProvider.future);
+        final fromController = service.getRecentSessions!();
+        expect(fromController, isNotNull);
+        expect(fromController!.single.sessionId, 'p1');
 
-      final fetched = await service.fetchRecentSessions!();
-      expect(fetched, isNotNull);
-      expect(fetched!.single.sessionId, 'p1');
-      expect(listApi.fetchCount, greaterThan(0));
-    });
+        final fetched = await service.fetchRecentSessions!();
+        expect(fetched, isNotNull);
+        expect(fetched!.single.sessionId, 'p1');
+        expect(listApi.fetchCount, greaterThan(0));
+      },
+    );
 
     test('Provider 回调：fetchRecentSessions 失败返回 null', () async {
       final listApi = FakeSessionListApi()..fetchError = StateError('boom');

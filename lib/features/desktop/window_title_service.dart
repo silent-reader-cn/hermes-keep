@@ -99,4 +99,14 @@ final windowTitleServiceProvider = Provider<WindowTitleService>((ref) {
 });
 
 /// 当前活跃会话 ID（由桌面路由监听器维护）。
+///
+/// 记录所有带会话 id 的路由：`/chat/:id`、`/workspace/:id`、`/git/:id`。
 final activeSessionIdProvider = StateProvider<String?>((ref) => null);
+
+/// 当前活跃的 **chat 路由**会话 ID —— 仅 `/chat/:id` 时非 null。
+///
+/// 与 [activeSessionIdProvider] 的区别：工作区/Git 详情页也会写后者，但它们
+/// **不需要聊天控制器**。标题链路只认本 provider，避免「仅为读一个窗口标题，
+/// 就把 chatController 建起来」——真实控制器会拉起 clarify/approval/content
+/// 三条通道并调用 loadMessages()（chat_controller.dart:259-267），属纯开销。
+final activeChatSessionIdProvider = StateProvider<String?>((ref) => null);

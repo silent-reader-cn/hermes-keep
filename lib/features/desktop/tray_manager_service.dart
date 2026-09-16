@@ -201,8 +201,9 @@ class TrayManagerService with TrayListener {
         });
       }
       // L2：语言模式变化 -> 节流重建托盘菜单（菜单 label 经 LocaleResolver 取语言）。
-      _localeListenerToken ??=
-          LocaleResolver.addListener(scheduleThrottledUpdateContextMenu);
+      _localeListenerToken ??= LocaleResolver.addListener(
+        scheduleThrottledUpdateContextMenu,
+      );
       await _setupTrayIcon();
       await updateContextMenu();
       _initialized = true;
@@ -257,11 +258,11 @@ class TrayManagerService with TrayListener {
     SidecarState? sidecarState,
     SidecarConfig? sidecarConfig,
   }) {
-    final effectiveStatus = sidecarState?.status ??
-        sidecarStatus ??
-        SidecarStatus.stopped;
+    final effectiveStatus =
+        sidecarState?.status ?? sidecarStatus ?? SidecarStatus.stopped;
 
-    final effectiveEnabled = sidecarConfig?.enabled ??
+    final effectiveEnabled =
+        sidecarConfig?.enabled ??
         sidecarEnabled ??
         (sidecarStatus == SidecarStatus.running);
 
@@ -397,8 +398,8 @@ class TrayManagerService with TrayListener {
       final currentSidecarState = sidecarStatus != null
           ? SidecarState(status: sidecarStatus)
           : (getSidecarState?.call() ??
-              sidecarService?.currentState ??
-              _cachedSidecarState);
+                sidecarService?.currentState ??
+                _cachedSidecarState);
       _cachedSidecarState = currentSidecarState;
 
       final currentSidecarConfig = sidecarEnabled != null
@@ -410,11 +411,11 @@ class TrayManagerService with TrayListener {
         sessions: sessionList,
         sidecarStatus: currentSidecarState.status,
         sidecarEnabled: currentSidecarConfig.enabled,
-        onOpenSession: (sid) => unawaited(handleOpenSession(sid)),
-        onShowWindow: () => unawaited(handleShowWindow()),
-        onNewSession: () => unawaited(handleNewSession()),
-        onQuit: () => unawaited(handleQuit()),
-        onOpenWebui: () => unawaited(handleOpenWebui()),
+        // 刻意【不挂】菜单项 onClick：tray_manager 0.5.3 的原生分发先调
+        // menuItem.onClick，再【无条件】调 listener.onTrayMenuItemClick
+        // （tray_manager.dart:61-64）。两处都接线会让每次点击触发两次业务回调
+        // （典型：handleQuit 重复 stop sidecar，第二次等满 5s 超时，退出肉眼可见变慢）。
+        // 统一由 onTrayMenuItemClick 按 key 分发（它是插件保证会调的入口）。
       );
 
       final menu = Menu(items: items);
@@ -488,7 +489,8 @@ class TrayManagerService with TrayListener {
 
   /// 处理「打开 WebUI」操作。
   Future<void> handleOpenWebui() async {
-    final state = getSidecarState?.call() ??
+    final state =
+        getSidecarState?.call() ??
         sidecarService?.currentState ??
         _cachedSidecarState;
     final config = getSidecarConfig?.call() ?? _cachedSidecarConfig;
@@ -568,16 +570,18 @@ class TrayManagerService with TrayListener {
 
   @override
   void onTrayIconRightMouseDown() {
-    try {
-      unawaited(trayManager.popUpContextMenu());
-    } catch (e, st) {
-      developer.log(
-        'Failed to pop up tray context menu',
-        name: 'TrayManagerService',
-        error: e,
-        stackTrace: st,
-      );
-    }
+    // catchError 必须挂在返回的 Future 上：popUpContextMenu 是 async，
+    // 异常经 Future 投递，try/catch 包同步调用永远捕不到（catch 块会成死代码）。
+    unawaited(
+      trayManager.popUpContextMenu().catchError((Object e, StackTrace st) {
+        developer.log(
+          'Failed to pop up tray context menu',
+          name: 'TrayManagerService',
+          error: e,
+          stackTrace: st,
+        );
+      }),
+    );
   }
 
   @override

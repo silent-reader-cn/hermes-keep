@@ -27,7 +27,8 @@ class ChatStartResponse {
         lossyString(json, camel) ??
         (dataMap != null ? lossyString(dataMap, camel) : null);
     return ChatStartResponse(
-      streamId: pick('stream_id', 'streamId') ??
+      streamId:
+          pick('stream_id', 'streamId') ??
           lossyString(json, 'id') ??
           (dataMap != null ? lossyString(dataMap, 'id') : null),
       sessionId: pick('session_id', 'sessionId'),
@@ -56,7 +57,12 @@ class ChatStartResponse {
 
 /// 取消聊天响应（Swift: ChatCancelResponse）。
 class ChatCancelResponse {
-  const ChatCancelResponse({this.ok, this.cancelled, this.streamId, this.error});
+  const ChatCancelResponse({
+    this.ok,
+    this.cancelled,
+    this.streamId,
+    this.error,
+  });
 
   factory ChatCancelResponse.fromJson(Map<String, Object?> json) {
     return ChatCancelResponse(
@@ -157,7 +163,12 @@ class RunJournalStatus {
 
 /// 引导聊天响应（Swift: ChatSteerResponse）。
 class ChatSteerResponse {
-  const ChatSteerResponse({this.accepted, this.fallback, this.streamId, this.error});
+  const ChatSteerResponse({
+    this.accepted,
+    this.fallback,
+    this.streamId,
+    this.error,
+  });
 
   factory ChatSteerResponse.fromJson(Map<String, Object?> json) {
     return ChatSteerResponse(
@@ -404,15 +415,15 @@ class AgentCommand {
 
   @override
   int get hashCode => Object.hash(
-        name,
-        description,
-        category,
-        Object.hashAll(aliases ?? const []),
-        argsHint,
-        Object.hashAll(subcommands ?? const []),
-        cliOnly,
-        gatewayOnly,
-      );
+    name,
+    description,
+    category,
+    Object.hashAll(aliases ?? const []),
+    argsHint,
+    Object.hashAll(subcommands ?? const []),
+    cliOnly,
+    gatewayOnly,
+  );
 
   @override
   String toString() => 'AgentCommand(name: $name)';
@@ -446,8 +457,10 @@ class ModelsResponse {
   final String? activeProvider;
 
   /// 解析后的目录分组（对应 Swift `catalogGroups`）。
-  List<ModelCatalogGroup> get catalogGroups =>
-      ModelCatalogParser.parseGroups(groups ?? const [], fallbackProvider: null);
+  List<ModelCatalogGroup> get catalogGroups => ModelCatalogParser.parseGroups(
+    groups ?? const [],
+    fallbackProvider: null,
+  );
 
   @override
   bool operator ==(Object other) {
@@ -460,11 +473,11 @@ class ModelsResponse {
 
   @override
   int get hashCode => Object.hash(
-        deepHash(groups),
-        deepHash(models),
-        defaultModel,
-        activeProvider,
-      );
+    deepHash(groups),
+    deepHash(models),
+    defaultModel,
+    activeProvider,
+  );
 
   @override
   String toString() => 'ModelsResponse(defaultModel: $defaultModel)';
@@ -495,8 +508,7 @@ class ModelsRefreshResponse {
   int get hashCode => Object.hash(ok, provider);
 
   @override
-  String toString() =>
-      'ModelsRefreshResponse(ok: $ok, provider: $provider)';
+  String toString() => 'ModelsRefreshResponse(ok: $ok, provider: $provider)';
 }
 
 /// 提供商列表响应（Swift: ProvidersResponse）。
@@ -597,20 +609,20 @@ class ProviderSummary {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        displayName,
-        hasKey,
-        configurable,
-        isSelfHosted,
-        baseUrl,
-        isPluginProvider,
-        isOauth,
-        isCustom,
-        keySource,
-        authError,
-        deepHash(models),
-        modelsTotal,
-      );
+    id,
+    displayName,
+    hasKey,
+    configurable,
+    isSelfHosted,
+    baseUrl,
+    isPluginProvider,
+    isOauth,
+    isCustom,
+    keySource,
+    authError,
+    deepHash(models),
+    modelsTotal,
+  );
 
   @override
   String toString() => 'ProviderSummary(id: $id, displayName: $displayName)';
@@ -624,7 +636,14 @@ class ProviderModel {
   factory ProviderModel.fromJson(Object? json) {
     if (json is String) return ProviderModel(id: json, label: json);
     if (json is! Map) return const ProviderModel();
-    final map = Map<String, Object?>.from(json);
+    // 非 String 键的 Map 会让 Map.from 抛 TypeError 直穿本工厂；本类处在容错解析链上
+    //（可能被 optModelList 的 catch 兜住，也可能被直接调用），按 lossy 口径降级为空模型。
+    final Map<String, Object?> map;
+    try {
+      map = Map<String, Object?>.from(json);
+    } catch (_) {
+      return const ProviderModel();
+    }
     return ProviderModel(
       id: lossyString(map, 'id'),
       label: lossyString(map, 'label'),
@@ -790,20 +809,20 @@ class SettingsResponse {
 
   @override
   int get hashCode => Object.hash(
-        botName,
-        webuiVersion,
-        agentVersion,
-        theme,
-        checkForUpdates,
-        showCliSessions,
-        showClaudeCodeSessions,
-        maxTokens,
-        maxTokensEffective,
-        authEnabled,
-        passwordAuthEnabled,
-        passkeysEnabled,
-        passwordlessEnabled,
-      );
+    botName,
+    webuiVersion,
+    agentVersion,
+    theme,
+    checkForUpdates,
+    showCliSessions,
+    showClaudeCodeSessions,
+    maxTokens,
+    maxTokensEffective,
+    authEnabled,
+    passwordAuthEnabled,
+    passkeysEnabled,
+    passwordlessEnabled,
+  );
 
   @override
   String toString() => 'SettingsResponse(botName: $botName)';
@@ -811,7 +830,12 @@ class SettingsResponse {
 
 /// 更新检查响应（Swift: UpdatesCheckResponse）。
 class UpdatesCheckResponse {
-  const UpdatesCheckResponse({this.webui, this.agent, this.checkedAt, this.disabled});
+  const UpdatesCheckResponse({
+    this.webui,
+    this.agent,
+    this.checkedAt,
+    this.disabled,
+  });
 
   factory UpdatesCheckResponse.fromJson(Map<String, Object?> json) {
     return UpdatesCheckResponse(
@@ -897,16 +921,16 @@ class UpdateTargetInfo {
 
   @override
   int get hashCode => Object.hash(
-        name,
-        behind,
-        currentSha,
-        latestSha,
-        branch,
-        repoUrl,
-        compareUrl,
-        error,
-        staleCheck,
-      );
+    name,
+    behind,
+    currentSha,
+    latestSha,
+    branch,
+    repoUrl,
+    compareUrl,
+    error,
+    staleCheck,
+  );
 
   @override
   String toString() => 'UpdateTargetInfo(name: $name, behind: $behind)';
@@ -956,7 +980,9 @@ class UpdatesApplyResponse {
   /// outcome 枚举（applying/restartBlocked/failed：先判 restartBlocked 再 ok）。
   UpdatesApplyOutcome get outcome {
     if (restartBlocked == true) return UpdatesApplyOutcome.restartBlocked;
-    return ok == true ? UpdatesApplyOutcome.applying : UpdatesApplyOutcome.failed;
+    return ok == true
+        ? UpdatesApplyOutcome.applying
+        : UpdatesApplyOutcome.failed;
   }
 
   @override
@@ -976,17 +1002,17 @@ class UpdatesApplyResponse {
 
   @override
   int get hashCode => Object.hash(
-        ok,
-        message,
-        target,
-        conflict,
-        diverged,
-        restartBlocked,
-        restartScheduled,
-        stashConflict,
-        activeStreams,
-        activeRuns,
-      );
+    ok,
+    message,
+    target,
+    conflict,
+    diverged,
+    restartBlocked,
+    restartScheduled,
+    stashConflict,
+    activeStreams,
+    activeRuns,
+  );
 
   @override
   String toString() => 'UpdatesApplyResponse(ok: $ok)';
@@ -1057,14 +1083,14 @@ class ReasoningStatusResponse {
 
   @override
   int get hashCode => Object.hash(
-        ok,
-        showReasoning,
-        reasoningEffort,
-        effort,
-        Object.hashAll(supportedEfforts ?? const []),
-        supportsReasoningEffort,
-        error,
-      );
+    ok,
+    showReasoning,
+    reasoningEffort,
+    effort,
+    Object.hashAll(supportedEfforts ?? const []),
+    supportsReasoningEffort,
+    error,
+  );
 
   @override
   String toString() => 'ReasoningStatusResponse(ok: $ok)';
@@ -1076,7 +1102,11 @@ class PersonalitiesResponse {
 
   factory PersonalitiesResponse.fromJson(Map<String, Object?> json) {
     return PersonalitiesResponse(
-      personalities: optModelList(json, 'personalities', PersonalitySummary.fromJson),
+      personalities: optModelList(
+        json,
+        'personalities',
+        PersonalitySummary.fromJson,
+      ),
     );
   }
 
@@ -1091,7 +1121,8 @@ class PersonalitiesResponse {
   int get hashCode => Object.hashAll([deepHash(personalities)]);
 
   @override
-  String toString() => 'PersonalitiesResponse(personalities: ${personalities?.length})';
+  String toString() =>
+      'PersonalitiesResponse(personalities: ${personalities?.length})';
 }
 
 /// 人格摘要（Swift: PersonalitySummary）。`id` = name ?? uuid。
@@ -1125,7 +1156,12 @@ class PersonalitySummary {
 
 /// 人格设置响应（Swift: PersonalitySetResponse）。
 class PersonalitySetResponse {
-  const PersonalitySetResponse({this.ok, this.personality, this.prompt, this.error});
+  const PersonalitySetResponse({
+    this.ok,
+    this.personality,
+    this.prompt,
+    this.error,
+  });
 
   factory PersonalitySetResponse.fromJson(Map<String, Object?> json) {
     return PersonalitySetResponse(
@@ -1182,7 +1218,8 @@ class ProfilesResponse {
   }
 
   @override
-  int get hashCode => Object.hash(deepHash(profiles), active, singleProfileMode);
+  int get hashCode =>
+      Object.hash(deepHash(profiles), active, singleProfileMode);
 
   @override
   String toString() => 'ProfilesResponse(active: $active)';
@@ -1257,12 +1294,12 @@ class ProfileSwitchResponse {
 
   @override
   int get hashCode => Object.hash(
-        deepHash(profiles),
-        active,
-        defaultModel,
-        defaultWorkspace,
-        error,
-      );
+    deepHash(profiles),
+    active,
+    defaultModel,
+    defaultWorkspace,
+    error,
+  );
 
   @override
   String toString() => 'ProfileSwitchResponse(active: $active)';
@@ -1334,16 +1371,16 @@ class ProfileSummary {
 
   @override
   int get hashCode => Object.hash(
-        name,
-        path,
-        isDefault,
-        isActive,
-        gatewayRunning,
-        model,
-        provider,
-        hasEnv,
-        skillCount,
-      );
+    name,
+    path,
+    isDefault,
+    isActive,
+    gatewayRunning,
+    model,
+    provider,
+    hasEnv,
+    skillCount,
+  );
 
   @override
   String toString() => 'ProfileSummary(name: $name)';
@@ -1380,8 +1417,13 @@ class ModelCatalogGroup {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, providerID, deepHash(models), deepHash(extraModels));
+  int get hashCode => Object.hash(
+    id,
+    name,
+    providerID,
+    deepHash(models),
+    deepHash(extraModels),
+  );
 
   @override
   String toString() => 'ModelCatalogGroup(id: $id, name: $name)';
@@ -1400,7 +1442,8 @@ class ModelCatalogOption {
   final String? providerID;
 
   /// favoriteKey = (id, providerID)。
-  ModelFavoriteKey get favoriteKey => ModelFavoriteKey(modelID: id, providerID: providerID);
+  ModelFavoriteKey get favoriteKey =>
+      ModelFavoriteKey(modelID: id, providerID: providerID);
 
   @override
   bool operator ==(Object other) {
@@ -1446,13 +1489,15 @@ class ModelCatalogParser {
         group.value['extra_models'],
         fallbackProvider: providerID,
       );
-      result.add(ModelCatalogGroup(
-        id: providerID ?? '$name-$index',
-        name: name,
-        providerID: providerID,
-        models: models,
-        extraModels: extraModels,
-      ));
+      result.add(
+        ModelCatalogGroup(
+          id: providerID ?? '$name-$index',
+          name: name,
+          providerID: providerID,
+          models: models,
+          extraModels: extraModels,
+        ),
+      );
     }
     return result;
   }
@@ -1462,10 +1507,7 @@ class ModelCatalogParser {
     List<JsonValue> values, {
     String? fallbackProvider,
   }) {
-    return _parseOptions(
-      JsonArray(values),
-      fallbackProvider: fallbackProvider,
-    );
+    return _parseOptions(JsonArray(values), fallbackProvider: fallbackProvider);
   }
 
   static List<ModelCatalogOption> _parseOptions(
@@ -1479,19 +1521,24 @@ class ModelCatalogParser {
       if (item is! JsonObject) continue;
       final id = _trimmed(item.value['id']?.stringValue);
       if (id == null) continue;
-      final normKey =
-          id.toLowerCase().replaceAll(' ', '-').replaceAll('_', '-');
+      final normKey = id
+          .toLowerCase()
+          .replaceAll(' ', '-')
+          .replaceAll('_', '-');
       if (!seen.add(normKey)) continue;
-      final displayName = _trimmed(item.value['name']?.stringValue) ??
+      final displayName =
+          _trimmed(item.value['name']?.stringValue) ??
           _trimmed(item.value['label']?.stringValue) ??
           id;
       final providerID =
           _trimmed(item.value['provider_id']?.stringValue) ?? fallbackProvider;
-      result.add(ModelCatalogOption(
-        id: id,
-        displayName: displayName,
-        providerID: providerID,
-      ));
+      result.add(
+        ModelCatalogOption(
+          id: id,
+          displayName: displayName,
+          providerID: providerID,
+        ),
+      );
     }
     return result;
   }

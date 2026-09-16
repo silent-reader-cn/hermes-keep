@@ -84,7 +84,13 @@ class KanbanConfiguration {
 String? kanbanAssigneeName(Object? value) {
   if (value is String) return value;
   if (value is Map) {
-    return lossyString(Map<String, Object?>.from(value), 'name');
+    // 非 String 键会让 Map.from 抛 TypeError；本函数是容错解析入口，降级返回 null
+    //（对齐 lossy_json.dart「绝不 throw」口径）。
+    try {
+      return lossyString(Map<String, Object?>.from(value), 'name');
+    } catch (_) {
+      return null;
+    }
   }
   return null;
 }

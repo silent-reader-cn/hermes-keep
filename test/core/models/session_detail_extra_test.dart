@@ -188,7 +188,10 @@ void main() {
       expect(s.messagesOffset, 7);
       expect(s.compressionAnchorVisibleIdx, 3);
       expect(s.compressionAnchorSummary, 'sum');
-      expect(s.compressionAnchorMessageKey, const CompressionAnchorMessageKey(role: 'assistant'));
+      expect(
+        s.compressionAnchorMessageKey,
+        const CompressionAnchorMessageKey(role: 'assistant'),
+      );
     });
 
     test('空 map：标量全 null，集合字段也全 null', () {
@@ -340,9 +343,8 @@ void main() {
 
     test('键位 1 缺失 → 回退键位 2', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'contextLength': 42},
-        ).contextLength,
+        SessionDetail.fromJson(const <String, Object?>{'contextLength': 42})
+            .contextLength,
         42,
       );
     });
@@ -385,7 +387,10 @@ void main() {
     });
 
     test('两键皆缺失 / 皆无效 → null', () {
-      expect(SessionDetail.fromJson(const <String, Object?>{}).contextLength, isNull);
+      expect(
+        SessionDetail.fromJson(const <String, Object?>{}).contextLength,
+        isNull,
+      );
       expect(
         SessionDetail.fromJson(const <String, Object?>{
           'context_length': 'bad',
@@ -409,9 +414,8 @@ void main() {
 
     test('键位 1 缺失 → 回退键位 2', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'thresholdTokens': 512},
-        ).thresholdTokens,
+        SessionDetail.fromJson(const <String, Object?>{'thresholdTokens': 512})
+            .thresholdTokens,
         512,
       );
     });
@@ -460,9 +464,8 @@ void main() {
 
     test('键位 1 缺失 → 回退键位 2', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'lastPromptTokens': 22},
-        ).lastPromptTokens,
+        SessionDetail.fromJson(const <String, Object?>{'lastPromptTokens': 22})
+            .lastPromptTokens,
         22,
       );
     });
@@ -557,9 +560,9 @@ void main() {
 
     test('键位 1、2 皆缺失/无效 → 键位 3 兜底', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'messages_truncated': true},
-        ).messagesTruncated,
+        SessionDetail.fromJson(const <String, Object?>{
+          'messages_truncated': true,
+        }).messagesTruncated,
         true,
       );
       expect(
@@ -645,9 +648,8 @@ void main() {
 
     test('键位 1、2 皆缺失/无效 → 键位 3 兜底', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'messages_offset': 30},
-        ).messagesOffset,
+        SessionDetail.fromJson(const <String, Object?>{'messages_offset': 30})
+            .messagesOffset,
         30,
       );
       expect(
@@ -661,7 +663,10 @@ void main() {
     });
 
     test('三键全缺/全无效 → null', () {
-      expect(SessionDetail.fromJson(const <String, Object?>{}).messagesOffset, isNull);
+      expect(
+        SessionDetail.fromJson(const <String, Object?>{}).messagesOffset,
+        isNull,
+      );
       expect(
         SessionDetail.fromJson(const <String, Object?>{
           '_messages_offset': <Object?>[],
@@ -696,9 +701,9 @@ void main() {
 
     test('键位 1 缺失 → 回退键位 2', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'compressionAnchorVisibleIdx': 99},
-        ).compressionAnchorVisibleIdx,
+        SessionDetail.fromJson(const <String, Object?>{
+          'compressionAnchorVisibleIdx': 99,
+        }).compressionAnchorVisibleIdx,
         99,
       );
     });
@@ -761,7 +766,10 @@ void main() {
     test('键位 1 缺失 → 回退键位 2', () {
       expect(
         SessionDetail.fromJson(const <String, Object?>{
-          'compressionAnchorMessageKey': {'role': 'assistant', 'attachments': 2},
+          'compressionAnchorMessageKey': {
+            'role': 'assistant',
+            'attachments': 2,
+          },
         }).compressionAnchorMessageKey,
         const CompressionAnchorMessageKey(role: 'assistant', attachments: 2),
       );
@@ -808,7 +816,8 @@ void main() {
 
     test('两键皆缺失 / 皆错型 → null', () {
       expect(
-        SessionDetail.fromJson(const <String, Object?>{}).compressionAnchorMessageKey,
+        SessionDetail.fromJson(const <String, Object?>{})
+            .compressionAnchorMessageKey,
         isNull,
       );
       expect(
@@ -829,19 +838,19 @@ void main() {
       };
 
       expect(
-        SessionDetail.firstKeyModel<CompressionAnchorMessageKey>(
-          json,
-          const ['a', 'b', 'c', 'd'],
-          CompressionAnchorMessageKey.fromJson,
-        ),
+        SessionDetail.firstKeyModel<CompressionAnchorMessageKey>(json, const [
+          'a',
+          'b',
+          'c',
+          'd',
+        ], CompressionAnchorMessageKey.fromJson),
         const CompressionAnchorMessageKey(text: 'hit'),
       );
       expect(
-        SessionDetail.firstKeyModel<CompressionAnchorMessageKey>(
-          json,
-          const ['a', 'b'],
-          CompressionAnchorMessageKey.fromJson,
-        ),
+        SessionDetail.firstKeyModel<CompressionAnchorMessageKey>(json, const [
+          'a',
+          'b',
+        ], CompressionAnchorMessageKey.fromJson),
         isNull,
       );
       expect(
@@ -878,9 +887,9 @@ void main() {
 
     test('键位 1 缺失 → 回退键位 2', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'compressionAnchorSummary': 'alias'},
-        ).compressionAnchorSummary,
+        SessionDetail.fromJson(const <String, Object?>{
+          'compressionAnchorSummary': 'alias',
+        }).compressionAnchorSummary,
         'alias',
       );
     });
@@ -918,25 +927,28 @@ void main() {
 
   group('SessionDetail.fromJson：pendingAttachments（optJsonValueList）', () {
     test('缺失 / 非 List → null', () {
-      expect(SessionDetail.fromJson(const <String, Object?>{}).pendingAttachments, isNull);
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'pending_attachments': 'x'},
-        ).pendingAttachments,
+        SessionDetail.fromJson(const <String, Object?>{}).pendingAttachments,
         isNull,
       );
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'pending_attachments': <String, Object?>{}},
-        ).pendingAttachments,
+        SessionDetail.fromJson(const <String, Object?>{
+          'pending_attachments': 'x',
+        }).pendingAttachments,
+        isNull,
+      );
+      expect(
+        SessionDetail.fromJson(const <String, Object?>{
+          'pending_attachments': <String, Object?>{},
+        }).pendingAttachments,
         isNull,
       );
     });
 
     test('空 List → 空列表（非 null）', () {
-      final s = SessionDetail.fromJson(
-        const <String, Object?>{'pending_attachments': <Object?>[]},
-      );
+      final s = SessionDetail.fromJson(const <String, Object?>{
+        'pending_attachments': <Object?>[],
+      });
 
       expect(s.pendingAttachments, isNotNull);
       expect(s.pendingAttachments, isEmpty);
@@ -968,23 +980,27 @@ void main() {
 
   group('SessionDetail.fromJson：messages 两级容错解码', () {
     test('缺失 / 非 List → null', () {
-      expect(SessionDetail.fromJson(const <String, Object?>{}).messages, isNull);
       expect(
-        SessionDetail.fromJson(const <String, Object?>{'messages': 'x'}).messages,
+        SessionDetail.fromJson(const <String, Object?>{}).messages,
         isNull,
       );
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'messages': <String, Object?>{}},
-        ).messages,
+        SessionDetail.fromJson(const <String, Object?>{'messages': 'x'})
+            .messages,
+        isNull,
+      );
+      expect(
+        SessionDetail.fromJson(const <String, Object?>{
+          'messages': <String, Object?>{},
+        }).messages,
         isNull,
       );
     });
 
     test('空 List → 快路径返回空列表（非 null）', () {
-      final s = SessionDetail.fromJson(
-        const <String, Object?>{'messages': <Object?>[]},
-      );
+      final s = SessionDetail.fromJson(const <String, Object?>{
+        'messages': <Object?>[],
+      });
 
       expect(s.messages, isNotNull);
       expect(s.messages, isEmpty);
@@ -1021,9 +1037,9 @@ void main() {
 
     test('慢路径：全为坏元素 → null', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'messages': <Object?>['bad', 1, null]},
-        ).messages,
+        SessionDetail.fromJson(const <String, Object?>{
+          'messages': <Object?>['bad', 1, null],
+        }).messages,
         isNull,
       );
     });
@@ -1041,31 +1057,38 @@ void main() {
       expect(s.messages!.single.role, 'user');
     });
 
-    test('当前行为：快路径首元素为非 String 键 Map → TypeError 直穿（见报告实现观察）', () {
-      // 快路径用 `Map<String, Object?>.from(element)`，未包 try/catch；
-      // 与 optModelList 的「解码失败返回 null」语义不一致。
-      expect(
-        () => SessionDetail.fromJson(<String, Object?>{
-          'messages': <Object>[
-            <Object, Object>{1: 'x'},
-          ],
-        }),
-        throwsA(isA<TypeError>()),
-      );
+    test('加固后行为：快路径首元素为非 String 键 Map → 降级慢路径，不再抛 TypeError', () {
+      // 原快路径裸用 `Map<String, Object?>.from(element)`，非 String 键会抛 TypeError
+      // 直穿 fromJson；2026-09-16 加固为「快路径失败 → 降级慢路径」，与 optModelList
+      // 的容错口径一致。慢路径按键 toString 后按 JsonValue 解码 → 产出 1 条字段全空的
+      // 消息（探针实测：role=null / content=null）。本用例原为「记录当前行为」，
+      // 现充当该行为变更的守卫。
+      final s = SessionDetail.fromJson(<String, Object?>{
+        'messages': <Object>[
+          <Object, Object>{1: 'x'},
+        ],
+      });
+      expect(s.messages, hasLength(1));
+      expect(s.messages!.single.role, isNull);
+      expect(s.messages!.single.content, isNull);
     });
   });
 
   group('SessionDetail.fromJson：toolCalls 两级容错解码', () {
     test('缺失 / 非 List → null', () {
-      expect(SessionDetail.fromJson(const <String, Object?>{}).toolCalls, isNull);
       expect(
-        SessionDetail.fromJson(const <String, Object?>{'tool_calls': 3}).toolCalls,
+        SessionDetail.fromJson(const <String, Object?>{}).toolCalls,
         isNull,
       );
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'tool_calls': <Object?>[]},
-        ).toolCalls,
+        SessionDetail.fromJson(const <String, Object?>{'tool_calls': 3})
+            .toolCalls,
+        isNull,
+      );
+      expect(
+        SessionDetail.fromJson(const <String, Object?>{
+          'tool_calls': <Object?>[],
+        }).toolCalls,
         isEmpty,
       );
     });
@@ -1100,22 +1123,23 @@ void main() {
 
     test('慢路径：全为坏元素 → null', () {
       expect(
-        SessionDetail.fromJson(
-          const <String, Object?>{'tool_calls': <Object?>['bad', 2]},
-        ).toolCalls,
+        SessionDetail.fromJson(const <String, Object?>{
+          'tool_calls': <Object?>['bad', 2],
+        }).toolCalls,
         isNull,
       );
     });
 
-    test('当前行为：快路径首元素为非 String 键 Map → TypeError 直穿（见报告实现观察）', () {
-      expect(
-        () => SessionDetail.fromJson(<String, Object?>{
-          'tool_calls': <Object>[
-            <Object, Object>{1: 'x'},
-          ],
-        }),
-        throwsA(isA<TypeError>()),
-      );
+    test('加固后行为：快路径首元素为非 String 键 Map → 降级慢路径，不再抛 TypeError', () {
+      // 同 messages 解码器：快路径失败不再直穿，改为降级慢路径。
+      // 探针实测慢路径产物 = 1 条 name 为 null 的条目。
+      final s = SessionDetail.fromJson(<String, Object?>{
+        'tool_calls': <Object>[
+          <Object, Object>{1: 'x'},
+        ],
+      });
+      expect(s.toolCalls, hasLength(1));
+      expect(s.toolCalls!.single.name, isNull);
     });
   });
 
@@ -1132,7 +1156,10 @@ void main() {
 
     test('sessionId 空串 → 落到 title 分支', () {
       // 取证：无时间戳时 `?? 0` 兜底字面量在本实现里渲染成 `0.0`（见下方探针用例）
-      expect(const SessionDetail(sessionId: '', title: 'T').id, 'session-T-0.0');
+      expect(
+        const SessionDetail(sessionId: '', title: 'T').id,
+        'session-T-0.0',
+      );
     });
 
     test('title 缺失 → untitled 兜底', () {
@@ -1331,11 +1358,16 @@ void main() {
       expect(attA == attA, isTrue);
       expect(attA.hashCode, attA2.hashCode);
       // deepHash：元素值等（对象不同）→ 哈希一致（非 identity 哈希）
-      expect(identical(attA.pendingAttachments, attA2.pendingAttachments), isFalse);
+      expect(
+        identical(attA.pendingAttachments, attA2.pendingAttachments),
+        isFalse,
+      );
       expect(attA.hashCode, attA2.hashCode);
 
       // messages
-      final msgNull = SessionDetail.fromJson(const <String, Object?>{'session_id': 's'});
+      final msgNull = SessionDetail.fromJson(const <String, Object?>{
+        'session_id': 's',
+      });
       final msgEmpty = SessionDetail.fromJson(const <String, Object?>{
         'session_id': 's',
         'messages': <Object?>[],
@@ -1374,7 +1406,9 @@ void main() {
       expect(msgA.hashCode, msgA2.hashCode);
 
       // toolCalls
-      final tcNull = SessionDetail.fromJson(const <String, Object?>{'session_id': 's'});
+      final tcNull = SessionDetail.fromJson(const <String, Object?>{
+        'session_id': 's',
+      });
       final tcEmpty = SessionDetail.fromJson(const <String, Object?>{
         'session_id': 's',
         'tool_calls': <Object?>[],
@@ -1405,7 +1439,9 @@ void main() {
       expect(tcA.hashCode, tcA2.hashCode);
 
       // compressionAnchorMessageKey（走 == / hashCode 而非 deep*）
-      final keyNull = SessionDetail.fromJson(const <String, Object?>{'session_id': 's'});
+      final keyNull = SessionDetail.fromJson(const <String, Object?>{
+        'session_id': 's',
+      });
       final keyEmpty = SessionDetail.fromJson(const <String, Object?>{
         'session_id': 's',
         'compression_anchor_message_key': <String, Object?>{},
@@ -1441,8 +1477,14 @@ void main() {
           'session_id': null,
         }),
         'title 空串': SessionDetail.fromJson({...fullJson(), 'title': ''}),
-        'pinned false': SessionDetail.fromJson({...fullJson(), 'pinned': false}),
-        'archived false': SessionDetail.fromJson({...fullJson(), 'archived': false}),
+        'pinned false': SessionDetail.fromJson({
+          ...fullJson(),
+          'pinned': false,
+        }),
+        'archived false': SessionDetail.fromJson({
+          ...fullJson(),
+          'archived': false,
+        }),
         'messageCount 0': SessionDetail.fromJson({
           ...fullJson(),
           'message_count': 0,
@@ -1503,7 +1545,8 @@ void main() {
         'SessionDetail(sessionId: null, title: null)',
       );
       expect(
-        SessionDetail.fromJson(const <String, Object?>{'session_id': 'x'}).toString(),
+        SessionDetail.fromJson(const <String, Object?>{'session_id': 'x'})
+            .toString(),
         'SessionDetail(sessionId: x, title: null)',
       );
     });

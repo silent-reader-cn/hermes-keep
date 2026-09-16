@@ -11,7 +11,6 @@ import 'package:hermes_ui/core/models/session.dart';
 ///
 /// 预期值全部按实现读出来写死，不用空断言充数。
 void main() {
-
   group('SessionsResponse', () {
     test('fromJson：全字段 + 嵌套列表', () {
       final r = SessionsResponse.fromJson({
@@ -376,9 +375,11 @@ void main() {
       expect(emptyNested.session!.title, isNull);
     });
 
-    test('fromJson：嵌套 session 解码抛错 → optModel 吞掉，整条回退到 null', () {
-      // messages 里塞入 int-keyed Map，Map<String, Object?>.from 会抛 TypeError，
-      // 该异常在 optModel 内部被 catch → nested 为 null；顶层又无 flat id → null。
+    test('加固后行为：嵌套 session 的 messages 含非 String 键元素 → 不再抛错，按慢路径尽力解析', () {
+      // 原实现靠快路径抛 TypeError 触发 optModel 的 catch → 整个 session 退化为 null
+      //（丢全部数据）；2026-09-16 加固后快路径降级慢路径不再抛，故 session 保留下来
+      //（部分解析，实测 SessionDetail(sessionId: x, title: null)）。本用例原为「记录
+      // 当前行为」，现充当该行为变更的守卫 —— 由「整条丢弃」改为「尽力保留」。
       final r = SessionResponse.fromJson({
         'session': {
           'session_id': 'x',
@@ -387,7 +388,8 @@ void main() {
           ],
         },
       });
-      expect(r.session, isNull);
+      expect(r.session, isNotNull);
+      expect(r.session!.sessionId, 'x');
     });
 
     test('fromJson：平坦 id 命中但 detail 解码抛错 → 退化兜底会话 id + title', () {
