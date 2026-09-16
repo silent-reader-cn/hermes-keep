@@ -913,7 +913,9 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
       );
       if (mounted) {
         final l10n = AppLocalizations.of(context);
-        _showNotice(l10n.pushTestTitle, error.toString());
+        // 统一文案口径：ApiException 展示其 message，其余回落本地化通用提示，
+        // 不再把 error.toString() 原样弹给用户（与同文件 _describeError 一致）。
+        _showNotice(l10n.pushTestTitle, _describeError(context, error));
       }
     } finally {
       if (mounted) {
@@ -2116,6 +2118,35 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
     try {
       final checker = ref.read(updateCheckerServiceProvider);
       result = await checker.checkForUpdates(isManual: true);
+    } on Object catch (error) {
+      // 兜底：不把「服务内部自吞异常」当隐性契约。服务真抛错时给出与
+      // result.status 异常分支一致的可见反馈，而不是让异常直穿 UI。
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.error,
+        tag: 'settings',
+        message: '检查更新失败: $error',
+        errorKind: error.toString(),
+      );
+      if (mounted) {
+        final l10n = AppLocalizations.of(context);
+        await showCupertinoDialog<void>(
+          context: context,
+          builder: (ctx) => SettingsSurfaces.dialog(
+            context,
+            CupertinoAlertDialog(
+              title: Text(l10n.updateSectionTitle),
+              content: Text(l10n.updateCheckFailed),
+              actions: [
+                CupertinoDialogAction(
+                  child: Text(l10n.ok),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      return;
     } finally {
       if (mounted) {
         setState(() => _isChecking = false);

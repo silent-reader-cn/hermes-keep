@@ -1510,80 +1510,6 @@ class _QueuedBanner extends StatelessWidget {
   }
 }
 
-/// 成功类会话操作轻提示横幅（可点 × 关闭）。
-///
-/// 已保留作兼容，当前挂载点已改为 [_TransientNoticeToast]。
-// ignore: unused_element
-class _NoticeBanner extends StatelessWidget {
-  const _NoticeBanner({required this.message, required this.onDismiss});
-
-  final String message;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: LightSurfaces.resolve(
-          context,
-          LightSurfaces.tintGreen,
-          dark: CupertinoColors.systemGreen.withValues(alpha: 0.12),
-        ),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: LightSurfaces.resolve(
-            context,
-            LightSurfaces.cardBorder,
-            dark: CupertinoColors.systemGreen.withValues(alpha: 0.2),
-          ),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            CupertinoIcons.checkmark_circle,
-            size: 14,
-            color: LightSurfaces.resolve(
-              context,
-              statusGreenText.resolveFrom(context),
-              dark: CupertinoColors.systemGreen.color,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                color: statusGreenText.resolveFrom(context),
-              ),
-            ),
-          ),
-          AccessibleButton(
-            label: l10n.dismissNotice,
-            minimumSize: const Size(0, 0),
-            onPressed: onDismiss,
-            child: Icon(
-              CupertinoIcons.xmark_circle_fill,
-              size: 14,
-              color: LightSurfaces.resolve(
-                context,
-                LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 /// 轻量自动消失通知 toast（selected-context-spec §5.2，复制提示分型）。
 ///
@@ -1616,15 +1542,11 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
     _arm();
   }
 
-  @override
-  void didUpdateWidget(covariant _TransientNoticeToast oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.message != widget.message) {
-      _timer?.cancel();
-      _visible = true;
-      _arm();
-    }
-  }
+  // 注意：本 widget 的 key 由 message 派生（挂载点是
+  // ValueKey('chat-notice-toast-$message')），故 message 变化时整个元素被替换、
+  // 走 initState 重新 arm，didUpdateWidget 收不到「message 已变」的形态 ——
+  // 原先按 message 比较的重置分支恒不可达，已移除。若日后 key 策略改为常量
+  // （不再按 message 区分），必须在此补回该重置逻辑。
 
   void _arm() {
     _timer?.cancel();
