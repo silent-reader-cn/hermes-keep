@@ -1,6 +1,6 @@
 {
-  "line_coverage_pct": 83.88,
-  "lines_hit": 32593,
+  "line_coverage_pct": 84.12,
+  "lines_hit": 32685,
   "lines_countable": 38857,
   "files_measured": 234,
   "note": "Ratchet this upward as tests are added; never lower it silently.",
