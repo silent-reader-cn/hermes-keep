@@ -276,10 +276,16 @@ for f in "${dart_files[@]}"; do
         test/app/*)
             test_candidates+=("test/app/")
             ;;
-        test/*)
+        test/*_test.dart)
             if [ -f "$norm_f" ]; then
                 test_candidates+=("$norm_f")
             fi
+            ;;
+        test/*)
+            # Bare files under test/ that are NOT `*_test.dart` (typically the
+            # shared helpers in test/helpers/) define no `main()`; running them
+            # as tests always fails with "Missing definition of `main` method"
+            # and turns the gate into a false failure. Skip them.
             ;;
     esac
 done
