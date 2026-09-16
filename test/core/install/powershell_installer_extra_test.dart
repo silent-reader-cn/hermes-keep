@@ -490,14 +490,14 @@ void main() {
       );
     });
 
-    test('实现观察：stdout 零输出时 stage 流永不关闭（asFuture 时序缺陷）', () async {
-      // lib/core/install/powershell_installer.dart:400-401
-      //   final exitCode = await process.exitCode;               // 至少一跳微任务
+    test('修复守卫：stdout 零输出时 stage 流仍会正常关闭（asFuture 时序已修正）', () async {
+      // 原缺陷（lib/core/install/powershell_installer.dart）：
+      //   final exitCode = await process.exitCode;               // 进程已退、流已 done
       //   await Future.wait([outSub.asFuture<void>(), ...]);      // asFuture 挂太晚
-      // Subscription.asFuture() 只有在 done 派发**之前**挂上才会完成；
-      // stdout 零输出时 done 恰好在那一跳内派发 → Future.wait 永不 resolve
-      // → controller 永不 close → 该 stage 既无成功也无失败终帧。
-      // 此处只断言"流未关闭、且已到达的事件均无终帧"，不修改 lib。
+      // Subscription.asFuture() 只有在 done 派发**之前**挂上才会完成；stdout 零输出时
+      // done 恰好在那一跳内派发 → Future.wait 永不 resolve → controller 永不 close
+      // → 该 stage 既无成功也无失败终帧（安装页静默卡死）。
+      // 修法：两个 asFuture 在 await exitCode 之前挂上。本用例充当该修复的守卫。
       final fake = _FakeProcess(
         stderrLines: <String>['{"event": "error", "stage": "deps", "reason": "boom"}'],
         exitCodeValue: 0,
@@ -521,7 +521,7 @@ void main() {
         isTrue,
         reason: 'stderr 的错误帧应已到达',
       );
-      expect(closed, isFalse, reason: '复现中：流始终未关闭');
+      expect(closed, isTrue, reason: '修复后：stdout 零输出时流仍会正常关闭');
     });
   });
 

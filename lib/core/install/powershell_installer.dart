@@ -397,8 +397,13 @@ class DefaultPowershellInstaller implements PowershellInstaller {
         }
       });
 
+      // ⚠️ asFuture 必须在流 close 之前挂上：进程退出后 stdout/stderr 已 done，
+      // 此时再调 asFuture 永远不会收到完成事件 → Future.wait 永不 resolve
+      //（stdout 零输出的 stage 会静默卡死，既无成功终帧也无失败终帧）。
+      final outDone = outSub.asFuture<void>();
+      final errDone = errSub.asFuture<void>();
       final exitCode = await process.exitCode;
-      await Future.wait([outSub.asFuture<void>(), errSub.asFuture<void>()]);
+      await Future.wait([outDone, errDone]);
 
       if (exitCode != 0 && !hadFailure) {
         controller.add(InstallerEvent.stageFailure(

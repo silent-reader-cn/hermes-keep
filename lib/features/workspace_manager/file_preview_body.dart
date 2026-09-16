@@ -367,6 +367,14 @@ class _BytesFilePreviewSource extends FilePreviewSource {
 
 /// 共享文件预览正文组件（支持 text/image/video/audio/pdf/office/兜底下载）。
 class FilePreviewBody extends ConsumerStatefulWidget {
+  /// 预览临时文件目录。
+  ///
+  /// 默认 [Directory.systemTemp]；测试可覆盖为**独立子目录**——`flutter test`
+  /// 是多测试文件并发跑的，共享同一目录会让「本次落了几个文件」这类断言被
+  /// 同目录其它用例落下的文件污染（实测可致假失败）。
+  @visibleForTesting
+  static Directory previewTempDir = Directory.systemTemp;
+
   const FilePreviewBody({
     super.key,
     required this.fileName,
@@ -408,6 +416,12 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
   OfficeDocument? _officeDocument;
   int _selectedSheetIndex = 0;
 
+  /// 加载代次：并发 [_load]（rebuild 风暴）时后发者取代先发者。
+  ///
+  /// 落盘型分支凭它判断「自己是否已被取代」——被取代则立刻删掉刚写下的临时文件，
+  /// 否则同一批并发加载会各留一个孤儿（实测单次 pump 可残留 4 个 `.pdf`）。
+  int _loadGeneration = 0;
+
   Player? _player;
   VideoController? _videoController;
 
@@ -431,6 +445,21 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
   void dispose() {
     unawaited(_disposeMedia());
     super.dispose();
+  }
+
+  /// 删除上一次留下的临时预览文件。
+  ///
+  /// ⚠️ [_mediaTempPath] / [_pdfTempPath] 都是**单字段**：重新加载时直接覆盖会丢掉
+  /// 旧路径，而 dispose 只能删当前这一个 → 每次 rebuild 都在 %TEMP% 漏一个
+  /// `hermes_preview_*`（实测单次测试即可累积 4 个）。故落盘成功后先把上一个删掉。
+  Future<void> _dropPreviousTempFile(String? path, {String? exceptPath}) async {
+    if (path == null || path == exceptPath) return;
+    try {
+      final previous = File(path);
+      if (await previous.exists()) await previous.delete();
+    } catch (_) {
+      // 清理失败不影响主流程（下次加载还会再试）。
+    }
   }
 
   Future<void> _disposeMedia() async {
@@ -459,8 +488,9 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     await _disposeMedia();
-    if (!mounted) return;
+    if (!mounted || generation != _loadGeneration) return;
     setState(() {
       _loading = true;
       _loadError = null;
@@ -499,17 +529,29 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
           return;
         }
         final ext = _extOf(widget.fileName);
-        final tempDir = Directory.systemTemp;
+        final tempDir = FilePreviewBody.previewTempDir;
         final tempFile = File(
           '${tempDir.path}/hermes_preview_${DateTime.now().millisecondsSinceEpoch}$ext',
         );
         await tempFile.writeAsBytes(bytes, flush: true);
+        if (generation != _loadGeneration) {
+          // 本次加载已被更新的调用取代 → 立刻删掉自己刚写的，避免并发孤儿。
+          try {
+            if (await tempFile.exists()) await tempFile.delete();
+          } catch (_) {}
+          return;
+        }
+        // 先清掉上一次的临时文件（单字段覆盖会丢旧路径 → 泄漏）。
+        await _dropPreviousTempFile(_mediaTempPath, exceptPath: tempFile.path);
+        // ⚠️ 写盘后立刻登记路径：下面的 Player() / open() 都可能抛错，
+        // 若等 setState 才赋值 _mediaTempPath，异常路径下 dispose 不知道要删哪个文件
+        // → %TEMP% 会持续累积 hermes_preview_* 残留。
+        _mediaTempPath = tempFile.path;
         final player = Player();
         final controller = _kind == WorkspaceFileKind.video
             ? VideoController(player)
             : null;
         setState(() {
-          _mediaTempPath = tempFile.path;
           _player = player;
           _videoController = controller;
         });
@@ -526,11 +568,20 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
           });
           return;
         }
-        final tempDir = Directory.systemTemp;
+        final tempDir = FilePreviewBody.previewTempDir;
         final tempFile = File(
           '${tempDir.path}/hermes_preview_${DateTime.now().millisecondsSinceEpoch}.pdf',
         );
         await tempFile.writeAsBytes(bytes, flush: true);
+        if (generation != _loadGeneration) {
+          // 本次加载已被更新的调用取代 → 立刻删掉自己刚写的，避免并发孤儿。
+          try {
+            if (await tempFile.exists()) await tempFile.delete();
+          } catch (_) {}
+          return;
+        }
+        // 先清掉上一次的临时文件（单字段覆盖会丢旧路径 → 泄漏）。
+        await _dropPreviousTempFile(_pdfTempPath, exceptPath: tempFile.path);
         if (!mounted) {
           try {
             if (await tempFile.exists()) await tempFile.delete();

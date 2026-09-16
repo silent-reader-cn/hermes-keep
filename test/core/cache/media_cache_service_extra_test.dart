@@ -206,9 +206,7 @@ void main() {
 
   group('未注入 rootDir：落点由 path_provider 决定', () {
     test('默认落点 = <应用支持目录>/hermes_media 且被自动创建', () async {
-      final supportDir = Directory.systemTemp.createTempSync(
-        'hermes_support_',
-      );
+      final supportDir = Directory.systemTemp.createTempSync('hermes_support_');
       final previous = PathProviderPlatform.instance;
       PathProviderPlatform.instance = _FakePathProvider(supportDir.path);
       addTearDown(() {
@@ -312,7 +310,7 @@ void main() {
       }
     });
 
-    test('TTL 过期：旧文件删不掉时索引照清，不会永远命中过期项', () async {
+    test('TTL 过期：旧文件删不掉时【保留索引】，交由下次访问重试', () async {
       var downloads = 0;
       final rig = _build(
         downloader: (_) async {
@@ -346,8 +344,10 @@ void main() {
           await (rig.db.select(
             rig.db.cachedMedia,
           )..where((t) => t.cacheKey.equals(key))).get(),
-          isEmpty,
-          reason: '删不掉文件也必须清索引，否则永远命中过期项',
+          hasLength(1),
+          reason:
+              '删不掉文件时【保留索引】：清索引会留下「文件在盘但索引没了」的孤儿，'
+              '被「文件在但索引缺失 → 补索引」分支重新登记为有效，过期项反而永不淘汰',
         );
       } else {
         final second = await rig.service.get(url);
@@ -399,13 +399,20 @@ void main() {
         expect(await middle.exists(), isFalse);
       }
 
-      // 无论文件删没删成，索引都必须与淘汰决策同步。
+      // 索引必须与淘汰【结果】同步：
+      //  - 删成功的（middle）→ 清索引；
+      //  - 删失败的（oldest）→ **保留索引**，否则留下「文件在盘但索引没了」的孤儿，
+      //    会被 _get 的补索引分支重新登记为有效，该文件永远淘汰不掉。
       final remainingKeys = (await rig.db.select(rig.db.cachedMedia).get())
           .map((r) => r.cacheKey)
           .toSet();
-      expect(remainingKeys, isNot(contains(_keyOf(oldest))));
       expect(remainingKeys, isNot(contains(_keyOf(middle))));
       expect(remainingKeys, contains(_keyOf(newest)));
+      if (windowsLocked) {
+        expect(remainingKeys, contains(_keyOf(oldest)));
+      } else {
+        expect(remainingKeys, isNot(contains(_keyOf(oldest))));
+      }
     });
   });
 }

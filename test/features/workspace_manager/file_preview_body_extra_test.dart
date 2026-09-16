@@ -179,13 +179,24 @@ Uint8List buildXlsxBytes(List<({String name, bool withRow})> sheets) {
   return Uint8List.fromList(ZipEncoder().encode(archive));
 }
 
-/// 系统临时目录里 `hermes_preview_*` 临时文件集合（PDF/音视频落盘用）。
-Set<String> previewTempPaths() => Directory.systemTemp
-    .listSync()
-    .whereType<File>()
-    .map((e) => e.path)
-    .where((p) => p.split(Platform.pathSeparator).last.startsWith('hermes_preview_'))
-    .toSet();
+/// 本用例注入的预览临时目录里的 `hermes_preview_*` 文件集合（PDF/音视频落盘用）。
+///
+/// 走 `FilePreviewBody.previewTempDir`（setUp 指向本用例专属子目录），而**不是**全局
+/// %TEMP%：`flutter test` 是多测试文件并发跑的，共享目录会被同目录其它用例落下的
+/// 文件混入，让「本次新增了几个」的 difference 断言假失败（实测单跑恒绿、三目录一起跑必红）。
+Set<String> previewTempPaths() {
+  final dir = FilePreviewBody.previewTempDir;
+  if (!dir.existsSync()) return <String>{};
+  return dir
+      .listSync()
+      .whereType<File>()
+      .map((e) => e.path)
+      .where(
+        (p) =>
+            p.split(Platform.pathSeparator).last.startsWith('hermes_preview_'),
+      )
+      .toSet();
+}
 
 /// pump 一个 `FilePreviewBody`，provider 全部注入。
 Future<void> pumpBody(
@@ -275,6 +286,12 @@ void main() {
           const MethodChannel('plugins.flutter.io/path_provider'),
           (call) async => Directory.systemTemp.path,
         );
+    // 预览临时目录改用**本用例专用子目录**：flutter test 并发跑多文件，共享 %TEMP%
+    // 会让「本次落了几个文件」的断言被同目录其它用例落下的文件污染。
+    // 注：此处不用 newTempDir()——Dart 局部函数不支持在声明前引用。
+    final previewDir = Directory.systemTemp.createTempSync('hermes_fpb_preview_');
+    tempDirs.add(previewDir);
+    FilePreviewBody.previewTempDir = previewDir;
   });
 
   tearDown(() {
@@ -283,6 +300,8 @@ void main() {
           const MethodChannel('plugins.flutter.io/path_provider'),
           null,
         );
+    // 还原注入，避免污染其它测试文件。
+    FilePreviewBody.previewTempDir = Directory.systemTemp;
     for (final dir in tempDirs) {
       if (dir.existsSync()) {
         try {
@@ -882,7 +901,9 @@ void main() {
         ),
       );
       // 落盘临时文件是真实 IO，需要 runAsync 才能推进。
-      await settleRealIo(tester);
+      // 轮次给足：全量并发跑时 CPU 争抢会让默认 4 轮（80ms）不够，_load() 未收尾
+      // 会让下面「有控件 or 有兜底」双断言假失败（单跑恒绿）。
+      await settleRealIo(tester, rounds: 12);
 
       expect(find.text('无法预览该文件'), findsNothing);
       final hasControls = find

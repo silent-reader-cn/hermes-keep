@@ -251,11 +251,17 @@ class MediaCacheService {
     )..where((t) => t.cacheKey.equals(key))).go();
   }
 
+  /// 删除缓存文件并清索引。
+  ///
+  /// ⚠️ 删除失败时【保留索引】：否则会留下「文件还在盘上但索引没了」的孤儿，
+  /// 而 [_get] 的「文件在但索引缺失 → 补索引」分支会把它重新登记为有效条目，
+  /// 导致过期缓存永远不会被淘汰。保留索引后，下次访问仍走 TTL 检查并重试删除。
   Future<void> _removeEntry(String key, File file) async {
     try {
       if (await file.exists()) await file.delete();
     } on FileSystemException {
-      // 忽略删除失败。
+      // 删除失败（文件被占用等）：索引保持不动，交由下次 TTL 检查重试。
+      return;
     }
     await _deleteIndexRow(key);
   }
@@ -286,12 +292,17 @@ class MediaCacheService {
     for (final file in files) {
       if (total <= maxBytes) break;
       final name = file.uri.pathSegments.last;
-      total -= await file.length();
+      final size = await file.length();
       try {
         if (await file.exists()) await file.delete();
       } on FileSystemException {
-        // 忽略删除失败。
+        // ⚠️ 删除失败时既不扣减 total、也不删索引：
+        //  - 扣减会让循环误判“已腾出空间”而提前 break（实际没释放）；
+        //  - 删索引会留下「文件在盘但索引没了」的孤儿，被 _get 的补索引分支
+        //    重新登记为有效，导致该文件永远不被淘汰。
+        continue;
       }
+      total -= size;
       await _deleteIndexRow(_keyFromFileName(name));
     }
   }
