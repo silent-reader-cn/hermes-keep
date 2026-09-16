@@ -424,7 +424,11 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
   bool _isStopping = false;
   int _consecutiveFailures = 0;
   Timer? _watchdogTimer;
-  StreamSubscription<int>? _exitSubscription;
+  // 注：这里曾有 `StreamSubscription<int>? _exitSubscription` 字段，用于订阅
+  // 子进程退出事件。退出监听后来改成了 `proc.exitCode.then(...)`（见
+  // `_startWatchdog` 的退出分支），该字段自此「声明后从未被赋非 null」，
+  // 两处 `!= null` 分支恒假 —— 已删除。若日后需要监听退出流，请用
+  // `proc.exitCode.listen(...)` 并在 `stop()` 里取消。
   Completer<void>? _startCompleter;
 
   static const int maxConsecutiveFailures = 5;
@@ -709,10 +713,6 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
 
   void _startWatchdog() {
     _watchdogTimer?.cancel();
-    final oldSub = _exitSubscription;
-    if (oldSub != null) {
-      unawaited(oldSub.cancel());
-    }
 
     if (_isTakeover) {
       var takeoverFails = 0;
@@ -798,11 +798,6 @@ class DefaultWebuiSidecarService implements WebuiSidecarService {
     _isStopping = true;
     _watchdogTimer?.cancel();
     _watchdogTimer = null;
-    final sub = _exitSubscription;
-    if (sub != null) {
-      await sub.cancel();
-      _exitSubscription = null;
-    }
     _consecutiveFailures = 0;
 
     final proc = _currentProcess;

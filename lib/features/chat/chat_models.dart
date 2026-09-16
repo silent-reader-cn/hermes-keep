@@ -109,6 +109,13 @@ class ReasoningGroup {
   final String text;
 
   /// 从消息列表提取全部已归档推理段（按 assistant anchor 关联）。
+  ///
+  /// 口径：**只认 `role == 'assistant'` 消息上的 `reasoning`** —— role 门禁
+  /// 排在 reasoning 读取之前，故挂在 user/tool 消息上的 reasoning 一律丢弃。
+  /// 理由：reasoning 是 assistant 的输出属性；放宽到别的 role 反而可能把
+  /// 注入内容当推理渲染出来。
+  /// 对照：WebUI 的 `compression_anchor.py` 用「any non-tool role」的宽判据，
+  /// 那是**压缩锚点**（判断消息有无内容）的需求，不是渲染口径。
   static List<ReasoningGroup> groups({
     required List<ChatMessage> messages,
     int? messageOffset,
@@ -231,8 +238,12 @@ class ReasoningGroup {
         .toList();
   }
 
-  /// 相邻聚合（聚合开关关闭语义）：间隔内无可见文本且无工具调用的相邻推理段
-  /// 合并为一组，被 text/tool 打断则分离（think/text/tools 穿插呈现）。
+  /// 相邻聚合（聚合开关关闭语义）：间隔内**无 assistant 可见正文**的相邻推理段
+  /// 合并为一组；被可见正文打断则分离。
+  ///
+  /// 注意：**工具调用不打断**（think/tool 互换时思考段照常合并为一张卡），
+  /// 与 `ToolCallGroup.coalescingAdjacent`（`tool_call.dart:764`）同判据 ——
+  /// 这是成体系的设计选择：**只有可见 text 才是分隔符**。
   static List<ReasoningGroup> coalescingAdjacent(
     List<ReasoningGroup> groups, {
     required List<ChatMessage> messages,
