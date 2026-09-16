@@ -560,4 +560,200 @@ Status: completed   API calls: 3   Duration: 9s''';
       );
     });
   });
+
+  // 2026-09-16 新增：压缩/环境合成行家族（spec §11）。样例逐字取自运行版
+  // `agent/context_compressor.py` / `agent/prompt_builder.py` / `tools/todo_tool.py`
+  // / `cron/scheduler_delivery.py`。
+  group('压缩/环境合成行家族', () {
+    const zh = AppLocalizations(Locale('zh'));
+    const en = AppLocalizations(Locale('en'));
+
+    const compaction =
+        '[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into '
+        'the summary below. This is a handoff summary for the next turn.\n'
+        '## Conversation Summary\n- did stuff';
+
+    const priorContext =
+        '[PRIOR CONTEXT — for reference only; not a new message]\n'
+        'earlier turns from a merged session';
+
+    const taskList =
+        '[Your active task list was preserved across context compression]\n'
+        '- [ ] 补测 kanban\n- [x] 补测 insights\n- [ ] 补测 workspace';
+
+    const planningState =
+        '[Planning state preserved across compression]\n- plan A';
+
+    const outOfBand =
+        '[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered '
+        'once at this position; not tool output and not a new delivery when '
+        'replayed from conversation history]\n'
+        '把预览图重新出一版\n'
+        '[/OUT-OF-BAND USER MESSAGE]';
+
+    const cronjob = 'Cronjob Response: yabook_signin\n任务已完成，签到成功。';
+
+    test('六形态均判为注入', () {
+      final cases = <String, String>{
+        'contextCompaction': compaction,
+        'priorContext': priorContext,
+        'activeTaskList': taskList,
+        'planningState': planningState,
+        'outOfBandMessage': outOfBand,
+        'cronjobResponse': cronjob,
+      };
+      cases.forEach((String name, String content) {
+        expect(
+          InjectedMessage.isInjectedNotice(_msg(content)),
+          isTrue,
+          reason: '$name 未判为注入',
+        );
+      });
+    });
+
+    test('分类各归其位', () {
+      expect(
+        InjectedMessage.classify(_msg(compaction)),
+        InjectedNoticeKind.contextCompaction,
+      );
+      expect(
+        InjectedMessage.classify(_msg(priorContext)),
+        InjectedNoticeKind.priorContext,
+      );
+      expect(
+        InjectedMessage.classify(_msg(taskList)),
+        InjectedNoticeKind.activeTaskList,
+      );
+      expect(
+        InjectedMessage.classify(_msg(planningState)),
+        InjectedNoticeKind.planningState,
+      );
+      expect(
+        InjectedMessage.classify(_msg(outOfBand)),
+        InjectedNoticeKind.outOfBandMessage,
+      );
+      expect(
+        InjectedMessage.classify(_msg(cronjob)),
+        InjectedNoticeKind.cronjobResponse,
+      );
+    });
+
+    test('摘要 zh', () {
+      expect(InjectedMessage.extractSummary(_msg(compaction), zh), '上下文压缩');
+      expect(InjectedMessage.extractSummary(_msg(priorContext), zh), '前序上下文');
+      expect(InjectedMessage.extractSummary(_msg(planningState), zh), '规划状态保留');
+      // 对齐 webui：去标记行后取前 2 条非空行拼预览
+      expect(
+        InjectedMessage.extractSummary(_msg(taskList), zh),
+        '保留的任务列表 · - [ ] 补测 kanban - [x] 补测 insights',
+      );
+      // 插话指令必须让人认出「这是我说的话」，故带首行预览
+      expect(
+        InjectedMessage.extractSummary(_msg(outOfBand), zh),
+        '插话指令 · 把预览图重新出一版',
+      );
+      expect(
+        InjectedMessage.extractSummary(_msg(cronjob), zh),
+        '定时任务回执 · yabook_signin',
+      );
+    });
+
+    test('摘要 en', () {
+      expect(
+        InjectedMessage.extractSummary(_msg(compaction), en),
+        'Context compaction',
+      );
+      expect(
+        InjectedMessage.extractSummary(_msg(taskList), en),
+        'Preserved task list · - [ ] 补测 kanban - [x] 补测 insights',
+      );
+      expect(
+        InjectedMessage.extractSummary(_msg(outOfBand), en),
+        'Out-of-band message · 把预览图重新出一版',
+      );
+      expect(
+        InjectedMessage.extractSummary(_msg(cronjob), en),
+        'Scheduled task response · yabook_signin',
+      );
+    });
+
+    test('任务清单正文为空时只留标签（webui 同约定）', () {
+      const markerOnly =
+          '[Your active task list was preserved across context compression]';
+      expect(InjectedMessage.extractSummary(_msg(markerOnly), zh), '保留的任务列表');
+    });
+
+    test('插话指令：只有标记行时回落标签', () {
+      const empty =
+          '[OUT-OF-BAND USER MESSAGE — a direct message from the user]\n'
+          '[/OUT-OF-BAND USER MESSAGE]';
+      expect(InjectedMessage.extractSummary(_msg(empty), zh), '插话指令');
+    });
+
+    test('定时任务回执：任务名缺失时回落标签', () {
+      expect(
+        InjectedMessage.extractSummary(_msg('Cronjob Response:   '), zh),
+        '定时任务回执',
+      );
+    });
+
+    test('防误伤：用户手打的 [context: …] 不折叠', () {
+      expect(
+        InjectedMessage.isInjectedNotice(_msg('[context: 这是我自己的笔记]')),
+        isFalse,
+      );
+      expect(
+        InjectedMessage.classify(_msg('[context: 这是我自己的笔记]')),
+        InjectedNoticeKind.none,
+      );
+    });
+
+    test('防误伤：无冒号的 "Cronjob response …" 普通正文不折叠', () {
+      expect(
+        InjectedMessage.isInjectedNotice(
+          _msg('Cronjob response format is documented here'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('防误伤：普通用户消息仍不折叠（回归）', () {
+      for (final text in [
+        'hello world',
+        '[IMPORTANT: hello]',
+        '[System: hello]',
+        'Planning state is fine',
+      ]) {
+        expect(
+          InjectedMessage.isInjectedNotice(_msg(text)),
+          isFalse,
+          reason: text,
+        );
+      }
+    });
+
+    test('displayTitle 六条', () {
+      expect(
+        InjectedNoticeKind.contextCompaction.displayTitleWithL10n(zh),
+        '上下文压缩',
+      );
+      expect(InjectedNoticeKind.priorContext.displayTitleWithL10n(zh), '前序上下文');
+      expect(
+        InjectedNoticeKind.activeTaskList.displayTitleWithL10n(zh),
+        '保留的任务列表',
+      );
+      expect(
+        InjectedNoticeKind.planningState.displayTitleWithL10n(en),
+        'Planning state preserved',
+      );
+      expect(
+        InjectedNoticeKind.outOfBandMessage.displayTitleWithL10n(zh),
+        '插话指令',
+      );
+      expect(
+        InjectedNoticeKind.cronjobResponse.displayTitleWithL10n(zh),
+        '定时任务回执',
+      );
+    });
+  });
 }

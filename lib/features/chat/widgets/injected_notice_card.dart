@@ -185,6 +185,18 @@ class InjectedNoticeCard extends StatelessWidget {
       case InjectedNoticeKind.sessionReset:
       case InjectedNoticeKind.memoryRecall:
         return CupertinoIcons.info_circle;
+      case InjectedNoticeKind.contextCompaction:
+        return CupertinoIcons.rectangle_compress_vertical;
+      case InjectedNoticeKind.priorContext:
+        return CupertinoIcons.doc_text;
+      case InjectedNoticeKind.activeTaskList:
+        return CupertinoIcons.list_bullet;
+      case InjectedNoticeKind.planningState:
+        return CupertinoIcons.flag;
+      case InjectedNoticeKind.outOfBandMessage:
+        return CupertinoIcons.bubble_left;
+      case InjectedNoticeKind.cronjobResponse:
+        return CupertinoIcons.tray_full;
       case InjectedNoticeKind.none:
         return CupertinoIcons.command;
     }

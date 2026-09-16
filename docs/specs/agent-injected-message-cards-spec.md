@@ -229,4 +229,59 @@ bool _isInjectedNotice(String text) {
   > 预览/截图取证务必也用真实布局：本次首版预览用 `Align` 生成，折叠态被撑到 210px，看图会误判成"折叠没生效"。
 - `C:/tmp/f.bat analyze` 零告警，`C:/tmp/f.bat test` 全绿。
 
+## 11. 扩展：压缩/环境合成行家族（2026-09-16 收口）
+
+> 背景（主人指示「邻近注入前缀一并收口」）：上一节只收了异步委派，`context_compressor._synthetic_prefixes`
+> 里**同列的其余 6 个前缀**仍在聊天里裸铺成长蓝泡（压缩摘要尤其长，动辄整屏）。
+
+### 11.1 触发点（运行版源码，权威）
+
+| # | kind | 检测前缀（逐字） | 产点 |
+|---|---|---|---|
+| 18 | `contextCompaction` | `[CONTEXT COMPACTION` | `agent/context_compressor.py:186/459/474/490/505/519` |
+| 19 | `priorContext` | `[PRIOR CONTEXT` | `agent/context_compressor.py:359` `_MERGED_PRIOR_CONTEXT_HEADER` |
+| 20 | `activeTaskList` | `[Your active task list was preserved across context compression]` | `tools/todo_tool.py:21` `TODO_INJECTION_HEADER`（经压缩重注） |
+| 21 | `planningState` | `[Planning state preserved` | **无产点**：仅存在于压缩器白名单（见 §11.4） |
+| 22 | `outOfBandMessage` | `[OUT-OF-BAND USER MESSAGE` | `agent/prompt_builder.py:506` `STEER_MARKER_OPEN`（关闭标记 `[/OUT-OF-BAND USER MESSAGE]`） |
+| 23 | `cronjobResponse` | `Cronjob Response:`（**不带括号**） | `cron/scheduler_delivery.py:1634` |
+
+### 11.2 检测与分类
+
+- 括号族 5 条走 §2.2 的 `[` 闸门之后；`Cronjob Response:` **不带括号**，必须在闸门**之前**判（与记忆/裸 nudge 同级）。
+- 前缀均为 producer-owned 窄白名单，**不用压缩器白名单里的 `[CONTEXT` 泛前缀**：那只覆盖到 `[CONTEXT COMPACTION`，
+  用泛前缀会误伤用户手打的 `[context: 笔记]`（用例已钉死）。
+- 正则全部 `static final` 预编译；`^cronjob response\s*[:\uFF1A]\s*([^\n]*)` 用 `[^\n]*` 而非 `.*$`
+  —— 回执是多行文本，带 `$` 会要求整串结束而永远失配（实测踩过）。
+
+### 11.3 摘要（zh / en）与图标
+
+| kind | 摘要规则 | 摘要样例 | 图标 |
+|---|---|---|---|
+| `contextCompaction` | 固定标题（**对齐 webui `context_compaction_label`**） | 上下文压缩 / Context compaction | `rectangle_compress_vertical` |
+| `priorContext` | 固定标题 | 前序上下文 / Prior context | `doc_text` |
+| `activeTaskList` | **对齐 webui `_preservedCompressionTaskListPreview`**：去标记行后取前 2 条非空行拼预览（≤64），空正文只留标签（**对齐 webui `preserved_task_list_label`**） | 保留的任务列表 · - [ ] A - [x] B / Preserved task list · … | `list_bullet` |
+| `planningState` | 固定标题 | 规划状态保留 / Planning state preserved | `flag` |
+| `outOfBandMessage` | 跳过开始/结束标记行，取用户实说内容首个非空行做预览（≤48） | 插话指令 · 把预览图重新出一版 / Out-of-band message · … | `bubble_left` |
+| `cronjobResponse` | `标签 · {任务名}`（≤48，任务名缺失只留标签） | 定时任务回执 · yabook_signin / Scheduled task response · … | `tray_full` |
+
+- **插话指令为何要带预览**：它是**真实用户指令**（marker 定义见系统提示），折叠态若只给「插话指令」四个字，
+  用户必须点开才知道自己说过什么 —— 预览即"折叠态可辨认"的最低要求。
+- 图标名全部对本机 Flutter SDK `packages/flutter/lib/src/cupertino/icons.dart` 逐个 grep 核对存在性
+  （`checklist` 等想当然的名字并不存在，禁止凭记忆写）。
+
+### 11.4 两处与 webui 的有意分歧
+
+1. **webui 把 `[CONTEXT COMPACTION]` 与保留任务清单整条隐藏**（`ui.js:621/10330/15601/15906` 跳过渲染）；
+   本端**收成折叠卡**（可展开看原文）。理由：本仓一贯口径是「不在 agent 侧砍输出，只在 UI 收敛」，
+   隐藏会让"这条压缩发生过"这件事在聊天流里彻底消失，而卡片保留可查性。
+2. **`[Planning state preserved` 当前无产点**：全树（`hermes-agent` 的 py/ts/js + `plugins`）只有压缩器
+   白名单里出现过它，说明是历史遗留前缀。本端仍纳入白名单 + 卡片（防御性）：老会话回放时不会退回裸泡。
+
+### 11.5 验收增量
+
+- `test/core/utils/injected_message_test.dart`：六形态检测/分类/中英摘要、空正文回落标签、
+  三条防误伤（`[context: …]` / 无冒号 `Cronjob response …` / `Planning state is fine`）+ displayTitle 六条。
+- `test/features/chat/injected_notice_card_extra_test.dart`：六形态图标分派（含期望 kind 显式登记，防 kind 漂移静默换图标）。
+- `C:/tmp/f.bat analyze` 零告警，`C:/tmp/f.bat test` 全绿。
+
 

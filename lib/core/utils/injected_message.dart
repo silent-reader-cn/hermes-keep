@@ -22,6 +22,24 @@ enum InjectedNoticeKind {
 
   /// 异步委派：`[ASYNC DELEGATION COMPLETE — {id}]`（单个子代理收口）。
   subagentComplete,
+
+  /// 上下文压缩摘要（`[CONTEXT COMPACTION — REFERENCE ONLY] …`）。
+  contextCompaction,
+
+  /// 前序上下文（`[PRIOR CONTEXT — for reference only; not a new message]`）。
+  priorContext,
+
+  /// 压缩后保留的任务清单（`[Your active task list was preserved across …]`）。
+  activeTaskList,
+
+  /// 规划状态保留（`[Planning state preserved`；压缩器白名单留存，当前无产点）。
+  planningState,
+
+  /// 回合中途的用户插话（`[OUT-OF-BAND USER MESSAGE …`）。
+  outOfBandMessage,
+
+  /// 定时任务回执（`Cronjob Response: {task}`）。
+  cronjobResponse,
   overflow,
   cron,
   skill,
@@ -143,6 +161,41 @@ class InjectedMessage {
     caseSensitive: false,
   );
   static final RegExp _leadingBracketRegExp = RegExp(r'^\[\s*');
+
+  // 环境/压缩器合成行家族（2026-09-16 收口；`context_compressor._synthetic_prefixes`
+  // 同列，且 webui 对前两条已有既定契约，检测式逐字对齐 webui 的 `_is*` 判定）。
+  static final RegExp _contextCompactionRegExp = RegExp(
+    r'^\[\s*context compaction',
+    caseSensitive: false,
+  );
+  static final RegExp _priorContextRegExp = RegExp(
+    r'^\[\s*prior context',
+    caseSensitive: false,
+  );
+  static final RegExp _activeTaskListRegExp = RegExp(
+    r'^\[\s*your active task list was preserved across context compression\s*\]',
+    caseSensitive: false,
+  );
+  static final RegExp _planningStateRegExp = RegExp(
+    r'^\[\s*planning state preserved',
+    caseSensitive: false,
+  );
+  static final RegExp _outOfBandRegExp = RegExp(
+    r'^\[\s*out-of-band user message',
+    caseSensitive: false,
+  );
+  static final RegExp _outOfBandCloseRegExp = RegExp(
+    r'\[/out-of-band user message\]',
+    caseSensitive: false,
+  );
+
+  /// 定时任务回执**不带括号**（`Cronjob Response: {task}`），须在 `[` 闸门之前判。
+  /// 用 `[^\n]*` 而非 `.*$`：回执是多行（冒号后是任务名，换行后是正文），
+  /// 带 `$` 会要求整串结束而永远失配。
+  static final RegExp _cronjobResponseRegExp = RegExp(
+    r'^cronjob response\s*[:\uFF1A]\s*([^\n]*)',
+    caseSensitive: false,
+  );
   static final RegExp _asyncTaskFailedRegExp = RegExp(
     r'^\[\s*ASYNC DELEGATION TASK FAILED\s*[-\u2014\u2013]+\s*(\S+?)\s*,?\s*task\s*(\d+)\s*/\s*(\d+)\s*\]',
     caseSensitive: false,
@@ -199,6 +252,9 @@ class InjectedMessage {
     )) {
       return true;
     }
+    // 定时任务回执不带括号（`Cronjob Response: {task}`），须在 `[` 闸门之前判；
+    // 与 `context_compressor._synthetic_prefixes` 同列，属 producer-owned。
+    if (_cronjobResponseRegExp.hasMatch(lower)) return true;
     if (!t.startsWith('[')) {
       // 除记忆/裸 nudge 外，其余注入均以 [ 开头
       return false;
@@ -207,6 +263,15 @@ class InjectedMessage {
     // `context_compressor._synthetic_prefixes` 里同列（producer-owned 合成行），
     // 现实输入不可能手打 → 窄白名单直接收口，不参与关键词二次确认。
     if (_asyncDelegationPrefixRegExp.hasMatch(lower)) return true;
+    // 压缩/环境合成行家族（前缀逐字对应压缩器白名单；不用 `[CONTEXT` 泛前缀，
+    // 避免误伤用户手打的 `[context: …]`）。
+    if (_contextCompactionRegExp.hasMatch(lower) ||
+        _priorContextRegExp.hasMatch(lower) ||
+        _activeTaskListRegExp.hasMatch(lower) ||
+        _planningStateRegExp.hasMatch(lower) ||
+        _outOfBandRegExp.hasMatch(lower)) {
+      return true;
+    }
     if (lower.startsWith('[important: background process')) return true;
     if (lower.startsWith('[important: you are running as a scheduled cron')) {
       return true;
@@ -350,6 +415,26 @@ class InjectedMessage {
       return InjectedNoticeKind.codexNudge;
     }
 
+    // 压缩/环境合成行家族（互不重叠前缀，逐条精确判）。
+    if (_contextCompactionRegExp.hasMatch(lower)) {
+      return InjectedNoticeKind.contextCompaction;
+    }
+    if (_priorContextRegExp.hasMatch(lower)) {
+      return InjectedNoticeKind.priorContext;
+    }
+    if (_activeTaskListRegExp.hasMatch(lower)) {
+      return InjectedNoticeKind.activeTaskList;
+    }
+    if (_planningStateRegExp.hasMatch(lower)) {
+      return InjectedNoticeKind.planningState;
+    }
+    if (_outOfBandRegExp.hasMatch(lower)) {
+      return InjectedNoticeKind.outOfBandMessage;
+    }
+    if (_cronjobResponseRegExp.hasMatch(lower)) {
+      return InjectedNoticeKind.cronjobResponse;
+    }
+
     // 异步委派家族：必须在 `background subagent` 兜底之前判，否则
     // `[ASYNC DELEGATION COMPLETE …]` 的引导句（"A background subagent you
     // dispatched earlier…"）会把它吞进 subagentAggregated。
@@ -462,6 +547,18 @@ class InjectedMessage {
         return _sessionResetTitle(l10n);
       case InjectedNoticeKind.memoryRecall:
         return _memoryTitle(l10n);
+      case InjectedNoticeKind.contextCompaction:
+        return _contextCompactionTitle(l10n);
+      case InjectedNoticeKind.priorContext:
+        return _priorContextTitle(l10n);
+      case InjectedNoticeKind.activeTaskList:
+        return _activeTaskListSummary(raw, l10n);
+      case InjectedNoticeKind.planningState:
+        return _planningStateTitle(l10n);
+      case InjectedNoticeKind.outOfBandMessage:
+        return _outOfBandSummary(raw, l10n);
+      case InjectedNoticeKind.cronjobResponse:
+        return _cronjobResponseSummary(firstLine, l10n);
       case InjectedNoticeKind.overflow:
         return _firstLineStripped(firstLine, 48);
       case InjectedNoticeKind.none:
@@ -658,6 +755,87 @@ class InjectedMessage {
     return l10n.isEnglish ? 'Memory recall' : '记忆上下文';
   }
 
+  // ---------------------------------------------------------------------------
+  // 压缩/环境合成行家族摘要（2026-09-16）
+  // ---------------------------------------------------------------------------
+
+  static String _contextCompactionTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Context compaction';
+    return l10n.isEnglish ? 'Context compaction' : '上下文压缩';
+  }
+
+  static String _priorContextTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Prior context';
+    return l10n.isEnglish ? 'Prior context' : '前序上下文';
+  }
+
+  static String _planningStateTitle(AppLocalizations? l10n) {
+    if (l10n == null) return 'Planning state preserved';
+    return l10n.isEnglish ? 'Planning state preserved' : '规划状态保留';
+  }
+
+  static String _outOfBandLabel(AppLocalizations? l10n) {
+    if (l10n == null) return 'Out-of-band message';
+    return l10n.isEnglish ? 'Out-of-band message' : '插话指令';
+  }
+
+  static String _cronjobResponseLabel(AppLocalizations? l10n) {
+    if (l10n == null) return 'Scheduled task response';
+    return l10n.isEnglish ? 'Scheduled task response' : '定时任务回执';
+  }
+
+  static String _activeTaskListLabel(AppLocalizations? l10n) {
+    if (l10n == null) return 'Preserved task list';
+    return l10n.isEnglish ? 'Preserved task list' : '保留的任务列表';
+  }
+
+  /// 保留任务清单摘要：对齐 webui `_preservedCompressionTaskListPreview` ——
+  /// 去掉标记行后取前 2 条非空行拼成预览，正文为空时只留标签。
+  static String _activeTaskListSummary(String raw, AppLocalizations? l10n) {
+    final String label = _activeTaskListLabel(l10n);
+    final String body = raw.replaceFirst(_activeTaskListRegExp, '').trim();
+    if (body.isEmpty) return label;
+    final List<String> lines = body
+        .split('\n')
+        .map((String line) => line.trim())
+        .where((String line) => line.isNotEmpty)
+        .take(2)
+        .toList();
+    if (lines.isEmpty) return label;
+    return '$label · ${_truncate(lines.join(' '), 64)}';
+  }
+
+  /// 插话指令摘要：跳过开始/结束标记行，取用户实说内容的首个非空行做预览
+  /// （折叠态也必须让人认出「这是我说的话」，故不能只给标签）。
+  static String _outOfBandSummary(String raw, AppLocalizations? l10n) {
+    final String label = _outOfBandLabel(l10n);
+    for (final String line in raw.split('\n')) {
+      final String t = line.trim();
+      if (t.isEmpty) continue;
+      if (_outOfBandRegExp.hasMatch(t.toLowerCase())) continue;
+      if (_outOfBandCloseRegExp.hasMatch(t)) continue;
+      return '$label · ${_truncate(t, 48)}';
+    }
+    return label;
+  }
+
+  /// 定时任务回执摘要：`定时任务回执 · {任务名}`（任务名缺失时只用标签）。
+  static String _cronjobResponseSummary(
+    String firstLine,
+    AppLocalizations? l10n,
+  ) {
+    final String label = _cronjobResponseLabel(l10n);
+    final RegExpMatch? m = _cronjobResponseRegExp.firstMatch(
+      firstLine.trimLeft(),
+    );
+    final String task = (m?.group(1) ?? '').trim();
+    if (task.isEmpty) return label;
+    return '$label · ${_truncate(task, 48)}';
+  }
+
+  static String _truncate(String text, int limit) =>
+      text.length > limit ? '${text.substring(0, limit).trimRight()}…' : text;
+
   static String _statusCompleted(AppLocalizations? l10n) {
     if (l10n == null) return 'completed';
     return l10n.isEnglish ? 'completed' : '已完成';
@@ -779,6 +957,24 @@ extension InjectedNoticeKindDisplay on InjectedNoticeKind {
       case InjectedNoticeKind.memoryRecall:
         if (l10n == null) return 'Memory recall';
         return l10n.isEnglish ? 'Memory recall' : '记忆上下文';
+      case InjectedNoticeKind.contextCompaction:
+        if (l10n == null) return 'Context compaction';
+        return l10n.isEnglish ? 'Context compaction' : '上下文压缩';
+      case InjectedNoticeKind.priorContext:
+        if (l10n == null) return 'Prior context';
+        return l10n.isEnglish ? 'Prior context' : '前序上下文';
+      case InjectedNoticeKind.activeTaskList:
+        if (l10n == null) return 'Preserved task list';
+        return l10n.isEnglish ? 'Preserved task list' : '保留的任务列表';
+      case InjectedNoticeKind.planningState:
+        if (l10n == null) return 'Planning state preserved';
+        return l10n.isEnglish ? 'Planning state preserved' : '规划状态保留';
+      case InjectedNoticeKind.outOfBandMessage:
+        if (l10n == null) return 'Out-of-band message';
+        return l10n.isEnglish ? 'Out-of-band message' : '插话指令';
+      case InjectedNoticeKind.cronjobResponse:
+        if (l10n == null) return 'Scheduled task response';
+        return l10n.isEnglish ? 'Scheduled task response' : '定时任务回执';
       case InjectedNoticeKind.overflow:
         if (l10n == null) return 'Notice';
         return l10n.isEnglish ? 'Notice' : '提示';

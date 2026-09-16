@@ -224,6 +224,36 @@ void main() {
         CupertinoIcons.arrow_2_circlepath,
       ),
       (
+        'contextCompaction → rectangle_compress_vertical',
+        '[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted',
+        CupertinoIcons.rectangle_compress_vertical,
+      ),
+      (
+        'priorContext → doc_text',
+        '[PRIOR CONTEXT — for reference only; not a new message]',
+        CupertinoIcons.doc_text,
+      ),
+      (
+        'activeTaskList → list_bullet',
+        '[Your active task list was preserved across context compression]',
+        CupertinoIcons.list_bullet,
+      ),
+      (
+        'planningState → flag',
+        '[Planning state preserved across compression]',
+        CupertinoIcons.flag,
+      ),
+      (
+        'outOfBandMessage → bubble_left',
+        '[OUT-OF-BAND USER MESSAGE — a direct message from the user]',
+        CupertinoIcons.bubble_left,
+      ),
+      (
+        'cronjobResponse → tray_full',
+        'Cronjob Response: yabook_signin',
+        CupertinoIcons.tray_full,
+      ),
+      (
         'continuationOutputLimit → arrow_2_circlepath',
         '[System: Your previous response was truncated by the output limit.]',
         CupertinoIcons.arrow_2_circlepath,
@@ -463,6 +493,18 @@ InjectedNoticeKind _expectedKindFor(String content) {
       return InjectedNoticeKind.mcp;
     case '[System: The previous response was cut off by a network error mid-stream.]':
       return InjectedNoticeKind.continuationNetworkCut;
+    case '[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted':
+      return InjectedNoticeKind.contextCompaction;
+    case '[PRIOR CONTEXT — for reference only; not a new message]':
+      return InjectedNoticeKind.priorContext;
+    case '[Your active task list was preserved across context compression]':
+      return InjectedNoticeKind.activeTaskList;
+    case '[Planning state preserved across compression]':
+      return InjectedNoticeKind.planningState;
+    case '[OUT-OF-BAND USER MESSAGE — a direct message from the user]':
+      return InjectedNoticeKind.outOfBandMessage;
+    case 'Cronjob Response: yabook_signin':
+      return InjectedNoticeKind.cronjobResponse;
     case '[System: Your previous response was truncated by the output limit.]':
       return InjectedNoticeKind.continuationOutputLimit;
     case '[System: Your previous tool call was too large to be processed.]':
