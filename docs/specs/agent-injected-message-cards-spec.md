@@ -221,6 +221,12 @@ bool _isInjectedNotice(String text) {
   `-`/`–` 分隔符容错、`[IMPORTANT: N background subagent delegations completed]` 仍归 `subagentAggregated`（防回归）。
 - `test/features/chat/injected_notice_card_extra_test.dart`：三形态图标分派 + 失败态折叠标题（大写渲染与语义标签）+
   失败/中性配色断言（深浅双模式）+ 展开态正文原文一致性。
+- **折叠态紧凑性护栏（2026-09-16 补）**：用**真实聊天布局**（纵向 `ListView` item，主轴无界）实测断言
+  折叠态高度 <80（实测 49）且展开态 > 折叠态 ×2。理由：卡片内层 `Column` 是 Flutter 默认的
+  `MainAxisSize.max`，**只在主轴无界的父布局里才会 shrink-wrap 到内容高**——一旦有人把卡片塞进有界主轴的容器
+  （如 `Align`/固定高 `SizedBox`），折叠态会静默拉高到整屏高而不报错。反向验证：把该用例的 `ListView`
+  换成 `Align` → 折叠态实测 **700**（整屏）→ 断言打红（非空转）。
+  > 预览/截图取证务必也用真实布局：本次首版预览用 `Align` 生成，折叠态被撑到 210px，看图会误判成"折叠没生效"。
 - `C:/tmp/f.bat analyze` 零告警，`C:/tmp/f.bat test` 全绿。
 
 

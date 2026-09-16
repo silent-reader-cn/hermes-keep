@@ -383,6 +383,52 @@ void main() {
         CupertinoColors.systemRed.resolveFrom(ctx),
       );
     });
+
+    // 折叠态紧凑性护栏（2026-09-16）：卡片内层 Column 是默认 `MainAxisSize.max`，
+    // 只有在**主轴无界**的父布局（聊天列表就是）里才会 shrink-wrap 到内容高。
+    // 谁把卡片挪到有界主轴的容器里，折叠态就会静默拉高到整屏 —— 用真实布局钉死。
+    testWidgets('真实聊天布局（主轴无界）下折叠态必须紧凑、展开态显著更高', (tester) async {
+      Future<Size> measure(bool expanded) async {
+        await tester.binding.setSurfaceSize(const Size(390, 700));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          CupertinoApp(
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh'), Locale('en')],
+            localizationsDelegates: _delegates,
+            home: CupertinoPageScaffold(
+              child: ListView(
+                children: [
+                  InjectedNoticeCard(
+                    message: _msg(failedFull),
+                    expanded: expanded,
+                    onToggle: () {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        return tester.getSize(find.byType(InjectedNoticeCard));
+      }
+
+      final collapsed = await measure(false);
+      final expanded = await measure(true);
+
+      expect(
+        collapsed.height,
+        lessThan(80),
+        reason: '折叠态应只有一行标题条，实际 ${collapsed.height}',
+      );
+      expect(
+        expanded.height,
+        greaterThan(collapsed.height * 2),
+        reason: '展开态需容纳正文，实际 ${expanded.height} vs 折叠 ${collapsed.height}',
+      );
+      // 宽度撑满槽位（与工具卡一致：整宽卡片）
+      expect(collapsed.width, 390);
+    });
   });
 }
 
