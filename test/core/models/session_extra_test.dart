@@ -11,6 +11,7 @@ import 'package:hermes_ui/core/models/session.dart';
 ///
 /// 预期值全部按实现读出来写死，不用空断言充数。
 void main() {
+
   group('SessionsResponse', () {
     test('fromJson：全字段 + 嵌套列表', () {
       final r = SessionsResponse.fromJson({
@@ -427,14 +428,16 @@ void main() {
       expect(r.session!.pinned, isTrue);
     });
 
-    test('当前行为：data 为非 String 键的 Map → Map.from 未包裹 try，直接抛 TypeError', () {
-      // 记录现状（线路 117 的 Map<String, Object?>.from(data) 不在 try 内），
-      // 本轮不改行为，是否加固留给 Leader 裁决。
+    test('加固后行为：data 为非 String 键的 Map → 退化为 session == null，不再抛 TypeError', () {
+      // 原实现第 117 行 Map<String, Object?>.from(data) 不在 try 内，非 String 键会抛
+      // TypeError（同类写法在 SessionBranchResponse 里是被 try 包住的，两处不一致）。
+      // 2026-09-16 按 Leader 决策加固为与邻类一致：解析失败退化为「data 不可用」。
+      // 本用例原为「记录当前行为」，现充当该行为变更的守卫。
       expect(
-        () => SessionResponse.fromJson({
+        SessionResponse.fromJson({
           'data': <Object, Object>{1: 'a'},
         }),
-        throwsA(isA<TypeError>()),
+        const SessionResponse(session: null),
       );
     });
 

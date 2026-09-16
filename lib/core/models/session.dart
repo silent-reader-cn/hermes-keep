@@ -114,7 +114,14 @@ class SessionResponse {
     }
     final data = json['data'];
     if (data is Map) {
-      final m = Map<String, Object?>.from(data);
+      final Map<String, Object?> m;
+      try {
+        m = Map<String, Object?>.from(data);
+      } catch (_) {
+        // 非 String 键的 Map（手工构造 / 异构 payload）：与 SessionBranchResponse 的
+        // 同名解析保持一致，退化为 data 不可用，绝不向上抛 TypeError。
+        return const SessionResponse(session: null);
+      }
       final dNested = optModel(m, 'session', SessionDetail.fromJson);
       if (dNested != null) return SessionResponse(session: dNested);
       final dFlat =

@@ -351,6 +351,12 @@ class ToolCallGroup {
   /// - text(m1) 与 text(m2) 之间的 tools(m1) + think(m2) → 合并一张卡，isAboveContent = false，
   ///   锚到 m1 下方，组内行序为 tools(m1) 在前、think(m2) 在后；
   /// - 末段 text 之后的 tools(mN) → 独立组，isAboveContent = false，挂末条正文下方。
+  ///
+  /// **入参契约：`groups` 必须是未经本方法处理过的 raw 分组。**
+  /// 本方法**不幂等**——它按 `anchorMessageID` 把入参索引回 assistant 消息，而输出组的
+  /// 锚是随卡位重算的；把输出回灌会因锚漂移而重复织入，产生重复思考行与幽灵卡
+  ///（#112 家族现象）。生产链路每次从 raw 重算，故当前不触发；任何输出缓存复用
+  /// 的改动都必须先解除此契约。
   static List<ToolCallGroup> withThinkingRows({
     required List<ToolCallGroup> groups,
     required List<ChatMessage> messages,
@@ -782,6 +788,11 @@ class ToolCallGroup {
           i;
     }
 
+    /// 两组之间是否存在「可见正文」——**只认 assistant 正文**，即把 assistant 的非空
+    /// content 当作回合分界。user 消息与工具消息都不算分界，因此「跨用户回合、但中间
+    /// 没有 assistant 正文」的两组仍会被判为可合并（与 coalescingAdjacent 上
+    /// 「同一回合内」的表述不同源，属既有行为，已由
+    /// test/core/models/tool_call_group_coalesce_extra_test.dart 固化）。
     bool hasTextBetween(int prevIndex, int curIndex) {
       for (var k = prevIndex + 1; k < curIndex; k++) {
         if (k < 0 || k >= messages.length) continue;
