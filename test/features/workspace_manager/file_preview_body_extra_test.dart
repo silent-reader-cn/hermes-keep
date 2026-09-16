@@ -926,7 +926,10 @@ void main() {
   // ---------------------------------------------------------------------------
   // 5. PDF
   // ---------------------------------------------------------------------------
-  group('FilePreviewBody · PDF 分支', () {
+  // 平台门控：PDFium 的 native 库仅在桌面端随包提供，Linux CI 上加载必失败
+  //（实测 `Failed to load PDFium module: .../linux-x64/lib/libpdfium.so: cannot
+  // open shared object file`）—— 与本组要验的「落盘 + 渲染 + 清理」链路无关。
+  group('FilePreviewBody · PDF 分支', skip: !Platform.isWindows, () {
     testWidgets('PDF：字节非空 → 落盘临时文件并渲染 preview-pdf，销毁时清理', (
       tester,
     ) async {

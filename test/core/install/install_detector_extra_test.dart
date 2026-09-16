@@ -204,7 +204,14 @@ void main() {
 
       expect(detector, isA<DefaultInstallDetector>());
       expect(detector.isWindows, Platform.isWindows);
-      expect(detector.localAppDataPath, isNotEmpty);
+      // localAppDataPath 透传自 %LOCALAPPDATA%：Windows 上必有值，
+      // 其余平台可能为空（CI 的 ubuntu runner 实测为空）—— 两端语义都钉住，
+      // 不假设它一定非空。
+      if (Platform.isWindows) {
+        expect(detector.localAppDataPath, isNotEmpty);
+      } else {
+        expect(detector.localAppDataPath, isEmpty);
+      }
     });
 
     test('override 注入 fake 后 read 返回注入实例（测试接缝有效）', () {

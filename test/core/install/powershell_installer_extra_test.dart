@@ -539,7 +539,10 @@ void main() {
       expect(path, target);
       expect(fs.createdDirs, <String>['${fs.localAppData}\\hermes\\nested']);
       expect(fs.fileContents[target], '# script');
-    });
+      // 平台门控：本用例的 fake 提供 Windows 风格路径（`C:\...\nested\install.ps1`），
+      // 而实现按 `Platform.pathSeparator` 定位父目录 —— Linux 宿主的分隔符是 `/`，
+      // 在 Windows 路径里找不到 `\` ⇒ 不建父目录。实现对 Windows 语义正确，故非 Windows 跳过。
+    }, skip: !Platform.isWindows);
 
     test('localAppData 为空 → 落到裸文件名 install.ps1，且不建父目录', () async {
       final fs = _FakeFileSystemAdapter(localAppData: '');
