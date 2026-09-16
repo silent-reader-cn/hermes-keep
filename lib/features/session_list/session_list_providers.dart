@@ -818,7 +818,18 @@ class SessionListController extends AsyncNotifier<SessionListState> {
         state = AsyncData(failed);
         return;
       }
+      // 刷新语义是「重载第一页数据」，不该顺带重置用户的视图态：
+      // _loadFirstPage 返回的是全新 state（不含 searchQuery / searchResults /
+      // filterMode / filterValue / archivedSessions），以 result 作 copyWith
+      // 基底会把搜索态、归档态、来源/项目筛选静默清掉。注意失败分支用的是
+      // previous.copyWith（保留），即「成功丢、失败不丢」的不对称 —— 此处补回。
       final withRefresh = result.copyWith(
+        searchQuery: () => previous?.searchQuery,
+        searchResults: () => previous?.searchResults,
+        filterMode: previous?.filterMode ?? SessionListFilterMode.all,
+        filterValue: () => previous?.filterValue,
+        archivedSessions: previous?.archivedSessions,
+        archivedCount: () => previous?.archivedCount,
         lastRefreshAt: () => now,
         lastAttemptAt: () => now,
         refreshing: false,

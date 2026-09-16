@@ -770,8 +770,27 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   // 交互：刷新 / 分页 / 搜索 / 新建 / 打开 / 行操作
   // -------------------------------------------------------------------------
 
-  Future<void> _onRefresh() =>
-      ref.read(sessionListControllerProvider.notifier).refresh();
+  /// 下拉刷新：按当前视图态分派，避免把搜索/归档视图静默重置为「全部」。
+  ///
+  /// [refresh] 拉的是普通列表，直接调会在搜索态/归档态下把视图态冲掉
+  /// （`refreshIfStale` 有同样的两道守卫，此前只有这条下拉路径漏了）：
+  /// - 搜索态 → 重跑当前搜索；
+  /// - 归档态 → 重拉归档列表；
+  /// - 其余 → 常规刷新（`refresh` 内部已回填视图态）。
+  Future<void> _onRefresh() async {
+    final controller = ref.read(sessionListControllerProvider.notifier);
+    final state = ref.read(sessionListControllerProvider).valueOrNull;
+    final query = state?.searchQuery?.trim();
+    if (query != null && query.isNotEmpty) {
+      await controller.search(query);
+      return;
+    }
+    if (state?.filterMode == SessionListFilterMode.archived) {
+      await controller.fetchArchived();
+      return;
+    }
+    await controller.refresh();
+  }
 
   void _onScroll() {
     _maybeLoadMore();
