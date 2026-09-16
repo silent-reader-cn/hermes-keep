@@ -717,9 +717,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
             String? healthUrl;
             try {
               final client = ref.read(apiClientProvider);
-              final rawUrl = client.baseUrl.endsWith('/')
-                  ? '${client.baseUrl}health'
-                  : '${client.baseUrl}/health';
+              // ApiClient 构造期已用 _normalizeBaseUrl 循环剥净尾斜杠
+              //（api_client.dart:161），这里无需再判尾斜杠 —— 原先的三元
+              // else 分支恒成立，属死分支，已简化。
+              final rawUrl = '${client.baseUrl}/health';
               healthUrl = rawUrl.replaceAll('://0.0.0.0', '://127.0.0.1');
             } catch (_) {}
             ref
@@ -1460,7 +1461,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     final trimmed = title.trim();
     if (trimmed.isEmpty) return;
     SessionSummary replacer(SessionSummary s) => s.replacingTitle(trimmed);
-    _syncLocalSession(id, replacer, dropArchived: false);
+    _syncLocalSession(id, replacer);
   }
 
   /// 聊天页置顶同步（成功后调用；失败不调用，列表保持旧值）。
@@ -1469,7 +1470,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     if (current == null || id.isEmpty) return;
     SessionSummary replacer(SessionSummary s) =>
         _replaced(s, pinned: pinned);
-    _syncLocalSession(id, replacer, dropArchived: false);
+    _syncLocalSession(id, replacer);
   }
 
   /// 聊天页归档/取消归档同步（成功后调用）。
@@ -1500,7 +1501,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     }
     SessionSummary replacer(SessionSummary s) =>
         _replaced(s, archived: false);
-    _syncLocalSession(id, replacer, dropArchived: false);
+    _syncLocalSession(id, replacer);
     unawaited(_removeArchived(id));
     unawaited(_adjustArchivedCount(-1));
   }
@@ -1552,13 +1553,14 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   }
 
   /// 三视图本地行替换原语：普通 + 搜索命中 + 归档视图同步改行。
-  /// [dropArchived] 为 true 时额外把该行从归档视图剔除
-  /// （归档成功场景：普通列表已移除，归档视图等重拉，不做本地插入）。
+  ///
+  /// 注：「归档时把该行从归档视图剔除」的场景由 [_removeArchived] 独立承担；
+  /// 原先的 `dropArchived` 参数在全仓**无任何 true 调用**（三个调用点都是
+  /// false），属死参数，连同其恒不执行的分支一并移除。
   void _syncLocalSession(
     String id,
-    SessionSummary Function(SessionSummary) transform, {
-    required bool dropArchived,
-  }) {
+    SessionSummary Function(SessionSummary) transform,
+  ) {
     final current = state.valueOrNull;
     if (current == null) return;
     state = AsyncData(
@@ -1573,14 +1575,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
                 for (final s in current.searchResults!)
                   s.sessionId == id ? transform(s) : s,
               ],
-        archivedSessions: dropArchived
-            ? current.archivedSessions
-                .where((s) => s.sessionId != id)
-                .toList()
-            : [
-                for (final s in current.archivedSessions)
-                  s.sessionId == id ? transform(s) : s,
-              ],
+        archivedSessions: [
+          for (final s in current.archivedSessions)
+            s.sessionId == id ? transform(s) : s,
+        ],
       ),
     );
   }

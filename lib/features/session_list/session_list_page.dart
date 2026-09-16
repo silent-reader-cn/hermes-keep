@@ -1361,8 +1361,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 String _sectionTitle(BuildContext context, String rawTitle) {
   final l10n = AppLocalizations.of(context);
   switch (rawTitle) {
-    case '定时':
-      return l10n.scheduledSection;
+    // 注：不存在 '定时' 分区 —— 分区构造只产出 置顶/今天/昨天/更早
+    //（见 session_list_providers.dart 的 sections 构造），原先的 '定时' case
+    // 永不命中，已移除；l10n.scheduledSection 保留备用。
     case '置顶':
       return l10n.pinnedSection;
     case '今天':
