@@ -865,10 +865,9 @@ packages:
   mermaid_flutter:
     dependency: "direct main"
     description:
-      name: mermaid_flutter
-      sha256: "2ada823e866a83c2cd63936e9ffc59e4ef85bfb55e70a0fc856ab833051b1ce6"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/mermaid_flutter"
+      relative: true
+    source: path
     version: "0.3.0"
   meta:
     dependency: "direct main"

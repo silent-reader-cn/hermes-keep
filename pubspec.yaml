@@ -78,6 +78,13 @@ dependency_overrides:
   # migrates to a maintained markdown package.
   flutter_markdown:
     path: third_party/flutter_markdown
+  # Vendored & patched copy (third_party/mermaid_flutter) of mermaid_flutter
+  # 0.3.0: its on-canvas pan/zoom controls hardcode light-mode colors, so the
+  # fullscreen viewer's buttons stayed white in dark mode. See
+  # third_party/mermaid_flutter/PATCH_NOTES.md. Remove when upstream exposes a
+  # theme hook for the controls (checked: 0.3.0 is still the latest release).
+  mermaid_flutter:
+    path: third_party/mermaid_flutter
 
 dev_dependencies:
   url_launcher_platform_interface: ^2.3.2
