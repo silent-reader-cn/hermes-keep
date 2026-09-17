@@ -772,7 +772,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                                 color: LightSurfaces.resolve(
                                   context,
                                   LightSurfaces.textSecondary,
-                                  dark: const Color(0xFF8E8E93),
+                                  dark: CupertinoColors.systemGrey,
                                 ),
                               ),
                       ),
@@ -791,7 +791,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                             color: LightSurfaces.resolve(
                               context,
                               LightSurfaces.textSecondary,
-                              dark: const Color(0xFF8E8E93),
+                              dark: CupertinoColors.systemGrey,
                             ),
                           ),
                         ),
@@ -1158,7 +1158,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
-                        dark: const Color(0xFF8E8E93),
+                        dark: CupertinoColors.systemGrey,
                       ),
                     ),
             ),
@@ -1177,7 +1177,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
-                    dark: const Color(0xFF8E8E93),
+                    dark: CupertinoColors.systemGrey,
                   ),
                 ),
               ),

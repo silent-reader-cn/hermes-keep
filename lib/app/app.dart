@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart' as material_ui;
 import '../features/desktop/desktop_lifecycle_observer.dart';
 import '../features/notifications/notification_lifecycle_observer.dart';
 import '../features/session_list/session_auto_refresh.dart';
+import '../features/settings/accessibility_settings.dart';
 import '../l10n/app_localizations.dart';
 import 'locale/locale_provider.dart';
 import 'router.dart';
@@ -31,6 +32,10 @@ class HermesApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final localeMode = ref.watch(localeModeProvider);
     final router = ref.watch(routerProvider);
+    // 无障碍高对比度开关（默认关）。
+    final forceHighContrast = ref
+        .watch(accessibilitySettingsProvider)
+        .forceHighContrast;
     final brightness = switch (themeMode) {
       AppThemeMode.light => Brightness.light,
       AppThemeMode.dark => Brightness.dark,
@@ -49,6 +54,16 @@ class HermesApp extends ConsumerWidget {
           theme: buildCupertinoTheme(brightness),
           routerConfig: router,
           locale: locale,
+          // 关闭时不新建 MediaQuery —— 既不改变既有像素，也不覆盖系统辅助功能设置；
+          // 开启时把 highContrast 强制为 true，令全部 Cupertino 动态色切到更强变体。
+          builder: (context, child) {
+            final content = child ?? const SizedBox.shrink();
+            if (!forceHighContrast) return content;
+            return MediaQuery(
+              data: MediaQuery.of(context).copyWith(highContrast: true),
+              child: content,
+            );
+          },
           localizationsDelegates: const [
             AppLocalizationsDelegate(),
             DefaultCupertinoLocalizations.delegate,

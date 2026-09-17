@@ -55,7 +55,7 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
     final wmStatus = ref.watch(workManagerStatusProvider);
     final chevronColor = isLight
         ? LightSurfaces.textSecondary
-        : const Color(0xFF8E8E93);
+        : CupertinoColors.systemGrey;
 
     return Column(
       children: [

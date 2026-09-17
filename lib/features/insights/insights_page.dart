@@ -322,7 +322,7 @@ class InsightsPage extends ConsumerWidget {
                 context,
                 LightSurfaces.textSecondary,
                 // Preserve the original unresolved icon color in dark mode.
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             const SizedBox(height: 12),
@@ -372,7 +372,7 @@ class InsightsPage extends ConsumerWidget {
                 context,
                 LightSurfaces.textSecondary,
                 // Preserve the original unresolved icon color in dark mode.
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             const SizedBox(height: 12),

@@ -120,11 +120,15 @@ void main() {
                 matching: find.byType(Icon),
               ),
             );
+            // #140 P2-b：深色档改由 CupertinoColors.systemGrey 解析而来，结果是
+            // 带解析值的 CupertinoDynamicColor（值同 #8E8E93、类型不同），
+            // 故断言比解析值而非对象相等，语义仍是「深色像素不变」。
             expect(
-              icon.color,
-              brightness == Brightness.light
-                  ? LightSurfaces.textSecondary
-                  : const Color(0xFF8E8E93),
+              icon.color!.toARGB32(),
+              (brightness == Brightness.light
+                      ? LightSurfaces.textSecondary
+                      : const Color(0xFF8E8E93))
+                  .toARGB32(),
             );
           }
           await _unmount(tester);

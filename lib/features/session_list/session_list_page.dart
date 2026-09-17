@@ -681,7 +681,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 LightSurfaces.textSecondary,
                 // Preserve the previously unresolved dark icon paint value,
                 // including in high contrast mode.
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             const SizedBox(height: 12),
@@ -731,7 +731,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 LightSurfaces.textSecondary,
                 // Preserve the previously unresolved dark icon paint value,
                 // including in high contrast mode.
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             const SizedBox(height: 12),
@@ -1610,7 +1610,7 @@ class _SessionRowState extends State<_SessionRow> {
                           LightSurfaces.textSecondary,
                           // Preserve the previously unresolved dark icon paint value,
                           // including in high contrast mode.
-                          dark: const Color(0xFF8E8E93),
+                          dark: CupertinoColors.systemGrey,
                         ),
                       ),
               ),

@@ -260,9 +260,15 @@ void main() {
                   : CupertinoIcons.chart_bar,
             ),
           );
+          // #140 P2-b：深色档改由 CupertinoColors.systemGrey 解析而来 —— 普通档
+          // #8E8E93（与原先逐字节一致），高对比档跟随其 #AEAEB2 变体（本轮新增
+          // 的「高对比度模式」开关所开启的行为）。
+          final expectedDark = highContrast
+              ? CupertinoColors.systemGrey.darkHighContrastColor
+              : const Color(0xFF8E8E93);
           expect(
-            icon.color,
-            isLight ? LightSurfaces.textSecondary : const Color(0xFF8E8E93),
+            icon.color!.toARGB32(),
+            (isLight ? LightSurfaces.textSecondary : expectedDark).toARGB32(),
           );
           if (isLight) {
             expect(

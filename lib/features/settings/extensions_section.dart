@@ -363,7 +363,7 @@ class _ExtensionInstallPageState extends ConsumerState<ExtensionInstallPage> {
                             color: LightSurfaces.resolve(
                               context,
                               LightSurfaces.textSecondary,
-                              dark: const Color(0xFF8E8E93),
+                              dark: CupertinoColors.systemGrey,
                             ),
                           ),
                           onTap: () => _selectRegistryItem(item),

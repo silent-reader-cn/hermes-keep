@@ -34,6 +34,7 @@ import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_events_client.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
+import 'accessibility_settings.dart';
 import 'chat_send_shortcut_settings.dart';
 import 'composer_settings.dart';
 import 'cron_visibility_settings.dart';
@@ -181,6 +182,26 @@ class _AppearanceSection extends ConsumerWidget {
                     },
                   ),
                 ),
+              ),
+            ),
+          ),
+          CupertinoListTile(
+            key: const ValueKey('settings-force-high-contrast'),
+            title: Text(l10n.forceHighContrastLabel),
+            subtitle: Text(l10n.forceHighContrastDescription),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                value: ref
+                    .watch(accessibilitySettingsProvider)
+                    .forceHighContrast,
+                onChanged: (value) {
+                  unawaited(
+                    ref
+                        .read(accessibilitySettingsProvider.notifier)
+                        .setForceHighContrast(value),
+                  );
+                },
               ),
             ),
           ),
@@ -573,7 +594,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () => Navigator.of(context).push(
@@ -591,7 +612,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () => Navigator.of(context)
@@ -606,7 +627,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () => Navigator.of(context).push(
@@ -622,7 +643,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () => Navigator.of(context).push(
@@ -640,7 +661,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () => Navigator.of(context).push(
@@ -658,7 +679,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () => Navigator.of(context).push(
@@ -676,7 +697,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () => Navigator.of(context).push(
@@ -694,7 +715,7 @@ class _AdvancedSettingsSection extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () => Navigator.of(context).push(

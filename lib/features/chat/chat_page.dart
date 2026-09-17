@@ -1391,7 +1391,7 @@ class _OfflineCacheBanner extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
           ),
@@ -1651,7 +1651,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
-                  dark: const Color(0xFF8E8E93),
+                  dark: CupertinoColors.systemGrey,
                 ),
               ),
             ),
@@ -1756,7 +1756,7 @@ class _SteerNoticeToast extends StatelessWidget {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
           ),

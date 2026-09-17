@@ -1,8 +1,9 @@
 // 状态文字颜色（WCAG AA 达标版）。
 //
-// 系统状态色（systemGreen/systemOrange/systemBlue/systemGrey）在浅色背景下
-// 对比度不足（绿 #34C759 白底 ~2.0:1、橙 #FF9500 白底 ~2.0:1），不适合
-// 直接用作文字色（圆点/图标装饰不受此限）。本组动态色：
+// 系统状态色（systemGreen/systemOrange/systemBlue/systemGrey/systemYellow）在浅色
+// 背景下对比度不足（绿 #34C759 ~2.0:1、橙 #FF9500 ~2.0:1、黄 #FFCC00 ~1.4:1），
+// 不适合直接用作文字色，**也不适合直接用作状态指示点/转圈** —— 后者是传达状态的
+// 图形对象，按 WCAG 1.4.11 需 >= 3:1（原生黄实测仅 1.355:1）。本组动态色：
 // - 浅色模式用深色变体（白底对比 >= 4.5:1）
 // - 深色模式用亮色变体（黑底对比 >= 4.5:1）
 // - highContrast* 为系统增强对比度模式下的更强变体。
@@ -55,6 +56,19 @@ const CupertinoDynamicColor statusTealText =
   darkColor: Color(0xFF30B0C7),
   highContrastColor: Color(0xFF0A6169),
   darkHighContrastColor: Color(0xFF40C4D6),
+);
+
+/// 状态「等待/挂起」文字色：浅 #8A6100（对页底 4.965:1、对白卡 5.540:1）/
+/// 深 #FFD60A（对黑底 14.875:1、对暗卡 12.052:1）。
+///
+/// 原生 systemYellow 浅色档 #FFCC00 对页底仅 1.355:1，在浅色面上几乎不可见，
+/// 故与绿/橙/红同族补一档压深变体。
+const CupertinoDynamicColor statusYellowText =
+    CupertinoDynamicColor.withBrightnessAndContrast(
+  color: Color(0xFF8A6100),
+  darkColor: Color(0xFFFFD60A),
+  highContrastColor: Color(0xFF6E4E00),
+  darkHighContrastColor: Color(0xFFFFE04F),
 );
 
 /// 错误/失败详情文字色：浅 #B3001B（白底 ~7.0:1）/ 深 #FF453A（黑底 ~6.3:1）。

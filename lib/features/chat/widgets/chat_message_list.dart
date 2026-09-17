@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../../app/theme/light_surfaces.dart';
+import '../../../app/theme/status_colors.dart';
 import '../../../core/api/sse_client.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
@@ -2878,20 +2879,32 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
     // Status dots/spinners repeat the adjacent status text: decorative color exception.
     if (prefillStatus == ContextPrefillStatus.error) {
       return _StatusLineRow(
-        color: CupertinoColors.systemRed,
+        color: LightSurfaces.resolve(
+          context,
+          statusRedText,
+          dark: CupertinoColors.systemRed,
+        ),
         label: l10n.chatStatusContextUnavailable + workSuffix,
       );
     }
     if (recovery == ActiveStreamRecoveryState.checking) {
       return _StatusLineRow(
-        color: CupertinoColors.systemOrange,
+        color: LightSurfaces.resolve(
+          context,
+          statusOrangeText,
+          dark: CupertinoColors.systemOrange,
+        ),
         label: l10n.chatStatusInvestigating + workSuffix,
         showSpinner: true,
       );
     }
     if (recovery == ActiveStreamRecoveryState.reconnecting) {
       return _StatusLineRow(
-        color: CupertinoColors.systemOrange,
+        color: LightSurfaces.resolve(
+          context,
+          statusOrangeText,
+          dark: CupertinoColors.systemOrange,
+        ),
         label: l10n.chatStatusReconnecting + workSuffix,
         showSpinner: true,
       );
@@ -2910,7 +2923,11 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
     if (prefillStatus == ContextPrefillStatus.loading ||
         prefillStatus == ContextPrefillStatus.notConfigured) {
       return _StatusLineRow(
-        color: CupertinoColors.systemYellow,
+        color: LightSurfaces.resolve(
+          context,
+          statusYellowText,
+          dark: CupertinoColors.systemYellow,
+        ),
         label: l10n.chatStatusWaitingResponse + workSuffix,
         showSpinner: true,
       );
@@ -2920,7 +2937,11 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
       return Opacity(
         opacity: opacity.clamp(0.0, 1.0),
         child: _StatusLineRow(
-          color: CupertinoColors.systemGreen,
+          color: LightSurfaces.resolve(
+            context,
+            statusGreenText,
+            dark: CupertinoColors.systemGreen,
+          ),
           label: l10n.chatStatusReconnected,
         ),
       );
@@ -2930,7 +2951,11 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
           ? ' ≈${liveTps.round()} tps'
           : '';
       return _StatusLineRow(
-        color: CupertinoColors.systemGreen,
+        color: LightSurfaces.resolve(
+          context,
+          statusGreenText,
+          dark: CupertinoColors.systemGreen,
+        ),
         label: l10n.chatStatusGenerating + tpsSuffix + workSuffix,
       );
     }
@@ -2939,6 +2964,10 @@ class _ChatStatusLineState extends ConsumerState<_ChatStatusLine>
 }
 
 /// 状态行单行：状态点/转圈 + 文案（secondaryLabel 13px，靠左对齐）。
+///
+/// 指示色一律由调用方经 [LightSurfaces.resolve] 给出：浅色档换用可读的状态令牌
+/// （原生 systemYellow/Orange/Green 对页底低至 1.355:1，而状态指示图形按
+/// WCAG 1.4.11 需 >= 3:1），深色档保持原 system* 色不变。
 class _StatusLineRow extends StatelessWidget {
   const _StatusLineRow({this.color, this.label = '', this.showSpinner = false});
 

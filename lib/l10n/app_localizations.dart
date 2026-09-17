@@ -1101,6 +1101,11 @@ class AppLocalizations {
   String get themeSystem => isEnglish ? 'System' : '跟随系统';
   String get themeLight => isEnglish ? 'Light' : '浅色';
   String get themeDark => isEnglish ? 'Dark' : '深色';
+  // 高对比度模式（#140 P2-b：把 P2-b 做成开关，默认关 = 零行为变更）
+  String get forceHighContrastLabel => isEnglish ? 'High contrast' : '高对比度模式';
+  String get forceHighContrastDescription => isEnglish
+      ? 'Use stronger colour variants even when the system setting is off'
+      : '即使系统未开启辅助功能高对比度，也使用对比度更强的颜色变体';
   String get chatSection => isEnglish ? 'Chat' : '对话';
   String get groupToolsByTurn => isEnglish ? 'Group tools by turn' : '工具按回合聚合';
   String get smoothStreaming => isEnglish ? 'Smooth Streaming' : '平滑输出';

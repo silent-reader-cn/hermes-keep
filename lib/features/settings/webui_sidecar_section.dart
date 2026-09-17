@@ -374,7 +374,7 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: const Color(0xFF8E8E93),
+                dark: CupertinoColors.systemGrey,
               ),
             ),
             onTap: () {

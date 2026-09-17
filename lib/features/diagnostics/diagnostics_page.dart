@@ -676,7 +676,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
               size: 48,
               color: isLight
                   ? LightSurfaces.textSecondary
-                  : const Color(0xFF8E8E93),
+                  : CupertinoColors.systemGrey,
             ),
             const SizedBox(height: 12),
             Text(
@@ -811,7 +811,7 @@ class _DiagnosticsLogRow extends StatelessWidget {
                       ? statusBlueText.resolveFrom(context)
                       : (isLight
                             ? LightSurfaces.textSecondary
-                            : const Color(0xFF8E8E93)),
+                            : CupertinoColors.systemGrey),
                   size: 20,
                 ),
               ),
