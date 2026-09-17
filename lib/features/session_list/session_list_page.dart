@@ -24,6 +24,7 @@ import '../desktop/desktop_settings.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
 import '../settings/settings_providers.dart';
+import '../settings/settings_surfaces.dart';
 import '../shared/app_navigation.dart';
 import 'session_auto_refresh.dart';
 import 'session_list_header.dart';
@@ -1865,18 +1866,21 @@ class _SessionFilterSheet extends ConsumerWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(fontSize: 15),
                                 ),
-                                trailing: CupertinoSwitch(
-                                  key: const ValueKey(
-                                    'session-filter-subagent-switch',
-                                  ),
-                                  value: current.showSubagent,
-                                  onChanged: (value) => unawaited(
-                                    ref
-                                        .read(
-                                          sessionListControllerProvider
-                                              .notifier,
-                                        )
-                                        .setShowSubagent(value),
+                                trailing: SettingsSurfaces.toggle(
+                                  context,
+                                  CupertinoSwitch(
+                                    key: const ValueKey(
+                                      'session-filter-subagent-switch',
+                                    ),
+                                    value: current.showSubagent,
+                                    onChanged: (value) => unawaited(
+                                      ref
+                                          .read(
+                                            sessionListControllerProvider
+                                                .notifier,
+                                          )
+                                          .setShowSubagent(value),
+                                    ),
                                   ),
                                 ),
                               ),

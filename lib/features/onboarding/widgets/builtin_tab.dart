@@ -13,6 +13,7 @@ import '../../../core/connections/connection_providers.dart';
 import '../../../core/connections/server_connection.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../desktop/desktop_settings.dart';
+import '../../settings/settings_surfaces.dart';
 import '../../webui_sidecar/webui_sidecar_providers.dart';
 import '../onboarding_providers.dart';
 import 'onboarding_field_style.dart';
@@ -906,16 +907,19 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
               fontSize: 12,
             ),
           ),
-          trailing: CupertinoSwitch(
-            key: const ValueKey('onboarding-sidecar-start-on-login-switch'),
-            value: desktopSettings.startOnLogin,
-            onChanged: (value) {
-              unawaited(
-                ref
-                    .read(desktopSettingsProvider.notifier)
-                    .setStartOnLogin(value),
-              );
-            },
+          trailing: SettingsSurfaces.toggle(
+            context,
+            CupertinoSwitch(
+              key: const ValueKey('onboarding-sidecar-start-on-login-switch'),
+              value: desktopSettings.startOnLogin,
+              onChanged: (value) {
+                unawaited(
+                  ref
+                      .read(desktopSettingsProvider.notifier)
+                      .setStartOnLogin(value),
+                );
+              },
+            ),
           ),
         ),
       ],

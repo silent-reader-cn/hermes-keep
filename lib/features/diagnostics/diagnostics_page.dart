@@ -8,6 +8,7 @@ import '../../app/theme/status_colors.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../core/utils/safe_clipboard.dart';
 import '../../l10n/app_localizations.dart';
+import '../settings/settings_surfaces.dart';
 import 'diagnostics_detail_sheet.dart';
 import 'diagnostics_models.dart';
 import 'diagnostics_providers.dart';
@@ -269,16 +270,19 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                       ),
                     ),
                   ),
-                  trailing: CupertinoSwitch(
-                    key: const ValueKey('diagnostics-switch-enable'),
-                    value: enabled,
-                    onChanged: (val) {
-                      unawaited(
-                        ref
-                            .read(diagnosticsEnabledProvider.notifier)
-                            .setEnabled(val),
-                      );
-                    },
+                  trailing: SettingsSurfaces.toggle(
+                    context,
+                    CupertinoSwitch(
+                      key: const ValueKey('diagnostics-switch-enable'),
+                      value: enabled,
+                      onChanged: (val) {
+                        unawaited(
+                          ref
+                              .read(diagnosticsEnabledProvider.notifier)
+                              .setEnabled(val),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],

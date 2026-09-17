@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
+import '../settings/settings_surfaces.dart';
 import '../settings/settings_subpages.dart';
 import 'background_keepalive_service.dart';
 import 'notification_providers.dart';
@@ -95,12 +96,15 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
                     ? const TextStyle(color: LightSurfaces.textSecondary)
                     : null,
               ),
-              trailing: CupertinoSwitch(
-                key: const ValueKey('settings-switch-bg-foreground-service'),
-                value: settings.bgForegroundServiceEnabled,
-                onChanged: (value) {
-                  unawaited(notifier.setBgForegroundServiceEnabled(value));
-                },
+              trailing: SettingsSurfaces.toggle(
+                context,
+                CupertinoSwitch(
+                  key: const ValueKey('settings-switch-bg-foreground-service'),
+                  value: settings.bgForegroundServiceEnabled,
+                  onChanged: (value) {
+                    unawaited(notifier.setBgForegroundServiceEnabled(value));
+                  },
+                ),
               ),
             ),
             // #105 安卓 16 实况通知（灵动岛/状态栏 chip）开关：默认开，
@@ -114,12 +118,15 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
                     ? const TextStyle(color: LightSurfaces.textSecondary)
                     : null,
               ),
-              trailing: CupertinoSwitch(
-                key: const ValueKey('settings-switch-bg-live-update'),
-                value: settings.bgLiveUpdateEnabled,
-                onChanged: (value) {
-                  unawaited(notifier.setBgLiveUpdateEnabled(value));
-                },
+              trailing: SettingsSurfaces.toggle(
+                context,
+                CupertinoSwitch(
+                  key: const ValueKey('settings-switch-bg-live-update'),
+                  value: settings.bgLiveUpdateEnabled,
+                  onChanged: (value) {
+                    unawaited(notifier.setBgLiveUpdateEnabled(value));
+                  },
+                ),
               ),
             ),
             if (settings.error != null)

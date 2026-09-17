@@ -12,6 +12,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/cron.dart';
 import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
+import '../settings/settings_surfaces.dart';
 import '../shared/app_back_button.dart';
 import 'tasks_providers.dart';
 
@@ -930,10 +931,14 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
           const SizedBox(height: 16),
           CupertinoListTile(
             title: Text(l10n.pushNotifications),
-            trailing: CupertinoSwitch(
-              key: const ValueKey('tasks-form-toast'),
-              value: _toastNotifications,
-              onChanged: (value) => setState(() => _toastNotifications = value),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('tasks-form-toast'),
+                value: _toastNotifications,
+                onChanged: (value) =>
+                    setState(() => _toastNotifications = value),
+              ),
             ),
           ),
         ],

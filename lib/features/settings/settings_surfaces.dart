@@ -241,14 +241,26 @@ abstract final class SettingsSurfaces {
     ),
   );
 
-  /// Native switch interaction with visible light tracks, also when disabled.
+  /// Native switch interaction with iOS system colours in light mode.
+  ///
+  /// Enabled tracks keep the SDK palette verbatim: [CupertinoColors.systemGreen]
+  /// on (#34C759) and the near-invisible [CupertinoColors.secondarySystemFill]
+  /// off (composites to #EAEAEB on a white card, 1.20:1).
+  ///
+  /// A previous revision fed the *text* status green (`statusGreenText`,
+  /// #1E7A34 -- darkened to reach 4.5:1 for label text) into the track fill,
+  /// which turned the switch into a solid dark block. WCAG text contrast does
+  /// not govern a large control fill, so that mapping was a category error.
+  ///
+  /// Disabled controls are composited by the SDK at 50% opacity, where both
+  /// tracks would collapse to an unreadable wash; black keeps a visible track
+  /// at 3.95:1 on white (#808080). That is the one deliberate light-mode
+  /// departure, and it is pinned by [settings_light_surfaces_test].
   static CupertinoSwitch toggle(
     BuildContext context,
     CupertinoSwitch original,
   ) {
     if (!isLight(context)) return original;
-    // CupertinoSwitch composites disabled controls at 50% opacity. Black
-    // becomes #808080 on white (3.95:1), keeping the track distinguishable.
     final disabled = original.onChanged == null;
     return CupertinoSwitch(
       key: original.key,
@@ -256,19 +268,30 @@ abstract final class SettingsSurfaces {
       onChanged: original.onChanged,
       activeTrackColor: disabled
           ? CupertinoColors.black
-          : statusGreenText.resolveFrom(context),
+          : CupertinoColors.systemGreen,
       inactiveTrackColor: disabled
           ? CupertinoColors.black
-          : LightSurfaces.textSecondary,
-      thumbColor: LightSurfaces.card,
-      inactiveThumbColor: LightSurfaces.card,
+          : CupertinoColors.secondarySystemFill,
+      thumbColor: CupertinoColors.white,
+      inactiveThumbColor: CupertinoColors.white,
       focusNode: original.focusNode,
       autofocus: original.autofocus,
       onFocusChange: original.onFocusChange,
     );
   }
 
-  /// Uses selection blue on light segmented controls only.
+  /// Pins light-mode segmented controls to the SDK's native iOS palette.
+  ///
+  /// This seam previously re-skinned the thumb with [LightSurfaces.selection]
+  /// (#E0ECFF) on a [LightSurfaces.page] track. Measured against iOS that read
+  /// as a recessed blue block, and it separated *worse* than the native white
+  /// thumb (1.069:1 vs 1.149:1 thumb-to-track) -- a pure regression with no
+  /// accessibility payoff, since the SDK default already passes.
+  ///
+  /// The two colours below are byte-identical to the SDK defaults
+  /// (`_kThumbColor` / `tertiarySystemFill`). They stay pinned explicitly so
+  /// the settings family cannot silently drift away from the platform control
+  /// again -- that drift is exactly what this file had to undo.
   static CupertinoSlidingSegmentedControl<T> segmented<T extends Object>(
     BuildContext context,
     CupertinoSlidingSegmentedControl<T> original,
@@ -283,8 +306,8 @@ abstract final class SettingsSurfaces {
       padding: original.padding,
       proportionalWidth: original.proportionalWidth,
       isMomentary: original.isMomentary,
-      backgroundColor: LightSurfaces.page,
-      thumbColor: LightSurfaces.selection,
+      backgroundColor: CupertinoColors.tertiarySystemFill,
+      thumbColor: CupertinoColors.white,
     );
   }
 

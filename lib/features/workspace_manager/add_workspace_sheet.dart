@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
+import '../settings/settings_surfaces.dart';
 import 'workspace_manager_providers.dart';
 
 /// 新建工作区表单（iOS form sheet 风格，键盘可避让）。
@@ -323,10 +324,13 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
                     style: const TextStyle(fontSize: 17),
                   ),
                 ),
-                CupertinoSwitch(
-                  key: const ValueKey('workspace-add-create'),
-                  value: _create,
-                  onChanged: (value) => setState(() => _create = value),
+                SettingsSurfaces.toggle(
+                  context,
+                  CupertinoSwitch(
+                    key: const ValueKey('workspace-add-create'),
+                    value: _create,
+                    onChanged: (value) => setState(() => _create = value),
+                  ),
                 ),
               ],
             ),

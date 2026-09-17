@@ -10,6 +10,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
 import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
+import '../settings/settings_surfaces.dart';
 import '../shared/app_back_button.dart';
 import 'skills_providers.dart';
 
@@ -461,16 +462,19 @@ class _SkillRow extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                CupertinoSwitch(
-                  key: ValueKey('skills-toggle-${skillDisplayName(skill)}'),
-                  value: !disabled,
-                  onChanged: isBusy
-                      ? null
-                      : (value) => unawaited(
-                          ref
-                              .read(skillsControllerProvider.notifier)
-                              .toggleSkill(skill, enabled: value),
-                        ),
+                SettingsSurfaces.toggle(
+                  context,
+                  CupertinoSwitch(
+                    key: ValueKey('skills-toggle-${skillDisplayName(skill)}'),
+                    value: !disabled,
+                    onChanged: isBusy
+                        ? null
+                        : (value) => unawaited(
+                            ref
+                                .read(skillsControllerProvider.notifier)
+                                .toggleSkill(skill, enabled: value),
+                          ),
+                  ),
                 ),
               ],
             ),
