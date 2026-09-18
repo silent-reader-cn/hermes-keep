@@ -388,6 +388,11 @@ final sessionListControllerProvider =
       SessionListController.new,
     );
 
+/// 流式状态看门狗超时：本地乐观置位后若长时间收不到任何收尾确认
+/// （窗口失焦时 SSE 与周期轮询均已停），到点主动向服务端求证一次。
+/// 取值需远大于正常回合时长，避免误伤长任务；测试可覆写以缩短等待。
+Duration sessionStreamingWatchdogTimeout = const Duration(minutes: 5);
+
 class SessionListController extends AsyncNotifier<SessionListState> {
   /// 页大小（客户端分块）。
   static const int pageSize = SessionListState.pageSize;
@@ -446,6 +451,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// 用于本地乐观置位与跨全量刷新保持流式指示，流结束或后台纠偏后移除。
   final Map<String, String?> _streamingSessions = {};
 
+  /// sessionId → 该会话的流式状态看门狗定时器。
+  final Map<String, Timer> _streamingWatchdogs = {};
+
   /// 将本地活跃流式状态覆盖到会话列表上（避免全量拉取响应时因服务端延迟抖动丢失流式状态）。
   List<SessionSummary> _overlayStreaming(List<SessionSummary> list) {
     if (_streamingSessions.isEmpty) return list;
@@ -495,6 +503,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
         t.cancel();
       }
       _activeLadderTimers.clear();
+      for (final t in _streamingWatchdogs.values) {
+        t.cancel();
+      }
+      _streamingWatchdogs.clear();
     });
     final loaded = await _loadFirstPage(api, isColdStart: true);
     // 首屏状态就绪后再后台读取本地「显示 subagent 会话」偏好并回填
@@ -1323,8 +1335,10 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     if (sessionId.isEmpty) return;
     if (isStreaming) {
       _streamingSessions[sessionId] = activeStreamId;
+      _armStreamingWatchdog(sessionId);
     } else {
       _streamingSessions.remove(sessionId);
+      _cancelStreamingWatchdog(sessionId);
     }
     final current = state.valueOrNull;
     if (current == null) return;
@@ -1372,6 +1386,26 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     }
   }
 
+  /// 为某会话武装流式状态看门狗（同会话重复调用即续期）。
+  ///
+  /// 到点后若该会话仍在 [_streamingSessions] 中，说明这段时间内没有任何
+  /// 收尾确认到达（窗口失焦时 SSE 与周期轮询都会停），于是主动向服务端
+  /// 求证一次；服务端确认非流式即清除，避免侧栏 loading 圈永久旋转。
+  void _armStreamingWatchdog(String sessionId) {
+    _cancelStreamingWatchdog(sessionId);
+    _streamingWatchdogs[sessionId] = Timer(sessionStreamingWatchdogTimeout, () {
+      _streamingWatchdogs.remove(sessionId);
+      if (_disposed) return;
+      if (!_streamingSessions.containsKey(sessionId)) return;
+      unawaited(_verifySessionStatus(sessionId));
+    });
+  }
+
+  /// 取消某会话的流式状态看门狗。
+  void _cancelStreamingWatchdog(String sessionId) {
+    _streamingWatchdogs.remove(sessionId)?.cancel();
+  }
+
   /// 后台单会话状态校验与纠偏（GET /api/session/status?session_id=）。
   Future<void> _verifySessionStatus(String sessionId) async {
     try {
@@ -1392,9 +1426,16 @@ class SessionListController extends AsyncNotifier<SessionListState> {
           activeStreamId: status.activeStreamId,
           verifyInBackground: false,
         );
+      } else {
+        // 服务端确认仍在流式：续期看门狗，下一轮继续求证。
+        _armStreamingWatchdog(sessionId);
       }
     } catch (_) {
-      // 网络波动或测试桩未注入 status 时静默，保留本地乐观状态
+      // 网络波动或测试桩未注入 status 时静默，保留本地乐观状态；
+      // 但看门狗必须续期 —— 否则一次失败就让状态永久卡住。
+      if (_streamingSessions.containsKey(sessionId)) {
+        _armStreamingWatchdog(sessionId);
+      }
     }
   }
 
@@ -1430,6 +1471,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
 
   Future<void> _removeSession(String id) async {
     _streamingSessions.remove(id);
+    _cancelStreamingWatchdog(id);
     final current = state.valueOrNull;
     if (current == null) return;
     state = AsyncData(
@@ -1511,6 +1553,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     final current = state.valueOrNull;
     if (current == null || id.isEmpty) return;
     _streamingSessions.remove(id);
+    _cancelStreamingWatchdog(id);
     state = AsyncData(
       current.copyWith(
         sessions: current.sessions.where((s) => s.sessionId != id).toList(),

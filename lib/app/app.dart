@@ -16,6 +16,7 @@ import 'locale/locale_provider.dart';
 import 'router.dart';
 import 'theme/cupertino_theme.dart';
 import 'theme/theme_provider.dart';
+import 'widgets/focus_gated_ticker_mode.dart';
 
 /// 根 Widget（app_shell_spec.md §2.2）。
 ///
@@ -58,11 +59,14 @@ class HermesApp extends ConsumerWidget {
           // 开启时把 highContrast 强制为 true，令全部 Cupertino 动态色切到更强变体。
           builder: (context, child) {
             final content = child ?? const SizedBox.shrink();
-            if (!forceHighContrast) return content;
-            return MediaQuery(
-              data: MediaQuery.of(context).copyWith(highContrast: true),
-              child: content,
-            );
+            final themed = forceHighContrast
+                ? MediaQuery(
+                    data: MediaQuery.of(context).copyWith(highContrast: true),
+                    child: content,
+                  )
+                : content;
+            // 窗口失焦时静音整棵子树的动画 ticker；见 FocusGatedTickerMode。
+            return FocusGatedTickerMode(child: themed);
           },
           localizationsDelegates: const [
             AppLocalizationsDelegate(),

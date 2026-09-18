@@ -327,4 +327,117 @@ void main() {
       expect(find.byIcon(CupertinoIcons.ellipsis), findsOneWidget);
     });
   });
+
+  group('流式状态看门狗（#141 P2-1）', () {
+    /// 缩短看门狗超时，避免用例真等 5 分钟。
+    void useShortTimeout() {
+      sessionStreamingWatchdogTimeout = const Duration(milliseconds: 40);
+      addTearDown(
+        () => sessionStreamingWatchdogTimeout = const Duration(minutes: 5),
+      );
+    }
+
+    SessionSummary s1Of(ProviderContainer c) => c
+        .read(sessionListControllerProvider)
+        .valueOrNull!
+        .sessions
+        .firstWhere((s) => s.sessionId == 's1');
+
+    Future<SessionListController> setup(
+      ProviderContainer container,
+      FakeSessionListApi api,
+    ) async {
+      await container.read(sessionListControllerProvider.future);
+      return container.read(sessionListControllerProvider.notifier);
+    }
+
+    const session = SessionSummary(
+      sessionId: 's1',
+      title: '会话 1',
+      createdAt: 1000,
+      messageCount: 2,
+    );
+
+    test('看门狗到期且服务端确认非流式 → 自动清除（失焦无人收尾的兜底）', () async {
+      useShortTimeout();
+      final api = FakeSessionListApi(sessions: [session]);
+      api.statusResponses['s1'] = const SessionStatusResponse(
+        sessionId: 's1',
+        isStreaming: false,
+        activeStreamId: null,
+      );
+      final container = _makeContainer(api);
+      addTearDown(container.dispose);
+
+      final controller = await setup(container, api);
+      // 不带 verifyInBackground：模拟窗口失焦时收不到任何收尾事件。
+      controller.markStreaming('s1', true, activeStreamId: 'stream-stale');
+      expect(s1Of(container).isStreaming, isTrue);
+
+      await Future<void>.delayed(const Duration(milliseconds: 140));
+
+      expect(api.statusCalls, contains('s1'), reason: '看门狗到期应主动向服务端求证');
+      expect(s1Of(container).isStreaming, isFalse, reason: '服务端确认结束即清除指示');
+      expect(s1Of(container).activeStreamId, isNull);
+    });
+
+    test('看门狗到期但服务端仍报流式 → 保留指示并续期（不误伤长任务）', () async {
+      useShortTimeout();
+      final api = FakeSessionListApi(sessions: [session]);
+      api.statusResponses['s1'] = const SessionStatusResponse(
+        sessionId: 's1',
+        isStreaming: true,
+        activeStreamId: 'stream-live',
+      );
+      final container = _makeContainer(api);
+      addTearDown(container.dispose);
+
+      final controller = await setup(container, api);
+      controller.markStreaming('s1', true, activeStreamId: 'stream-live');
+
+      await Future<void>.delayed(const Duration(milliseconds: 140));
+
+      expect(
+        api.statusCalls.length,
+        greaterThanOrEqualTo(2),
+        reason: '服务端仍流式时应续期，后续继续求证',
+      );
+      expect(s1Of(container).isStreaming, isTrue, reason: '真在跑的长任务不得被误清');
+    });
+
+    test('看门狗求证失败 → 保留乐观状态但续期重试（不永久卡住）', () async {
+      useShortTimeout();
+      final api = FakeSessionListApi(sessions: [session]);
+      api.statusError = HttpException(500, null, message: 'Status error');
+      final container = _makeContainer(api);
+      addTearDown(container.dispose);
+
+      final controller = await setup(container, api);
+      controller.markStreaming('s1', true, activeStreamId: 'stream-x');
+
+      await Future<void>.delayed(const Duration(milliseconds: 140));
+
+      expect(
+        api.statusCalls.length,
+        greaterThanOrEqualTo(2),
+        reason: '求证失败也必须续期 —— 否则状态永久卡住（本轮修复的起因）',
+      );
+      expect(s1Of(container).isStreaming, isTrue, reason: '求证失败时保留乐观状态');
+    });
+
+    test('显式清除后看门狗取消，不再发起求证', () async {
+      useShortTimeout();
+      final api = FakeSessionListApi(sessions: [session]);
+      final container = _makeContainer(api);
+      addTearDown(container.dispose);
+
+      final controller = await setup(container, api);
+      controller.markStreaming('s1', true, activeStreamId: 'stream-y');
+      controller.markStreaming('s1', false);
+
+      await Future<void>.delayed(const Duration(milliseconds: 140));
+
+      expect(api.statusCalls, isEmpty, reason: '已显式清除，看门狗应已取消');
+    });
+  });
 }
