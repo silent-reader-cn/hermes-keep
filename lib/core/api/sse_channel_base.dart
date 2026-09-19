@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:meta/meta.dart';
 
+import '../../features/diagnostics/diagnostics_models.dart';
+import '../../features/diagnostics/diagnostics_service.dart';
 import 'custom_header.dart';
 import 'sse_client.dart';
 
@@ -19,6 +21,7 @@ abstract class SseChannelBase {
     this.cookieProvider,
     this.isEnabled,
     this.backoffStrategy,
+    this.idleTimeout = const Duration(seconds: 90),
   });
 
   /// 传输用 dio；传入 [ApiClient.dio] 时自动继承其自定义头/cookie 拦截器。
@@ -39,11 +42,17 @@ abstract class SseChannelBase {
   /// 可选的退避计算策略（测试注入用）。
   final Duration Function(int attempt)? backoffStrategy;
 
+  /// 空闲超时时间（在此时间内未收到任何 chunk 则判定连接为半开并主动重连）。
+  /// 默认 90s（3 × 服务端 30s keepalive 间隔）。
+  final Duration? idleTimeout;
+
   bool _running = false;
   bool _disposed = false;
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
   Timer? _connectTimer;
+  Timer? _idleTimer;
+  bool _idleTimedOut = false;
   CancelToken? _cancelToken;
 
   /// 通道是否处于运行状态。
@@ -55,6 +64,14 @@ abstract class SseChannelBase {
   /// 测试专用的当前 CancelToken 句柄。
   @visibleForTesting
   CancelToken? get cancelTokenForTesting => _cancelToken;
+
+  /// 测试专用的当前空闲定时器句柄。
+  @visibleForTesting
+  Timer? get idleTimerForTesting => _idleTimer;
+
+  /// 测试专用的空闲超时判定标志。
+  @visibleForTesting
+  bool get idleTimedOutForTesting => _idleTimedOut;
 
   /// 本次连接的目标 URL（子类必实现）。
   @protected
@@ -94,6 +111,9 @@ abstract class SseChannelBase {
     _connectTimer = null;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    _idleTimedOut = false;
     _cancelToken?.cancel();
     _cancelToken = null;
     _reconnectAttempts = 0;
@@ -104,6 +124,8 @@ abstract class SseChannelBase {
     _disposed = true;
     _connectTimer?.cancel();
     _connectTimer = null;
+    _idleTimer?.cancel();
+    _idleTimer = null;
     stop();
   }
 
@@ -114,6 +136,25 @@ abstract class SseChannelBase {
     final shift = attempt > 30 ? 30 : attempt;
     final seconds = (1 << shift).clamp(1, 30);
     return Duration(seconds: seconds);
+  }
+
+  void _resetIdleTimer(Uri url) {
+    _idleTimer?.cancel();
+    if (!_running || _disposed || idleTimeout == null || idleTimeout! <= Duration.zero) {
+      _idleTimer = null;
+      return;
+    }
+    _idleTimer = Timer(idleTimeout!, () {
+      if (!_running || _disposed) return;
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'sse_idle',
+        message:
+            'SSE channel idle timeout for $url (${idleTimeout!.inMilliseconds}ms)',
+      );
+      _idleTimedOut = true;
+      _cancelToken?.cancel();
+    });
   }
 
   void _scheduleReconnect() {
@@ -187,30 +228,58 @@ abstract class SseChannelBase {
       onConnected(wasReconnecting: wasReconnecting);
 
       final parser = SseWireParser();
-      await for (final chunk in body.stream) {
-        if (!_running || _disposed || cancelToken.isCancelled) break;
-        final text = utf8.decode(chunk, allowMalformed: true);
-        for (final wire in parser.feed(text)) {
+      _resetIdleTimer(url);
+      try {
+        await for (final chunk in body.stream) {
+          if (!_running || _disposed || cancelToken.isCancelled) break;
+          _resetIdleTimer(url);
+          final text = utf8.decode(chunk, allowMalformed: true);
+          for (final wire in parser.feed(text)) {
+            processWire(wire);
+          }
+        }
+        for (final wire in parser.finish()) {
           processWire(wire);
         }
-      }
-      for (final wire in parser.finish()) {
-        processWire(wire);
+      } finally {
+        _idleTimer?.cancel();
+        _idleTimer = null;
       }
     } on DioException catch (e) {
+      _idleTimer?.cancel();
+      _idleTimer = null;
       if (e.type == DioExceptionType.cancel || cancelToken.isCancelled) {
+        if (_idleTimedOut) {
+          _idleTimedOut = false;
+          _scheduleReconnect();
+        }
         return;
       }
       _scheduleReconnect();
       return;
     } catch (_) {
-      if (!_running || _disposed || cancelToken.isCancelled) return;
+      _idleTimer?.cancel();
+      _idleTimer = null;
+      if (!_running || _disposed) return;
+      if (cancelToken.isCancelled) {
+        if (_idleTimedOut) {
+          _idleTimedOut = false;
+          _scheduleReconnect();
+        }
+        return;
+      }
       _scheduleReconnect();
       return;
+    } finally {
+      _idleTimer?.cancel();
+      _idleTimer = null;
     }
 
-    if (_running && !_disposed && !cancelToken.isCancelled) {
-      _scheduleReconnect();
+    if (_running && !_disposed) {
+      if (!cancelToken.isCancelled || _idleTimedOut) {
+        _idleTimedOut = false;
+        _scheduleReconnect();
+      }
     }
   }
 }
