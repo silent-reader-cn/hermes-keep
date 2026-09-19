@@ -393,6 +393,13 @@ final sessionListControllerProvider =
 /// 取值需远大于正常回合时长，避免误伤长任务；测试可覆写以缩短等待。
 Duration sessionStreamingWatchdogTimeout = const Duration(minutes: 5);
 
+/// 本地乐观 streaming 标记的宽限期：仅在该时长内允许 `_overlayStreaming`
+/// 覆盖服务端数据。原意是防「刚发消息、服务端尚未标记」的抖动；超出后一律以
+/// 服务端为准 —— 否则锁屏期间收尾事件丢失时，该标记会永久压住服务端的
+/// `is_streaming: false`，导致刷新/点开/返回全部无效、唯有杀进程才恢复（#142）。
+/// 服务端每次列表请求都实时重算 is_streaming，故宽限无需很长。测试可覆写。
+Duration localStreamingOverlayGrace = const Duration(seconds: 60);
+
 class SessionListController extends AsyncNotifier<SessionListState> {
   /// 页大小（客户端分块）。
   static const int pageSize = SessionListState.pageSize;
@@ -437,6 +444,13 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   @visibleForTesting
   bool get isRefreshInFlightForTesting => _refreshInFlight;
 
+  /// 测试探针：该会话是否仍持有本地乐观 streaming 标记（时间戳表）。
+  ///
+  /// 用于钉住「显式清除 / 删除会话后时间戳不得残留」这一不变量（#142）。
+  @visibleForTesting
+  bool hasLocalStreamingMarkForTesting(String sessionId) =>
+      _streamingMarkedAt.containsKey(sessionId);
+
   @visibleForTesting
   Timer? get eventsDebounceTimerForTesting => _eventsDebounceTimer;
 
@@ -454,19 +468,65 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// sessionId → 该会话的流式状态看门狗定时器。
   final Map<String, Timer> _streamingWatchdogs = {};
 
+  /// sessionId → 本地乐观置位的时刻（判定该标记是否仍「新鲜」，见 #142）。
+  ///
+  /// 与 [_streamingSessions] 平行维护：置位时写入、清除/移除时同步删除，
+  /// 服务端确认仍在流式时续期。
+  final Map<String, DateTime> _streamingMarkedAt = {};
+
+  /// 已触发「陈旧标记后台求证」的会话（`_overlayStreaming` 有 4 个调用点，
+  /// 去重避免同一会话被反复求证）。
+  final Set<String> _staleVerifyInFlight = {};
+
   /// 将本地活跃流式状态覆盖到会话列表上（避免全量拉取响应时因服务端延迟抖动丢失流式状态）。
+  ///
+  /// #142：覆盖**仅在本地标记新鲜时**生效（[localStreamingOverlayGrace]）。
+  /// 陈旧的本地标记不再压过服务端 —— 否则锁屏期间收尾事件丢失时，服务端已
+  /// 返回 `is_streaming: false` 也会被覆盖回 true，使刷新/点开/返回全部无效，
+  /// 唯杀进程才恢复。陈旧标记不就地删除（删除权归 `_verifySessionStatus`），
+  /// 但会触发一次去重的后台求证。
   List<SessionSummary> _overlayStreaming(List<SessionSummary> list) {
     if (_streamingSessions.isEmpty) return list;
-    return [
-      for (final s in list)
-        if (s.sessionId != null && _streamingSessions.containsKey(s.sessionId))
+    final now = DateTime.now();
+    final result = <SessionSummary>[];
+    final staleIds = <String>[];
+
+    for (final s in list) {
+      final id = s.sessionId;
+      if (id == null || !_streamingSessions.containsKey(id)) {
+        result.add(s);
+        continue;
+      }
+      if (_isLocalStreamingMarkFresh(id, now)) {
+        result.add(
           s.withStreaming(
             isStreaming: true,
-            activeStreamId: _streamingSessions[s.sessionId],
-          )
-        else
-          s,
-    ];
+            activeStreamId: _streamingSessions[id],
+          ),
+        );
+      } else {
+        staleIds.add(id);
+        result.add(s);
+      }
+    }
+
+    for (final id in staleIds) {
+      if (_staleVerifyInFlight.contains(id)) continue;
+      _staleVerifyInFlight.add(id);
+      unawaited(
+        _verifySessionStatus(id).whenComplete(
+          () => _staleVerifyInFlight.remove(id),
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// 本地乐观标记是否仍新鲜（缺失时间戳视为陈旧）。
+  bool _isLocalStreamingMarkFresh(String sessionId, DateTime now) {
+    final markedAt = _streamingMarkedAt[sessionId];
+    if (markedAt == null) return false;
+    return now.difference(markedAt) < localStreamingOverlayGrace;
   }
 
   /// Provider 侧的单测用单次调度与获焦 debounce（真正的 30s 周期在
@@ -507,6 +567,8 @@ class SessionListController extends AsyncNotifier<SessionListState> {
         t.cancel();
       }
       _streamingWatchdogs.clear();
+      _streamingMarkedAt.clear();
+      _staleVerifyInFlight.clear();
     });
     final loaded = await _loadFirstPage(api, isColdStart: true);
     // 首屏状态就绪后再后台读取本地「显示 subagent 会话」偏好并回填
@@ -1335,9 +1397,11 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     if (sessionId.isEmpty) return;
     if (isStreaming) {
       _streamingSessions[sessionId] = activeStreamId;
+      _streamingMarkedAt[sessionId] = DateTime.now();
       _armStreamingWatchdog(sessionId);
     } else {
       _streamingSessions.remove(sessionId);
+      _streamingMarkedAt.remove(sessionId);
       _cancelStreamingWatchdog(sessionId);
     }
     final current = state.valueOrNull;
@@ -1427,7 +1491,8 @@ class SessionListController extends AsyncNotifier<SessionListState> {
           verifyInBackground: false,
         );
       } else {
-        // 服务端确认仍在流式：续期看门狗，下一轮继续求证。
+        // 服务端确认仍在流式：续期看门狗与本地标记时刻，下一轮继续求证。
+        _streamingMarkedAt[sessionId] = DateTime.now();
         _armStreamingWatchdog(sessionId);
       }
     } catch (_) {
@@ -1471,6 +1536,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
 
   Future<void> _removeSession(String id) async {
     _streamingSessions.remove(id);
+    _streamingMarkedAt.remove(id);
     _cancelStreamingWatchdog(id);
     final current = state.valueOrNull;
     if (current == null) return;
@@ -1553,6 +1619,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     final current = state.valueOrNull;
     if (current == null || id.isEmpty) return;
     _streamingSessions.remove(id);
+    _streamingMarkedAt.remove(id);
     _cancelStreamingWatchdog(id);
     state = AsyncData(
       current.copyWith(
