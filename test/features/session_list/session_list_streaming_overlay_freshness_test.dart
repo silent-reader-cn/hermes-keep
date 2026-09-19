@@ -5,7 +5,6 @@ import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/server_connection.dart';
 import 'package:hermes_ui/core/models/session.dart';
-import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
