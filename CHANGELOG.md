@@ -5,13 +5,16 @@
 
 ## [Unreleased]
 
-### 发布前收尾（见 docs/RELEASE.md）
+> 逐版变更明细以 [GitHub Releases](https://github.com/silent-reader-cn/hermes-keep/releases) 的 Release notes 为准（每个 tag 一份）；
+> 本文件自 `0.1.0` 起未逐版维护，只保留里程碑与当前进行中的事项。
 
-- [ ] Android release 签名配置（当前用 debug keystore 占位）
-- [ ] 补充 LICENSE 文件（MIT 全文 + 版权人）
-- [ ] 补齐 README 截图
-- [ ] pubspec 版本号与 CHANGELOG 里程碑对齐（当前 `1.0.0+1`）
-- [ ] Windows release 打包验证（MSIX / Inno Setup 可选）
+### 仓库与口径
+
+- 仓库更名为 `hermes-keep`（原 `hermes-ui`）。旧链接由 GitHub 自动重定向，**已发布版本的应用内检查更新不受影响**（实测旧 API 端点 301 → 正确返回最新 Release）
+- README：Android 下载资产名与实物对齐（`app-release.apk`，原误写 `*-arm64.apk`）；新增「为什么选它 / Why this one」定位段
+- README：测试规模口径更新为实测值（原写 2,400+，现 4,800+）
+- `pubspec.yaml`：补齐 `description`（原为 Flutter 模板默认值 `A new Flutter project.`）
+- `.gitignore`：忽略 `key.properties`，避免签名口令误入公开仓库
 
 ## [0.1.0] - 2026-08-17
 

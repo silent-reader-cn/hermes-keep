@@ -154,7 +154,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       const fakeRelease = GithubRelease(
         tagName: 'v0.1.31',
-        htmlUrl: 'https://github.com/silent-reader-cn/hermes-ui/releases/tag/v0.1.31',
+        htmlUrl: 'https://github.com/silent-reader-cn/hermes-keep/releases/tag/v0.1.31',
         name: 'v0.1.31 更新日志',
         body: '1. 修复已知问题\n2. 优化性能',
       );

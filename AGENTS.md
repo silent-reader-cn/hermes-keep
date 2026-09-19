@@ -1,4 +1,4 @@
-# AGENTS.md — hermes-ui 执行契约（编码规范）
+# AGENTS.md — hermes-keep 执行契约（编码规范）
 
 > 本文档是**执行契约**：本仓库的代码/样式/测试/Git 硬规范，任何进本仓库写代码的人或代理必读。
 > 并行子代理纪律（任务书 / 扇出 / 盯盘 / 复验 / 兜底后端）不在本文档，见 `HERMES.md` §6。
@@ -11,7 +11,7 @@ Hermes Agent 的**跨平台客户端**：Flutter + Cupertino 单代码库，Andr
 - API 契约：对齐 `nesquena/hermes-webui` 的 HTTP / SSE / WS 接口（主人 fork 跑在 :30002，经 frp 暴露公网）；端点以本仓 `lib/core/api/endpoints.dart` 为准
 - UI 蓝本（只读参考，不进仓库）：`.reference/hermex-src/`（即 uzairansaruzi/hermex 的 HermesMobile 目录）——**取交互与信息架构，不照搬 iOS 专属能力**
 - 上游 hermes-webui：https://github.com/nesquena/hermes-webui
-- 公开仓库与对外口径：https://github.com/silent-reader-cn/hermes-ui（`README.md` / `README.zh-CN.md`）
+- 公开仓库与对外口径：https://github.com/silent-reader-cn/hermes-keep（`README.md` / `README.zh-CN.md`）
 - 外壳与路由设计：`DESIGN.md`
 
 ## 2. 技术栈（锁死，不得私自更换）
@@ -215,7 +215,7 @@ python tools/fake_gateway/smoke_test.py
 | analyze-test | ubuntu | push main / tag `v*` / PR / 手动 | checkout → flutter-action 3.47.0 stable → setup-java 17 → `flutter pub get` → `flutter analyze` → `flutter test`（`update_goldens=true` 时改跑 `--update-goldens test/golden/` 并上传基线 artifact；失败时上传 `test/golden/failures/` 诊断产物） |
 | android-debug | ubuntu | **独立**（不 `needs: analyze-test`） | 同上 → `flutter build apk --debug` |
 | fake-gateway | ubuntu | 独立 | checkout → setup-python 3.12 → `pip install -r tools/fake_gateway/requirements.txt` → `python tools/fake_gateway/smoke_test.py`（脚本按 `__file__` 解析 main.py，任意 cwd 可调用；子进程输出在失败时回显） |
-| windows-installer | windows | **独立**，仅 main / tag / 手动 | Inno Setup（choco）→ `flutter build windows --release` → 组装 WebUI sidecar → 编译安装包 → 上传 `hermes-ui-windows-setup` 产物 |
+| windows-installer | windows | **独立**，仅 main / tag / 手动 | Inno Setup（choco）→ `flutter build windows --release` → 组装 WebUI sidecar → 编译安装包 → 上传 `hermes-keep-windows-setup` 产物 |
 
 > 两个建包 job **刻意不依赖** analyze-test：测试红不该连坐掉「包能不能构建」的验证（连坐期间 129 次 run 里它们从未真正执行过一次）。
 > 合并到 main 前必须全绿（analyze-test / fake-gateway；android-debug 与 windows-installer 按上表触发条件）；新增端点/模型需同步更新 `tools/fake_gateway` 契约。CI 带 `concurrency`，同 ref 的旧跑会被取消。

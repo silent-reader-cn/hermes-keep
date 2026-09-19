@@ -22,7 +22,7 @@ import urllib.request
 from pathlib import Path
 
 
-DEFAULT_REPO = "silent-reader-cn/hermes-ui"
+DEFAULT_REPO = "silent-reader-cn/hermes-keep"
 PUBSPEC_REL = Path("pubspec.yaml")
 VERSION_INFO_REL = Path("lib/core/update/version_info.dart")
 

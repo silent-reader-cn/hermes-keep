@@ -18,6 +18,7 @@ android/app/profile/
 android/app/release/
 *.keystore
 *.jks
+key.properties
 
 # iOS/macOS
 ios/Flutter/Generated.xcconfig

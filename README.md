@@ -6,9 +6,9 @@
 
 A Flutter + Cupertino client for [Hermes Agent](https://hermes-agent.nousresearch.com/docs) — one codebase, consistent chat on desktop and phone.
 
-[![CI](https://github.com/silent-reader-cn/hermes-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/silent-reader-cn/hermes-ui/actions/workflows/ci.yml)
+[![CI](https://github.com/silent-reader-cn/hermes-keep/actions/workflows/ci.yml/badge.svg)](https://github.com/silent-reader-cn/hermes-keep/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/silent-reader-cn/hermes-ui)](https://github.com/silent-reader-cn/hermes-ui/releases)
+[![Release](https://img.shields.io/github/v/release/silent-reader-cn/hermes-keep)](https://github.com/silent-reader-cn/hermes-keep/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Android-lightgrey)
 
 **English** | [简体中文](README.zh-CN.md)
@@ -75,19 +75,19 @@ behaves the same everywhere it runs.
 
 ### Windows
 
-1. Grab the latest installer (`*.exe`) from the [Releases](https://github.com/silent-reader-cn/hermes-ui/releases) page and run it.
+1. Grab the latest installer (`*.exe`) from the [Releases](https://github.com/silent-reader-cn/hermes-keep/releases) page and run it.
 2. Launch **Hermes UI**. On the onboarding screen pick **Built-in service** → **Start & Connect**. That's it — the WebUI backend starts automatically.
 
 Chat requires a [Hermes Agent](https://hermes-agent.nousresearch.com/docs) installation. If none is detected, the onboarding screen shows a card linking to the install guide; without it the app still works in read-only mode (session history), and attempting to chat will tell you what's missing.
 
 ### Android
 
-Download `app-release.apk` from the [Releases](https://github.com/silent-reader-cn/hermes-ui/releases) page (Android 7.0+, arm64) and connect it to your Hermes server on the network.
+Download `app-release.apk` from the [Releases](https://github.com/silent-reader-cn/hermes-keep/releases) page (Android 7.0+, arm64) and connect it to your Hermes server on the network.
 
 ### Build from source
 
 ```bash
-git clone https://github.com/silent-reader-cn/hermes-ui.git
+git clone https://github.com/silent-reader-cn/hermes-keep.git
 cd hermes-ui
 flutter pub get
 
@@ -131,7 +131,7 @@ The API contract is aligned with **[nesquena/hermes-webui](https://github.com/ne
 
 ## Project status
 
-Actively developed; 2,400+ automated tests green, `flutter analyze` clean. Releases ship a signed Windows installer (CI-built, bundling the WebUI sidecar) and an Android arm64 APK. See the [changelog](CHANGELOG.md) for details.
+Actively developed; 4,800+ automated tests green, `flutter analyze` clean. Releases ship a signed Windows installer (CI-built, bundling the WebUI sidecar) and an Android arm64 APK. See the [changelog](CHANGELOG.md) for details.
 
 ## License
 

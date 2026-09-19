@@ -293,6 +293,6 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
-          name: hermes-ui-windows-setup
+          name: hermes-keep-windows-setup
           path: build/installer/*.exe
           if-no-files-found: error

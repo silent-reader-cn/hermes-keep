@@ -7,7 +7,7 @@ void main() {
     test('fromJson parses complete release correctly', () {
       final json = {
         'tag_name': 'v0.1.31',
-        'html_url': 'https://github.com/silent-reader-cn/hermes-ui/releases/tag/v0.1.31',
+        'html_url': 'https://github.com/silent-reader-cn/hermes-keep/releases/tag/v0.1.31',
         'name': '0.1.31 Release',
         'body': 'Bug fixes and performance improvements.',
         'published_at': '2026-09-08T20:00:00Z',
@@ -27,7 +27,7 @@ void main() {
 
       final release = GithubRelease.fromJson(json);
       expect(release.tagName, 'v0.1.31');
-      expect(release.htmlUrl, 'https://github.com/silent-reader-cn/hermes-ui/releases/tag/v0.1.31');
+      expect(release.htmlUrl, 'https://github.com/silent-reader-cn/hermes-keep/releases/tag/v0.1.31');
       expect(release.name, '0.1.31 Release');
       expect(release.body, 'Bug fixes and performance improvements.');
       expect(release.publishedAt, DateTime.parse('2026-09-08T20:00:00Z'));

@@ -92,7 +92,7 @@ void main() {
     test('toJson 输出完整键位；publishedAt 走 ISO8601', () {
       final release = GithubRelease(
         tagName: 'v0.1.51',
-        htmlUrl: 'https://github.com/silent-reader-cn/hermes-ui/releases/tag/v0.1.51',
+        htmlUrl: 'https://github.com/silent-reader-cn/hermes-keep/releases/tag/v0.1.51',
         name: '0.1.51',
         body: 'notes',
         publishedAt: DateTime.utc(2026, 9, 15, 12, 30),

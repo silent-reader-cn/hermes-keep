@@ -7,7 +7,7 @@
 #define MyAppVersion "0.1.17"
 #endif
 #define MyAppPublisher "silent-reader-cn"
-#define MyAppURL "https://github.com/silent-reader-cn/hermes-ui"
+#define MyAppURL "https://github.com/silent-reader-cn/hermes-keep"
 #define MyAppExeName "hermes_ui.exe"
 
 [Setup]

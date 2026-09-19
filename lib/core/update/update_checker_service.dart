@@ -16,10 +16,10 @@ const String kLastUpdateCheckAtKey = 'last_update_check_at';
 
 /// GitHub 最新 Release 接口 URL。
 const String kGithubReleasesLatestUrl =
-    'https://api.github.com/repos/silent-reader-cn/hermes-ui/releases/latest';
+    'https://api.github.com/repos/silent-reader-cn/hermes-keep/releases/latest';
 
 /// 本应用公开仓库主页（设置 → 关于 → Hermes UI 点击后外部浏览器打开）。
-const String kHermesUiRepoUrl = 'https://github.com/silent-reader-cn/hermes-ui';
+const String kHermesUiRepoUrl = 'https://github.com/silent-reader-cn/hermes-keep';
 
 /// 默认版本解析器：从 `package_info_plus` 读取**真实安装版本**。
 ///

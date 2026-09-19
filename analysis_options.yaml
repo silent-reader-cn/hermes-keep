@@ -1,4 +1,4 @@
-# hermes-ui 项目分析配置（规范见 AGENTS.md）
+# hermes-keep 项目分析配置（规范见 AGENTS.md）
 include: package:flutter_lints/flutter.yaml
 
 analyzer:

@@ -6,9 +6,9 @@
 
 基于 Flutter + Cupertino 的 [Hermes Agent](https://hermes-agent.nousresearch.com/docs) 客户端——一套代码，桌面与手机体验一致。
 
-[![CI](https://github.com/silent-reader-cn/hermes-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/silent-reader-cn/hermes-ui/actions/workflows/ci.yml)
+[![CI](https://github.com/silent-reader-cn/hermes-keep/actions/workflows/ci.yml/badge.svg)](https://github.com/silent-reader-cn/hermes-keep/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/silent-reader-cn/hermes-ui)](https://github.com/silent-reader-cn/hermes-ui/releases)
+[![Release](https://img.shields.io/github/v/release/silent-reader-cn/hermes-keep)](https://github.com/silent-reader-cn/hermes-keep/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Android-lightgrey)
 
 [English](README.md) | **简体中文**
@@ -72,19 +72,19 @@
 
 ### Windows
 
-1. 从 [Releases](https://github.com/silent-reader-cn/hermes-ui/releases) 页面下载最新安装包（`*.exe`）并运行。
+1. 从 [Releases](https://github.com/silent-reader-cn/hermes-keep/releases) 页面下载最新安装包（`*.exe`）并运行。
 2. 启动 **Hermes UI**，在引导页选择 **内置服务** → **启动并连接**，完成——WebUI 后端自动拉起。
 
 聊天功能需要本机安装 [Hermes Agent](https://hermes-agent.nousresearch.com/docs)。未检测到时引导页会出现提示卡并附安装指南链接；此时 App 仍可用（会话历史只读），尝试聊天会明确提示缺少的内容。
 
 ### Android
 
-从 [Releases](https://github.com/silent-reader-cn/hermes-ui/releases) 页面下载 `app-release.apk`（Android 7.0+，arm64），连接局域网内或经隧道暴露的 Hermes 服务器即可。
+从 [Releases](https://github.com/silent-reader-cn/hermes-keep/releases) 页面下载 `app-release.apk`（Android 7.0+，arm64），连接局域网内或经隧道暴露的 Hermes 服务器即可。
 
 ### 从源码构建
 
 ```bash
-git clone https://github.com/silent-reader-cn/hermes-ui.git
+git clone https://github.com/silent-reader-cn/hermes-keep.git
 cd hermes-ui
 flutter pub get
 
@@ -128,7 +128,7 @@ API 契约对齐 **[nesquena/hermes-webui](https://github.com/nesquena/hermes-we
 
 ## 项目状态
 
-活跃开发中：2,400+ 自动化测试全绿、`flutter analyze` 零告警。发布产物为 CI 构建的 Windows 安装包（内置 WebUI sidecar）与 Android arm64 APK。变更详情见 [更新日志](CHANGELOG.md)。
+活跃开发中：4,800+ 自动化测试全绿、`flutter analyze` 零告警。发布产物为 CI 构建的 Windows 安装包（内置 WebUI sidecar）与 Android arm64 APK。变更详情见 [更新日志](CHANGELOG.md)。
 
 ## 开源协议
 
