@@ -400,7 +400,17 @@ class MainActivity : FlutterActivity() {
             } else {
                 R.drawable.ic_hermes_agent
             }
-            style.setProgressTrackerIcon(IconCompat.createWithResource(this, trackerRes))
+            // ⚠ 槽位选择（2026-09-19 真机反馈驱动，改之前先读这段）：
+            //   setProgressTrackerIcon → 官方定义 "an overlay ON the bar at the
+            //       point of current progress"，官方用例是外卖小车/网约车（一个
+            //       在条上移动的对象）⇒ 把「状态徽标」放这个位置，系统必然把它
+            //       压在进度条上，真机观感即「图标被横条贯穿」。
+            //   setProgressStartIcon   → 官方定义 "a square icon that appears AT
+            //       THE START OF the progress bar"（独立方形位，非 overlay）。
+            // 故状态图标改用 start 位：图标与条分离，回归「[图标] ━━━━━━」的读法。
+            // 风险：OEM（小米超级岛）模板是否渲染 startIcon 需真机验证；不渲染时
+            // 图标消失，画面退化为「干净条 + chip 三字 + 状态色」，信息不缺失。
+            style.setProgressStartIcon(IconCompat.createWithResource(this, trackerRes))
 
             // #114-P1 工具调用落点：语义是「已经发生的动作落点」，不是完成度（进度条仍保持 indeterminate，禁伪造百分比）。
             val clampedPoints = progressPoints.coerceIn(0, 20)

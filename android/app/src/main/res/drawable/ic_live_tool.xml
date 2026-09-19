@@ -3,8 +3,9 @@
     android:height="20dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+    <!-- 调用工具：圆环。必须显式 fillType=evenOdd —— 此前两段圆同向绘制又未声明，按默认 nonZero 规则内孔被填死，真机上渲染成实心圆、与思考中的圆点混淆。环宽同时加大到 4.8。 -->
     <path
         android:fillColor="#FFFFFFFF"
         android:fillType="evenOdd"
-        android:pathData="M12,3.5a8.5,8.5 0 1,0 0,17a8.5,8.5 0 1,0 0,-17Z M12,8.6a3.4,3.4 0 1,0 0,6.8a3.4,3.4 0 1,0 0,-6.8Z" />
+        android:pathData="M12,2.8a9.2,9.2 0 1,0 0,18.4a9.2,9.2 0 1,0 0,-18.4Z M12,7.6a4.4,4.4 0 1,0 0,8.8a4.4,4.4 0 1,0 0,-8.8Z" />
 </vector>

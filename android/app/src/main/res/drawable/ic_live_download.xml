@@ -3,13 +3,8 @@
     android:height="20dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- B 案补齐的下载态记号：向下粗箭头（杆宽 3、头宽 10）+ 底部托条。
-         参照 #50 教训做成大块面实心 —— 细线在 20dp 尺度必然断线，
-         插画式细节在通知图标尺寸下不可辨。 -->
+    <!-- 下载中：单个大块面箭头（杆宽 5.2、头宽 15.2）。刻意去掉上一版的底部托条 —— 细箭头+托条在 20dp 下碎成线框，只靠「向下」的形状本身表达即可。 -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M10.5,2.5 L13.5,2.5 L13.5,10.7 L17.9,6.3 L20.0,8.4 L12.0,16.4 L4.0,8.4 L6.1,6.3 L10.5,10.7 Z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M5.0,18.9 L19.0,18.9 L19.0,21.5 L5.0,21.5 Z" />
+        android:pathData="M9.4,3.4 L14.6,3.4 L14.6,11.6 L19.6,11.6 L12,20.2 L4.4,11.6 L9.4,11.6 Z" />
 </vector>
