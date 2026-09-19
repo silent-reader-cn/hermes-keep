@@ -152,6 +152,8 @@ class ChatWatchdogConfig {
     this.recoverySentinelInterval = const Duration(seconds: 60),
     this.resumeProbeRetries = 2,
     this.resumeProbeRetryDelay = const Duration(seconds: 2),
+    this.deadZoneStallThreshold = const Duration(seconds: 15),
+    this.deadZoneCooldown = const Duration(seconds: 30),
     this.random,
     this.customJitter,
   });
@@ -201,6 +203,12 @@ class ChatWatchdogConfig {
 
   /// resume 主动探活重试间隔（默认 2s，等待 WiFi/frp 就绪，测试可 override）。
   final Duration resumeProbeRetryDelay;
+
+  /// 死区兜底巡检阈值（处于进行中相位但 activeStreamId 为空、且距上次进展 ≥ 该值 → 触发死区恢复）。
+  final Duration deadZoneStallThreshold;
+
+  /// 死区兜底巡检触发后的冷却时长（防频繁触发向服务端拉取）。
+  final Duration deadZoneCooldown;
 
   /// 可选随机数发生器（测试可注入确定性 Random）。
   final Random? random;

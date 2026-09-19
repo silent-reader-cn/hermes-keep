@@ -148,6 +148,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// #127 静默兜底：冷却截止时刻，避免连续触发重复拉取。
   DateTime? _stallGuardCooldownUntil;
 
+  /// #142 死区兜底：冷却截止时刻，避免连续触发重复拉取。
+  DateTime? _deadZoneCooldownUntil;
+
   /// #127 静默兜底：是否「已发出请求/作答但尚未收到任何服务端进展」。
   /// 由 `_markUserAction`（发送/作答）置 true、`_markProgress`（收到进展）
   /// 置 false —— 兜底巡检只在这个未决期待存在时动手，避免回合正常收尾后
@@ -219,6 +222,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _emptyPendingStreak = 0;
     _lastUserActionAt = null;
     _stallGuardCooldownUntil = null;
+    _deadZoneCooldownUntil = null;
     _awaitingServerContent = false;
     _cancelRecoverySentinel();
     _cancelResumeProbeRetry();
@@ -720,9 +724,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (sessionId.isEmpty || _disposed) return;
     final api = _api;
     if (api == null) return;
-    // 若当前正在发送或流式接收中，避免与实时消息状态竞争
+    // 若当前正在发送或活跃流式接收中，避免与实时消息状态竞争。
+    // 注意：死区场景下（phase == streaming 但 activeStreamId == null）无活跃底层流，
+    // 允许通过 syncMissingMessages 向服务端求证，因此仅在 activeStreamId != null 时早退。
     if (state.stream.activeStreamId != null ||
-        state.phase == ChatPhase.streaming ||
         state.phase == ChatPhase.sending) {
       return;
     }
@@ -1660,7 +1665,22 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     } else {
       nowPaused = next != AppLifecycleState.resumed;
     }
-    if (nowPaused == _appPaused) return;
+    if (nowPaused == _appPaused) {
+      if (next == AppLifecycleState.resumed) {
+        DiagnosticsService.instance.log(
+          level: DiagnosticsLogLevel.info,
+          tag: 'chat_resume',
+          message:
+              'believed-state early-return reconcile (session: ${state.sessionId})',
+        );
+        _reconnectAttempts = 0;
+        _cancelReconnectTimer();
+        _cancelResumeProbeRetry();
+        _resetFullReconnectThrottle();
+        _statusCheckCooldownUntil = null;
+      }
+      return;
+    }
     _appPaused = nowPaused;
     if (nowPaused) {
       DiagnosticsService.instance.log(
@@ -1717,23 +1737,21 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         unawaited(keepalive.cancelOneOffPoll(state.sessionId));
       }
     } catch (_) {}
-    // #100 F1：解锁/回前台 = 人类在场 → 重置恢复状态，拆掉「预算烧尽 +
-    // recovery 闩锁」死锁：重连预算归零、退避/探活重试定时器清除、
+    // #100 F1 / #142 B2：解锁/回前台 = 人类在场 → 无条件重置恢复状态，
+    // 拆掉「预算烧尽 + recovery 闩锁」死锁：重连预算归零、退避/探活重试定时器清除、
     // recovery 非 idle 强制复位（resume 主动探活只认 idle，不复位则永久跳过）。
-    if (state.stream.activeStreamId != null) {
-      _reconnectAttempts = 0;
-      _cancelReconnectTimer();
-      _cancelResumeProbeRetry();
-      _resetFullReconnectThrottle();
-      final recovery = state.stream.recovery;
-      if (recovery == ActiveStreamRecoveryState.checking ||
-          recovery == ActiveStreamRecoveryState.reconnecting) {
-        state = state.copyWith(
-          stream: state.stream.copyWith(
-            recovery: ActiveStreamRecoveryState.idle,
-          ),
-        );
-      }
+    _reconnectAttempts = 0;
+    _cancelReconnectTimer();
+    _cancelResumeProbeRetry();
+    _resetFullReconnectThrottle();
+    final recovery = state.stream.recovery;
+    if (recovery == ActiveStreamRecoveryState.checking ||
+        recovery == ActiveStreamRecoveryState.reconnecting) {
+      state = state.copyWith(
+        stream: state.stream.copyWith(
+          recovery: ActiveStreamRecoveryState.idle,
+        ),
+      );
     }
     // #29 后台恢复主动探测：重基线前捕获「后台空窗」——后台冻结点到 resumed
     // 时刻的传输停滞时长（SSE 后台静默断线无 onTransportError/onClosed 事件，
@@ -1785,6 +1803,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           resumeRetries: _watchdogConfig.resumeProbeRetries,
         ),
       );
+    }
+    // #142 B3：若检测到死区特征立即调用一次死区恢复（不等 watchdog 15s 阈值）
+    final isDeadZone =
+        state.stream.activeStreamId == null &&
+        _phaseIndicatesOngoingTurn &&
+        !state.pendingAction.hasPendingPrompt;
+    if (isDeadZone) {
+      _recoverOrphanedStreamingPhaseIfNeeded(ignoreStallThreshold: true);
     }
   }
 
@@ -3219,6 +3245,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     return ChatLiveActivity.thinking;
   }
 
+  /// #142 A2：当前相位是否表示回合进行中（死区关键判据）。
+  /// 刻意不含 approvalPending / clarifyPending —— 那两个由 hasPendingPrompt 门控覆盖。
+  bool get _phaseIndicatesOngoingTurn =>
+      state.phase == ChatPhase.sending ||
+      state.phase == ChatPhase.streaming ||
+      state.phase == ChatPhase.steered ||
+      state.phase == ChatPhase.recovering;
+
   /// 当前是否处于「回合进行中」（对齐保活上报的 isStreaming 判定）。
   bool get _hasActiveTurn =>
       state.stream.activeStreamId != null ||
@@ -3896,6 +3930,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _recoverStaleStreamIfNeeded();
       _pollContextWindowIfNeeded();
       unawaited(_runStallGuardIfNeeded());
+      _recoverOrphanedStreamingPhaseIfNeeded();
     });
   }
 
@@ -3952,6 +3987,45 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           'Stall guard: 用户动作后 ${now.difference(actionAt).inSeconds}s 无进展且无活跃流，主动拉取会话兜底',
     );
     await syncMissingMessages();
+  }
+
+  /// 死区兜底巡检（#142 A4）：消灭「streaming 但 activeStreamId == null」死区。
+  ///
+  /// 当「本地以为还在跑」但「流标识已丢」且「长时间无任何进展」时，
+  /// 主动 [syncMissingMessages] 向服务端求证一次（该调用顺带能接管服务端新开的流）。
+  void _recoverOrphanedStreamingPhaseIfNeeded({
+    bool ignoreStallThreshold = false,
+  }) {
+    if (_disposed) return;
+    if (_appPaused) return; // 后台不动作
+    if (state.sessionId.isEmpty) return;
+    if (state.stream.activeStreamId != null) return; // 有流 → 归 transport 链
+    if (state.stream.hasCompletedResponse) return; // 已收尾
+    if (state.pendingAction.hasPendingPrompt) return; // 等主人作答 → 不催
+    if (!_phaseIndicatesOngoingTurn) return; // ← 死区关键判据
+    if (_reconnectTimer != null && _reconnectTimer!.isActive) return;
+    final lastProgress = _lastProgress;
+    if (!ignoreStallThreshold) {
+      if (lastProgress == null) return; // 从未有进展 → 交给既有 stall guard
+      final now = _now();
+      if (now.difference(lastProgress) <
+          _watchdogConfig.deadZoneStallThreshold) {
+        return;
+      }
+    }
+    final now = _now();
+    final cooldown = _deadZoneCooldownUntil;
+    if (cooldown != null && now.isBefore(cooldown)) return;
+    _deadZoneCooldownUntil = now.add(_watchdogConfig.deadZoneCooldown);
+    final lastProgressAgeMs =
+        lastProgress == null ? -1 : now.difference(lastProgress).inMilliseconds;
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'chat_deadzone',
+      message:
+          'Deadzone recovery triggered: activeStreamId: null, phase: ${state.phase.name}, lastProgressAge: ${lastProgressAgeMs}ms, sessionId: ${state.sessionId}',
+    );
+    unawaited(syncMissingMessages());
   }
 
   void _recoverStalePrefillIfNeeded() {
@@ -4975,6 +5049,36 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   @visibleForTesting
   Future<void> recoverExistingStreamForTesting(String activeStreamId) =>
       _recoverExistingStream(activeStreamId);
+
+  @visibleForTesting
+  int get reconnectAttemptsForTesting => _reconnectAttempts;
+
+  @visibleForTesting
+  set reconnectAttemptsForTesting(int value) => _reconnectAttempts = value;
+
+  @visibleForTesting
+  void setLastProgressForTesting(DateTime? value) => _lastProgress = value;
+
+  @visibleForTesting
+  DateTime? get deadZoneCooldownUntilForTesting => _deadZoneCooldownUntil;
+
+  @visibleForTesting
+  void setAppPausedForTesting(bool value) => _appPaused = value;
+
+  @visibleForTesting
+  void setStateForTesting(ChatState newState) => state = newState;
+
+  @visibleForTesting
+  void recoverOrphanedStreamingPhaseForTesting({
+    bool ignoreStallThreshold = false,
+  }) =>
+      _recoverOrphanedStreamingPhaseIfNeeded(
+        ignoreStallThreshold: ignoreStallThreshold,
+      );
+
+  @visibleForTesting
+  void setLastContextPollTimeForTesting(DateTime? value) =>
+      _lastContextPollTime = value;
 
   void _recordPersistedMessageCount(int? count) {
     if (count != null) {
