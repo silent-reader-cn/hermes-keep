@@ -85,6 +85,9 @@ class LiveUpdateService {
   static const String kLiveUpdateChannelId = 'live';
 
   /// #114-P1 工具调用落点上限（clamp 防溢出）。
+  ///
+  /// B 案（2026-09-19）起 Dart 侧不再上报落点（小米超级岛不渲染 points、且点数
+  /// 会改变系统 progressMax 使条跳变），Kotlin 侧参数与 clamp 保留以支持回退。
   static const int kMaxProgressPoints = 20;
 
   /// 设置开关 prefs key（默认开启：渐进增强、低版本自动无感）。
@@ -98,14 +101,22 @@ class LiveUpdateService {
   /// 当前时间获取器（测试注入用，禁 Timer 铁律下做确定性节流单测）。
   final DateTime Function() _now;
 
-  /// 上次成功展示的 (title, text, chip, trackerIcon, progressPoints, indeterminate, progressPercent) 幂等缓存；null = 当前无展示中的实况通知。
-  (String, String, String, String, int, bool, int)? _lastShown;
+  /// 上次成功展示的 (title, text, chip, trackerIcon, subText, indeterminate, progressPercent) 幂等缓存；null = 当前无展示中的实况通知。
+  ///
+  /// B 案（2026-09-19）：出参第 5 位由工具落点数换成 subText —— 进度条上的落点
+  /// 蓝点在小米超级岛上根本不渲染（真机取证），且点数会改变系统的 progressMax
+  /// 使条本身跳变，故整套停用，位置让给真正有信息量的次级文案。
+  (String, String, String, String, String?, bool, int)? _lastShown;
 
   /// #114-P1 动态 tracker 图标键（thinking / tool / output / waiting_reply / waiting_approval）。
   String _trackerIconKey = 'thinking';
 
-  /// #114-P1 当前回合工具调用累计落点数（非完成度，回合收尾归零）。
-  int _progressPoints = 0;
+  /// chat 侧上报的**当前活动会话标题**（B 案接线：最大字号位承载会话身份）。
+  ///
+  /// 此前该参数一路传到服务层却在 [_compose] 里被丢弃，导致展开态最大字号长期
+  /// 显示恒定文案「Hermes · 回合进行中」，用户最需要的「哪个会话在跑」完全缺席
+  /// （真机取证 2026-09-19）。回合收尾时清空。
+  String? _activityTitle;
 
   /// 当前活动种类（#123 用于区分等待态与普通回合活动，支持高优先级抢占与自然回落）。
   LiveUpdateActivity? _activity;
@@ -113,8 +124,11 @@ class LiveUpdateService {
   /// 来源一：会话列表活跃会话数（多会话总览兜底）。
   int _listActiveCount = 0;
 
-  /// 来源一：首个非空会话标题（列表链路正文）。
+  /// 来源一：首个非空会话标题（无实时活动时的身份来源）。
   String? _listTitle;
+
+  /// 来源一：活跃会话标题明细（用于精确统计「另有 N 个会话」）。
+  List<String> _listTitles = const [];
 
   /// 来源二：回合实时活动正文（null = 当前无实时活动）。
   String? _activityText;
@@ -184,12 +198,15 @@ class LiveUpdateService {
       _activity = null;
       _activityText = null;
       _activityChip = null;
+      _activityTitle = null;
       _trackerIconKey = 'thinking';
-      _progressPoints = 0;
       await _flush();
       return;
     }
     _activity = activity;
+    // B 案：记录活动会话标题，供 [_compose] 作为最大字号位的主文案。
+    final trimmedTitle = title.trim();
+    _activityTitle = trimmedTitle.isEmpty ? null : trimmedTitle;
     final l10n = AppLocalizations(LocaleResolver.resolve());
     _activityText = switch (activity) {
       LiveUpdateActivity.thinking => l10n.liveUpdateActivityThinking,
@@ -220,11 +237,6 @@ class LiveUpdateService {
       LiveUpdateActivity.completed => 'completed',
       LiveUpdateActivity.interrupted => 'interrupted',
     };
-    if (activity == LiveUpdateActivity.tool) {
-      if (_progressPoints < kMaxProgressPoints) {
-        _progressPoints++;
-      }
-    }
     await _flush();
   }
 
@@ -290,6 +302,7 @@ class LiveUpdateService {
   }) async {
     if (!_isAndroid) return;
     _listActiveCount = activeCount;
+    _listTitles = List<String>.unmodifiable(titles);
     _listTitle = titles.firstWhere(
       (t) => t.trim().isNotEmpty,
       orElse: () => '',
@@ -297,15 +310,54 @@ class LiveUpdateService {
     await _flush();
   }
 
-  /// 合成当前应展示的 (title, text, chip, trackerIcon, progressPoints, indeterminate, progressPercent)；null = 应撤销。
+  /// 当前应作为最大字号主文案的**会话身份**（B 案）：活动会话标题优先，其次
+  /// 列表链路首个会话标题；都没有返回空串（调用方回退通用文案）。
+  String _sessionIdentity() {
+    final activity = (_activityTitle ?? '').trim();
+    if (activity.isNotEmpty) return activity;
+    return (_listTitle ?? '').trim();
+  }
+
+  /// 次级信息（subText）：「另有 N 个会话」。
+  ///
+  /// 精准口径：只统计**与当前身份不同**的活跃会话标题（列表链路逐条上报），故
+  /// 不会把当前会话自己算成「另有」；标题明细缺失时退回「活跃数 - 1」近似。
+  /// 无多会话时返回 null（不占 subText 槽）。
+  String? _otherSessionsSubText(
+    AppLocalizations l10n,
+    String identity,
+    int count,
+  ) {
+    // 身份缺失时 title 已回落「· N 个会话」通用文案，再报一次「另有」即同一句
+    // 话占两处 —— 故此时不占 subText 槽。
+    if (identity.trim().isEmpty) return null;
+    final resolved = _listTitles.isEmpty
+        ? (count > 1 ? count - 1 : 0)
+        : _listTitles
+              .map((t) => t.trim())
+              .where((t) => t.isNotEmpty && t != identity)
+              .toSet()
+              .length;
+    if (resolved <= 0) return null;
+    return l10n.liveUpdateSubTextExtraSessions(resolved);
+  }
+
+  /// 合成当前应展示的 (title, text, chip, trackerIcon, subText, indeterminate, progressPercent)；null = 应撤销。
   ///
   /// 优先级：等待态（抢占一切） > 下载进行中 > 回合其他活动 > 列表总览 > 撤销。
-  (String, String, String, String, int, bool, int)? _compose() {
+  /// **B 案「身份优先」（2026-09-19，主人拍板）**：最大字号位（title）恒定承载
+  /// 会话身份 —— 有实时活动用活动会话标题，否则回落列表链路首个会话标题，都没有
+  /// 才退回通用文案。真机取证显示小米超级岛会自行在头部显示 App 名与计时器，故
+  /// subText 只放系统不会替我们说的话（「另有 N 个会话」），不放 App 名 —— 否则
+  /// 一屏会出现两遍「Hermes」。
+  (String, String, String, String, String?, bool, int)? _compose() {
     final l10n = AppLocalizations(LocaleResolver.resolve());
     final count = _listActiveCount;
-    final title = count > 1
-        ? l10n.liveUpdateTitleMulti(count)
-        : l10n.liveUpdateTitle;
+    final identity = _sessionIdentity();
+    final title = identity.isNotEmpty
+        ? identity
+        : (count > 1 ? l10n.liveUpdateTitleMulti(count) : l10n.liveUpdateTitle);
+    final subText = _otherSessionsSubText(l10n, identity, count);
 
     // 1. 等待态（waitingReply / waitingApproval）：需主人行动，抢占一切。
     final isWaiting =
@@ -318,7 +370,7 @@ class LiveUpdateService {
         activityText,
         _activityChip ?? l10n.liveUpdateChip,
         _trackerIconKey,
-        _progressPoints,
+        subText,
         true,
         0,
       );
@@ -340,7 +392,7 @@ class LiveUpdateService {
         text,
         l10n.liveUpdateDownloadChip,
         'download',
-        0,
+        subText,
         !hasTotal,
         hasTotal ? _downloadPercent : 0,
       );
@@ -349,14 +401,14 @@ class LiveUpdateService {
     // 3. 回合其他活动（thinking / tool / output / completed / interrupted）。
     if (activityText != null && activityText.trim().isNotEmpty) {
       // #129：已完成态用**确定进度条 100%**（满载=完成、停止动画）；
-      // 其余活动保持 indeterminate（工具落点表达「已发生的动作」而非完成度）。
+      // 其余活动保持 indeterminate —— B 案起条只表达「在跑」，不再叠工具落点。
       final isCompleted = _activity == LiveUpdateActivity.completed;
       return (
         title,
         activityText,
         _activityChip ?? l10n.liveUpdateChip,
         _trackerIconKey,
-        _progressPoints,
+        subText,
         !isCompleted,
         isCompleted ? 100 : 0,
       );
@@ -364,13 +416,12 @@ class LiveUpdateService {
 
     // 4. 会话列表总览。
     if (count > 0) {
-      final listTitle = (_listTitle ?? '').trim();
       return (
         title,
-        listTitle.isNotEmpty ? listTitle : l10n.liveUpdateDefaultText,
+        l10n.liveUpdateDefaultText,
         l10n.liveUpdateChip,
         _trackerIconKey,
-        _progressPoints,
+        subText,
         true,
         0,
       );
@@ -392,7 +443,7 @@ class LiveUpdateService {
         await cancelAll();
         return;
       }
-      // 幂等：文案/图标/点数/确定性/百分比 7 字段未变则不重复 notify（防 SSE/列表/下载刷新抖动风暴），
+      // 幂等：文案/图标/subText/确定性/百分比 7 字段未变则不重复 notify（防 SSE/列表/下载刷新抖动风暴），
       // 且先于 isSupported 通道往返——同文案/百分比高频同步须零平台通道调用。
       if (_lastShown == composed) return;
       if (!await isSupported()) return;
@@ -401,7 +452,7 @@ class LiveUpdateService {
         text,
         chip,
         trackerIcon,
-        progressPoints,
+        subText,
         indeterminate,
         progressPercent,
       ) = composed;
@@ -412,9 +463,10 @@ class LiveUpdateService {
         'text': text,
         // 状态栏 chip 短文案（≤6 字符硬约束，Kotlin 侧再兜底截断）。
         'shortCriticalText': chip,
+        // B 案次级信息（可空：多会话时为「另有 N 个会话」）。
+        'subText': subText,
         'indeterminate': indeterminate,
         'trackerIcon': trackerIcon,
-        'progressPoints': progressPoints,
         'progressPercent': progressPercent,
       });
       if (shown == true) {
@@ -448,8 +500,8 @@ class LiveUpdateService {
     _activity = null;
     _activityText = null;
     _activityChip = null;
+    _activityTitle = null;
     _trackerIconKey = 'thinking';
-    _progressPoints = 0;
     try {
       await _channel.invokeMethod<void>('cancel', {
         'id': kLiveUpdateNotificationId,

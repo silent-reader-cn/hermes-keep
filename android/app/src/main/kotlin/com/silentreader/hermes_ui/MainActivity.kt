@@ -247,6 +247,10 @@ class MainActivity : FlutterActivity() {
                         val shortCriticalText = call.argument<String>("shortCriticalText")
                         val indeterminate = call.argument<Boolean>("indeterminate") ?: true
                         val trackerIcon = call.argument<String>("trackerIcon")
+                        // B 案新增：次级信息（多会话计数等）。小米超级岛会自行显示
+                        // App 名与计时器，故 Dart 侧只在这里放系统不会替我们说的话。
+                        val subText = call.argument<String>("subText")
+                        // 工具落点：Dart 侧自 B 案起不再上报（恒 0），参数保留以支持回退。
                         val progressPoints = (call.argument<Int>("progressPoints") ?: 0).coerceIn(0, 20)
                         val progressPercent = call.argument<Int>("progressPercent") ?: 0
                         if (id == null || channelId.isNullOrEmpty() ||
@@ -261,6 +265,7 @@ class MainActivity : FlutterActivity() {
                             title = title,
                             text = text,
                             shortCriticalText = shortCriticalText,
+                            subText = subText,
                             indeterminate = indeterminate,
                             trackerIcon = trackerIcon,
                             progressPoints = progressPoints,
@@ -301,6 +306,7 @@ class MainActivity : FlutterActivity() {
         title: String,
         text: String,
         shortCriticalText: String?,
+        subText: String? = null,
         indeterminate: Boolean,
         trackerIcon: String? = null,
         progressPoints: Int = 0,
@@ -334,7 +340,10 @@ class MainActivity : FlutterActivity() {
                 // 一路往下跳，语义错误。回合进行中应正计时，表达"已经跑了多久"。
                 .setChronometerCountDown(false)
                 .setContentIntent(contentIntent)
-                .setColor(0xFF007AFF.toInt())
+                // B 案状态着色：颜色是最省位置的语义通道（不占一个字就能区分
+                // 「在跑 / 等你动手 / 完了 / 断了」），故按状态取值而非固定品牌蓝。
+                // 注：真机上小米超级岛是否采用该色待复验，忽略则无副作用。
+                .setColor(accentColorFor(trackerIcon))
             // 状态栏 chip 短文案（系统硬约束 ≤6 字符）。按**字符数**截断：
             // TextUtils.ellipsize 的宽度参数单位是像素、非字符数（且新建
             // TextPaint 无字体度量），任何文案都会被压成单个「…」而使 chip 失效，
@@ -347,6 +356,10 @@ class MainActivity : FlutterActivity() {
                         shortCriticalText.take(6)
                     }
                 )
+            }
+            // B 案次级信息（可空）：刻意不放 App 名 —— 系统头部已有，重复即噪声。
+            if (!subText.isNullOrEmpty()) {
+                builder.setSubText(subText)
             }
             // 进度样式（实况通知资格条件之一）：兼容层 NotificationCompat
             // 自带低版本降级（坑③：SDK<36 时 ProgressStyle 自动回退默认样式，
@@ -379,6 +392,9 @@ class MainActivity : FlutterActivity() {
                     // #129 完成/中断态：粗勾 / 实心方块（大块面实心，24dp 可辨）。
                     "completed" -> R.drawable.ic_live_done
                     "interrupted" -> R.drawable.ic_live_stop
+                    // B 案补：此前 download 键在 when 里无分支，落回品牌记号，
+                    // 与「思考中」视觉无法区分（真机取证 2026-09-19）。
+                    "download" -> R.drawable.ic_live_download
                     else -> R.drawable.ic_hermes_agent
                 }
             } else {
@@ -402,6 +418,23 @@ class MainActivity : FlutterActivity() {
             true
         } catch (e: Exception) {
             false
+        }
+    }
+
+    /**
+     * B 案状态强调色（iOS 系统色调色板，暗色语境值）。
+     *
+     * 复用 trackerIcon 作为色键，避免再引入一个与图标语义重复的通道参数；
+     * 等待态用琥珀表达「需要你动手」，是这条通知上唯一的催促性颜色；完成绿 /
+     * 中断红为终态；下载青与运行蓝区分。未知键回落运行蓝。
+     */
+    private fun accentColorFor(trackerIcon: String?): Int {
+        return when (trackerIcon) {
+            "waiting_reply", "waiting_approval" -> 0xFFFF9F0A.toInt()
+            "completed" -> 0xFF30D158.toInt()
+            "interrupted" -> 0xFFFF453A.toInt()
+            "download" -> 0xFF64D2FF.toInt()
+            else -> 0xFF0A84FF.toInt()
         }
     }
 

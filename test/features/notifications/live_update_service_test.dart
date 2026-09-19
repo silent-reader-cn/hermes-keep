@@ -63,7 +63,7 @@ void main() {
   });
 
   group('LiveUpdateService.sync（安卓 16 实况通知）', () {
-    test('activeCount=1 且设备支持 → show 一次，文案含「回合进行中」与 chip「生成中」', () async {
+    test('B 案身份优先：列表会话标题上位 title，正文退为通用状态文案', () async {
       installMock();
       final service = LiveUpdateService();
 
@@ -73,24 +73,29 @@ void main() {
       final args = calls.last.arguments as Map<Object?, Object?>;
       expect(args['id'], LiveUpdateService.kLiveUpdateNotificationId);
       expect(args['channelId'], LiveUpdateService.kLiveUpdateChannelId);
-      expect(args['title'], 'Hermes · 回合进行中');
-      expect(args['text'], '会话 A');
+      expect(args['title'], '会话 A');
+      expect(args['text'], '正在生成回复…');
       expect(args['shortCriticalText'], '生成中');
       expect(args['indeterminate'], isTrue);
+      expect(args['subText'], isNull);
     });
 
-    test('多会话聚合 → 标题带 N 个会话；无有效标题时正文用兜底文案', () async {
+    test('多会话且无标题明细 → title 回退通用文案；有标题时标题上位', () async {
       installMock();
       final service = LiveUpdateService();
 
       await service.sync(activeCount: 3, titles: ['  ', '会话 B']);
       var args = calls.last.arguments as Map<Object?, Object?>;
-      expect(args['title'], 'Hermes · 回合进行中 · 3 个会话');
-      expect(args['text'], '会话 B');
+      expect(args['title'], '会话 B');
+      expect(args['text'], '正在生成回复…');
+      // 明细里除「会话 B」外只剩空白项 → 与身份不同的非空标题数为 0。
+      expect(args['subText'], isNull);
 
       await service.sync(activeCount: 2, titles: const []);
       args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], 'Hermes · 回合进行中 · 2 个会话');
       expect(args['text'], '正在生成回复…');
+      expect(args['subText'], isNull);
     });
 
     test('英文模式 → 标题/正文/chip 全英文（Live ≤6 字符）', () async {
@@ -210,7 +215,7 @@ void main() {
         activity: LiveUpdateActivity.thinking,
       );
       var args = calls.last.arguments as Map<Object?, Object?>;
-      expect(args['title'], 'Hermes · 回合进行中');
+      expect(args['title'], '我的会话');
       expect(args['text'], '正在思考…');
       expect(args['shortCriticalText'], '生成中');
       expect(args['indeterminate'], isTrue);
@@ -301,7 +306,7 @@ void main() {
       );
     });
 
-    test('活动优先于列表总览：正文用动作、标题保留多会话计数', () async {
+    test('活动优先于列表总览：身份用活动会话标题，其余会话数落 subText', () async {
       installMock();
       final service = LiveUpdateService();
 
@@ -313,8 +318,9 @@ void main() {
       );
 
       final args = calls.last.arguments as Map<Object?, Object?>;
-      expect(args['title'], 'Hermes · 回合进行中 · 3 个会话');
+      expect(args['title'], '会话 A');
       expect(args['text'], '正在输出…');
+      expect(args['subText'], '另有 1 个会话');
     });
 
     test('幂等：同活动连续上报 → 只 show 一次', () async {
@@ -347,10 +353,11 @@ void main() {
       await service.notifyActivity(sessionId: 's1', title: 't', activity: null);
       expect(calls.where((c) => c.method == 'cancel'), hasLength(1));
 
-      // 活动态已清：多会话场景下由列表链路重新点亮时正文回退为会话标题。
+      // 活动态已清：列表链路重新点亮时，会话标题落在 title（B 案身份优先）。
       await service.sync(activeCount: 1, titles: ['会话 A']);
       final args = calls.last.arguments as Map<Object?, Object?>;
-      expect(args['text'], '会话 A');
+      expect(args['title'], '会话 A');
+      expect(args['text'], '正在生成回复…');
     });
 
     test('活动态存在时列表报 0 不误撤（列表滞后场景）', () async {
@@ -417,44 +424,29 @@ void main() {
 
   group('LiveUpdateService ProgressStyle 增强（#114-P1）', () {
     test(
-      'tool 活动连续上报 3 次 → 第 3 次 progressPoints=3，且每次都触发 show（点数驱动幂等刷新）',
+      'B 案停用工具落点：同工具连续上报 3 次 → 不透传 progressPoints，字段全同故幂等只 show 一次',
       () async {
         installMock();
         final service = LiveUpdateService();
 
-        await service.notifyActivity(
-          sessionId: 's1',
-          title: '我的会话',
-          activity: LiveUpdateActivity.tool,
-          detail: 'read_file',
-        );
-        await service.notifyActivity(
-          sessionId: 's1',
-          title: '我的会话',
-          activity: LiveUpdateActivity.tool,
-          detail: 'read_file',
-        );
-        await service.notifyActivity(
-          sessionId: 's1',
-          title: '我的会话',
-          activity: LiveUpdateActivity.tool,
-          detail: 'read_file',
-        );
+        for (var i = 0; i < 3; i++) {
+          await service.notifyActivity(
+            sessionId: 's1',
+            title: '我的会话',
+            activity: LiveUpdateActivity.tool,
+            detail: 'read_file',
+          );
+        }
 
+        // #114 的「点数驱动刷新」随落点一起停用：幂等键回到纯文案比对，
+        // tool 重复上报（同工具名）不再制造平台通道调用。
         final showCalls = calls.where((c) => c.method == 'show').toList();
-        expect(showCalls, hasLength(3));
+        expect(showCalls, hasLength(1));
 
-        final args1 = showCalls[0].arguments as Map<Object?, Object?>;
-        expect(args1['trackerIcon'], 'tool');
-        expect(args1['progressPoints'], 1);
-
-        final args2 = showCalls[1].arguments as Map<Object?, Object?>;
-        expect(args2['trackerIcon'], 'tool');
-        expect(args2['progressPoints'], 2);
-
-        final args3 = showCalls[2].arguments as Map<Object?, Object?>;
-        expect(args3['trackerIcon'], 'tool');
-        expect(args3['progressPoints'], 3);
+        final args = showCalls.single.arguments as Map<Object?, Object?>;
+        expect(args['trackerIcon'], 'tool');
+        expect(args['title'], '我的会话');
+        expect(args.containsKey('progressPoints'), isFalse);
       },
     );
 
@@ -559,7 +551,7 @@ void main() {
     });
 
     test(
-      '收尾（activity=null）→ 调 cancel，且点数归零；新回合首个 tool 上报时 progressPoints=1',
+      'B 案收尾（activity=null）→ 调 cancel 并清空活动身份，新回合身份切新',
       () async {
         installMock();
         final service = LiveUpdateService();
@@ -570,16 +562,10 @@ void main() {
           activity: LiveUpdateActivity.tool,
           detail: 'search',
         );
-        await service.notifyActivity(
-          sessionId: 's1',
-          title: '回合 1',
-          activity: LiveUpdateActivity.tool,
-          detail: 'grep',
-        );
         var lastArgs =
             calls.where((c) => c.method == 'show').last.arguments
                 as Map<Object?, Object?>;
-        expect(lastArgs['progressPoints'], 2);
+        expect(lastArgs['title'], '回合 1');
 
         // 回合收尾
         await service.notifyActivity(
@@ -589,7 +575,7 @@ void main() {
         );
         expect(calls.where((c) => c.method == 'cancel'), hasLength(1));
 
-        // 新回合开始，首次 tool 调用
+        // 新回合开始：身份切到新会话，不与上一回合串味。
         await service.notifyActivity(
           sessionId: 's2',
           title: '回合 2',
@@ -599,11 +585,11 @@ void main() {
         lastArgs =
             calls.where((c) => c.method == 'show').last.arguments
                 as Map<Object?, Object?>;
-        expect(lastArgs['progressPoints'], 1);
+        expect(lastArgs['title'], '回合 2');
       },
     );
 
-    test('点数超过 kMaxProgressPoints → clamp 到上限（不会无限增长）', () async {
+    test('B 案落点整套停用：连续多轮工具调用后 show 参数里始终没有 progressPoints 键', () async {
       installMock();
       final service = LiveUpdateService();
 
@@ -616,10 +602,12 @@ void main() {
         );
       }
 
-      final lastArgs =
-          calls.where((c) => c.method == 'show').last.arguments
-              as Map<Object?, Object?>;
-      expect(lastArgs['progressPoints'], LiveUpdateService.kMaxProgressPoints);
+      final showCalls = calls.where((c) => c.method == 'show').toList();
+      expect(showCalls, isNotEmpty);
+      for (final call in showCalls) {
+        final args = call.arguments as Map<Object?, Object?>;
+        expect(args.containsKey('progressPoints'), isFalse);
+      }
     });
 
     test('cancelAll 显式调用 → 重置点数与 trackerIconKey', () async {
@@ -637,13 +625,162 @@ void main() {
       final lastArgs =
           calls.where((c) => c.method == 'show').last.arguments
               as Map<Object?, Object?>;
-      expect(lastArgs['progressPoints'], 0);
+      // B 案：cancelAll 清空活动身份，下一次列表链路上报由列表标题接手 title。
+      expect(lastArgs['title'], '新会话');
       expect(lastArgs['trackerIcon'], 'thinking');
+      expect(lastArgs.containsKey('progressPoints'), isFalse);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // B 案「身份优先 + 状态着色」（2026-09-19，主人拍板；真机取证驱动）
+  //
+  // 病灶：展开态最大字号位长期被恒定文案「Hermes · 回合进行中」占死，而 chat 侧
+  // 一路传上来的会话标题在服务层被丢弃 —— 用户看不出是哪个会话在跑；同时真机
+  // 显示小米超级岛会自行在头部显示 App 名与计时器，任何再放 App 名的做法只会
+  // 让一屏出现两遍「Hermes」。
+  // -------------------------------------------------------------------------
+  group('B 案身份优先与 subText（2026-09-19）', () {
+    test('活动会话标题上位 title（此前该参数被丢弃）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '重构 SSE 重连逻辑',
+        activity: LiveUpdateActivity.thinking,
+      );
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], '重构 SSE 重连逻辑');
+      expect(args['text'], '正在思考…');
+      // 单会话：不占 subText 槽。
+      expect(args['subText'], isNull);
+    });
+
+    test('无实时活动 → 列表链路首个标题上位 title，正文退为通用状态文案', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 1, titles: ['会话 A']);
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], '会话 A');
+      expect(args['text'], '正在生成回复…');
+      expect(args['subText'], isNull);
+    });
+
+    test('身份与标题明细都缺失 → 回退通用文案，且 subText 不重复计数', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 3);
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], 'Hermes · 回合进行中 · 3 个会话');
+      expect(args['text'], '正在生成回复…');
+      // title 已含计数 —— 再报一次「另有」等于同一句话占两处。
+      expect(args['subText'], isNull);
+    });
+
+    test('多会话：身份留 title、其余会话数落 subText，且不含 App 名', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 3, titles: ['会话 A', '会话 B', '会话 C']);
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '会话 A',
+        activity: LiveUpdateActivity.output,
+      );
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], '会话 A');
+      expect(args['subText'], '另有 2 个会话');
+      // App 名由系统头部显示，subText 再放会让一屏出现两遍「Hermes」。
+      expect(args['subText'], isNot(contains('Hermes')));
+    });
+
+    test('当前身份不在列表明细内 → 不把自己算成「另有」', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 2, titles: ['会话 B', '会话 C']);
+      await service.notifyActivity(
+        sessionId: 's9',
+        title: '会话 A',
+        activity: LiveUpdateActivity.thinking,
+      );
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], '会话 A');
+      expect(args['subText'], '另有 2 个会话');
+    });
+
+    test('英文模式 subText 按单复数分流', () async {
+      installMock();
+      LocaleResolver.updateMode(AppLocaleMode.en);
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 2, titles: ['A', 'B']);
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 'A',
+        activity: LiveUpdateActivity.thinking,
+      );
+      var args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['subText'], '1 more session');
+
+      await service.sync(activeCount: 4, titles: ['A', 'B', 'C', 'D']);
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: 'A',
+        activity: LiveUpdateActivity.output,
+      );
+      args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['subText'], '3 more sessions');
+    });
+
+    test('等待态同样带身份与 subText（报警态不丢上下文）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 2, titles: ['会话 A', '会话 B']);
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '会话 A',
+        activity: LiveUpdateActivity.waitingApproval,
+      );
+
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['title'], '会话 A');
+      expect(args['subText'], '另有 1 个会话');
+      expect(args['shortCriticalText'], '请批准');
+    });
+
+    test('subText 变化单独触发刷新（幂等键已含该字段）', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.sync(activeCount: 2, titles: ['会话 A', '会话 B']);
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '会话 A',
+        activity: LiveUpdateActivity.thinking,
+      );
+      // 列表链路 1 次（正文为通用状态）+ 活动上报 1 次（正文为动作）。
+      expect(calls.where((c) => c.method == 'show'), hasLength(2));
+
+      // 第三条会话进入 → 仅 subText 变化即须重发（幂等键已含该字段）。
+      await service.sync(activeCount: 3, titles: ['会话 A', '会话 B', '会话 C']);
+      final args = calls.last.arguments as Map<Object?, Object?>;
+      expect(args['subText'], '另有 2 个会话');
+      expect(calls.where((c) => c.method == 'show'), hasLength(3));
     });
   });
 
   group('LiveUpdateService #123 下载进度上岛与工具名转译', () {
-    test('1. 下载上岛参数：notifyDownloadProgress(fileName: a.apk, 42/100) → show 含 indeterminate=false, progressPercent=42, trackerIcon=download, progressPoints=0', () async {
+    test('1. 下载上岛参数：notifyDownloadProgress(fileName: a.apk, 42/100) → show 含 indeterminate=false, progressPercent=42, trackerIcon=download', () async {
       installMock();
       final service = LiveUpdateService();
 
@@ -659,7 +796,7 @@ void main() {
       expect(args['indeterminate'], isFalse);
       expect(args['progressPercent'], 42);
       expect(args['trackerIcon'], 'download');
-      expect(args['progressPoints'], 0);
+      expect(args.containsKey('progressPoints'), isFalse);
       expect(args['shortCriticalText'], '下载中');
       expect(args['text'], '正在下载 a.apk · 42%');
     });
@@ -933,7 +1070,7 @@ void main() {
       expect(lastArgs['text'], '正在调用工具…');
     });
 
-    test('9. 7 字段透传断言：show 调用同时携带 title/text/chip/trackerIcon/progressPoints/indeterminate/progressPercent', () async {
+    test('9. 字段透传断言：show 调用同时携带 title/text/chip/trackerIcon/subText/indeterminate/progressPercent', () async {
       installMock();
       final service = LiveUpdateService();
 
@@ -953,7 +1090,9 @@ void main() {
       expect(lastArgs['text'], '正在下载 verify.tar.gz · 75% · 还有 2 个');
       expect(lastArgs['shortCriticalText'], '下载中');
       expect(lastArgs['trackerIcon'], 'download');
-      expect(lastArgs['progressPoints'], 0);
+      // 无多会话信息时不占 subText 槽（键存在但为空）。
+      expect(lastArgs['subText'], isNull);
+      expect(lastArgs.containsKey('progressPoints'), isFalse);
       expect(lastArgs['indeterminate'], false);
       expect(lastArgs['progressPercent'], 75);
     });

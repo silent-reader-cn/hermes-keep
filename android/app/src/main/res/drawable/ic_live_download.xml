@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- B 案补齐的下载态记号：向下粗箭头（杆宽 3、头宽 10）+ 底部托条。
+         参照 #50 教训做成大块面实心 —— 细线在 20dp 尺度必然断线，
+         插画式细节在通知图标尺寸下不可辨。 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10.5,2.5 L13.5,2.5 L13.5,10.7 L17.9,6.3 L20.0,8.4 L12.0,16.4 L4.0,8.4 L6.1,6.3 L10.5,10.7 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5.0,18.9 L19.0,18.9 L19.0,21.5 L5.0,21.5 Z" />
+</vector>

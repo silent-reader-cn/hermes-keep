@@ -29,6 +29,7 @@
   "liveUpdateChipApproval": "Allow",
   "liveUpdateChipDone": "Done",
   "liveUpdateChipStopped": "Stop",
+  "liveUpdateSubTextExtraSessions": "{count} more sessions",
   "bgWorkManagerStatusNotApplicable": "Not applicable (Android only)",
   "bgWorkManagerStatusFailed": "Not ready: {reason}",
   "bgWorkManagerStatusFailedShort": "Not ready"

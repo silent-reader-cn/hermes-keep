@@ -1918,6 +1918,18 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
   /// 活动正文：下载队列排队后缀（仅 queuedCount > 0 时拼接）。
   String liveUpdateDownloadQueuedSuffix(int count) =>
       isEnglish ? ' · +$count queued' : ' · 还有 $count 个';
+
+  /// 实况通知次级信息（subText）：另有 N 个会话（B 案，2026-09-19）。
+  ///
+  /// 只放**系统不会替我们显示**的信息：真机取证显示小米超级岛会自行在头部显示
+  /// App 名与计时器，subText 再放 App 名会让一屏出现两遍「Hermes」。中文不带
+  /// 量词后缀以省宽度；英文按单复数分流。
+  String liveUpdateSubTextExtraSessions(int count) {
+    if (isEnglish) {
+      return count == 1 ? '1 more session' : '$count more sessions';
+    }
+    return '另有 $count 个会话';
+  }
 }
 
 // ---------------------------------------------------------------------------
