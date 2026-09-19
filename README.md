@@ -47,6 +47,15 @@ Dark and light themes ship side by side, and each language gets its own set so t
 
 > All screenshots are captured from the app's own golden-screenshot harness with demo data (`test/screenshots/`), so they match every release byte-for-byte. Both the English and [简体中文](README.zh-CN.md) sets are generated from the same harness, one run per language.
 
+## Why this one
+
+**One codebase, two platforms.** A Windows desktop app and an Android phone app built from the same
+Flutter + Cupertino codebase — the same layout, the same features, the same bilingual UI on both.
+Start a turn at your desk, pick it up from your phone.
+
+That is the point of the project: not a port of any single-platform client, but one client that
+behaves the same everywhere it runs.
+
 ## Highlights
 
 - **Bundled WebUI Sidecar (Windows)** — the installer ships a self-contained WebUI backend with an embedded Python 3.11 runtime: no pre-installed Python, Git, or compilers required. One click to start & connect, Clash-Verge style.
@@ -73,7 +82,7 @@ Chat requires a [Hermes Agent](https://hermes-agent.nousresearch.com/docs) insta
 
 ### Android
 
-Download the `*-arm64.apk` from the [Releases](https://github.com/silent-reader-cn/hermes-ui/releases) page (Android 7.0+) and connect it to your Hermes server on the network.
+Download `app-release.apk` from the [Releases](https://github.com/silent-reader-cn/hermes-ui/releases) page (Android 7.0+, arm64) and connect it to your Hermes server on the network.
 
 ### Build from source
 

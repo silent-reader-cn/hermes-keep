@@ -47,6 +47,12 @@
 
 > 全部截图由 App 自身的 golden 截图工装生成（`test/screenshots/`，演示数据），与每次发布逐像素一致；英文版 README 用的是同一工装出的英文套件（界面语言与演示数据同为英文）。
 
+## 为什么选它
+
+**一套代码，两个平台。** Windows 桌面端与 Android 手机端出自同一套 Flutter + Cupertino 代码库——布局一致、功能一致、双语一致。桌面端开一个回合，手机上接着聊。
+
+这正是本项目的立意：不做任何单平台客户端的移植，而是一个「在哪里跑都长一样」的客户端。
+
 ## 功能亮点
 
 - **内置 WebUI Sidecar（Windows）** —— 安装包自带完整 WebUI 后端与嵌入式 Python 3.11 运行时：无需预装 Python、Git 或任何编译环境，一键启动并连接（Clash Verge 式体验）。
@@ -73,7 +79,7 @@
 
 ### Android
 
-从 [Releases](https://github.com/silent-reader-cn/hermes-ui/releases) 页面下载 `*-arm64.apk`（Android 7.0+），连接局域网内或经隧道暴露的 Hermes 服务器即可。
+从 [Releases](https://github.com/silent-reader-cn/hermes-ui/releases) 页面下载 `app-release.apk`（Android 7.0+，arm64），连接局域网内或经隧道暴露的 Hermes 服务器即可。
 
 ### 从源码构建
 
