@@ -1,12 +1,16 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../features/session_list/session_list_page.dart';
+import '../../features/session_list/sidebar_workspace_selector.dart';
 import 'sidebar_nav_rail.dart';
 import 'sidebar_status_bar.dart';
 
 /// 宽屏自适应外壳的左侧常驻侧栏（TASK W1 / #145 重设计）。
 ///
-/// 包含左侧 50px 导航轨（SidebarNavRail）与右侧列（会话列表 + 底部状态条 SidebarStatusBar）。
+/// 结构自左向右：50px 导航轨（[SidebarNavRail]）+ 列表列
+/// （顶部工作区选择器 [SidebarWorkspaceSelector] → 会话列表 → 底部状态条
+/// [SidebarStatusBar]）。工作区选择器自带窄屏守卫且无工作区时自渲染为零尺寸，
+/// 故此处无条件挂载即可。
 class SessionSidebar extends StatelessWidget {
   const SessionSidebar({super.key, required this.currentLocation});
 
@@ -34,6 +38,9 @@ class SessionSidebar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // #145 工作区选择器：列表列顶部常驻，自带窄屏守卫与
+                // 「无工作区 / 拉取失败即零尺寸」容错，故无条件挂载。
+                SidebarWorkspaceSelector(),
                 // 侧栏左侧已有 SidebarNavRail 提供工具入口，内部会话
                 // 列表不再重复渲染工具行，避免宽屏双层入口重叠；设置图标同样由
                 // 导航轨承担，隐藏列表头部右侧齿轮避免双设置入口。
@@ -42,6 +49,8 @@ class SessionSidebar extends StatelessWidget {
                     showUtilityRows: false,
                     showSettingsTrailing: false,
                     showFab: false,
+                    // #145：选择器已由侧栏承担，列表页不再自带一份。
+                    showWorkspaceSelector: false,
                   ),
                 ),
                 SidebarStatusBar(),

@@ -31,6 +31,7 @@ import 'session_list_header.dart';
 import 'session_list_providers.dart';
 import 'session_list_utility_rows.dart';
 import 'session_row_subtitle_settings.dart';
+import 'sidebar_workspace_selector.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
 ///
@@ -43,6 +44,7 @@ class SessionListPage extends ConsumerStatefulWidget {
     this.showUtilityRows = true,
     this.showSettingsTrailing = true,
     this.showFab = true,
+    this.showWorkspaceSelector = false,
   });
 
   /// 是否渲染顶部工具行入口（任务/看板/技能/记忆/统计）。
@@ -63,6 +65,9 @@ class SessionListPage extends ConsumerStatefulWidget {
   /// 手机单栈（窄屏）保持默认 `true`；桌面侧栏场景隐藏 FAB，新建入口由
   /// 头部右上角按钮承担（见 [SessionListHeaderDelegate.actions]）。
   final bool showFab;
+
+  /// 是否在列表顶部渲染工作区选择器卡片（#145，桌面侧栏场景）。
+  final bool showWorkspaceSelector;
 
   @override
   ConsumerState<SessionListPage> createState() => _SessionListPageState();
@@ -126,6 +131,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       }
     });
 
+    ref.listen<String?>(selectedWorkspaceFilterProvider, (previous, next) {
+      if (previous != next && _scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+
     // 首帧后自动补充分页窗口，直到填满视口或耗尽（内容不足一屏时也能翻页）。
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeLoadMore());
 
@@ -182,6 +193,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 // （视口会把 overscroll 逐级分给前面的 box sliver，导致
                 // 指示器拿不到负 overlap 而无法触发）。
                 CupertinoSliverRefreshControl(onRefresh: _onRefresh),
+                if (widget.showWorkspaceSelector)
+                  const SliverToBoxAdapter(child: SidebarWorkspaceSelector()),
                 if (widget.showUtilityRows)
                   SliverToBoxAdapter(child: _buildSearchBar()),
                 if (widget.showUtilityRows && !isSearchMode && isWide)
@@ -522,10 +535,17 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
     final hasVisible = sections.any((section) => section.sessions.isNotEmpty);
     if (!hasVisible) {
-      return [_buildEmptySliver(isSearchMode: isSearchMode)];
+      return [
+        _buildEmptySliver(
+          isSearchMode: isSearchMode,
+          selectedWorkspace: ref.watch(selectedWorkspaceFilterProvider),
+        ),
+      ];
     }
 
     final l10n = AppLocalizations.of(context);
+    final hasMore = ref.watch(sessionListHasMoreProvider);
+    final filteredSessions = ref.watch(filteredDisplaySessionsProvider);
     return [
       for (final section in sections)
         if (section.sessions.isNotEmpty) ...[
@@ -634,15 +654,15 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ),
           ),
         ],
-      if (state.hasMore)
+      if (hasMore)
         const SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(child: CupertinoActivityIndicator(radius: 12)),
           ),
         ),
-      if (!state.hasMore &&
-          state.displaySessions.length > SessionListState.pageSize)
+      if (!hasMore &&
+          filteredSessions.length > SessionListState.pageSize)
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -712,8 +732,39 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     );
   }
 
-  Widget _buildEmptySliver({required bool isSearchMode}) {
+  Widget _buildEmptySliver({
+    required bool isSearchMode,
+    String? selectedWorkspace,
+  }) {
     final l10n = AppLocalizations.of(context);
+    final isWorkspaceFiltered =
+        selectedWorkspace != null && selectedWorkspace.trim().isNotEmpty;
+
+    final IconData icon;
+    final String title;
+    final String subtitle;
+    if (isWorkspaceFiltered) {
+      icon = CupertinoIcons.folder_badge_minus;
+      title = isSearchMode
+          ? (l10n.isEnglish
+              ? 'No matching sessions in this workspace'
+              : '该工作区下未找到相关会话')
+          : (l10n.isEnglish
+              ? 'No sessions in this workspace'
+              : '该工作区下暂无会话');
+      subtitle = l10n.isEnglish
+          ? 'Clear the filter to view all sessions'
+          : '清除筛选以查看全部会话';
+    } else if (isSearchMode) {
+      icon = CupertinoIcons.search;
+      title = l10n.noMatchingSessionsFound;
+      subtitle = l10n.tryAnotherKeyword;
+    } else {
+      icon = CupertinoIcons.chat_bubble_2;
+      title = l10n.noSessions;
+      subtitle = l10n.tapButtonToStartNewChat;
+    }
+
     return SliverFillRemaining(
       hasScrollBody: false,
       child: Padding(
@@ -722,9 +773,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              isSearchMode
-                  ? CupertinoIcons.search
-                  : CupertinoIcons.chat_bubble_2,
+              icon,
               size: 48,
               color: LightSurfaces.resolve(
                 context,
@@ -736,14 +785,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              isSearchMode ? l10n.noMatchingSessionsFound : l10n.noSessions,
+              title,
+              textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 17),
             ),
             const SizedBox(height: 6),
             Text(
-              isSearchMode
-                  ? l10n.tryAnotherKeyword
-                  : l10n.tapButtonToStartNewChat,
+              subtitle,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
                 color: LightSurfaces.resolve(
@@ -753,8 +802,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 ),
               ),
             ),
-            if (!isSearchMode) ...[
-              const SizedBox(height: 20),
+            const SizedBox(height: 20),
+            if (isWorkspaceFiltered) ...[
+              CupertinoButton.filled(
+                key: const ValueKey('session-list-clear-filter'),
+                onPressed: () => ref
+                    .read(selectedWorkspaceFilterProvider.notifier)
+                    .clearFilter(),
+                child: Text(l10n.isEnglish ? 'Clear filter' : '清除筛选'),
+              ),
+            ] else if (!isSearchMode) ...[
               CupertinoButton.filled(
                 key: const ValueKey('session-list-empty-new'),
                 onPressed: () => unawaited(_onNewSession(context)),
@@ -799,8 +856,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   void _maybeLoadMore() {
     final controller = ref.read(sessionListControllerProvider.notifier);
-    final state = ref.read(sessionListControllerProvider).valueOrNull;
-    if (state == null || !state.hasMore) return;
+    final hasMore = ref.read(sessionListHasMoreProvider);
+    if (!hasMore) return;
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
     if (position.extentAfter < 200 || position.maxScrollExtent == 0) {
@@ -816,8 +873,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   Future<void> _onNewSession(BuildContext context, {String? workspace}) async {
+    final activeFilter = ref.read(selectedWorkspaceFilterProvider);
+    final targetWorkspace = workspace ?? activeFilter;
     final controller = ref.read(sessionListControllerProvider.notifier);
-    final id = await controller.createSession(workspace: workspace);
+    final id = await controller.createSession(workspace: targetWorkspace);
     if (!context.mounted) return;
     if (id != null) {
       ref.read(recentlyCreatedSessionIdProvider.notifier).markCreated(id);

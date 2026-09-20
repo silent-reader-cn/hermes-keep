@@ -936,15 +936,30 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// 分页加载：展开可见窗口（客户端分块；服务端无分页参数）。
   Future<void> loadMore() async {
     final current = state.valueOrNull;
-    if (current == null || !current.hasMore) return;
+    if (current == null) return;
+    final filter = ref.read(selectedWorkspaceFilterProvider);
+    final int maxCount;
+    if (filter == null || filter.trim().isEmpty) {
+      maxCount = current.displaySessions.length;
+    } else {
+      maxCount = current.displaySessions
+          .where((s) => matchesWorkspace(s.workspace, filter))
+          .length;
+    }
+    if (current.visibleCount >= maxCount) return;
     final next = current.visibleCount + pageSize;
     state = AsyncData(
       current.copyWith(
-        visibleCount: next < current.displaySessions.length
-            ? next
-            : current.displaySessions.length,
+        visibleCount: next < maxCount ? next : maxCount,
       ),
     );
+  }
+
+  /// 重置分页窗口为初始页大小（切换工作区/筛选时调用）。
+  void resetVisibleCount() {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(current.copyWith(visibleCount: pageSize));
   }
 
   /// 搜索（UI 已做防抖）：query 为空 → 退出搜索模式恢复普通列表。
@@ -1830,13 +1845,70 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   }
 }
 
-/// 当前分页窗口内的可见会话（普通模式 = 分块；搜索模式 = 命中结果分块）。
+/// 工作区路径比对（忽略首尾空格，容错反斜杠与正斜杠差异）。
+bool matchesWorkspace(String? sessionWorkspace, String? targetPath) {
+  if (sessionWorkspace == null || targetPath == null) return false;
+  final sw = sessionWorkspace.trim();
+  final tw = targetPath.trim();
+  if (sw.isEmpty || tw.isEmpty) return false;
+  if (sw == tw) return true;
+  return sw.replaceAll('\\', '/') == tw.replaceAll('\\', '/');
+}
+
+/// 当前选中的工作区筛选路径（null 或空 = 全部工作区）。
+///
+/// 内存态，不落盘（避免上次筛选导致会话莫名消失；#145）。
+final selectedWorkspaceFilterProvider =
+    NotifierProvider<SelectedWorkspaceFilterController, String?>(
+      SelectedWorkspaceFilterController.new,
+    );
+
+class SelectedWorkspaceFilterController extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  /// 选中指定工作区路径（null 或空 = 全部工作区）。
+  void selectWorkspace(String? path) {
+    final normalized =
+        (path == null || path.trim().isEmpty) ? null : path.trim();
+    if (state == normalized) return;
+    state = normalized;
+    ref.read(sessionListControllerProvider.notifier).resetVisibleCount();
+  }
+
+  /// 清除工作区筛选，恢复显示全部工作区。
+  void clearFilter() {
+    selectWorkspace(null);
+  }
+}
+
+/// 当前工作区筛选后的完整会话列表（在分页与分段之前应用过滤）。
+final filteredDisplaySessionsProvider = Provider<List<SessionSummary>>((ref) {
+  final state = ref.watch(sessionListControllerProvider).valueOrNull;
+  if (state == null) return const [];
+  final filter = ref.watch(selectedWorkspaceFilterProvider);
+  final all = state.displaySessions;
+  if (filter == null || filter.trim().isEmpty) {
+    return all;
+  }
+  return all.where((s) => matchesWorkspace(s.workspace, filter)).toList();
+});
+
+/// 是否还有更多可分页内容（考虑工作区筛选后的分块）。
+final sessionListHasMoreProvider = Provider<bool>((ref) {
+  final state = ref.watch(sessionListControllerProvider).valueOrNull;
+  if (state == null) return false;
+  final all = ref.watch(filteredDisplaySessionsProvider);
+  return state.visibleCount < all.length;
+});
+
+/// 当前分页窗口内的可见会话（普通模式 = 分块；搜索模式 = 命中结果分块；受工作区筛选控制）。
 final sessionListVisibleSessionsProvider = Provider<List<SessionSummary>>((
   ref,
 ) {
   final state = ref.watch(sessionListControllerProvider).valueOrNull;
   if (state == null) return const [];
-  final all = state.displaySessions;
+  final all = ref.watch(filteredDisplaySessionsProvider);
   final end = state.visibleCount < all.length ? state.visibleCount : all.length;
   return all.sublist(0, end);
 });
