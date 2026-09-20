@@ -28,11 +28,13 @@ SessionSummary buildSession(
   String title, {
   bool pinned = false,
   DateTime? at,
+  String? workspace = '/ws/test-ws',
 }) {
   return SessionSummary(
     sessionId: id,
     title: title,
     pinned: pinned,
+    workspace: workspace,
     lastMessageAt: sec(at ?? DateTime.now()),
   );
 }
@@ -92,44 +94,47 @@ class _StubActiveConnection extends ActiveConnectionController {
 
 void main() {
   group('buildSessionSections 分区', () {
-    test('置顶 / 今天 / 昨天 / 更早 分组，组内时间倒序，空组剔除', () {
+    test('按工作区分组：置顶独立在最前，各工作区按最近活动时间倒序，空工作区归入「其他」，组内时间倒序', () {
       final now = DateTime(2026, 8, 16, 12);
-      final pinned = buildSession('p1', '置顶会话', pinned: true, at: now);
-      final today = buildSession(
-        't1',
-        '今天会话',
+      final pinned = buildSession('p1', '置顶会话', pinned: true, at: now, workspace: '/ws/alpha');
+      final alpha1 = buildSession(
+        'a1',
+        'Alpha 较早',
+        at: now.subtract(const Duration(hours: 3)),
+        workspace: '/ws/alpha',
+      );
+      final beta1 = buildSession(
+        'b1',
+        'Beta 最近',
         at: now.subtract(const Duration(hours: 1)),
+        workspace: '/ws/beta',
       );
-      final yesterday = buildSession(
-        'y1',
-        '昨天会话',
-        at: now.subtract(const Duration(days: 1)),
-      );
-      final earlier = buildSession(
-        'e1',
-        '更早会话',
-        at: now.subtract(const Duration(days: 10)),
-      );
-      final noTimestamp = buildSession(
+      final noWs1 = buildSession(
         'n1',
-        '无时间戳',
-        at: DateTime.fromMillisecondsSinceEpoch(0),
+        '无工作区 1',
+        at: now.subtract(const Duration(hours: 2)),
+        workspace: null,
+      );
+      final noWs2 = buildSession(
+        'n2',
+        '无工作区 2（较早）',
+        at: now.subtract(const Duration(days: 1)),
+        workspace: null,
       );
 
       final sections = buildSessionSections([
-        noTimestamp,
-        earlier,
-        yesterday,
-        today,
+        noWs2,
+        noWs1,
+        beta1,
+        alpha1,
         pinned,
       ], now: now);
 
-      expect(sections.map((s) => s.title).toList(), ['置顶', '今天', '昨天', '更早']);
+      expect(sections.map((s) => s.title).toList(), ['置顶', 'beta', 'alpha', '其他']);
       expect(sections[0].sessions.map((s) => s.sessionId), ['p1']);
-      expect(sections[1].sessions.map((s) => s.sessionId), ['t1']);
-      expect(sections[2].sessions.map((s) => s.sessionId), ['y1']);
-      // 更早：e1（10 天前）在前，无时间戳（0）在后
-      expect(sections[3].sessions.map((s) => s.sessionId), ['e1', 'n1']);
+      expect(sections[1].sessions.map((s) => s.sessionId), ['b1']);
+      expect(sections[2].sessions.map((s) => s.sessionId), ['a1']);
+      expect(sections[3].sessions.map((s) => s.sessionId), ['n1', 'n2']);
     });
 
     test('全空输入 → 无分区', () {
@@ -485,7 +490,7 @@ void main() {
       expect(inserted.createdAt, isNotNull);
       expect(inserted.createdAt!, greaterThanOrEqualTo(before - 5));
       final sections = buildSessionSections(sessions);
-      expect(sections.first.title, '今天');
+      expect(sections.first.title, 'test-ws');
       expect(sections.first.sessions.first.sessionId, 'b1');
     });
 
@@ -601,24 +606,28 @@ void main() {
       final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
         sessions: [
-          buildSession('p1', '置顶会话', pinned: true, at: noon),
+          buildSession('p1', '置顶会话', pinned: true, at: noon, workspace: '/ws/proj_a'),
           buildSession(
             't1',
             '今天会话',
             at: noon.subtract(const Duration(hours: 2)),
+            workspace: '/ws/proj_a',
           ),
           buildSession(
             'e1',
             '更早会话',
             at: noon.subtract(const Duration(days: 5)),
+            workspace: '/ws/proj_b',
           ),
         ],
       );
       await pumpSessionList(tester, api);
 
       expect(find.text('置顶'), findsOneWidget);
-      expect(find.text('今天'), findsOneWidget);
-      expect(find.text('更早'), findsOneWidget);
+      // 组头（11.5px 加粗）与会话行副标题都显示工作区名，故同名文本会出现多次；
+      // 本断言只验证「该工作区名在列表中可见」。
+      expect(find.text('proj_a'), findsAtLeastNWidgets(1));
+      expect(find.text('proj_b'), findsAtLeastNWidgets(1));
       expect(find.text('置顶会话'), findsOneWidget);
       expect(find.text('今天会话'), findsOneWidget);
       expect(find.text('更早会话'), findsOneWidget);

@@ -2033,3 +2033,11 @@ extension AppLocalizationsDesktopShell145 on AppLocalizations {
   String get sessionsTitle => sessions;
 }
 
+// ---------------------------------------------------------------------------
+// #146 会话列表按工作区分组
+// ---------------------------------------------------------------------------
+extension AppLocalizationsWorkspaceGroup146 on AppLocalizations {
+  /// 会话列表未绑定工作区的「其他」分组标题。
+  String get otherSection => isEnglish ? 'Other' : '其他';
+}
+

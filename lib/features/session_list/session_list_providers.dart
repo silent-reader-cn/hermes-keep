@@ -155,15 +155,34 @@ final sessionListApiFactoryProvider = Provider<SessionListApiFactory>(
   (ref) => SessionListApiClient.new,
 );
 
-/// 会话列表分区（对齐 Hermex `SessionListSection.Kind`：scheduled/pinned/today/yesterday/earlier）。
+/// 会话列表分区（置顶 / 工作区组 / 其他；搜索模式为「搜索结果」）。
 class SessionListSection {
-  const SessionListSection({required this.title, required this.sessions});
+  const SessionListSection({
+    required this.title,
+    required this.sessions,
+    this.workspacePath,
+    this.isOther = false,
+    this.isPinned = false,
+  });
 
-  /// 分区标题（定时 / 置顶 / 今天 / 昨天 / 更早；搜索模式为「搜索结果」）。
+  /// 分区标题（置顶 / 工作区名或路径末段 / 其他；搜索模式为「搜索结果」）。
   final String title;
 
   /// 分区内的会话（已按时间倒序）。
   final List<SessionSummary> sessions;
+
+  /// 工作区路径（若是工作区组）。
+  final String? workspacePath;
+
+  /// 是否为「其他」组（收纳无 workspace 的会话）。
+  final bool isOther;
+
+  /// 是否为置顶区。
+  final bool isPinned;
+
+  /// 分区唯一标识键（用于内存折叠态索引）。
+  String get key =>
+      isOther ? '其他' : (isPinned ? '置顶' : (workspacePath ?? title));
 }
 
 /// 会话列表筛选模式：全部 / 已归档 / 来源标签 / 项目 / 工作区。
@@ -1312,11 +1331,15 @@ class SessionListController extends AsyncNotifier<SessionListState> {
           ? null
           : session.title!.trim();
       await _insertSession(
+        // 继承原会话的 workspace：fork 的语义是「在同一项目上下文继续」，
+        // 而 SessionBranchResponse 并不携带 workspace（后端不返回该字段）。
+        // 不继承的话，fork 出的会话会掉进「其他」组，与按工作区分组的列表相悖。
         SessionSummary(
           sessionId: newId,
           title: hasTitle
               ? response.title
               : (baseTitle == null ? null : '$baseTitle (fork)'),
+          workspace: session.workspace,
         ),
       );
       return newId;
@@ -1856,6 +1879,14 @@ bool matchesWorkspace(String? sessionWorkspace, String? targetPath) {
   return sw.replaceAll('\\', '/') == tw.replaceAll('\\', '/');
 }
 
+/// 提取工作区路径的最后一段（忽略首尾空格，容错反斜杠与正斜杠差异）。
+String extractWorkspaceLastPathComponent(String workspace) {
+  final parts = workspace.replaceAll(r'\', '/').split('/');
+  return parts
+      .lastWhere((p) => p.trim().isNotEmpty, orElse: () => workspace)
+      .trim();
+}
+
 /// 当前选中的工作区筛选路径（null 或空 = 全部工作区）。
 ///
 /// 语义由会话列表筛选状态（[SessionListFilterMode.workspace]）驱动，
@@ -1936,7 +1967,7 @@ final sessionListRefreshingProvider = Provider<bool>(
       ref.watch(sessionListControllerProvider).valueOrNull?.refreshing == true,
 );
 
-/// 会话分区（置顶 / 今天 / 昨天 / 更早）；搜索模式为单个「搜索结果」分区。
+/// 会话分区（置顶 / 工作区组 / 其他）；搜索模式为单个「搜索结果」分区。
 final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
   final visible = ref.watch(sessionListVisibleSessionsProvider);
   final query = ref
@@ -1948,12 +1979,55 @@ final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
     return [SessionListSection(title: '搜索结果', sessions: visible)];
   }
   final showCron = ref.watch(cronVisibilityProvider).showCron;
+  // 刻意不 ref.watch(workspaceRootsProvider)：分组是纯计算，不应把「拉工作区列表」
+  // 这个网络请求变成它的硬依赖（会让每个挂载列表的 widget 测试都带出 Dio 超时
+  // timer，撞 `!timersPending`）。组名一律用 workspace 路径末段；
+  // buildSessionSections 仍保留 workspaceRoots 参数以支持「名字优先」的纯函数用法。
+  const roots = <WorkspaceRoot>[];
   return buildSessionSections(
     visible,
     showCron: showCron,
+    workspaceRoots: roots,
     now: ref.watch(sessionListNowProvider)(),
   );
 });
+
+/// 会话列表分区折叠态（仅存内存、不落盘；「其他」默认折叠）。
+final sessionListCollapsedSectionsProvider =
+    NotifierProvider<SessionListCollapsedSectionsController, Set<String>>(
+      SessionListCollapsedSectionsController.new,
+    );
+
+class SessionListCollapsedSectionsController extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => <String>{};
+
+  /// 切换指定分区的折叠状态。
+  void toggle(String key) {
+    if (state.contains(key)) {
+      state = {...state}..remove(key);
+    } else {
+      state = {...state}..add(key);
+    }
+  }
+
+  /// 展开指定分区。
+  void expand(String key) {
+    if (state.contains(key)) {
+      state = {...state}..remove(key);
+    }
+  }
+
+  /// 折叠指定分区。
+  void collapse(String key) {
+    if (!state.contains(key)) {
+      state = {...state}..add(key);
+    }
+  }
+
+  /// 是否处于折叠态。
+  bool isCollapsed(String key) => state.contains(key);
+}
 
 /// 会话分区参考时间工厂（生产返回 [DateTime.now] 实时时钟）。
 ///
@@ -1963,27 +2037,46 @@ final sessionListNowProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
 );
 
-/// 按类型与时间把会话分组为 置顶 / 今天 / 昨天 / 更早，组内时间倒序；空组剔除。
+/// 内部辅助：工作区构建项。
+class _WorkspaceSectionBuilder {
+  _WorkspaceSectionBuilder({
+    required this.workspacePath,
+    required this.title,
+  });
+
+  final String workspacePath;
+  final String title;
+  final List<SessionSummary> sessions = [];
+
+  double get latestActivity =>
+      sessions.isEmpty ? 0.0 : _sortTimestamp(sessions.first);
+}
+
+/// 按置顶与工作区分组会话，组间及组内按时间倒序；空组剔除。
 ///
-/// 分组规则：
-/// 1. 定时会话：当 [showCron] 为 false 时直接过滤忽略；当 [showCron] 为 true 时，
-///    不再独立成「定时」分区，而是融流按时间戳归入「今天」/「昨天」/「更早」（即使 pinned 也按时间归入）。
-/// 2. 置顶：非 cron 且 `pinned == true` 进入「置顶」分区。
-/// 3. 时间分区：非置顶会话（及开启 showCron 时的 cron 会话）按时间归入「今天」/「昨天」/「更早」。
-///
-/// [now] 仅供测试注入固定参考时间；生产使用 [DateTime.now]。
+/// 分组契约（#146 · A 案）：
+/// 1. 置顶区：保持现有逻辑（`pinned == true` 且非 cron）→ 独立分区置于主列表最上方，跨工作区、不参与分组。
+/// 2. 工作区组：其余会话按 `session.workspace` 分组：
+///    - 比对必须复用既有 [matchesWorkspace]（容错斜杠/反斜杠/空格差异），禁止另写字符串比对；
+///    - 组名：优先匹配 [workspaceRoots] 中对应工作区的 `name`；匹配不到 → 取 workspace 路径最后一段；
+///    - 组顺序：按组内最近活动时间倒序；
+///    - 组内：时间倒序（沿用现有）。
+/// 3. 「其他」组：仅收纳 `workspace` 为空的会话，固定最后、默认折叠。
+///    - workspace 有值但不在 [workspaceRoots] 列表里的（任意目录跑的）→ 按路径最后一段独立成组，不要塞进「其他」。
+/// 4. 定时会话：当 [showCron] 为 false 时直接过滤忽略；当 [showCron] 为 true 时融流参与分组。
 List<SessionListSection> buildSessionSections(
   List<SessionSummary> sessions, {
   bool showCron = false,
+  List<WorkspaceRoot> workspaceRoots = const [],
   DateTime? now,
 }) {
-  final reference = now ?? DateTime.now();
   final sorted = [...sessions]
     ..sort((a, b) => _sortTimestamp(b).compareTo(_sortTimestamp(a)));
+
   final pinned = <SessionSummary>[];
-  final today = <SessionSummary>[];
-  final yesterday = <SessionSummary>[];
-  final earlier = <SessionSummary>[];
+  final other = <SessionSummary>[];
+  final groups = <_WorkspaceSectionBuilder>[];
+
   for (final session in sorted) {
     if (session.isCronSession && !showCron) {
       continue;
@@ -1992,28 +2085,68 @@ List<SessionListSection> buildSessionSections(
       pinned.add(session);
       continue;
     }
-    final timestamp = _timestamp(session);
-    if (timestamp == null) {
-      earlier.add(session);
+    final ws = session.workspace?.trim();
+    if (ws == null || ws.isEmpty) {
+      other.add(session);
       continue;
     }
-    final date = DateTime.fromMillisecondsSinceEpoch(
-      (timestamp * 1000).round(),
-    );
-    if (_isSameDay(date, reference)) {
-      today.add(session);
-    } else if (_isSameDay(date, reference.subtract(const Duration(days: 1)))) {
-      yesterday.add(session);
+
+    _WorkspaceSectionBuilder? matchedGroup;
+    for (final g in groups) {
+      if (matchesWorkspace(ws, g.workspacePath)) {
+        matchedGroup = g;
+        break;
+      }
+    }
+
+    if (matchedGroup != null) {
+      matchedGroup.sessions.add(session);
     } else {
-      earlier.add(session);
+      WorkspaceRoot? matchedRoot;
+      for (final root in workspaceRoots) {
+        if (matchesWorkspace(ws, root.path)) {
+          matchedRoot = root;
+          break;
+        }
+      }
+
+      final String groupTitle;
+      if (matchedRoot?.name != null && matchedRoot!.name!.trim().isNotEmpty) {
+        groupTitle = matchedRoot.name!.trim();
+      } else {
+        groupTitle = extractWorkspaceLastPathComponent(matchedRoot?.path ?? ws);
+      }
+
+      final newGroup = _WorkspaceSectionBuilder(
+        workspacePath: matchedRoot?.path ?? ws,
+        title: groupTitle,
+      )..sessions.add(session);
+      groups.add(newGroup);
     }
   }
+
+  groups.sort((a, b) => b.latestActivity.compareTo(a.latestActivity));
+
   return [
-    if (pinned.isNotEmpty) SessionListSection(title: '置顶', sessions: pinned),
-    if (today.isNotEmpty) SessionListSection(title: '今天', sessions: today),
-    if (yesterday.isNotEmpty)
-      SessionListSection(title: '昨天', sessions: yesterday),
-    if (earlier.isNotEmpty) SessionListSection(title: '更早', sessions: earlier),
+    if (pinned.isNotEmpty)
+      SessionListSection(
+        title: '置顶',
+        sessions: pinned,
+        isPinned: true,
+      ),
+    for (final g in groups)
+      if (g.sessions.isNotEmpty)
+        SessionListSection(
+          title: g.title,
+          sessions: g.sessions,
+          workspacePath: g.workspacePath,
+        ),
+    if (other.isNotEmpty)
+      SessionListSection(
+        title: '其他',
+        sessions: other,
+        isOther: true,
+      ),
   ];
 }
 
@@ -2023,9 +2156,6 @@ double? _timestamp(SessionSummary session) =>
 
 /// 排序用时间戳：缺失按 0（最旧）处理。
 double _sortTimestamp(SessionSummary session) => _timestamp(session) ?? 0;
-
-bool _isSameDay(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
 
 /// 工作区最近使用频率排序与截断。
 ///

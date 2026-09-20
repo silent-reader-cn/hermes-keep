@@ -540,39 +540,32 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final l10n = AppLocalizations.of(context);
     final hasMore = ref.watch(sessionListHasMoreProvider);
     final filteredSessions = ref.watch(filteredDisplaySessionsProvider);
+    final collapsedSections = ref.watch(sessionListCollapsedSectionsProvider);
     return [
       for (final section in sections)
         if (section.sessions.isNotEmpty) ...[
           SliverToBoxAdapter(
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(
-                  20.0,
-                  16.0,
-                  20.0,
-                  6.0,
-                ),
-                child: DefaultTextStyle(
-                  style: CupertinoTheme.of(context).textTheme.textStyle.merge(
-                    const TextStyle(
-                      fontSize: 20.0,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  child: Text(_sectionTitle(context, section.title)),
-                ),
-              ),
+            child: _buildSectionHeader(
+              context,
+              section,
+              isCollapsed:
+                  !isSearchMode && collapsedSections.contains(section.key),
+              onTap: isSearchMode
+                  ? null
+                  : () => ref
+                      .read(sessionListCollapsedSectionsProvider.notifier)
+                      .toggle(section.key),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsetsDirectional.fromSTEB(
-              20.0,
-              0.0,
-              20.0,
-              10.0,
-            ),
-            sliver: DecoratedSliver(
+          if (isSearchMode || !collapsedSections.contains(section.key))
+            SliverPadding(
+              padding: const EdgeInsetsDirectional.fromSTEB(
+                20.0,
+                0.0,
+                20.0,
+                10.0,
+              ),
+              sliver: DecoratedSliver(
               decoration: ShapeDecoration(
                 color: LightSurfaces.resolve(
                   context,
@@ -676,6 +669,84 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           ),
         ),
     ];
+  }
+
+  Widget _buildSectionHeader(
+    BuildContext context,
+    SessionListSection section, {
+    required bool isCollapsed,
+    VoidCallback? onTap,
+  }) {
+    final secondaryColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
+    final pillBg = LightSurfaces.resolve(
+      context,
+      const Color(0xFFE5E5EA),
+      dark: const Color(0xFF2C2C2E),
+    );
+
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: GestureDetector(
+        key: ValueKey('session-section-header-${section.key}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(
+            20.0,
+            14.0,
+            20.0,
+            6.0,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 用 CupertinoIcons 而非 Unicode 三角字符（'▸'/'▾'）：后者在
+              // 缺该字形的字体环境下会渲染成 tofu 方框（金照实测踩到），
+              // 且与「iOS 原生细 icon」的视觉口径不一致。
+              Icon(
+                isCollapsed
+                    ? CupertinoIcons.chevron_right
+                    : CupertinoIcons.chevron_down,
+                size: 11.0,
+                color: secondaryColor,
+              ),
+              const SizedBox(width: 4.0),
+              Text(
+                _sectionTitle(context, section.title),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.bold,
+                  color: secondaryColor,
+                ),
+              ),
+              const SizedBox(width: 6.0),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6.0,
+                  vertical: 1.5,
+                ),
+                decoration: BoxDecoration(
+                  color: pillBg,
+                  borderRadius: BorderRadius.circular(10.0),
+                ),
+                child: Text(
+                  '${section.sessions.length}',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: secondaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildErrorSliver(Object? error) {
@@ -1428,6 +1499,8 @@ String _sectionTitle(BuildContext context, String rawTitle) {
       return l10n.earlierSection;
     case '搜索结果':
       return l10n.searchResultsSection;
+    case '其他':
+      return l10n.otherSection;
     default:
       return rawTitle;
   }

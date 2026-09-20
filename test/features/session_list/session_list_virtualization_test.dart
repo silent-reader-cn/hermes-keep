@@ -86,6 +86,7 @@ void main() {
           SessionSummary(
             sessionId: 'sess-$i',
             title: '会话标题 #$i',
+            workspace: '/ws/main',
             createdAt: now - (i * 60),
             messageCount: i,
           ),
@@ -129,6 +130,7 @@ void main() {
           SessionSummary(
             sessionId: 'scroll-sess-$i',
             title: '滚动测试会话 #$i',
+            workspace: '/ws/main',
             createdAt: now - (i * 60),
           ),
       ];
@@ -166,7 +168,7 @@ void main() {
       expect(scrolledRows.evaluate().length, lessThanOrEqualTo(22));
     });
 
-    testWidgets('跨多个分区（置顶/今天/昨天/更早）各分区均保持独立 Sliver 虚拟化', (tester) async {
+    testWidgets('跨多个分区（置顶/工作区各分区）均保持独立 Sliver 虚拟化', (tester) async {
       final now = DateTime.now();
       final noon = DateTime(now.year, now.month, now.day, 12);
       final secNoon = noon.millisecondsSinceEpoch / 1000.0;
@@ -179,18 +181,20 @@ void main() {
             pinned: true,
             createdAt: secNoon,
           ),
-        // 今天组 30 个
+        // 工作区 A 组 30 个
         for (var i = 0; i < 30; i++)
           SessionSummary(
             sessionId: 'today-$i',
             title: '今天会话 $i',
+            workspace: '/ws/proj_a',
             createdAt: secNoon - (i * 60),
           ),
-        // 昨天组 20 个
+        // 工作区 B 组 20 个
         for (var i = 0; i < 20; i++)
           SessionSummary(
             sessionId: 'yest-$i',
             title: '昨天会话 $i',
+            workspace: '/ws/proj_b',
             createdAt: secNoon - 86400 - (i * 60),
           ),
       ];
@@ -200,13 +204,15 @@ void main() {
 
       // 分区标题可见
       expect(find.text('置顶'), findsOneWidget);
-      expect(find.text('今天'), findsOneWidget);
+      // 组头（11.5px 加粗）与会话行副标题都显示工作区名，故同名文本会出现多次；
+      // 本断言只验证「该工作区名在列表中可见」。
+      expect(find.text('proj_a'), findsAtLeastNWidgets(1));
 
       // 置顶全部可见（3 个）
       expect(find.byKey(const ValueKey('session-row-pin-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('session-row-pin-2')), findsOneWidget);
 
-      // 今天部分可见，昨天尚未进入视口
+      // proj_a 部分可见，proj_b 尚未进入视口
       expect(find.byKey(const ValueKey('session-row-today-0')), findsOneWidget);
       expect(find.byKey(const ValueKey('session-row-yest-10')), findsNothing);
     });
@@ -218,6 +224,7 @@ void main() {
           SessionSummary(
             sessionId: 'page-sess-$i',
             title: '分页会话 $i',
+            workspace: '/ws/main',
             createdAt: now - (i * 60),
           ),
       ];

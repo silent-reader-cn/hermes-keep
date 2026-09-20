@@ -1235,11 +1235,11 @@ void main() {
   });
 
   group('分区与工作区排序补充分支', () {
-    test('buildSessionSections：无任何时间戳的会话落入「更早」', () {
+    test('buildSessionSections：无工作区的会话落入「其他」', () {
       final sections = buildSessionSections([
-        const SessionSummary(sessionId: 't1', title: '无时间戳'),
+        const SessionSummary(sessionId: 't1', title: '无工作区'),
       ]);
-      expect(sections.single.title, '更早');
+      expect(sections.single.title, '其他');
       expect(sections.single.sessions.single.sessionId, 't1');
     });
 

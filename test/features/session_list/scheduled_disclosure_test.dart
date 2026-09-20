@@ -1,4 +1,4 @@
-﻿import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,11 +25,13 @@ SessionSummary buildSession(
   bool pinned = false,
   DateTime? at,
   String? sourceLabel,
+  String? workspace,
 }) {
   return SessionSummary(
     sessionId: id,
     title: title,
     pinned: pinned,
+    workspace: workspace ?? '/ws/main',
     lastMessageAt: sec(at ?? DateTime.now()),
     sourceLabel: sourceLabel,
   );
@@ -316,7 +318,9 @@ void main() {
 
       expect(find.text('定时'), findsNothing);
       expect(find.text('置顶'), findsOneWidget);
-      expect(find.text('今天'), findsOneWidget);
+      // 组头（11.5px 加粗）与会话行副标题都显示工作区名，故同名文本会出现多次；
+      // 本断言只验证「该工作区名在列表中可见」。
+      expect(find.text('main'), findsAtLeastNWidgets(1));
       expect(find.text('置顶重要会话'), findsOneWidget);
       expect(find.text('今天普通会话'), findsOneWidget);
       expect(find.text('每日自动同步'), findsNothing);
@@ -346,11 +350,13 @@ void main() {
       expect(find.text('定时'), findsNothing);
       expect(find.byType(ScheduledSessionDisclosure), findsNothing);
 
-      // 分区为 置顶 与 今天
+      // 分区为 置顶 与 main
       expect(find.text('置顶'), findsOneWidget);
-      expect(find.text('今天'), findsOneWidget);
+      // 组头（11.5px 加粗）与会话行副标题都显示工作区名，故同名文本会出现多次；
+      // 本断言只验证「该工作区名在列表中可见」。
+      expect(find.text('main'), findsAtLeastNWidgets(1));
 
-      // 定时会话与普通会话一起在「今天」分区直接渲染展示
+      // 定时会话与普通会话一起在「main」分区直接渲染展示
       expect(find.text('置顶重要会话'), findsOneWidget);
       expect(find.text('每日自动同步'), findsOneWidget);
       expect(find.text('今天普通会话'), findsOneWidget);
