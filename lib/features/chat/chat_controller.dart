@@ -1625,18 +1625,33 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         // _replayRebuildTimeline）执行，避免时间线为空 + 归档锚定 →
         // liveTimeline=null → 旧分组式气泡沉底；正常 live 重连断点仍在，
         // 此时补点会把已展示段重复叠加到时间线尾部（成簇卡片）。
-        if (_replayRebuildTimeline) {
-          _ensureTimelinePoint(LiveSegmentKind.text, prevCursor);
+        // #147：与主路径同一条「内容性」判据 —— 纯空白重放帧同样不建点，
+        // 保证「存在 text 断点 ⇒ 内容性正文到达过」这条不变量无例外。
+        if (_replayRebuildTimeline && text.trim().isNotEmpty) {
+          _ensureTimelinePoint(
+            LiveSegmentKind.text,
+            prevCursor,
+            contentful: true,
+          );
         }
         return false;
       }
     }
     // 时间线断点：在「事件到达」时记录（而非 flush 时），保证与真实事件顺序一致；
     // start 取缓冲全量（content + 待合并 + 待揭示），使切片与最终 content 对齐。
-    _ensureTimelinePoint(
-      LiveSegmentKind.text,
-      _currentStreamingContent().length,
-    );
+    //
+    // #147：纯空白正文（'\n\n' / 空格 token）**不建断点**。「是否内容性正文」必须
+    // 在事件到达时判定 —— 此刻 token 文本就在手上；若把它留给渲染端按「已 reveal
+    // 的 content」去猜，则 reveal 滞后（后台冻结 / 回前台重放补课 / 打字机落后）期间
+    // 内容性正文会被 clamp 成空段，渲染端据此拒绝切卡 ⇒ 相邻工具挤成一张大卡。
+    // 不建点的效果与 #62 一致：空白不构成分隔符，相邻工具仍并一张卡。
+    if (remainder.trim().isNotEmpty) {
+      _ensureTimelinePoint(
+        LiveSegmentKind.text,
+        _currentStreamingContent().length,
+        contentful: true,
+      );
+    }
     state = state.copyWith(
       pendingAssistantTokenChunks: [
         ...state.pendingAssistantTokenChunks,
@@ -1763,9 +1778,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (recovery == ActiveStreamRecoveryState.checking ||
         recovery == ActiveStreamRecoveryState.reconnecting) {
       state = state.copyWith(
-        stream: state.stream.copyWith(
-          recovery: ActiveStreamRecoveryState.idle,
-        ),
+        stream: state.stream.copyWith(recovery: ActiveStreamRecoveryState.idle),
       );
     }
     // #29 后台恢复主动探测：重基线前捕获「后台空窗」——后台冻结点到 resumed
@@ -2083,7 +2096,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   ///
   /// 断点按 SSE 事件到达顺序记录；[start] 为该段缓冲起始游标，渲染层据此
   /// 对 content / liveReasoningText / liveToolCalls 切片穿插展示。
-  void _ensureTimelinePoint(LiveSegmentKind kind, int start) {
+  ///
+  /// [contentful]：text 断点专用 —— 建立时「到达的是内容性正文」（#147）。
+  /// 调用方在 token 文本就在手上时置位；空白 token 一律不建点，故 controller
+  /// 建的 text 断点恒为 true，渲染层因此可以**脱离 reveal 进度**切卡。
+  void _ensureTimelinePoint(
+    LiveSegmentKind kind,
+    int start, {
+    bool contentful = false,
+  }) {
     final points = state.liveTimelinePoints;
     if (points.isNotEmpty && points.last.kind == kind) return;
     state = state.copyWith(
@@ -2093,6 +2114,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           kind: kind,
           start: start,
           sequence: ++_timelineSequence,
+          contentful: contentful,
         ),
       ],
     );
@@ -2140,6 +2162,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _ensureTimelinePoint(
         LiveSegmentKind.text,
         _currentStreamingContent().length,
+        // 本路径只由 `_handleInterimAssistant` 触发，且上游已判过
+        // `text.trim().isNotEmpty` ⇒ 到达的就是内容性正文（#147）。
+        contentful: true,
       );
     }
     final next = List<ChatMessage>.of(state.messages);
@@ -4005,8 +4030,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     // 本次动作之前）时以动作时刻为基线 —— 否则刚动作就会因
     // `_lastProgress == null` 被立刻判定静止。
     final lastProgress = _lastProgress;
-    final baseline =
-        (lastProgress == null || lastProgress.isBefore(actionAt))
+    final baseline = (lastProgress == null || lastProgress.isBefore(actionAt))
         ? actionAt
         : lastProgress;
     if (now.difference(baseline) < _stallGuardStallThreshold) return;
@@ -4048,8 +4072,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final cooldown = _deadZoneCooldownUntil;
     if (cooldown != null && now.isBefore(cooldown)) return;
     _deadZoneCooldownUntil = now.add(_watchdogConfig.deadZoneCooldown);
-    final lastProgressAgeMs =
-        lastProgress == null ? -1 : now.difference(lastProgress).inMilliseconds;
+    final lastProgressAgeMs = lastProgress == null
+        ? -1
+        : now.difference(lastProgress).inMilliseconds;
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.info,
       tag: 'chat_deadzone',
@@ -5102,10 +5127,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   @visibleForTesting
   void recoverOrphanedStreamingPhaseForTesting({
     bool ignoreStallThreshold = false,
-  }) =>
-      _recoverOrphanedStreamingPhaseIfNeeded(
-        ignoreStallThreshold: ignoreStallThreshold,
-      );
+  }) => _recoverOrphanedStreamingPhaseIfNeeded(
+    ignoreStallThreshold: ignoreStallThreshold,
+  );
 
   @visibleForTesting
   void setLastContextPollTimeForTesting(DateTime? value) =>

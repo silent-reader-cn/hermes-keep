@@ -37,7 +37,13 @@ void main() {
     LiveSegmentKind kind = LiveSegmentKind.text,
     int start = 4,
     int sequence = 9,
-  }) => LiveTimelinePoint(kind: kind, start: start, sequence: sequence);
+    bool contentful = false,
+  }) => LiveTimelinePoint(
+    kind: kind,
+    start: start,
+    sequence: sequence,
+    contentful: contentful,
+  );
 
   LiveTimelineEntry entry({
     LiveSegmentKind kind = LiveSegmentKind.text,
@@ -104,10 +110,11 @@ void main() {
       expect(LiveSegmentKind.thinking.name, 'thinking');
       expect(LiveSegmentKind.text.name, 'text');
       expect(LiveSegmentKind.tools.name, 'tools');
-      expect(
-        LiveSegmentKind.values.map((kind) => kind.name),
-        <String>['thinking', 'text', 'tools'],
-      );
+      expect(LiveSegmentKind.values.map((kind) => kind.name), <String>[
+        'thinking',
+        'text',
+        'tools',
+      ]);
     });
 
     test('toString 为「枚举名.取值名」；渲染 key 依赖 name 拼接', () {
@@ -175,10 +182,7 @@ void main() {
       expect(LiveSegmentKind.tools == LiveSegmentKind.thinking, isFalse);
       expect(LiveSegmentKind.text == LiveSegmentKind.text, isTrue);
       expect(identical(LiveSegmentKind.text, LiveSegmentKind.text), isTrue);
-      expect(
-        LiveSegmentKind.tools.hashCode,
-        LiveSegmentKind.tools.hashCode,
-      );
+      expect(LiveSegmentKind.tools.hashCode, LiveSegmentKind.tools.hashCode);
     });
   });
 
@@ -262,6 +266,9 @@ void main() {
       // sequence 差异
       expect(base == point(sequence: 10), isFalse);
       expect(base == point(sequence: 0), isFalse);
+      // contentful 差异（#147：内容性正文标记参与等值判定）
+      expect(base == point(contentful: true), isFalse);
+      expect(point(contentful: true) == base, isFalse);
       // 反向（让每个字段都作为「入参侧」参与比较）
       expect(point(start: 5) == base, isFalse);
       expect(point(sequence: 10) == base, isFalse);
@@ -280,15 +287,23 @@ void main() {
     test('toString：固定格式（形参 sequence 在输出里写作 seq）', () {
       expect(
         point().toString(),
-        'LiveTimelinePoint(kind: LiveSegmentKind.text, start: 4, seq: 9)',
+        'LiveTimelinePoint(kind: LiveSegmentKind.text, start: 4, seq: 9, '
+        'contentful: false)',
       );
       expect(
         point(kind: LiveSegmentKind.thinking, start: 0, sequence: 0).toString(),
-        'LiveTimelinePoint(kind: LiveSegmentKind.thinking, start: 0, seq: 0)',
+        'LiveTimelinePoint(kind: LiveSegmentKind.thinking, start: 0, seq: 0, '
+        'contentful: false)',
       );
       expect(
-        point(kind: LiveSegmentKind.tools, start: -1, sequence: 42).toString(),
-        'LiveTimelinePoint(kind: LiveSegmentKind.tools, start: -1, seq: 42)',
+        point(
+          kind: LiveSegmentKind.tools,
+          start: -1,
+          sequence: 42,
+          contentful: true,
+        ).toString(),
+        'LiveTimelinePoint(kind: LiveSegmentKind.tools, start: -1, seq: 42, '
+        'contentful: true)',
       );
       // kind 段渲染的是枚举 toString 而非 name
       expect(point().toString(), contains('LiveSegmentKind.text'));
@@ -361,7 +376,10 @@ void main() {
     });
 
     test('toolGroup 为可变引用：同一底层实例被多条目共享', () {
-      final group = ToolCallGroup(id: 'g', toolCalls: [ToolCall(id: 'a')]);
+      final group = ToolCallGroup(
+        id: 'g',
+        toolCalls: [ToolCall(id: 'a')],
+      );
       final first = entry(kind: LiveSegmentKind.tools, toolGroup: group);
       final second = entry(
         kind: LiveSegmentKind.tools,
@@ -389,7 +407,10 @@ void main() {
     });
 
     test('逐项相同的完整载荷也不相等（含 toolGroup 同引用）', () {
-      final group = ToolCallGroup(id: 'g', toolCalls: [ToolCall(id: 'a')]);
+      final group = ToolCallGroup(
+        id: 'g',
+        toolCalls: [ToolCall(id: 'a')],
+      );
       final a = entry(
         kind: LiveSegmentKind.tools,
         renderKey: 'live:tools:1',
@@ -462,7 +483,9 @@ void main() {
     });
 
     test('message 为必填的 ChatMessage（非空、可为任意 role）', () {
-      final user = transcript(message: chatMessage(role: 'user', content: 'q'));
+      final user = transcript(
+        message: chatMessage(role: 'user', content: 'q'),
+      );
       final assistant = transcript(
         message: chatMessage(role: 'assistant', content: 'a'),
       );
