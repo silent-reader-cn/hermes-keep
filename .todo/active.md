@@ -799,4 +799,27 @@ Leader 亲自静态取证（无真机时序复现手段，故方案含诊断埋�
 
 **验收（两轮共同）**：`analyze` 零告警 + 全量测试全绿 + 窄屏（<900）逐像素不变 + 右侧聊天在左栏切模块时**不被打断**（不触发路由变化）。
 
+### 第二轮交付记录（2026-09-20）
+
+**提交链**（同一分支 `feat/desktop-shell-redesign`，均未合 main）：
+| commit | 内容 |
+|---|---|
+| `3a77e0a` | 第二轮规格入档 |
+| `ebf086c` | T1 工作区筛选并轨 + T2 左栏模块切换（B 案）+ 收口清理 |
+| `b70af51` | 宽屏 README 图更新（选择器卡片移除、导航轨新增会话入口） |
+
+**验收**：`analyze` No issues found! + 全量 **4940 通过 / 8 skipped / 0 失败**（第一轮 4932 → +8 为本轮新增用例）；T1/T2 各自独立复验（session_list 339 例 / test/app 175 例）后，合并态再跑全量。
+
+**过程实况**：两路 agy **均在收尾阵亡**（同一 idle 机制：把命令丢后台 → 空闲 5s 被杀、后台任务一并终止），但都属「主体完整、仅验证段缺失」。Leader 逐路接手补验：
+- **T2**：修 2 处 provider 名写错（`memoryApiProvider` → `memoryApiFactoryProvider`）、补 3 个 import、清 4 个 analyze 问题（补 import 后旧的变多余）、修 1 个用例 —— 它断言「工作区管理」，而页面标题实为 `l10n.workspacesTitle` =「工作区」；且 `AdaptiveSliverNavigationBar` 是**双标题结构**（展开态大标题 + 收起态中标题同文案），`findsOneWidget` 必错 ⇒ 改 `findsWidgets`
+- **T1**：产出本身干净（analyze 零告警 + 339 例绿），仅遗留一个 `@Deprecated showWorkspaceSelector` 占位参数；其保留理由成立（删它会牵连 shell 域 = T2 地盘），合并后由 Leader 删除参数定义 + 两处传参
+
+**合并策略**：T1 排除 `session_sidebar.dart`、由 T2 那份覆盖（其改造已包含 T1 那点删除）⇒ 零冲突，两路 patch 均干净落地。
+
+**本轮两条教训（已回写 skill `parallel-subagent-project-governance`）**：
+1. **跨任务的「引用清理」必须交给删组件的那一方**：安排「T1 删组件 / T2 删挂载」时，T1 删掉组件文件后不删引用就编译不过 ⇒ 必然越界。正确做法是让删组件的那一路**全权负责清理所有引用**，别拆给两路。
+2. **给 agy 的 prompt 里直接写反引号会被 bash 当命令替换执行**：重派 T2 时在 `-p "…"` 的补充分段里写了反引号包裹的路径，bash 直接执行了它（报 `import: command not found`），prompt 被破坏、T2 二次阵亡。**任务书内部**用反引号是安全的（`"$(cat TASK.md)"` 的结果不会再被替换）——只有**直接写在命令行字符串里**的补充分段会中招。
+
+**待主人拍板**：是否合 main 并发布；左栏模块划分（现为 工作区/记忆/下载/技能，`kLeftPaneModuleIds` 常量表一行可调）。
+
 ---
