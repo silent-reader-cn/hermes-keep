@@ -16,6 +16,8 @@ import 'package:hermes_ui/core/connections/server_connection.dart';
 import 'package:hermes_ui/core/models/insights.dart';
 import 'package:hermes_ui/core/models/kanban.dart';
 import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/core/models/workspace.dart';
+import 'package:hermes_ui/core/providers/catalog_providers.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/insights/insights_api.dart';
@@ -106,6 +108,20 @@ Future<ConnectionStore> demoConnectionStore() async {
 }
 
 /// 演示会话列表数据（中性文案，固定时钟防漂移）。
+/// #145：侧栏工作区选择器与输入区元信息 chip 都要读目录数据。截图工装注入
+/// 一份固定清单，否则组件遇空列表会自渲染为零尺寸——图里看不到它们。
+final demoWorkspaceOverrides = <Override>[
+  workspaceRootsProvider.overrideWith(
+    (ref) => Future.value(const [
+      WorkspaceRoot(path: r'D:\projects\hermes-ui', name: 'hermes-ui'),
+      WorkspaceRoot(path: r'D:\projects\book-hub', name: 'book-hub'),
+    ]),
+  ),
+  availableModelIdsProvider.overrideWith(
+    (ref) => Future.value(const ['claude-opus-4.6', 'gemini-3.8-flash-high']),
+  ),
+];
+
 FakeSessionListApi demoSessionApi() {
   final fixed = DateTime(2026, 9, 12, 12, 0);
   double at(Duration ago) =>
@@ -312,6 +328,10 @@ void main() {
       'session': {
         'session_id': 's-demo-1',
         'title': _demoTitles[0],
+        // #145：让输入区 chip 显示真实值（而非虚线空态），README 图才是
+        // 日常使用中的样子。
+        'workspace': r'D:\projects\hermes-ui',
+        'model': 'claude-opus-4.6',
         'messages': [
           {
             'role': 'user',
@@ -360,6 +380,7 @@ void main() {
       overrides: [
         chatApiProvider.overrideWithValue(api),
         sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        ...demoWorkspaceOverrides,
       ],
     );
   }, skip: !_capture);
@@ -372,6 +393,7 @@ void main() {
       physicalSize: const Size(2560, 1600),
       overrides: [
         sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        ...demoWorkspaceOverrides,
       ],
     );
   }, skip: !_capture);
@@ -444,6 +466,7 @@ void main() {
       overrides: [
         kanbanApiFactoryProvider.overrideWithValue((_) => api),
         sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        ...demoWorkspaceOverrides,
       ],
     );
   }, skip: !_capture);
@@ -459,6 +482,7 @@ void main() {
           (_) => FakeInsightsApi(response: demoInsights()),
         ),
         sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        ...demoWorkspaceOverrides,
       ],
     );
   }, skip: !_capture);
@@ -510,6 +534,7 @@ void main() {
       overrides: [
         chatApiProvider.overrideWithValue(api),
         sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        ...demoWorkspaceOverrides,
       ],
     );
   }, skip: !_capture);
@@ -522,6 +547,7 @@ void main() {
       physicalSize: const Size(780, 1688),
       overrides: [
         sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        ...demoWorkspaceOverrides,
       ],
     );
   }, skip: !_capture);
@@ -572,6 +598,7 @@ void main() {
           ),
         ),
         sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        ...demoWorkspaceOverrides,
       ],
     );
   }, skip: !_capture);
