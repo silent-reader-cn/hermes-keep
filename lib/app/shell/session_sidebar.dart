@@ -1,24 +1,30 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/downloads/download_page.dart';
+import '../../features/memory/memory_page.dart';
 import '../../features/session_list/session_list_page.dart';
-import '../../features/session_list/sidebar_workspace_selector.dart';
+import '../../features/skills/skills_page.dart';
+import '../../features/workspace_manager/workspace_manager_page.dart';
+import 'left_pane_module.dart';
 import 'sidebar_nav_rail.dart';
 import 'sidebar_status_bar.dart';
 
-/// 宽屏自适应外壳的左侧常驻侧栏（TASK W1 / #145 重设计）。
+/// 宽屏自适应外壳的左侧常驻侧栏（TASK W1 / #145 重设计 + #145 第二轮 T2 左栏模块切换）。
 ///
-/// 结构自左向右：50px 导航轨（[SidebarNavRail]）+ 列表列
-/// （顶部工作区选择器 [SidebarWorkspaceSelector] → 会话列表 → 底部状态条
-/// [SidebarStatusBar]）。工作区选择器自带窄屏守卫且无工作区时自渲染为零尺寸，
-/// 故此处无条件挂载即可。
-class SessionSidebar extends StatelessWidget {
+/// 结构自左向右：50px 导航轨（[SidebarNavRail]）+ 列表列/模块展示区。
+/// - [leftPaneModuleProvider] 为 null 时：展示会话列表与底部状态条（[SidebarStatusBar]）；
+/// - [leftPaneModuleProvider] 非空时：展示对应模块页（工作区管理 / 记忆 / 下载 / 技能）。
+class SessionSidebar extends ConsumerWidget {
   const SessionSidebar({super.key, required this.currentLocation});
 
   /// 当前激活的路由路径。
   final String currentLocation;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final leftPaneModule = ref.watch(leftPaneModuleProvider);
+
     // Android 15+ 强制 edge-to-edge（targetSdk >= 35）：宽屏侧栏是全项目唯一
     // 未处理状态栏 inset 的顶层区域（todo #16 方案 A）。外层 SafeArea 一次吸收
     // 顶部 inset —— 工具条整体下移、不再被系统状态栏盖住（现象①）；其
@@ -34,31 +40,80 @@ class SessionSidebar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SidebarNavRail(currentLocation: currentLocation),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // #145 工作区选择器：列表列顶部常驻，自带窄屏守卫与
-                // 「无工作区 / 拉取失败即零尺寸」容错，故无条件挂载。
-                SidebarWorkspaceSelector(),
-                // 侧栏左侧已有 SidebarNavRail 提供工具入口，内部会话
-                // 列表不再重复渲染工具行，避免宽屏双层入口重叠；设置图标同样由
-                // 导航轨承担，隐藏列表头部右侧齿轮避免双设置入口。
-                Expanded(
-                  child: SessionListPage(
-                    showUtilityRows: false,
-                    showSettingsTrailing: false,
-                    showFab: false,
-                    // #145：选择器已由侧栏承担，列表页不再自带一份。
-                    showWorkspaceSelector: false,
-                  ),
-                ),
-                SidebarStatusBar(),
-              ],
-            ),
+          Expanded(
+            child: leftPaneModule == null
+                ? const Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // 侧栏左侧已有 SidebarNavRail 提供工具入口，内部会话
+                      // 列表不再重复渲染工具行，避免宽屏双层入口重叠；设置图标同样由
+                      // 导航轨承担，隐藏列表头部右侧齿轮避免双设置入口。
+                      Expanded(
+                        child: SessionListPage(
+                          showUtilityRows: false,
+                          showSettingsTrailing: false,
+                          showFab: false,
+                        ),
+                      ),
+                      SidebarStatusBar(),
+                    ],
+                  )
+                : _buildModulePane(context, leftPaneModule),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildModulePane(BuildContext context, String modulePath) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(
+            size: Size(constraints.maxWidth, mediaQuery.size.height),
+          ),
+          child: LeftPaneScope(
+            child: _buildModuleWidget(modulePath),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildModuleWidget(String modulePath) {
+    final normalized = modulePath.startsWith('/') ? modulePath : '/$modulePath';
+    switch (normalized) {
+      case '/workspaces':
+        return const WorkspaceManagerPage(
+          key: ValueKey('left-pane-workspaces'),
+        );
+      case '/memory':
+        return const MemoryPage(
+          key: ValueKey('left-pane-memory'),
+        );
+      case '/downloads':
+        return const DownloadPage(
+          key: ValueKey('left-pane-downloads'),
+        );
+      case '/skills':
+        return const SkillsPage(
+          key: ValueKey('left-pane-skills'),
+        );
+      default:
+        return const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: SessionListPage(
+                showUtilityRows: false,
+                showSettingsTrailing: false,
+                showFab: false,
+              ),
+            ),
+            SidebarStatusBar(),
+          ],
+        );
+    }
   }
 }

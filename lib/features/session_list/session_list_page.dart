@@ -12,6 +12,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/session.dart';
 import '../../core/models/workspace.dart';
+import '../../core/providers/catalog_providers.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/safe_clipboard.dart';
 import '../../app/shell/adaptive_shell.dart';
@@ -31,7 +32,6 @@ import 'session_list_header.dart';
 import 'session_list_providers.dart';
 import 'session_list_utility_rows.dart';
 import 'session_row_subtitle_settings.dart';
-import 'sidebar_workspace_selector.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
 ///
@@ -44,7 +44,6 @@ class SessionListPage extends ConsumerStatefulWidget {
     this.showUtilityRows = true,
     this.showSettingsTrailing = true,
     this.showFab = true,
-    this.showWorkspaceSelector = false,
   });
 
   /// 是否渲染顶部工具行入口（任务/看板/技能/记忆/统计）。
@@ -65,9 +64,6 @@ class SessionListPage extends ConsumerStatefulWidget {
   /// 手机单栈（窄屏）保持默认 `true`；桌面侧栏场景隐藏 FAB，新建入口由
   /// 头部右上角按钮承担（见 [SessionListHeaderDelegate.actions]）。
   final bool showFab;
-
-  /// 是否在列表顶部渲染工作区选择器卡片（#145，桌面侧栏场景）。
-  final bool showWorkspaceSelector;
 
   @override
   ConsumerState<SessionListPage> createState() => _SessionListPageState();
@@ -193,8 +189,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 // （视口会把 overscroll 逐级分给前面的 box sliver，导致
                 // 指示器拿不到负 overlap 而无法触发）。
                 CupertinoSliverRefreshControl(onRefresh: _onRefresh),
-                if (widget.showWorkspaceSelector)
-                  const SliverToBoxAdapter(child: SidebarWorkspaceSelector()),
                 if (widget.showUtilityRows)
                   SliverToBoxAdapter(child: _buildSearchBar()),
                 if (widget.showUtilityRows && !isSearchMode && isWide)
@@ -1796,6 +1790,8 @@ class _SessionFilterSheet extends ConsumerWidget {
         ref.watch(sessionListControllerProvider).valueOrNull ?? state;
     final mode = current.filterMode;
     final projects = ref.watch(projectsProvider).valueOrNull ?? const [];
+    final workspaces =
+        ref.watch(workspaceRootsProvider).valueOrNull ?? const [];
     final sheetBg = LightSurfaces.resolve(
       context,
       LightSurfaces.page,
@@ -2048,6 +2044,55 @@ class _SessionFilterSheet extends ConsumerWidget {
                                     onTap: () => onSelect(
                                       SessionListFilterMode.project,
                                       project.id,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          if (workspaces.isNotEmpty)
+                            CupertinoListSection.insetGrouped(
+                              key: const ValueKey('filter-section-workspaces'),
+                              hasLeading: false,
+                              header: Text(l10n.workspacesTitle, style: headerStyle),
+                              backgroundColor: CupertinoColors.transparent,
+                              separatorColor: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.divider,
+                                dark: CupertinoColors.separator,
+                              ),
+                              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                              // #28 分割线全宽
+                              dividerMargin: 0,
+                              additionalDividerMargin: 0,
+                              decoration: cardDecoration,
+                              children: [
+                                _SheetOptionRow(
+                                  key: const ValueKey('workspace-chip-all'),
+                                  label: l10n.allWorkspaces,
+                                  selected: mode == SessionListFilterMode.all ||
+                                      (mode == SessionListFilterMode.workspace &&
+                                          (current.filterValue == null ||
+                                              current.filterValue!.isEmpty)),
+                                  onTap: () => onSelect(
+                                    SessionListFilterMode.all,
+                                    null,
+                                  ),
+                                ),
+                                for (final ws in workspaces)
+                                  _SheetOptionRow(
+                                    key: ValueKey('workspace-chip-${ws.path}'),
+                                    label: (ws.name != null &&
+                                            ws.name!.trim().isNotEmpty)
+                                        ? ws.name!.trim()
+                                        : (ws.path?.trim() ?? ''),
+                                    selected:
+                                        mode == SessionListFilterMode.workspace &&
+                                        matchesWorkspace(
+                                          current.filterValue,
+                                          ws.path,
+                                        ),
+                                    onTap: () => onSelect(
+                                      SessionListFilterMode.workspace,
+                                      ws.path,
                                     ),
                                   ),
                               ],

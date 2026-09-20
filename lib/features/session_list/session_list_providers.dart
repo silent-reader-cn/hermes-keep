@@ -166,8 +166,8 @@ class SessionListSection {
   final List<SessionSummary> sessions;
 }
 
-/// 会话列表筛选模式：全部 / 已归档 / 来源标签 / 项目。
-enum SessionListFilterMode { all, archived, source, project }
+/// 会话列表筛选模式：全部 / 已归档 / 来源标签 / 项目 / 工作区。
+enum SessionListFilterMode { all, archived, source, project, workspace }
 
 /// 会话列表状态（AsyncNotifier 的 AsyncData 载荷）。
 ///
@@ -295,6 +295,15 @@ class SessionListState {
             base = sessions;
           } else {
             base = sessions.where((s) => s.projectId == projectId).toList();
+          }
+        case SessionListFilterMode.workspace:
+          final workspacePath = filterValue;
+          if (workspacePath == null || workspacePath.trim().isEmpty) {
+            base = sessions;
+          } else {
+            base = sessions
+                .where((s) => matchesWorkspace(s.workspace, workspacePath))
+                .toList();
           }
         case SessionListFilterMode.all:
           base = sessions;
@@ -937,15 +946,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   Future<void> loadMore() async {
     final current = state.valueOrNull;
     if (current == null) return;
-    final filter = ref.read(selectedWorkspaceFilterProvider);
-    final int maxCount;
-    if (filter == null || filter.trim().isEmpty) {
-      maxCount = current.displaySessions.length;
-    } else {
-      maxCount = current.displaySessions
-          .where((s) => matchesWorkspace(s.workspace, filter))
-          .length;
-    }
+    final maxCount = current.displaySessions.length;
     if (current.visibleCount >= maxCount) return;
     final next = current.visibleCount + pageSize;
     state = AsyncData(
@@ -1857,7 +1858,9 @@ bool matchesWorkspace(String? sessionWorkspace, String? targetPath) {
 
 /// 当前选中的工作区筛选路径（null 或空 = 全部工作区）。
 ///
-/// 内存态，不落盘（避免上次筛选导致会话莫名消失；#145）。
+/// 语义由会话列表筛选状态（[SessionListFilterMode.workspace]）驱动，
+/// 与既有 filterMode/filterValue 机制合流，禁止两套筛选状态并存（#145）。
+/// 内存态，不落盘（避免上次筛选导致会话莫名消失）。
 final selectedWorkspaceFilterProvider =
     NotifierProvider<SelectedWorkspaceFilterController, String?>(
       SelectedWorkspaceFilterController.new,
@@ -1865,20 +1868,39 @@ final selectedWorkspaceFilterProvider =
 
 class SelectedWorkspaceFilterController extends Notifier<String?> {
   @override
-  String? build() => null;
+  String? build() {
+    final state = ref.watch(sessionListControllerProvider).valueOrNull;
+    if (state?.filterMode == SessionListFilterMode.workspace) {
+      final val = state?.filterValue?.trim();
+      return (val != null && val.isNotEmpty) ? val : null;
+    }
+    return null;
+  }
 
   /// 选中指定工作区路径（null 或空 = 全部工作区）。
   void selectWorkspace(String? path) {
     final normalized =
         (path == null || path.trim().isEmpty) ? null : path.trim();
-    if (state == normalized) return;
-    state = normalized;
-    ref.read(sessionListControllerProvider.notifier).resetVisibleCount();
+    if (normalized == null) {
+      clearFilter();
+    } else {
+      unawaited(
+        ref.read(sessionListControllerProvider.notifier).setFilter(
+          SessionListFilterMode.workspace,
+          value: normalized,
+        ),
+      );
+    }
   }
 
   /// 清除工作区筛选，恢复显示全部工作区。
   void clearFilter() {
-    selectWorkspace(null);
+    unawaited(
+      ref.read(sessionListControllerProvider.notifier).setFilter(
+        SessionListFilterMode.all,
+        value: null,
+      ),
+    );
   }
 }
 
@@ -1886,12 +1908,7 @@ class SelectedWorkspaceFilterController extends Notifier<String?> {
 final filteredDisplaySessionsProvider = Provider<List<SessionSummary>>((ref) {
   final state = ref.watch(sessionListControllerProvider).valueOrNull;
   if (state == null) return const [];
-  final filter = ref.watch(selectedWorkspaceFilterProvider);
-  final all = state.displaySessions;
-  if (filter == null || filter.trim().isEmpty) {
-    return all;
-  }
-  return all.where((s) => matchesWorkspace(s.workspace, filter)).toList();
+  return state.displaySessions;
 });
 
 /// 是否还有更多可分页内容（考虑工作区筛选后的分块）。

@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/shell/left_pane_module.dart';
 import 'package:hermes_ui/app/shell/sidebar_nav_rail.dart';
 import 'package:hermes_ui/app/shell/sidebar_status_bar.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
@@ -157,11 +158,12 @@ void main() {
   }
 
   group('SidebarNavRail 基础渲染与几何尺寸规格测试', () {
-    testWidgets('默认全开时渲染全部 8 个功能入口，顺序与语义准确', (tester) async {
+    testWidgets('默认全开时渲染全部 9 个功能入口，顺序与语义准确', (tester) async {
       await tester.pumpWidget(buildRailApp(currentLocation: '/'));
       await tester.pumpAndSettle();
 
       const itemIds = [
+        'sessions',
         'tasks',
         'kanban',
         'workspaces',
@@ -181,6 +183,7 @@ void main() {
       }
 
       // 验证图标数据与既有定义完全对齐
+      expect(find.byIcon(CupertinoIcons.chat_bubble), findsOneWidget); // sessions
       expect(find.byIcon(CupertinoIcons.clock), findsOneWidget); // tasks
       expect(find.byIcon(CupertinoIcons.square_split_2x2), findsOneWidget); // kanban
       expect(find.byIcon(CupertinoIcons.folder), findsOneWidget); // workspaces
@@ -214,6 +217,13 @@ void main() {
     testWidgets('Semantics 与 Tooltip 标签完整配置', (tester) async {
       await tester.pumpWidget(buildRailApp(currentLocation: '/'));
       await tester.pumpAndSettle();
+
+      final sessionsSemantics = tester.widget<Semantics>(
+        find.byKey(const ValueKey('sidebar-utility-sessions')),
+      );
+      expect(sessionsSemantics.properties.label, '会话');
+      expect(sessionsSemantics.properties.tooltip, '会话');
+      expect(sessionsSemantics.properties.button, isTrue);
 
       final tasksSemantics = tester.widget<Semantics>(
         find.byKey(const ValueKey('sidebar-utility-tasks')),
@@ -347,6 +357,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const ValueKey('sidebar-nav-sessions')), findsOneWidget);
       expect(find.byKey(const ValueKey('sidebar-nav-tasks')), findsNothing);
       expect(find.byKey(const ValueKey('sidebar-nav-kanban')), findsOneWidget);
       expect(find.byKey(const ValueKey('sidebar-nav-workspaces')), findsOneWidget);
@@ -357,7 +368,7 @@ void main() {
       expect(find.byKey(const ValueKey('sidebar-nav-settings')), findsOneWidget);
     });
 
-    testWidgets('全部功能入口关闭时：整条轨道只保留设置图标，中间分隔线不渲染', (tester) async {
+    testWidgets('全部功能入口关闭时：整条轨道保留会话与设置图标', (tester) async {
       await tester.pumpWidget(
         buildRailApp(
           currentLocation: '/settings',
@@ -370,6 +381,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const ValueKey('sidebar-nav-sessions')), findsOneWidget);
       expect(find.byKey(const ValueKey('sidebar-nav-tasks')), findsNothing);
       expect(find.byKey(const ValueKey('sidebar-nav-kanban')), findsNothing);
       expect(find.byKey(const ValueKey('sidebar-nav-workspaces')), findsNothing);
@@ -378,17 +390,16 @@ void main() {
       expect(find.byKey(const ValueKey('sidebar-nav-memory')), findsNothing);
       expect(find.byKey(const ValueKey('sidebar-nav-downloads')), findsNothing);
 
-      // 仅 settings 存在
+      // 设置存在
       expect(find.byKey(const ValueKey('sidebar-nav-settings')), findsOneWidget);
     });
   });
 
   group('SidebarNavRail 点击触发路由跳转测试', () {
-    testWidgets('点击各个功能入口触发对应路由 push 入栈（#145）', (tester) async {
+    testWidgets('点击表外功能入口触发对应路由 push 入栈（#145 / #145 第二轮）', (tester) async {
       // #145：侧栏入口语义必须是 push（入栈）而非 go（替换）——#77 宽屏
       // 右侧面板导航栈依赖它才能逐级回退（wide_panel_nav_stack_test 钉此）。
-      // 故本用例按 push 语义断言：每个入口单独在干净 app 里点击，避开
-      // push 造成的多页面 rail 累积（同一 ValueKey 会出现多实例）。
+      // 表外模块（tasks / kanban / settings）仍走右侧面板栈。
       for (final id in <String>['tasks', 'kanban', 'settings']) {
         final navigated = <String>[];
         await tester.pumpWidget(
@@ -402,9 +413,61 @@ void main() {
         expect(
           navigated,
           contains('/$id'),
-          reason: '点击 $id 入口应 push 到 /$id',
+          reason: '点击表外 $id 入口应 push 到 /$id',
         );
       }
+    });
+
+    testWidgets('点击表内功能入口（workspaces / memory / downloads / skills）不触发路由跳转，切至左栏模块状态', (tester) async {
+      final navigated = <String>[];
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: CupertinoApp.router(
+            routerConfig: GoRouter(
+              initialLocation: '/',
+              routes: [
+                GoRoute(
+                  path: '/',
+                  builder: (context, state) => CupertinoPageScaffold(
+                    child: SidebarNavRail(currentLocation: state.uri.toString()),
+                  ),
+                ),
+                GoRoute(
+                  path: '/workspaces',
+                  builder: (context, state) {
+                    navigated.add('/workspaces');
+                    return CupertinoPageScaffold(
+                      child: SidebarNavRail(currentLocation: state.uri.toString()),
+                    );
+                  },
+                ),
+              ],
+            ),
+            locale: const Locale('zh'),
+            supportedLocales: const [Locale('zh'), Locale('en')],
+            localizationsDelegates: testDelegates,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 点击表内模块 workspaces
+      await tester.tap(find.byKey(const ValueKey('sidebar-nav-workspaces')));
+      await tester.pumpAndSettle();
+
+      // 核心断言：路由未发生跳转，但 leftPaneModuleProvider 状态已更新为 '/workspaces'
+      expect(navigated, isEmpty, reason: '点击表内模块不得触发路由跳转');
+      expect(container.read(leftPaneModuleProvider), '/workspaces');
+
+      // 点击会话项切回
+      await tester.tap(find.byKey(const ValueKey('sidebar-nav-sessions')));
+      await tester.pumpAndSettle();
+      expect(navigated, isEmpty, reason: '点击会话项不得触发路由跳转');
+      expect(container.read(leftPaneModuleProvider), isNull);
     });
   });
 

@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/shell/left_pane_module.dart';
+
 /// 页面左上角统一返回按钮（跨 feature 复用）。
 ///
 /// App 顶层页面统一用 `context.go` 跳转（go_router 无页面堆栈），而 Windows
@@ -10,6 +12,7 @@ import 'package:go_router/go_router.dart';
 /// 行为：当前路由可 pop（存在上级页面，如 `push` 进入的详情页）→ `pop`
 /// 返回；否则按 [fallback] 兜底跳转（默认 `/` 会话列表主页，即页面是从
 /// `go` 直进、没有返回堆栈的场景）。
+/// 在左栏模块视图（[LeftPaneScope]）中不展示返回按钮。
 ///
 /// 图标：纤细 `CupertinoIcons.chevron_left`（20pt），细度对齐窄屏大标题
 /// 右侧 `NarrowNavigationDropdownButton` 的 `chevron_down`（参照 `_BackChevron`
@@ -22,6 +25,9 @@ class AppBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (LeftPaneScope.of(context)) {
+      return const SizedBox.shrink();
+    }
     // 语义标签沿用 SDK 返回按钮的本地化文案（en: Back / zh: 返回）。
     final backLabel = CupertinoLocalizations.of(context).backButtonLabel;
     return Semantics(

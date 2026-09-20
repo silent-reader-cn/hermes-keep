@@ -24,8 +24,14 @@ class SidebarUtilityItem {
   final String Function(AppLocalizations l10n) getTitle;
 }
 
-/// 侧栏工具条 / 导航轨共享项清单（8 个功能入口）。
+/// 侧栏工具条 / 导航轨共享项清单。
 const List<SidebarUtilityItem> sidebarUtilityItems = [
+  SidebarUtilityItem(
+    id: 'sessions',
+    path: '/',
+    icon: CupertinoIcons.chat_bubble,
+    getTitle: _getSessionsTitle,
+  ),
   SidebarUtilityItem(
     id: 'tasks',
     path: '/tasks',
@@ -77,6 +83,7 @@ const List<SidebarUtilityItem> sidebarUtilityItems = [
   ),
 ];
 
+String _getSessionsTitle(AppLocalizations l10n) => l10n.sessions;
 String _getTasksTitle(AppLocalizations l10n) => l10n.tasksTitle;
 String _getKanbanTitle(AppLocalizations l10n) => l10n.kanbanTitle;
 String _getWorkspacesTitle(AppLocalizations l10n) => l10n.workspacesTitle;
@@ -85,3 +92,4 @@ String _getInsightsTitle(AppLocalizations l10n) => l10n.insightsTitle;
 String _getMemoryTitle(AppLocalizations l10n) => l10n.memoryTitle;
 String _getDownloadsTitle(AppLocalizations l10n) => l10n.downloadsTitle;
 String _getSettingsTitle(AppLocalizations l10n) => l10n.settingsTitle;
+

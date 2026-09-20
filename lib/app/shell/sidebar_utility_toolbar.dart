@@ -40,6 +40,7 @@ class SidebarUtilityToolbar extends ConsumerWidget {
 
     final visibleItems = _items
         .where((item) {
+          if (item.id == 'sessions') return false;
           if (item.id == 'settings') return true;
           return visibility.isVisible(item.id);
         })

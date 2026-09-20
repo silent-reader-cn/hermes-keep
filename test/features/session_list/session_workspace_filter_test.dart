@@ -10,7 +10,6 @@ import 'package:hermes_ui/core/providers/catalog_providers.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
 import 'package:hermes_ui/features/session_list/session_list_page.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
-import 'package:hermes_ui/features/session_list/sidebar_workspace_selector.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
 
 import '../../helpers/fake_session_list_api.dart';
@@ -21,6 +20,7 @@ SessionSummary _session(
   String id,
   String title, {
   String? workspace,
+  String? projectId,
   bool pinned = false,
   DateTime? at,
 }) {
@@ -28,6 +28,7 @@ SessionSummary _session(
     sessionId: id,
     title: title,
     workspace: workspace,
+    projectId: projectId,
     pinned: pinned,
     lastMessageAt: _sec(at ?? DateTime.now()),
   );
@@ -89,12 +90,25 @@ void main() {
 
   group('工作区筛选 Provider 逻辑单测', () {
     final now = DateTime.now();
-    final s1 = _session('s1', 'Session 1', workspace: '/ws/alpha', at: now);
-    final s2 = _session('s2', 'Session 2', workspace: '/ws/beta', at: now);
+    final s1 = _session(
+      's1',
+      'Session 1',
+      workspace: '/ws/alpha',
+      projectId: 'p1',
+      at: now,
+    );
+    final s2 = _session(
+      's2',
+      'Session 2',
+      workspace: '/ws/beta',
+      projectId: 'p2',
+      at: now,
+    );
     final s3 = _session(
       's3',
       'Session 3',
       workspace: '/ws/alpha',
+      projectId: 'p2',
       pinned: true,
       at: now,
     );
@@ -112,7 +126,6 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      // 触发首屏加载
       await container.read(sessionListControllerProvider.future);
 
       final filter = container.read(selectedWorkspaceFilterProvider);
@@ -123,11 +136,14 @@ void main() {
       final visible = container.read(sessionListVisibleSessionsProvider);
 
       expect(filtered.length, equals(state.displaySessions.length));
-      expect(filtered.map((s) => s.sessionId), equals(state.displaySessions.map((s) => s.sessionId)));
+      expect(
+        filtered.map((s) => s.sessionId),
+        equals(state.displaySessions.map((s) => s.sessionId)),
+      );
       expect(visible.length, equals(4));
     });
 
-    test('② 选中工作区后只剩该工作区会话', () async {
+    test('② 选中工作区后只剩该工作区会话，且区分于 projectId 维度', () async {
       final api = FakeSessionListApi(sessions: [s1, s2, s3, s4]);
       final container = ProviderContainer(
         overrides: [
@@ -141,7 +157,7 @@ void main() {
 
       await container.read(sessionListControllerProvider.future);
 
-      // 选中 /ws/alpha
+      // 选中 /ws/alpha（s1 和 s3 属于该工作区，但 s1 属于 p1，s3 属于 p2）
       container
           .read(selectedWorkspaceFilterProvider.notifier)
           .selectWorkspace('/ws/alpha');
@@ -149,6 +165,10 @@ void main() {
         container.read(selectedWorkspaceFilterProvider),
         equals('/ws/alpha'),
       );
+
+      final state = container.read(sessionListControllerProvider).valueOrNull!;
+      expect(state.filterMode, equals(SessionListFilterMode.workspace));
+      expect(state.filterValue, equals('/ws/alpha'));
 
       final filtered = container.read(filteredDisplaySessionsProvider);
       expect(filtered.length, equals(2));
@@ -174,13 +194,16 @@ void main() {
       container.read(selectedWorkspaceFilterProvider.notifier).clearFilter();
       expect(container.read(selectedWorkspaceFilterProvider), isNull);
       expect(
+        container.read(sessionListControllerProvider).valueOrNull!.filterMode,
+        equals(SessionListFilterMode.all),
+      );
+      expect(
         container.read(filteredDisplaySessionsProvider).length,
         equals(4),
       );
     });
 
     test('工作区筛选下的分页 loadMore 行为', () async {
-      // 创建 60 个 /ws/gamma 会话与 10 个 /ws/other 会话
       final gammaSessions = List.generate(
         60,
         (i) => _session('g_$i', 'Gamma $i', workspace: '/ws/gamma'),
@@ -232,8 +255,9 @@ void main() {
       WidgetTester tester, {
       required List<SessionSummary> sessions,
       List<WorkspaceRoot> workspaces = const [],
-      String? initialWorkspaceFilter,
-      bool showWorkspaceSelector = true,
+      bool throwWorkspaceError = false,
+      SessionListFilterMode initialMode = SessionListFilterMode.all,
+      String? initialFilterValue,
       Size viewportSize = const Size(1200, 800),
     }) async {
       tester.view.physicalSize = viewportSize;
@@ -252,13 +276,14 @@ void main() {
             projectApiFactoryProvider.overrideWithValue(
               (_) => _StubProjectApi(),
             ),
-            workspaceRootsProvider.overrideWith(
-              (ref) => Future.value(workspaces),
-            ),
-            if (initialWorkspaceFilter != null)
-              selectedWorkspaceFilterProvider.overrideWith(
-                () => _InitialWorkspaceController(initialWorkspaceFilter),
-              ),
+            workspaceRootsProvider.overrideWith((ref) {
+              if (throwWorkspaceError) {
+                return Future<List<WorkspaceRoot>>.error(
+                  Exception('Failed to load workspaces'),
+                );
+              }
+              return Future.value(workspaces);
+            }),
           ],
           child: const CupertinoApp(
             locale: Locale('zh'),
@@ -275,7 +300,6 @@ void main() {
                 showUtilityRows: false,
                 showSettingsTrailing: false,
                 showFab: false,
-                showWorkspaceSelector: true,
               ),
             ),
           ),
@@ -283,9 +307,201 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
+
+      if (initialMode != SessionListFilterMode.all ||
+          initialFilterValue != null) {
+        final element = tester.element(find.byType(SessionListPage));
+        final container = ProviderScope.containerOf(element);
+        await container.read(sessionListControllerProvider.notifier).setFilter(
+          initialMode,
+          value: initialFilterValue,
+        );
+        await tester.pumpAndSettle();
+      }
     }
 
-    testWidgets('② 选中工作区后只剩该工作区会话', (tester) async {
+    testWidgets('④ 默认态列表与改造前逐像素一致（关键回归守卫）：移除侧栏卡片后无多余顶部卡片', (tester) async {
+      final s1 = _session('s1', '会话一', workspace: '/projects/alpha');
+      final s2 = _session('s2', '会话二', workspace: '/projects/beta');
+
+      await pumpSessionList(
+        tester,
+        sessions: [s1, s2],
+        workspaces: [
+          const WorkspaceRoot(path: '/projects/alpha', name: 'Alpha'),
+          const WorkspaceRoot(path: '/projects/beta', name: 'Beta'),
+        ],
+      );
+
+      // 侧栏工作区选择器卡片已被彻底移除，不再渲染
+      expect(
+        find.byKey(const ValueKey('sidebar-workspace-selector')),
+        findsNothing,
+      );
+
+      // 会话行正常展示
+      expect(find.text('会话一'), findsOneWidget);
+      expect(find.text('会话二'), findsOneWidget);
+
+      // 筛选按钮存在
+      expect(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('① 筛选菜单出现工作区维度：展示全部工作区与各项（name 优先、path 兜底），默认态全部勾选', (tester) async {
+      final s1 = _session('s1', 'Alpha 会话', workspace: '/projects/alpha');
+      final s2 = _session('s2', 'Beta 会话', workspace: '/projects/beta');
+
+      await pumpSessionList(
+        tester,
+        sessions: [s1, s2],
+        workspaces: [
+          const WorkspaceRoot(path: '/projects/alpha', name: 'Alpha 项目'),
+          const WorkspaceRoot(path: '/projects/beta'), // 无 name，path 兜底
+        ],
+      );
+
+      // 打开筛选菜单
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 出现工作区分组
+      expect(
+        find.byKey(const ValueKey('filter-section-workspaces')),
+        findsOneWidget,
+      );
+      expect(find.text('工作区'), findsOneWidget);
+
+      // 全部工作区存在
+      expect(find.byKey(const ValueKey('workspace-chip-all')), findsOneWidget);
+      expect(find.text('全部工作区'), findsOneWidget);
+
+      // name 优先（显示 Alpha 项目）
+      expect(
+        find.byKey(const ValueKey('workspace-chip-/projects/alpha')),
+        findsOneWidget,
+      );
+      expect(find.text('Alpha 项目'), findsOneWidget);
+
+      // path 兜底（显示 /projects/beta）
+      expect(
+        find.byKey(const ValueKey('workspace-chip-/projects/beta')),
+        findsOneWidget,
+      );
+      expect(find.text('/projects/beta'), findsOneWidget);
+
+      // 默认态下「全部工作区」行显示 checkmark 选中
+      final allRowFinder = find.descendant(
+        of: find.byKey(const ValueKey('workspace-chip-all')),
+        matching: find.byIcon(CupertinoIcons.check_mark),
+      );
+      expect(allRowFinder, findsOneWidget);
+    });
+
+    testWidgets('② 选中工作区后只留该工作区会话', (tester) async {
+      final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
+      final sBeta = _session('s_beta', 'Beta 会话', workspace: '/projects/beta');
+
+      await pumpSessionList(
+        tester,
+        sessions: [sAlpha, sBeta],
+        workspaces: [
+          const WorkspaceRoot(path: '/projects/alpha', name: 'Alpha 项目'),
+          const WorkspaceRoot(path: '/projects/beta', name: 'Beta 项目'),
+        ],
+      );
+
+      // 打开筛选菜单
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 点击 Alpha 项目
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-chip-/projects/alpha')),
+      );
+      await tester.pumpAndSettle();
+
+      // 弹层关闭，只留该工作区会话
+      expect(find.byKey(const ValueKey('session-filter-sheet')), findsNothing);
+      expect(find.text('Alpha 会话'), findsOneWidget);
+      expect(find.text('Beta 会话'), findsNothing);
+
+      // 再次打开筛选菜单，确认 Alpha 项目项被勾选，「全部工作区」未勾选
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      final alphaCheckmark = find.descendant(
+        of: find.byKey(const ValueKey('workspace-chip-/projects/alpha')),
+        matching: find.byIcon(CupertinoIcons.check_mark),
+      );
+      expect(alphaCheckmark, findsOneWidget);
+
+      final allCheckmark = find.descendant(
+        of: find.byKey(const ValueKey('workspace-chip-all')),
+        matching: find.byIcon(CupertinoIcons.check_mark),
+      );
+      expect(allCheckmark, findsNothing);
+
+      // 同时「会话」分组出现「清除筛选」
+      expect(find.byKey(const ValueKey('sheet-filter-clear')), findsOneWidget);
+    });
+
+    testWidgets('③-a 工作区列表为空时不显示该分组', (tester) async {
+      final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
+
+      await pumpSessionList(
+        tester,
+        sessions: [sAlpha],
+        workspaces: const [],
+      );
+
+      // 打开筛选菜单
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 不显示工作区分组
+      expect(
+        find.byKey(const ValueKey('filter-section-workspaces')),
+        findsNothing,
+      );
+      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+    });
+
+    testWidgets('③-b 工作区列表加载失败时不显示该分组（不显示错误态）', (tester) async {
+      final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
+
+      await pumpSessionList(
+        tester,
+        sessions: [sAlpha],
+        throwWorkspaceError: true,
+      );
+
+      // 打开筛选菜单
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 不显示工作区分组，且不显示错误态
+      expect(
+        find.byKey(const ValueKey('filter-section-workspaces')),
+        findsNothing,
+      );
+      expect(find.text('Failed to load workspaces'), findsNothing);
+      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+    });
+
+    testWidgets('在筛选菜单中选中「全部工作区」恢复显示全部会话', (tester) async {
       final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
       final sBeta = _session('s_beta', 'Beta 会话', workspace: '/projects/beta');
 
@@ -296,14 +512,30 @@ void main() {
           const WorkspaceRoot(path: '/projects/alpha', name: 'Alpha'),
           const WorkspaceRoot(path: '/projects/beta', name: 'Beta'),
         ],
-        initialWorkspaceFilter: '/projects/alpha',
+        initialMode: SessionListFilterMode.workspace,
+        initialFilterValue: '/projects/alpha',
       );
 
       expect(find.text('Alpha 会话'), findsOneWidget);
       expect(find.text('Beta 会话'), findsNothing);
+
+      // 打开筛选菜单
+      await tester.tap(
+        find.byKey(const ValueKey('session-list-filter-trigger')),
+      );
+      await tester.pumpAndSettle();
+
+      // 点击「全部工作区」
+      await tester.tap(find.byKey(const ValueKey('workspace-chip-all')));
+      await tester.pumpAndSettle();
+
+      // 弹层关闭，恢复显示全部会话
+      expect(find.byKey(const ValueKey('session-filter-sheet')), findsNothing);
+      expect(find.text('Alpha 会话'), findsOneWidget);
+      expect(find.text('Beta 会话'), findsOneWidget);
     });
 
-    testWidgets('③ 空结果空态 + 「清除筛选」动作恢复会话', (tester) async {
+    testWidgets('空结果空态 + 「清除筛选」动作恢复会话', (tester) async {
       final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
 
       await pumpSessionList(
@@ -313,7 +545,8 @@ void main() {
           const WorkspaceRoot(path: '/projects/alpha', name: 'Alpha'),
           const WorkspaceRoot(path: '/projects/empty', name: 'EmptyWS'),
         ],
-        initialWorkspaceFilter: '/projects/empty',
+        initialMode: SessionListFilterMode.workspace,
+        initialFilterValue: '/projects/empty',
       );
 
       // 筛选后无会话，显示工作区专属空态
@@ -326,167 +559,11 @@ void main() {
 
       // 点击清除筛选
       await tester.tap(clearBtn);
-      await tester.pump();
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       // 会话重新出现
       expect(find.text('Alpha 会话'), findsOneWidget);
       expect(find.text('该工作区下暂无会话'), findsNothing);
     });
   });
-
-  group('SidebarWorkspaceSelector 独立组件测试', () {
-    Future<void> pumpSelector(
-      WidgetTester tester, {
-      required List<WorkspaceRoot> roots,
-      List<SessionSummary> sessions = const [],
-      String? initialSelectedPath,
-      bool throwError = false,
-      Size viewportSize = const Size(1200, 800),
-    }) async {
-      tester.view.physicalSize = viewportSize;
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      final api = FakeSessionListApi(sessions: sessions);
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            apiClientProvider.overrideWithValue(
-              ApiClient(baseUrl: 'http://test.local:30002'),
-            ),
-            sessionListApiFactoryProvider.overrideWithValue((_) => api),
-            projectApiFactoryProvider.overrideWithValue(
-              (_) => _StubProjectApi(),
-            ),
-            workspaceRootsProvider.overrideWith((ref) {
-              if (throwError) {
-                return Future<List<WorkspaceRoot>>.error(
-                  Exception('Network error'),
-                );
-              }
-              return Future<List<WorkspaceRoot>>.value(roots);
-            }),
-            if (initialSelectedPath != null)
-              selectedWorkspaceFilterProvider.overrideWith(
-                () => _InitialWorkspaceController(initialSelectedPath),
-              ),
-          ],
-          child: const CupertinoApp(
-            locale: Locale('zh'),
-            supportedLocales: [Locale('zh'), Locale('en')],
-            localizationsDelegates: [
-              AppLocalizationsDelegate(),
-              DefaultCupertinoLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-            ],
-            home: CupertinoPageScaffold(
-              child: Center(
-                child: SizedBox(
-                  width: 290,
-                  child: SidebarWorkspaceSelector(),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump();
-      await tester.pump();
-    }
-
-    testWidgets('④-a 空列表不渲染选择器 (SizedBox.shrink)', (tester) async {
-      await pumpSelector(tester, roots: []);
-
-      expect(
-        find.byKey(const ValueKey('sidebar-workspace-selector')),
-        findsNothing,
-      );
-    });
-
-    testWidgets('④-b 加载失败不渲染选择器，不显示错误态', (tester) async {
-      await pumpSelector(tester, roots: [], throwError: true);
-
-      expect(
-        find.byKey(const ValueKey('sidebar-workspace-selector')),
-        findsNothing,
-      );
-      expect(find.byType(CupertinoActivityIndicator), findsNothing);
-    });
-
-    testWidgets('④-c 窄屏 (< 900) 不渲染本选择器', (tester) async {
-      await pumpSelector(
-        tester,
-        roots: [const WorkspaceRoot(path: '/ws/1', name: 'WS1')],
-        viewportSize: const Size(800, 600), // < 900
-      );
-
-      expect(
-        find.byKey(const ValueKey('sidebar-workspace-selector')),
-        findsNothing,
-      );
-    });
-
-    testWidgets('正常宽屏下渲染白底卡片 + 会话计数 + 点击展开菜单并切换', (tester) async {
-      final s1 = _session('s1', 'S1', workspace: '/ws/alpha');
-      final s2 = _session('s2', 'S2', workspace: '/ws/alpha');
-      final s3 = _session('s3', 'S3', workspace: '/ws/beta');
-
-      await pumpSelector(
-        tester,
-        roots: [
-          const WorkspaceRoot(path: '/ws/alpha', name: 'Alpha Project'),
-          const WorkspaceRoot(path: '/ws/beta', name: 'Beta Project'),
-        ],
-        sessions: [s1, s2, s3],
-      );
-
-      // 默认态：显示「全部工作区」+ 3 个会话
-      expect(
-        find.byKey(const ValueKey('sidebar-workspace-selector')),
-        findsOneWidget,
-      );
-      expect(find.text('全部工作区'), findsOneWidget);
-      expect(find.text('3 个会话'), findsOneWidget);
-
-      // 点击打开菜单
-      await tester.tap(find.byKey(const ValueKey('sidebar-workspace-selector')));
-      await tester.pump();
-      await tester.pump();
-
-      // 菜单项可见
-      expect(find.byKey(const ValueKey('workspace-option-all')), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('workspace-option-/ws/alpha')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('workspace-option-/ws/beta')),
-        findsOneWidget,
-      );
-      expect(find.text('Alpha Project'), findsOneWidget);
-      expect(find.text('/ws/alpha'), findsOneWidget);
-
-      // 点击选中 Alpha Project
-      await tester.tap(find.byKey(const ValueKey('workspace-option-/ws/alpha')));
-      await tester.pump();
-      await tester.pump();
-
-      // 标题翻新为 Alpha Project，计数为 2 个会话
-      expect(find.text('Alpha Project'), findsOneWidget);
-      expect(find.text('/ws/alpha · 2 个会话'), findsOneWidget);
-    });
-  });
-}
-
-class _InitialWorkspaceController extends SelectedWorkspaceFilterController {
-  _InitialWorkspaceController(this._initial);
-  final String _initial;
-  @override
-  String? build() => _initial;
 }

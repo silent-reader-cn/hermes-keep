@@ -2028,4 +2028,8 @@ extension AppLocalizationsDesktopShell145 on AppLocalizations {
 
   /// 侧栏底部状态条：未连接。
   String get offline => isEnglish ? 'Offline' : '离线';
+
+  /// 侧栏导航轨：会话入口标题。
+  String get sessionsTitle => sessions;
 }
+
