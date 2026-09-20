@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/app.dart';
 import 'package:hermes_ui/app/shell/adaptive_shell.dart';
 import 'package:hermes_ui/app/shell/empty_detail_pane.dart';
+import 'package:hermes_ui/app/shell/sidebar_nav_rail.dart';
 import 'package:hermes_ui/app/shell/sidebar_utility_toolbar.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/connection_store.dart';
@@ -144,7 +145,7 @@ void main() {
         find.byKey(const ValueKey('adaptive-session-sidebar')),
         findsOneWidget,
       );
-      expect(find.byType(SidebarUtilityToolbar), findsOneWidget);
+      expect(find.byType(SidebarNavRail), findsOneWidget);
       expect(find.byType(EmptyDetailPane), findsOneWidget);
       expect(find.byType(SessionListPage), findsOneWidget);
     });

@@ -8,21 +8,7 @@ import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
-
-/// 侧栏顶部工具条项配置。
-class _UtilityItem {
-  const _UtilityItem({
-    required this.id,
-    required this.path,
-    required this.icon,
-    required this.getTitle,
-  });
-
-  final String id;
-  final String path;
-  final IconData icon;
-  final String Function(AppLocalizations l10n) getTitle;
-}
+import 'sidebar_utility_item.dart';
 
 /// 侧栏常驻工具入口行（TASK W2/W3 / 蓝本 SessionListComponents.swift §SessionSidebarUtilityRows）。
 ///
@@ -34,57 +20,7 @@ class SidebarUtilityToolbar extends ConsumerWidget {
   /// 当前激活的路由路径。
   final String currentLocation;
 
-  static final List<_UtilityItem> _items = [
-    _UtilityItem(
-      id: 'tasks',
-      path: '/tasks',
-      icon: CupertinoIcons.clock,
-      getTitle: (l10n) => l10n.tasksTitle,
-    ),
-    _UtilityItem(
-      id: 'kanban',
-      path: '/kanban',
-      icon: CupertinoIcons.square_split_2x2,
-      getTitle: (l10n) => l10n.kanbanTitle,
-    ),
-    _UtilityItem(
-      id: 'workspaces',
-      path: '/workspaces',
-      icon: CupertinoIcons.folder,
-      getTitle: (l10n) => l10n.workspacesTitle,
-    ),
-    _UtilityItem(
-      id: 'skills',
-      path: '/skills',
-      icon: CupertinoIcons.hammer,
-      getTitle: (l10n) => l10n.skillsTitle,
-    ),
-    _UtilityItem(
-      id: 'insights',
-      path: '/insights',
-      icon: CupertinoIcons.chart_bar,
-      getTitle: (l10n) => l10n.insightsTitle,
-    ),
-    _UtilityItem(
-      id: 'memory',
-      path: '/memory',
-      // #75：bookmark 与收藏提示词按钮撞脸，记忆入口改用 book（记忆库语义）。
-      icon: CupertinoIcons.book,
-      getTitle: (l10n) => l10n.memoryTitle,
-    ),
-    _UtilityItem(
-      id: 'downloads',
-      path: '/downloads',
-      icon: CupertinoIcons.arrow_down_circle,
-      getTitle: (l10n) => l10n.downloadsTitle,
-    ),
-    _UtilityItem(
-      id: 'settings',
-      path: '/settings',
-      icon: CupertinoIcons.gear_alt,
-      getTitle: (l10n) => l10n.settingsTitle,
-    ),
-  ];
+  static const List<SidebarUtilityItem> _items = sidebarUtilityItems;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

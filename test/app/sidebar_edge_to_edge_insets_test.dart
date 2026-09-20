@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/shell/adaptive_shell.dart';
-import 'package:hermes_ui/app/shell/sidebar_utility_toolbar.dart';
+import 'package:hermes_ui/app/shell/sidebar_nav_rail.dart';
 import 'package:hermes_ui/features/session_list/session_auto_refresh.dart';
 import 'package:hermes_ui/features/session_list/session_list_header.dart';
 import 'package:hermes_ui/features/session_list/session_list_page.dart';
@@ -109,11 +109,11 @@ void main() {
       );
       expect(safeArea.bottom, isFalse);
 
-      // 现象①：工具条整体下移一个状态栏高（顶部恰在状态栏下沿），不再被盖。
-      final toolbarTop = tester
-          .getTopLeft(find.byType(SidebarUtilityToolbar))
+      // 现象①：导航轨整体下移一个状态栏高（顶部恰在状态栏下沿），不再被盖。
+      final railTop = tester
+          .getTopLeft(find.byType(SidebarNavRail))
           .dy;
-      expect(toolbarTop, moreOrLessEquals(48.0, epsilon: 0.001));
+      expect(railTop, moreOrLessEquals(48.0, epsilon: 0.001));
 
       // 现象②：header 读到的 topPadding 已归零（SafeArea removePadding 生效）。
       final persistentHeader = tester.widget<SliverPersistentHeader>(
@@ -122,16 +122,11 @@ void main() {
       final delegate = persistentHeader.delegate as SessionListHeaderDelegate;
       expect(delegate.topPadding, 0);
 
-      // 现象②：工具条底部与搜索栏顶部（compact header）紧邻，无状态栏高度空白带。
-      // （修复前 header 顶部会比工具条底部多出 48px 空白带。）
-      final toolbarBottom = tester
-          .getBottomLeft(find.byType(SidebarUtilityToolbar))
-          .dy;
+      // 现象②：会话列表 header 顶部同样在状态栏下沿（48px），顶端对齐导航轨。
       final headerTop = tester
           .getTopLeft(find.byKey(const ValueKey('session-list-header')))
           .dy;
-      final gap = headerTop - toolbarBottom;
-      expect(gap, lessThan(1.0), reason: '工具条与搜索栏之间不应存在空白带，实际 gap=$gap');
+      expect(headerTop, moreOrLessEquals(48.0, epsilon: 0.001));
     });
 
     testWidgets('宽屏 padding == 0（默认视口语义）：SafeArea 空转，工具条顶零，零回归', (
@@ -150,10 +145,10 @@ void main() {
         find.byKey(const ValueKey('adaptive-session-sidebar')),
         findsOneWidget,
       );
-      final toolbarTop = tester
-          .getTopLeft(find.byType(SidebarUtilityToolbar))
+      final railTop = tester
+          .getTopLeft(find.byType(SidebarNavRail))
           .dy;
-      expect(toolbarTop, moreOrLessEquals(0.0, epsilon: 0.001));
+      expect(railTop, moreOrLessEquals(0.0, epsilon: 0.001));
     });
 
     testWidgets('窄屏（800 < 900）注入 padding(top: 48)：不渲染侧栏，child 直接展示，布局零变化', (
@@ -181,7 +176,7 @@ void main() {
         find.byKey(const ValueKey('adaptive-session-sidebar')),
         findsNothing,
       );
-      expect(find.byType(SidebarUtilityToolbar), findsNothing);
+      expect(find.byType(SidebarNavRail), findsNothing);
     });
   });
 }
