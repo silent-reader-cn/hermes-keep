@@ -384,30 +384,27 @@ void main() {
   });
 
   group('SidebarNavRail 点击触发路由跳转测试', () {
-    testWidgets('点击各个功能入口触发对应 context.go 路由跳转', (tester) async {
-      String? lastNavigated;
-      await tester.pumpWidget(
-        buildRailApp(
-          currentLocation: '/',
-          onNavigate: (path) => lastNavigated = path,
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets('点击各个功能入口触发对应路由 push 入栈（#145）', (tester) async {
+      // #145：侧栏入口语义必须是 push（入栈）而非 go（替换）——#77 宽屏
+      // 右侧面板导航栈依赖它才能逐级回退（wide_panel_nav_stack_test 钉此）。
+      // 故本用例按 push 语义断言：每个入口单独在干净 app 里点击，避开
+      // push 造成的多页面 rail 累积（同一 ValueKey 会出现多实例）。
+      for (final id in <String>['tasks', 'kanban', 'settings']) {
+        final navigated = <String>[];
+        await tester.pumpWidget(
+          buildRailApp(currentLocation: '/', onNavigate: navigated.add),
+        );
+        await tester.pumpAndSettle();
 
-      // 点击 tasks
-      await tester.tap(find.byKey(const ValueKey('sidebar-nav-tasks')));
-      await tester.pumpAndSettle();
-      expect(lastNavigated, '/tasks');
+        await tester.tap(find.byKey(ValueKey('sidebar-nav-$id')));
+        await tester.pumpAndSettle();
 
-      // 点击 kanban
-      await tester.tap(find.byKey(const ValueKey('sidebar-nav-kanban')));
-      await tester.pumpAndSettle();
-      expect(lastNavigated, '/kanban');
-
-      // 点击 settings
-      await tester.tap(find.byKey(const ValueKey('sidebar-nav-settings')));
-      await tester.pumpAndSettle();
-      expect(lastNavigated, '/settings');
+        expect(
+          navigated,
+          contains('/$id'),
+          reason: '点击 $id 入口应 push 到 /$id',
+        );
+      }
     });
   });
 

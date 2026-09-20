@@ -1165,6 +1165,9 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
                 ),
               const SizedBox(width: 6),
               CupertinoButton(
+                // 稳定锚点：折叠钮与输入区 chip / 过程胶囊共用 chevron 图标字形，
+                // 测试若用 byIcon 全局查找会歧义（#145 实测），故用 key 定位。
+                key: const ValueKey('chat-clarify-collapse-toggle'),
                 padding: EdgeInsets.zero,
                 minimumSize: const Size(24, 24),
                 onPressed: () => setState(() => _isCollapsed = !_isCollapsed),

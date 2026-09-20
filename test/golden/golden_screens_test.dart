@@ -14,6 +14,7 @@ import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/core/models/skills.dart';
 import 'package:hermes_ui/core/models/workspace.dart';
+import 'package:hermes_ui/core/providers/catalog_providers.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import '../helpers/fake_chat_api.dart';
@@ -268,6 +269,16 @@ void main() {
       return [
         chatApiProvider.overrideWithValue(api),
         connectionStoreProvider.overrideWithValue(store),
+        // #145 输入区元信息 chip 在 build 时会读工作区 / 模型目录：注入空值
+        // 避免真实 dio 请求挂起——金照 teardown 的 !timersPending 会因此失败
+        // （这不是像素差异，别用 --update-goldens 掩盖）。与上方
+        // 「列表页 watch 项目：注入空 stub 避免真实 dio 请求」同源。
+        workspaceRootsProvider.overrideWith(
+          (ref) => Future.value(const <WorkspaceRoot>[]),
+        ),
+        availableModelIdsProvider.overrideWith(
+          (ref) => Future.value(const <String>[]),
+        ),
       ];
     },
   );

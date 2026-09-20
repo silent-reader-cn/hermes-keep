@@ -723,7 +723,7 @@ void main() {
       expect(find.text('是否继续执行？'), findsOneWidget);
 
       // 点击折叠按钮
-      await tester.tap(find.byIcon(CupertinoIcons.chevron_up));
+      await tester.tap(find.byKey(const ValueKey('chat-clarify-collapse-toggle')));
       await tester.pump();
 
       // 折叠后问题与输入框隐藏
@@ -731,7 +731,7 @@ void main() {
       expect(find.byKey(const ValueKey('chat-prompt-clarify-input')), findsNothing);
 
       // 再次点击展开
-      await tester.tap(find.byIcon(CupertinoIcons.chevron_down));
+      await tester.tap(find.byKey(const ValueKey('chat-clarify-collapse-toggle')));
       await tester.pump();
 
       expect(find.text('是否继续执行？'), findsOneWidget);

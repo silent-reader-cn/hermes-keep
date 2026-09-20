@@ -294,6 +294,15 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
       return const SizedBox.shrink();
     }
 
+    // #145 窄屏守卫（刻意放在读取任何 provider 之前）：手机视口下输入栏放不下
+    // 两枚 chip（实测 390px + 1.3x 文本缩放时经典 Row 溢出 72px），故整组不渲染。
+    // 提前 return 还顺带省掉工作区 / 模型目录的两次无谓请求——窄屏既然不显示
+    // chip，就没有理由为它拉目录。功能入口不丢失：上下文弹层（ContextWindowPopover）
+    // 一直能改模型与工作区。
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return const SizedBox.shrink();
+    }
+
     final l10n = AppLocalizations.of(context);
     final sessionState = ref.watch(chatControllerProvider(widget.sessionId));
     final currentWorkspace = sessionState.workspace;
@@ -327,11 +336,12 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 窄宽时 chip 优先自我收缩：丢掉键名、只留「图标 + 值」
         final screenWidth = MediaQuery.sizeOf(context).width;
+
+        // 窄宽时 chip 优先自我收缩：丢掉键名、只留「图标 + 值」。
         final bool showKeyName = constraints.hasBoundedWidth
             ? constraints.maxWidth >= 260
-            : screenWidth >= 600;
+            : screenWidth >= 760;
 
         return Row(
           mainAxisSize: MainAxisSize.min,

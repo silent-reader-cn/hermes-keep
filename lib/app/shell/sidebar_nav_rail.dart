@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -141,7 +143,11 @@ class SidebarNavRail extends ConsumerWidget {
           borderRadius: BorderRadius.circular(9.0),
           color: isSelected ? activeBg : CupertinoColors.transparent,
           onPressed: () {
-            context.go(item.path);
+            // #77 宽屏右侧面板导航栈：侧栏入口必须 push 入栈（而非 go 替换），
+            // 否则模块页不积累导航栈、返回无法逐级回退 —— 与旧
+            // SidebarUtilityToolbar 的跳转语义逐字一致（既有
+            // wide_panel_nav_stack_test 即钉此行为）。
+            unawaited(context.push(item.path));
           },
           child: Icon(
             item.icon,
