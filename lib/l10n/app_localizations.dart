@@ -1989,3 +1989,43 @@ extension AppLocalizationsWorkManagerStatus113 on AppLocalizations {
       ? (reason.isEmpty ? 'Not ready' : 'Not ready: $reason')
       : (reason.isEmpty ? '未就绪' : '未就绪：$reason');
 }
+
+// ---------------------------------------------------------------------------
+// #145 桌面端外壳：侧栏导航轨 / 工作区选择器 / 输入区元信息 chip
+// ---------------------------------------------------------------------------
+extension AppLocalizationsDesktopShell145 on AppLocalizations {
+  /// 输入区元信息 chip：工作区键名。
+  String get composerWorkspaceLabel => isEnglish ? 'Workspace' : '工作区';
+
+  /// 输入区元信息 chip：模型键名。
+  String get composerModelLabel => isEnglish ? 'Model' : '模型';
+
+  /// 会话未绑定工作区时的虚线 chip 文案（可点即填）。
+  String get composerNoWorkspace => isEnglish ? 'Select workspace' : '选择工作区';
+
+  /// 会话未显式选模型时的虚线 chip 文案（跟随服务端默认）。
+  String get composerDefaultModel => isEnglish ? 'Server default' : '跟随默认模型';
+
+  /// 会话绑定的工作区目录已不存在 / 无权限（chip 红色异常态）。
+  String get composerWorkspaceUnavailable =>
+      isEnglish ? 'Workspace unavailable' : '工作区已失效';
+
+  /// 侧栏工作区选择器：不过滤，显示全部会话。
+  String get allWorkspaces => isEnglish ? 'All workspaces' : '全部工作区';
+
+  /// 侧栏工作区选择器：某工作区下的会话计数（用于副标题）。
+  String workspaceSessionCount(int count) =>
+      isEnglish ? '$count sessions' : '$count 个会话';
+
+  /// 侧栏底部状态条：内置服务（sidecar）。
+  String get builtinService => isEnglish ? 'Built-in service' : '内置服务';
+
+  /// 侧栏底部状态条：外部服务器连接。
+  String get externalServer => isEnglish ? 'External server' : '外部服务器';
+
+  /// 侧栏底部状态条：正在建立连接。
+  String get connecting => isEnglish ? 'Connecting…' : '连接中…';
+
+  /// 侧栏底部状态条：未连接。
+  String get offline => isEnglish ? 'Offline' : '离线';
+}

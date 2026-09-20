@@ -654,3 +654,84 @@ Leader 亲自静态取证（无真机时序复现手段，故方案含诊断埋�
 - 本次修复只碰 chat 侧上报闸，服务层优先级（活动 > 列表）保持 #141 拍板设计不变。
 
 ---
+
+## #145 桌面端：侧边栏重设计 + 输入框下方元信息条（承载模型 / 工作区选择）
+
+**分类**：方向（设计 + 桌面端外壳）　**状态**：**开发中**（主人 2026-09-20 拍板：输入区 chip 落「发送按钮左侧」；侧栏走 B 导航轨 + C 工作区选择器混搭）　**分支**：`feat/desktop-shell-redesign`　**发起**：2026-09-20（主人指示）
+
+### 主人诉求（原话）
+「针对桌面端给侧边栏重新做下设计；聊天框下方的区域也可以承载下模型和工作区选择，也做下 UI 设计」
+
+### 现状诊断（源码取证）
+| # | 现状 | 位置 |
+|---|---|---|
+| 1 | 宽屏侧栏 = 顶部 `SidebarUtilityToolbar`（**8 个纯图标横排**、无文字）+ 下方完整 `SessionListPage`（大标题「会话」+ 搜索 + 筛选 + 新建），**底部完全闲置** | `lib/app/shell/session_sidebar.dart`（46 行，纯组装）、`lib/app/shell/sidebar_utility_toolbar.dart`（174 行） |
+| 2 | 侧栏宽度 280–420（ideal 340），可拖拽并持久化 | `adaptive_shell.dart`（`kAdaptiveSidebarMinWidth/MaxWidth`） |
+| 3 | 输入框下方**没有任何信息承载**；模型与工作区都不可见 | `chat_input_bar.dart:725-1000`（经典 Row）/ `:997`（两段式） |
+| 4 | 工作区只能进上下文弹层里翻 | `context_window_popover.dart` |
+
+### 关键技术事实（已 grep 取证，决定本任务可行性）
+- **`updateSession` 已封装但 UI 从未接线**：`lib/core/api/api_client_sessions.dart:201` → `POST /api/session/update {session_id, workspace?, model?, model_provider?}`（端点 `endpoints.dart:177`）。全仓**零调用点** ⇒ 会话级模型/工作区切换的**后端能力已在、前端未接**。
+- 模型列表：`GET /api/models`（缓存）/ `GET /api/models/live`（实时）—— `api_client_server_panels.dart:13/21`。
+- 工作区列表：`GET /api/workspaces`（`endpoints.dart:324`）+ `lib/features/workspace/workspace_providers.dart`。
+- 设计 token（新组件必须复用）：`lib/app/theme/light_surfaces.dart` —— page `#F2F2F7` / card `#FFFFFF` / border+divider `#CCD0DA` / textSecondary `#6A6A6F` / selection `#E0ECFF` / blue `#007AFF`。
+
+### 设计案产物（本轮已出）
+- 源稿：`sketches/desktop-sidebar-composer-redesign.html`（54KB，按真实 token 1:1 实尺绘制）
+- 分段预览图（4 张，同目录）：`sidebar-design-v1-1-baseline-A.png` / `-2-B-C.png` / `-3-composer-123.png` / `-4-details.png`
+- 质检：Playwright 实测渲染，中文无乱码、四张均无重叠/溢出/崩坏（视觉复核通过）
+
+### 待主人拍板（两组独立选择，可混搭）
+**侧边栏**：
+- **A「底栏导航」** — 8 入口从顶部移到**底部导航栏**（图标+文字），列表头部瘦身为「搜索+新建」。改动最小、回归最小；缺点：340px 底部塞 8 项偏挤。
+- **B「导航轨 + 列表」← 柚子推荐** — 最左 50px 图标轨（8 入口竖排 + 设置钉底），右侧 290 给列表，**总宽不变**；列表头部只剩搜索/新建，底部加状态条（服务/连接态）。视觉噪音最低、扩容性最好（新增入口只动轨道）。
+- **C「工作区优先」** — 顶部常驻工作区选择器（名 + 路径 + 会话数），列表按工作区语义聚合；与下方元信息条呼应，代价是信息密度上升。
+- 可混搭：**B 的导航轨 + C 的工作区选择器**（柚子倾向的组合）。
+
+**输入框下方**：
+- **1「常驻元信息条」← 柚子推荐** — 输入框正下方 24px 条：左「工作区 chip + 模型 chip」（细描边 pill，点击向上弹选择器），右「上下文用量环 + 快捷键提示」。
+- **2「内嵌 chip 行」** — chip 进输入框内部顶行；更像完整 composer，但占高 +26px 且与两段式附件顶行易重复。
+- **3「极薄状态行」** — 纯文字 + 分隔点，无边框无底色；最轻但控件感最弱。
+
+### 拍板结论（2026-09-20）
+| 项 | 决定 | 理由 |
+|---|---|---|
+| 输入区 chip 位置 | **发送按钮左侧**（右簇） | 性能监视器被 `Expanded` 钉在左簇右缘，chip 插其左侧会把它整体推走；插右簇左侧零位移，且填补右侧空白 |
+| 侧栏 | **B 导航轨 + C 工作区选择器** | 导航轨解决「8 图标靠猜」，工作区选择器让工作区成一等公民 |
+
+### 建设性修正（调研后推翻本条最初的判断）
+本条最初写「`updateSession` UI 从未接线」**不准确**。实情：**controller 层早已实现且在用**——
+- `chat_controller.dart:662` `updateSessionSettings({workspace, model})` — 切工作区，`context_window_popover.dart:491/505` 在用
+- `chat_controller.dart:408` `selectModel(model, {modelProvider})` — 切模型（带 `explicit_model_pick`），同弹层 `:284/299` 在用
+- `client.workspaces()` → `List<WorkspaceRoot>`，同弹层 `:461` 在用
+
+⇒ **本任务不是「新接后端能力」，而是「把弹层里的既有入口提到常驻 chip」**，风险与工作量显著低于初判。新组件一律复用上述三条既有链路，**禁止另造一套 session 更新逻辑**。
+
+### 接口契约（Leader 已落 main 分支，两路共用，勿改签名）
+- `lib/core/providers/catalog_providers.dart`（新增）：
+  - `availableModelIdsProvider` → `FutureProvider<List<String>>`（`GET /api/models/live`，按小写+空格/下划线归一为连字符去重）
+  - `workspaceRootsProvider` → `FutureProvider<List<WorkspaceRoot>>`（`GET /api/workspaces`）
+  - 容错：无激活连接 / 网络失败**一律返回空列表**，不抛错不弹窗（与弹层 `_maybeFetchModels`/`_fetchWorkspaces` 同口径）
+- l10n：`app_localizations.dart` 尾部 `extension AppLocalizationsDesktopShell145`（词条见文件；禁止中段插入，避免并行冲突）
+
+### 关键约束（后端事实，已取证）
+- **`GET /api/sessions` 不支持 workspace 筛选**（仅 `include_archived` / `archived_limit`）⇒ 侧栏工作区选择器只能走**客户端过滤**；`Session.workspace` 字段存在（`session.dart:704`）可行。
+- 已有「新建会话带工作区」能力：`session_list_page.dart:818 _onNewSession(context, workspace:)` + FAB 长按工作区菜单（`_fabRankedWorkspaces`）——**侧栏选择器勿与之重复造轮子**，可共用取数。
+
+### 任务分区（1 任务 1 worktree，文件级零重叠）
+| 路 | 范围 | 交付 |
+|---|---|---|
+| W1 | `lib/app/shell/*`（`sidebar_utility_toolbar.dart` 改造为竖排导航轨 + 新增 `sidebar_nav_rail.dart`、改 `session_sidebar.dart`） | 50px 导航轨（8 入口竖排 + 设置钉底，图标 19px/线 1.6/命中 34×34，激活 `#E0ECFF`+`#007AFF`）+ 底部状态条（已连接/连接中/离线 + 端口 + 服务类型） |
+| W2 | `lib/features/session_list/*`（新增 `sidebar_workspace_selector.dart` + 筛选状态） | 侧栏顶部工作区选择器（全部工作区 + 各根，客户端过滤 + 会话计数），与 `SessionSidebar` 的组装由 W2 负责接线 |
+| W3 | `lib/features/chat/widgets/*`（新增 `composer_meta_chips.dart` + 改 `chat_input_bar.dart` 两段式与经典 Row 两处） | 发送按钮左侧两枚 chip（工作区 / 模型）+ 向上弹出的选择器；复用 `updateSessionSettings`/`selectModel`；四态：正常/悬停/失效(红)/无值(虚线) |
+
+### 验收标准（每路自检 + Leader 独立复验）
+- [ ] `C:/tmp/f.bat analyze` 零告警（含 info）
+- [ ] 相关测试全绿 + 新增守卫用例；失败/降级路径必须有 RED 校验（禁空转测试）
+- [ ] 窄屏（width < 900）行为**逐像素不变**（侧栏不渲染；chip 仅在两段式/经典 Row 内，移动端不加宽）
+- [ ] 深色模式不回归（新面/描边一律走 `LightSurfaces.resolve` 双分支）
+- [ ] 全量 `C:/tmp/f.bat test` 无回归 + 金照 `--update-goldens`（样式变更必须重出金照）
+- [ ] 无 Material 组件混入（Cupertino-only）
+- [ ] 子代理**禁止 commit**，Leader 统一提交
+
+---
