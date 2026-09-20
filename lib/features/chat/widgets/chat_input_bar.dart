@@ -25,6 +25,7 @@ import '../../chat/chat_state.dart';
 import '../../chat/pending_attachments_provider.dart';
 import '../../chat/selection_provider.dart';
 import '../../chat/widgets/attachment_pending_bar.dart';
+import '../../chat/widgets/composer_meta_chips.dart';
 import '../../chat/widgets/context_window_indicator.dart';
 import '../../chat/widgets/context_window_popover.dart';
 import '../../chat/widgets/perf_monitor_panel.dart';
@@ -947,6 +948,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           ),
                         ),
                       ),
+                      ComposerMetaChips(sessionId: widget.sessionId),
                       if (isStreaming) ...[
                         AccessibleButton(
                           key: const ValueKey('chat-stop-button'),
@@ -1197,6 +1199,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 child: PerfMonitorPanel(),
               ),
             ),
+            ComposerMetaChips(sessionId: widget.sessionId),
             ..._buildTrailingControls(
               l10n,
               isStreaming,
