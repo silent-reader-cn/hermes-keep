@@ -132,9 +132,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// resumed 后直接铺全文并重新校准看门狗基线。
   bool _appPaused = false;
 
-  /// 回合实时活动（#120 实况通知/灵动岛）：最近一次上报的活动与 detail。
+  /// 回合实时活动（#120 实况通知/灵动岛）：最近一次上报的活动、detail 与标题。
+  ///
+  /// **标题必须进去重键**（#144）：岛的最大字号位承载会话身份（B 案），若去重只看
+  /// (activity, detail)，则「标题变了而活动没变」的上报会被静默按掉 —— 新会话发
+  /// 首条消息时岛的标题会长期停在占位值（主人 2026-09-20 报告：一直是 untitled）。
   ChatLiveActivity? _liveActivity;
   String _liveActivityDetail = '';
+  String _liveActivityTitle = '';
 
   /// #124：已发出通知的 clarify_id，避免轮询/重连重建卡片时重复弹系统通知。
   String? _notifiedClarifyId;
@@ -218,6 +223,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _appPaused = false;
     _liveActivity = null;
     _liveActivityDetail = '';
+    _liveActivityTitle = '';
     _notifiedClarifyId = null;
     _emptyPendingStreak = 0;
     _lastUserActionAt = null;
@@ -230,6 +236,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _isContextPolling = false;
     _startWatchdog();
     ref.onDispose(_dispose);
+    // #144 标题跟进闸：标题是岛的最大字号位主文案，凡其变化（SSE title 事件 /
+    // 会话详情加载 / 改名 / 收尾补拉）都立刻按当前活动补报一次，不等下一个活动
+    // 事件 —— 否则标题更新会被活动去重门挡住，岛一直停在占位标题。
+    listenSelf((previous, next) {
+      if (previous == null || previous.displayTitle == next.displayTitle) {
+        return;
+      }
+      _reReportForTitleChange();
+    });
     // 后台/锁屏暂停 reveal 消费、resumed 铺全文并重新校准 watchdog 基线。
     ref.listen<AppLifecycleState>(appLifecycleStateProvider, (previous, next) {
       _handleAppLifecycleChange(previous, next);
@@ -3137,7 +3152,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   /// 上报回合实时活动。
   ///
-  /// 与上次上报相同则跳过：token 级高频事件（输出中）不得穿透到平台通道。
+  /// 与上次相同则跳过：token 级高频事件（输出中）不得穿透到平台通道。
+  /// **去重键 = (活动, detail, 标题)**（#144）—— 标题是岛的最大字号位主文案，
+  /// 它的变化必须穿透，否则新会话的岛会停在占位标题。
   /// [force] 供生命周期变化点使用——退后台时即使活动未变也要上报一次。
   /// 新会话（sessionId 为空）跳过：通知点击需要可跳转的会话。
   void _reportLiveActivity(
@@ -3148,6 +3165,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (_disposed) return;
     final sessionId = state.sessionId;
     if (sessionId.isEmpty) return;
+    final title = state.displayTitle;
     // #129 等待态豁免去重：等待态是「需主人行动」的报警态，一旦被外部链路撤岛
     // （后台兜底 / 列表归零 / 开关），去重表会让后续澄清轮询重建卡片的上报被
     // 静默跳过 → 岛再也回不来（#124 E 的「轮询重建即自动回岛」因此空转）。
@@ -3159,7 +3177,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (!force &&
         !sticky &&
         _liveActivity == activity &&
-        _liveActivityDetail == detail) {
+        _liveActivityDetail == detail &&
+        _liveActivityTitle == title) {
       return;
     }
     // #129：出现新的进行中/等待活动 → 取消「已完成/已中断」的停留计时
@@ -3170,14 +3189,26 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     _liveActivity = activity;
     _liveActivityDetail = detail;
+    _liveActivityTitle = title;
     try {
       ref.read(chatLiveActivityCallbackProvider)(
         sessionId,
-        state.displayTitle,
+        title,
         activity,
         detail,
       );
     } catch (_) {}
+  }
+
+  /// #144：标题变化后按当前活动补报一次（去重键含标题，故必然穿透）。
+  ///
+  /// 无进行中活动、或完成/中断态已停留到期撤岛（[ChatLiveActivity.finished]）
+  /// 时不补报 —— 不因一次改名或收尾补拉把已撤销的岛重新点亮。
+  void _reReportForTitleChange() {
+    if (_disposed) return;
+    final current = _liveActivity;
+    if (current == null || current == ChatLiveActivity.finished) return;
+    _reportLiveActivity(current, detail: _liveActivityDetail);
   }
 
   /// #124：收尾时若仍有「等主人行动」的报警态，直接报 finished 会把岛上的

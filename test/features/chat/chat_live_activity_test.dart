@@ -26,12 +26,24 @@ import '../../helpers/in_memory_secure_storage.dart';
 /// - 退到后台（paused）时列表轮询与 SSE 已停，必须**强制**补报一次，
 ///   否则岛在后台不会出现（主人 2026-09-15 报的「等一会才显示」）；
 /// - 高频 token 事件不得穿透（同活动连续到达只报一次），避免平台通道抖动。
+/// 单次上报快照（命名记录）。
+///
+/// 位置记录曾把 title 丢在断言之外 —— 「新建会话标题更新后岛仍显示占位标题」
+/// 这条缺陷能长期漏网，正因为本链路的测试只看得见 (sessionId, activity, detail)：
+/// 「标题变了但活动没变」在断言层面不可表达。
+typedef Report = ({
+  String sessionId,
+  String title,
+  ChatLiveActivity activity,
+  String detail,
+});
+
 void main() {
   group('#120 回合实时活动上报', () {
     test('token → output 上报（带会话 id）；同活动去重；退后台强制重报', () {
       fakeAsync((async) {
         final api = FakeChatApi();
-        final reports = <(String, ChatLiveActivity, String)>[];
+        final reports = <Report>[];
         final container = _buildContainer(api, reports);
         final controller = container.read(
           chatControllerProvider('').notifier,
@@ -48,8 +60,8 @@ void main() {
         api.emit(const TokenSseEvent('文本 '));
         async.flushMicrotasks();
         expect(reports, hasLength(1));
-        expect(reports.last.$1, 'sess-new');
-        expect(reports.last.$2, ChatLiveActivity.output);
+        expect(reports.last.sessionId, 'sess-new');
+        expect(reports.last.activity, ChatLiveActivity.output);
 
         // 去重：同活动连续 token 不再上报。
         final before = reports.length;
@@ -61,14 +73,14 @@ void main() {
         _setLifecycle(container, AppLifecycleState.paused);
         async.flushMicrotasks();
         expect(reports, hasLength(before + 1));
-        expect(reports.last.$2, ChatLiveActivity.output);
+        expect(reports.last.activity, ChatLiveActivity.output);
       });
     });
 
     test('reasoning → thinking；tool_started → tool 且带工具名', () {
       fakeAsync((async) {
         final api = FakeChatApi();
-        final reports = <(String, ChatLiveActivity, String)>[];
+        final reports = <Report>[];
         final container = _buildContainer(api, reports);
         final controller = container.read(
           chatControllerProvider('').notifier,
@@ -78,29 +90,29 @@ void main() {
 
         api.emit(const ReasoningSseEvent('先看下目录'));
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.thinking);
-        expect(reports.last.$3, '');
+        expect(reports.last.activity, ChatLiveActivity.thinking);
+        expect(reports.last.detail, '');
 
         api.emit(
           const ToolStartedSseEvent(ToolStreamEvent(name: 'terminal')),
         );
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.tool);
-        expect(reports.last.$3, 'terminal');
+        expect(reports.last.activity, ChatLiveActivity.tool);
+        expect(reports.last.detail, 'terminal');
 
         // 工具完成 → 回到推理。
         api.emit(
           const ToolCompletedSseEvent(ToolStreamEvent(name: 'terminal')),
         );
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.thinking);
+        expect(reports.last.activity, ChatLiveActivity.thinking);
       });
     });
 
     test('clarify → waitingReply；approval → waitingApproval', () {
       fakeAsync((async) {
         final api = FakeChatApi();
-        final reports = <(String, ChatLiveActivity, String)>[];
+        final reports = <Report>[];
         final container = _buildContainer(api, reports);
         final controller = container.read(
           chatControllerProvider('').notifier,
@@ -112,18 +124,18 @@ void main() {
           const ClarificationPendingSseEvent(<String, Object?>{}),
         );
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.waitingReply);
+        expect(reports.last.activity, ChatLiveActivity.waitingReply);
 
         api.emit(const ApprovalPendingSseEvent(<String, Object?>{}));
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.waitingApproval);
+        expect(reports.last.activity, ChatLiveActivity.waitingApproval);
       });
     });
 
     test('#129 回合收尾（stream_end）→ completed，停留 15s 后才 finished 撤岛', () {
       fakeAsync((async) {
         final api = FakeChatApi();
-        final reports = <(String, ChatLiveActivity, String)>[];
+        final reports = <Report>[];
         final container = _buildContainer(api, reports);
         final controller = container.read(
           chatControllerProvider('').notifier,
@@ -133,30 +145,30 @@ void main() {
 
         api.emit(const TokenSseEvent('文本 '));
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.output);
+        expect(reports.last.activity, ChatLiveActivity.output);
 
         api.emit(const StreamEndSseEvent());
         async.flushMicrotasks();
         // #129：收尾不再立刻撤岛，先上「已完成」态。
-        expect(reports.last.$2, ChatLiveActivity.completed);
+        expect(reports.last.activity, ChatLiveActivity.completed);
 
         // 停留期内不撤岛。
         async.elapse(const Duration(seconds: 14));
         expect(
-          reports.any((r) => r.$2 == ChatLiveActivity.finished),
+          reports.any((r) => r.activity == ChatLiveActivity.finished),
           isFalse,
         );
 
         // 满额 → 自动撤岛。
         async.elapse(const Duration(seconds: 2));
-        expect(reports.last.$2, ChatLiveActivity.finished);
+        expect(reports.last.activity, ChatLiveActivity.finished);
       });
     });
 
     test('#129 取消收尾 → interrupted（「已中断」而非「已完成」），停留后撤岛', () {
       fakeAsync((async) {
         final api = FakeChatApi();
-        final reports = <(String, ChatLiveActivity, String)>[];
+        final reports = <Report>[];
         final container = _buildContainer(api, reports);
         final controller = container.read(
           chatControllerProvider('').notifier,
@@ -165,23 +177,23 @@ void main() {
         async.flushMicrotasks();
         api.emit(const TokenSseEvent('文本 '));
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.output);
+        expect(reports.last.activity, ChatLiveActivity.output);
 
         api.emit(const CancelledSseEvent());
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.interrupted);
+        expect(reports.last.activity, ChatLiveActivity.interrupted);
 
         async.elapse(
           ChatController.liveActivityDwell + const Duration(seconds: 1),
         );
-        expect(reports.last.$2, ChatLiveActivity.finished);
+        expect(reports.last.activity, ChatLiveActivity.finished);
       });
     });
 
     test('#129 停留期内新活动接管 → 停留计时作废，不误撤岛', () {
       fakeAsync((async) {
         final api = FakeChatApi();
-        final reports = <(String, ChatLiveActivity, String)>[];
+        final reports = <Report>[];
         final container = _buildContainer(api, reports);
         final controller = container.read(
           chatControllerProvider('').notifier,
@@ -190,19 +202,19 @@ void main() {
         async.flushMicrotasks();
         api.emit(const StreamEndSseEvent());
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.completed);
+        expect(reports.last.activity, ChatLiveActivity.completed);
 
         // 新回合开始（推理）→ 接管岛。
         api.emit(const ReasoningSseEvent('再看一下'));
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.thinking);
+        expect(reports.last.activity, ChatLiveActivity.thinking);
 
         // 原停留计时已作废：走过 15s 也不得冒出 finished。
         async.elapse(
           ChatController.liveActivityDwell + const Duration(seconds: 3),
         );
         expect(
-          reports.any((r) => r.$2 == ChatLiveActivity.finished),
+          reports.any((r) => r.activity == ChatLiveActivity.finished),
           isFalse,
         );
       });
@@ -211,7 +223,7 @@ void main() {
     test('#129 等待态豁免去重：同一 waitingReply 重复上报仍穿透（外部撤岛后可回岛）', () {
       fakeAsync((async) {
         final api = FakeChatApi();
-        final reports = <(String, ChatLiveActivity, String)>[];
+        final reports = <Report>[];
         final container = _buildContainer(api, reports);
         final controller = container.read(
           chatControllerProvider('').notifier,
@@ -221,7 +233,7 @@ void main() {
         // 对照组：非等待态仍去重（防 token 级平台通道风暴）。
         api.emit(const TokenSseEvent('a '));
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.output);
+        expect(reports.last.activity, ChatLiveActivity.output);
         final afterOutput = reports.length;
         api.emit(const TokenSseEvent('b '));
         async.flushMicrotasks();
@@ -230,20 +242,20 @@ void main() {
         // 等待态：同活动重复到达必须继续上报（去重表不得把它按掉）。
         api.emit(const ClarificationPendingSseEvent(<String, Object?>{}));
         async.flushMicrotasks();
-        expect(reports.last.$2, ChatLiveActivity.waitingReply);
+        expect(reports.last.activity, ChatLiveActivity.waitingReply);
         final afterFirst = reports.length;
 
         api.emit(const ClarificationPendingSseEvent(<String, Object?>{}));
         async.flushMicrotasks();
         expect(reports.length, greaterThan(afterFirst));
-        expect(reports.last.$2, ChatLiveActivity.waitingReply);
+        expect(reports.last.activity, ChatLiveActivity.waitingReply);
       });
     });
 
     test('回合未进行时退后台 → 不上报（不无中生有地点亮岛）', () {
       fakeAsync((async) {
         final api = FakeChatApi();
-        final reports = <(String, ChatLiveActivity, String)>[];
+        final reports = <Report>[];
         final container = _buildContainer(api, reports);
         // 不发送任何消息：controller 处于 idle。
         container.read(chatControllerProvider(''));
@@ -254,6 +266,67 @@ void main() {
         expect(reports, isEmpty);
       });
     });
+
+    test('#144 标题更新即上岛：新会话从占位标题跟到真实标题', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final reports = <Report>[];
+        final container = _buildContainer(api, reports);
+        final controller = container.read(
+          chatControllerProvider('').notifier,
+        );
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // 首段正文 → output：此刻服务端尚未生成标题，岛上带的是占位标题。
+        api.emit(const TokenSseEvent('文本 '));
+        async.flushMicrotasks();
+        expect(reports.last.activity, ChatLiveActivity.output);
+        final placeholderTitle = reports.last.title;
+        expect(
+          placeholderTitle == '新会话' || placeholderTitle == 'Untitled Session',
+          isTrue,
+          reason: '新会话占位标题应为「新会话」/「Untitled Session」，实测：$placeholderTitle',
+        );
+
+        // 服务端生成标题（SSE title 事件）→ 活动没变，标题也必须立刻上岛。
+        api.emit(
+          const TitleSseEvent(sessionId: 'sess-new', title: '灵动岛标题跟进'),
+        );
+        async.flushMicrotasks();
+        expect(reports.last.title, '灵动岛标题跟进');
+        expect(reports.last.activity, ChatLiveActivity.output);
+
+        // 标题补报不得破坏防抖：随后同活动 token 仍需去重。
+        final afterTitle = reports.length;
+        api.emit(const TokenSseEvent('继续 '));
+        async.flushMicrotasks();
+        expect(reports.length, afterTitle);
+      });
+    });
+
+    test('#144 改名后岛标题同样立刻跟进（补报闸覆盖多写入点）', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final reports = <Report>[];
+        final container = _buildContainer(api, reports);
+        final controller = container.read(
+          chatControllerProvider('').notifier,
+        );
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+        api.emit(const TokenSseEvent('文本 '));
+        async.flushMicrotasks();
+        expect(reports.last.activity, ChatLiveActivity.output);
+
+        // 主人手动改名：聊天页标题与岛都该立刻跟上（活动没变）。
+        unawaited(controller.renameSession('我给它起的名字'));
+        async.flushMicrotasks();
+        expect(reports.last.title, '我给它起的名字');
+        expect(reports.last.activity, ChatLiveActivity.output);
+      });
+    });
+
   });
 }
 
@@ -283,7 +356,7 @@ class _NoopCacheService extends CacheService {
 
 ProviderContainer _buildContainer(
   FakeChatApi api,
-  List<(String, ChatLiveActivity, String)> reports,
+  List<Report> reports,
 ) {
   TestWidgetsFlutterBinding.ensureInitialized();
   final db = AppDatabase.memory();
@@ -299,7 +372,12 @@ ProviderContainer _buildContainer(
       // 捕获上报（生产由 main.dart 注入 chatLiveActivityHookProvider）。
       chatLiveActivityCallbackProvider.overrideWith(
         (ref) => (sessionId, title, activity, detail) {
-          reports.add((sessionId, activity, detail));
+          reports.add((
+            sessionId: sessionId,
+            title: title,
+            activity: activity,
+            detail: detail,
+          ));
         },
       ),
     ],
