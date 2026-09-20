@@ -843,6 +843,102 @@ Leader 亲自静态取证（无真机时序复现手段，故方案含诊断埋�
 
 **风险**：既有大量用例把「时间分组」当当前行为钉住 → 需逐条改钉新行为 + RED 校验（回退分组键 → 应精确变红）。金照宽屏会话列表图会变，需 `--update-goldens` 并确认变化符合预期（**注意不是像素差异就别急着 update**）。
 
-**状态**：🔨 开工中
+**状态**：✅ 已交付（提交 `fc43c0c`）
+
+### #146 交付记录（2026-09-20）
+
+**提交**：`fc43c0c`（主仓 `feat/desktop-shell-redesign` 分支）
+
+**验收**：`analyze` No issues found! + 主仓全量 **4948 通过 / 8 skipped / 0 失败**；`session_list` 域 **347 例全绿**（基线 339 + agy 新增 8）。
+**RED 校验**：移除 `matchesWorkspace` 的 trim + 反斜杠归一 → **精确 1 例变红**（容错比对用例），其余 15 例仍绿；还原后 54 例全绿 ⇒ 守卫确实钉住行为，非巧合通过。
+**金照**：`session_list light/dark` 更新（组头从时间→工作区）；README 截图 5 张更新（含 `wide-sessions.png` 展示 置顶/etl/hermes-ui/其他 四组）。
+
+**过程实况**：agy 单路，**又一次在收尾阵亡**（把测试丢后台 → idle 被杀），但**主体完整**（改了 providers/page/l10n + 5 个测试文件），Leader 接手补验。
+
+**⭐ 既有测试撞出两个真缺陷**（本轮最大价值，均非 agy 实现错误，而是**我规格的两处疏漏**）：
+1. **「其他」默认折叠 → 会话"消失"**：无 workspace 的会话（旧会话/默认会话）全进「其他」组，而规格让它默认折叠 ⇒ 侧栏打开时看不到这些会话，**用户会以为会话丢了**。修：默认**不折叠任何组**（宁可在列表里多显示，也不能默认藏内容）。
+2. **fork 不继承 workspace → 分支会话掉组**：`branch()` 构造新会话时没带 workspace，而 `SessionBranchResponse` **不含该字段** ⇒ fork 出的会话落进「其他」组，与「同一项目上下文继续」的语义相悖。修：`branch()` 继承原会话的 `workspace`。
+
+**架构修正**：分组 provider 原 `ref.watch(workspaceRootsProvider)` ⇒ 把「拉工作区列表」这个**网络请求变成了分组计算的硬依赖**，导致每个挂载会话列表的 widget 测试都带出 Dio 超时 timer、撞 `!timersPending`（68 例失败里的一大半是它连坐的）。改为不 watch、组名用路径末段纯计算。
+
+**第三个问题（测试抓不到）**：金照人眼复检发现**组头折叠箭头渲染成 tofu 方框** —— agy 用了 Unicode 三角字符 `▸`/`▾`，缺该字形时渲染失败；**测试全绿但画面是坏的**。改为 `CupertinoIcons.chevron_down/right`。
+
+**逐条归因的收敛路径**（每一步根因都不同）：
+68（默认折叠 + 网络依赖）→ 28（网络依赖）→ 6（含 fork 缺陷）→ 0（断言精化 + 测试补初始化）
+
+**待主人裁决**：会话行副标题在组内**重复显示组名**（如 `etl` 组内每行副标题都带 `etl`）—— 信息完整 vs 视觉干净的取舍，未擅动。
 
 ---
+
+## #147 回前台后工具卡被并成一张「工具特别多」的大卡（切卡判据与 reveal 游标错位）
+
+**分类**：问题（bug）　**状态**：✅ **A 案已实施** @`5f2285b`（分支 `fix/147-live-split`，未合 main；待主人真机复验）　**发现**：2026-09-20（主人报告）
+
+### 现象（现状 vs 预期）
+- **现状**：应用切后台再切回来，流式回合里攒出**一张**含很多个工具调用的大卡；本该把工具分开的正文，在切回来之后才一段段吐出来。
+- **预期**：工具卡按「事件真相」当场分开；正文 reveal 跟不跟得上，不应改变卡片边界。
+
+### 复现（已实测）
+事件序列固定为：正文A → 工具1 → 正文B → 工具2 → 正文C → 工具3（三条工具分属不同「正文区段」）。
+探针（`fakeAsync` + `FakeChatApi`，经 `appLifecycleStateProvider` 驱动生命周期）真实运行输出：
+
+| 时刻 | 输出 |
+|---|---|
+| 后台冻结中 | `entries=1 :: <tools key=live:tools:2 n=3>` ← **3 个工具并成 1 张卡** |
+| 恢复瞬间 | `entries=6 :: <text 4><tools n=1><text 4><tools n=1><text 4><tools n=1>` |
+| 前台同序列（不涉后台，纯 reveal 滞后） | 刚到达 `n=3` 一张卡 → 5s 后拆成 3 张 |
+
+⇒ **非后台独有**：只要 reveal 落后于事件到达就会并卡；后台只是把滞后放大（冻结越久、回前台补课越久，并卡持续越久）。
+
+### 根因（源码取证）：两个游标空间错位
+```mermaid
+flowchart LR
+  A["工具事件到达<br/>_appendToolCall:2255-2298<br/>（不受 _appPaused 门控）"] --> B["立即落 liveToolCalls<br/>+ 记 tools 断点"]
+  C["正文 token 到达<br/>_appendAssistantToken:1636-1639"] --> D["断点按「已到达」空间记<br/>_currentStreamingContent():2154-2181<br/>= content + pending + _revealQueue"]
+  D --> E["渲染切片却按「已 reveal」空间取<br/>chat_models.dart:687-689 content.substring"]
+  E --> F["文本段被 clamp 成零长<br/>segText.trim() 为空 :690"]
+  F --> G["不 flush、不建条目 ⇒ 段前后工具行并进同一张卡"]
+  B --> G
+```
+- 文本消费三处被 `_appPaused` 门控（`chat_controller.dart:1851 / 1906 / 1939`），工具写入**没有**门控（`:2255-2298`）⇒ 冻结期「工具照落、正文冻住」，正是主人看到的先后顺序。
+- 「正文是唯一分隔符」这条铁律（#54 时间线）本身没错 —— 错在**判据读的是「可见正文」，而不是「已到达正文」**。
+
+### 方案（主人 2026-09-20 拍板走 **A**）
+| 案 | 做法 | 观感 | 代价/风险 |
+|---|---|---|---|
+| **A（柚子推荐）** | 切卡判据与 reveal 解耦：按**事件到达**真相切卡（空白 token 仍不建断点，保留 #62 语义；「已到达」= content + pending + `_revealQueue`），文字仍按打字机逐段填入 | 卡片边界当场正确，文字随后填进两卡之间（可能有轻微布局回落） | 必须盯 #54/#62 老坑：断点被 diff-merge 吸收成零长时**不得**产生「无正文的分割」——需 RED 校验 |
+| B′（保守） | 保持「可见正文才切卡」，但一旦有工具事件到达，就把**尚未 reveal 的正文一次性铺出** | 卡片切开时正文必然可见（无空白分割） | 打字机在工具调用点「跳字」；工具密集的长回合体验变差 |
+
+### 同类体检（已完成）
+- **思考段同源受影响**（`_flushReasoningChunks:1999` 也走 merge tick，冻结期同样不推进）→ 冻结期思考子行会缺、回前台补齐；但思考是**工具卡子行**、不参与切卡判据，故不产生「并卡」。
+- **归档路径不受影响**（`toolGroupsProvider:525-561`）：归档时正文已完整，无 reveal 滞后。
+- `fallbackLiveTimelineEntries`（无断点兜底）按设计就是单卡，与本案无关。
+
+### 交付实现（A 案，`5f2285b` @ 分支 `fix/147-live-split`）
+| # | 文件 | 改动 |
+|---|---|---|
+| 1 | `lib/features/chat/chat_models.dart` | `LiveTimelinePoint` 增 `contentful`（缺省 false，保持旧契约）+ 等值/hash/toString 同步 |
+| 2 | `lib/features/chat/chat_controller.dart` | `_ensureTimelinePoint` 增 `contentful` 形参；三处建点方在**事件到达时**置位（主 token 路径 / 重放补点 / interim 新段落）；主 token 路径与重放补点各加「纯空白不建点」守卫 |
+| 3 | `lib/features/chat/chat_models.dart` | `buildLiveTimelineEntries` 的 text 分支：`flushBlock` 门 = `point.contentful \|\| 已 reveal 切片非空`；「是否渲染该 text 条目」仍看已 reveal 文本 |
+| 4 | `test/features/chat/live_timeline_reveal_lag_split_test.dart`（新增 260 行） | 4 例：后台冻结 / 前台滞后 / #62 空白不建点 / 可见正文照切 |
+| 5 | `test/features/chat/chat_models_basics_extra_test.dart` | 新字段纳入等值阶梯 + toString 固定格式断言同步 |
+
+**关键设计约束（改动过程中被测试逼出来的）**：纯函数 `buildLiveTimelineEntries` 的输入只有 `content` + `points`，它**无法**区分「尚未 reveal 的内容性段」与「到达即为空的占位段」。所以初版「text 断点无条件 flush」会打红 `live_timeline_segment_alignment_test` 两条（空段占位 / 纯空白段，属 #116/#62 守卫）⇒ 真相必须**由断点携带**（`contentful`），不能让渲染端猜；缺省 false 正好让 hand-fed 断点继续走旧语义。
+
+### 验收（实测）
+- [x] RED 用例：后台冻结交替序列 ⇒ 冻结中即 3 张卡（修复前实测并成 1 张 `n=3`，已红）
+- [x] RED 用例：前台纯滞后交替序列 ⇒ 刚到达即 3 张卡
+- [x] **反向校验**：`git stash` 掉 lib 修复 → **4 例全红（`+0 -4`）**；`pop` 恢复 → 全绿（护栏非空转）
+- [x] 防回归：#62 空白 token 不切卡（`live_timeline_blank_text_test` 3 例全绿）+ #116/#62 纯函数契约（`live_timeline_segment_alignment_test` 4 例全绿）+ 金照零变更（wide/narrow 全通过，未出现像素 diff）
+- [x] `flutter analyze`：**No issues found!**
+- [x] 全量 `flutter test`：**4898 通过 / 8 skipped / 0 失败**
+- [ ] 主人真机复验：后台切回 / 长回合工具密集时不再出现「一张工具特别多的卡」，且正文逐段填入不改变卡片边界
+
+### 过程备注
+- **自带边界（有意语义，非缺陷）**：若某段正文到达后又被 diff-merge 去重吸收（content 变短），本修复仍按「到达真相」保持两张卡 —— 这正是 #54「卡位忠实事件时间线」的推论；旧行为会因「看不见」而并卡。
+- **既有 flaky 顺带取证（与本案无关）**：全量首跑有一条 `test/features/workspace_manager/file_preview_body_extra_test.dart`（media_kit 视频分支）失败 → `stash` 掉本次改动在**干净基线**单跑同样**全绿 51 例** ⇒ 判定为**并行跑 flake**（§6.2 口径），非回归。
+- skill `hermex-flutter-codebase` 已回写：现象表新增 **K = 后台/打字机滞后期间工具并成一张大卡（切卡判据误读 reveal 游标）**，`references/tool-aggregation-phenomena-live-forensics.md` 记完整机制 + RED 约束。
+- worktree 预热按 §6⑭ 做了 `.dart_tool/hooks_runner` 拷贝；`linux/flutter/generated_plugin_registrant.h` 的工具性行尾噪声已在提交前还原，未夹带。
+
+- 调研轮取证：探针为临时文件（已删、未入库）；复现方式 = `fakeAsync` 容器 + `_setLifecycle(paused)` + 交替 emit，读 `liveTimelineProvider('')` 数 `LiveSegmentKind.tools` 条目与其 `toolGroup.toolCalls.length`。
+
