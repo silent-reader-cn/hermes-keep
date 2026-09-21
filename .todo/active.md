@@ -999,5 +999,25 @@ flowchart LR
 - [x] `dart format`：本轮触碰的 5 个 lib 文件 + 3 个新测试文件零差异；**HEAD 存量未格式化的 `app_localizations.dart` 未夹带整篇重排**（仅 +2 行）
 - [ ] 主人真机复验：改图后点刷新即见新图（灯箱与聊天内联同步）
 
+### 同类体检追补：宿主一重建就白下整份文件（已修，独立提交）
+**取证**（探针实测，一次同型重建一次下载）：`FilePreviewBody.didUpdateWidget` 用
+`oldWidget.source != widget.source` 判「换文件了、要重载」，而三个 `FilePreviewSource`
+子类**没有值语义**（默认同一性比较），宿主又每次 `build()` 都新建实例
+（`FilePreviewPage.build` 里 `FilePreviewSource.workspaceFile(...)`）⇒ 该判据**恒真**。
+实测 `downloads = 1 → 2 → 3`，即主题/语言切换、下载态 `setState` 等**任何宿主 rebuild
+都会白拉一整份文件**（大 PDF/图片尤其浪费，且会闪一次加载态）。
+
+**修复**：三个 source 类补值语义 —— `_WorkspaceFilePreviewSource` 比 `sessionId + path`；
+`_ResolvedFilePreviewSource` 比 `url + sessionId + identical(bytes)`；
+`_BytesFilePreviewSource` 比 `identical(bytes)`（字节用同一性：同实例跨 rebuild 稳定，
+逐字节比较代价过高）。⇒ 只有真换文件才重载；「同一份文件再看一次」一律由 `reloadToken`
+显式表达。
+
+**验收**：新增守卫「宿主同型重建（每次新建等值 source 实例）不重复拉取；换文件才重载」；
+相关 5 文件 **82 例全绿**（含既有「fileName 变化触发重载」契约）；全量
+**4964 通过 / 8 skipped / 0 失败**；`flutter analyze` 零告警。
+**RED 红线**：把 `==` 退回同一性比较 ⇒ 守卫用例精确变红
+（`Expected: length 1 / Actual: ['s1|pic.png', 's1|pic.png']`），其余保持绿。
+
 ### 过程备注（两条测试侧新坑，已回写 skill `hermex-flutter-codebase`）
 - **FakeAsync 下真实 I/O 不会自己推进**：widget 测试里 await 一个走真实文件/drift 的 provider future 会**挂住整个 isolate**（实测残留 `flutter_tester` 进程并锁住 `build/native_assets/.../sqlite3.dll`，令下一次跑测试直接 `Flutter failed to delete file`）。正解 = 编排层测「接线」时注入**同步落盘的替身 service**，行为层交给真实 service 的单测。

@@ -31,9 +31,8 @@ void main() {
   group('FilePreviewBody reloadToken（刷新接线）', () {
     testWidgets('token 自增 → 同一 source 实例也重新加载；token 不变则不重复加载', (tester) async {
       final api = FakeWorkspaceApi()..downloadBytes = kPngBytes;
-      // ⚠️ 全程复用同一个 source 实例：`didUpdateWidget` 里
-      // `oldWidget.source != widget.source` 是**恒真**的（source 无值语义），
-      // 换新实例会顺带触发重载，测出来的就不是 token 这条判据了。
+      // 全程复用同一个 source 实例：这样「只有 token 变」这一条判据是干净的，
+      // 不会和 source 变化带来的重载混淆（source 的值语义另有用例覆盖）。
       final source = FilePreviewSource.workspaceFile('s1', 'pic.png');
       // 复用同一批 override 实例（避免每次 pump 重放新 override）。
       final overrides = <Override>[
@@ -66,6 +65,45 @@ void main() {
       // 纯重建（token 不变）不得重新拉取 —— RED 红线：把 token 判据写成恒真
       // （或干脆删掉该分支）即可复现。
       await tester.pumpWidget(wrap(1));
+      await tester.pump();
+      await tester.pump();
+      expect(api.downloadCalls, hasLength(2));
+    });
+  });
+
+  group('FilePreviewBody source 值语义', () {
+    testWidgets('宿主同型重建（每次新建等值 source 实例）不重复拉取；换文件才重载', (tester) async {
+      final api = FakeWorkspaceApi()..downloadBytes = kPngBytes;
+      final overrides = <Override>[
+        apiClientProvider.overrideWithValue(ApiClient(baseUrl: kBaseUrl)),
+        workspaceApiFactoryProvider.overrideWithValue((_) => api),
+      ];
+
+      // 宿主真实写法：每次 build 都 `FilePreviewSource.workspaceFile(...)` 新建实例。
+      Widget wrap({String path = 'pic.png'}) => ProviderScope(
+        overrides: overrides,
+        child: CupertinoApp(
+          home: FilePreviewBody(
+            fileName: path,
+            source: FilePreviewSource.workspaceFile('s1', path),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(wrap());
+      await tester.pump();
+      await tester.pump();
+      expect(api.downloadCalls, hasLength(1));
+
+      // RED 红线：source 退回默认的同一性比较 ⇒ 等值重建也会重载，
+      // 于是「主题/语言切换、下载态 setState」等任何宿主 rebuild 都白拉一整份。
+      await tester.pumpWidget(wrap());
+      await tester.pump();
+      await tester.pump();
+      expect(api.downloadCalls, hasLength(1), reason: '等值 source 不该触发重载');
+
+      // 真换文件仍必须重载。
+      await tester.pumpWidget(wrap(path: 'other.png'));
       await tester.pump();
       await tester.pump();
       expect(api.downloadCalls, hasLength(2));

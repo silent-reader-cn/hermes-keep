@@ -238,6 +238,21 @@ class _WorkspaceFilePreviewSource extends FilePreviewSource {
   final String sessionId;
   final String path;
 
+  // ⚠️ 值语义不是装饰：宿主每次 `build()` 都会新建 source 实例，而
+  // [FilePreviewBody] 的 `didUpdateWidget` 用 `oldWidget.source != widget.source`
+  // 判定「换文件了、要重载」。默认的同一性比较下该判据**恒真** —— 实测宿主每次
+  // 同型重建都会白拉一整份文件（1→2→3；主题/语言切换、下载态 setState 等任何
+  // rebuild 都算）。改成值比较后只有真正的换文件才重载；「同一份文件再看一次」
+  // 一律由宿主的 `reloadToken` 显式表达。
+  @override
+  bool operator ==(Object other) =>
+      other is _WorkspaceFilePreviewSource &&
+      other.sessionId == sessionId &&
+      other.path == path;
+
+  @override
+  int get hashCode => Object.hash(sessionId, path);
+
   @override
   Future<FileResponse> loadText(WidgetRef ref, {required String fileName}) {
     final api = ref.read(workspaceApiFactoryProvider)(
@@ -261,6 +276,20 @@ class _ResolvedFilePreviewSource extends FilePreviewSource {
   final String? url;
   final Uint8List? bytes;
   final String? sessionId;
+
+  /// 值语义（理由同 [_WorkspaceFilePreviewSource]）。
+  ///
+  /// `bytes` 按**同一性**比较：同一 `Uint8List` 实例跨 rebuild 稳定，逐字节比较
+  /// 代价过高；字节真换了（新实例）时仍会正确判为「换文件」而重载。
+  @override
+  bool operator ==(Object other) =>
+      other is _ResolvedFilePreviewSource &&
+      other.url == url &&
+      other.sessionId == sessionId &&
+      identical(other.bytes, bytes);
+
+  @override
+  int get hashCode => Object.hash(url, sessionId, identityHashCode(bytes));
 
   @override
   Future<Uint8List> loadBytes(WidgetRef ref) async {
@@ -345,6 +374,14 @@ class _BytesFilePreviewSource extends FilePreviewSource {
   const _BytesFilePreviewSource(this.bytes);
 
   final Uint8List bytes;
+
+  /// 值语义（理由同 [_WorkspaceFilePreviewSource]）；字节按同一性比较。
+  @override
+  bool operator ==(Object other) =>
+      other is _BytesFilePreviewSource && identical(other.bytes, bytes);
+
+  @override
+  int get hashCode => identityHashCode(bytes);
 
   @override
   Future<FileResponse> loadText(
