@@ -31,7 +31,7 @@ Hermes Agent 的**跨平台客户端**：Flutter + Cupertino 单代码库，Andr
 | 后台任务 | workmanager 0.10.x + flutter_foreground_task 8.x | Android 后台回合 worker + 前台服务保活 |
 | 通知 | flutter_local_notifications 22.3.x | Android 后台回合通知 |
 | 媒体/文件 | media_kit 1.2.x + media_kit_video 2.0.x + media_kit_libs_video + pdfrx 2.6.x + file_picker 12.x | 音视频 / PDF 预览、附件选择 |
-| 剪贴板 | super_clipboard 0.1.x + pasteboard 0.5.x | 粘贴附件/文本（clipboard_paste） |
+| 剪贴板 | super_clipboard 0.1.x + pasteboard 0.5.x | 粘贴附件/文本（`core/utils/clipboard_paste.dart`）。**只有桌面才允许走 super_clipboard 的原生 FFI 附件探测**：Windows 走 `pasteboard`，macOS/Linux 走 `super_clipboard`；**移动端（Android/iOS）一律不探测附件**（该 Rust 库 profile `panic = "abort"`，失败即进程级闪退、Dart 的 try/catch 无效，判据 `nativeFfiPasteProbeEnabled` 有测试守卫，勿回退），移动端只保留引擎纯文本粘贴 |
 | 外链与意图 | url_launcher 6.x + android_intent_plus 5.x | 外部浏览器、APK 安装意图 |
 | 自更新与打包 | package_info_plus + archive + xml + crypto | 版本检查、sidecar 打包产物处理（实现见 `core/update/`、`core/install/`） |
 | 基础工具 | meta | 注解与不可变标注 |

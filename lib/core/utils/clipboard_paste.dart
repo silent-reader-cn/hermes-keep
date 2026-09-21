@@ -25,7 +25,10 @@ abstract interface class ClipboardPasteService {
 /// - Windows：使用 [Pasteboard]（纯 Win32 C++，无 Rust FFI）绕过
 ///   `super_clipboard`/`irondash 0.1.1` 在 Dart 3.13 上的
 ///   `Dart_UpdateFinalizableExternalSize not found` abort。
-/// - 其他平台：使用 `super_clipboard` 的 [ClipboardReader]。
+/// - 桌面（macOS / Linux）：使用 `super_clipboard` 的 [ClipboardReader]。
+/// - 移动端（Android / iOS / fuchsia）：**不探测附件**（恒返回 null）。
+///   同一条 FFI 路径在移动端是进程级 abort 风险（懒初始化 + `panic = "abort"`），
+///   这正是「输入框长按 → 粘贴 → 闪退」的根因，见 [nativeFfiPasteProbeEnabled]。
 class PlatformClipboardPasteService implements ClipboardPasteService {
   const PlatformClipboardPasteService({this.customReader});
 
@@ -70,15 +73,58 @@ const _attachmentProbeTimeout = Duration(milliseconds: 1500);
 /// 从剪贴板尝试读取附件（图片或文件），无附件时返回 null。
 ///
 /// - Windows：使用 [Pasteboard.image] / [Pasteboard.files]（Win32 无 FFI）。
-/// - 其他平台：优先级策略：
+/// - 桌面非 Windows（macOS / Linux）：优先级策略：
 ///   1. 优先图片：检测 png/jpeg/gif/webp/tiff，读取二进制，支持 virtual file 兜底；
 ///   2. 其次文件：检测 fileUri，解析为本地文件并读取 bytes；支持 virtual file 兜底；
 ///   3. 皆无则返回 null，放行系统默认纯文本粘贴。
+/// - 移动端（Android / iOS）：**不探测，恒返回 null**（放行纯文本粘贴）——
+///   见 [nativeFfiPasteProbeEnabled] 的契约与代价。
 ///
 /// 所有 FFI 路径均有 try/catch + 超时兜底，任何异常都返回 null 不抛。
 Future<PastedAttachment?> readPastedAttachment({
   ClipboardDataReader? customReader,
 }) => readPastedAttachmentFromClipboard(customReader: customReader);
+
+/// 是否允许走 `super_clipboard` 的原生 FFI 附件探测。
+///
+/// 契约（2026-09-21，主人拍板 A 案）：**移动端一律不走，只有桌面走**。
+///
+/// 背景（本判据存在的理由，勿删）：`super_clipboard` 的 Dart 侧是**懒初始化**
+/// ——`ClipboardReader.instance`（`static final`）→ `superNativeExtensionsContext`
+/// （顶层 `final`）→ `DynamicLibrary.open("libsuper_native_extensions.so")` +
+/// `super_native_extensions_init_message_channel_context`，即**首次真正用到
+/// `ClipboardReader` 时才进 Rust**。而该 Rust 库 profile 为 `panic = "abort"`
+/// （包内 `rust/Cargo.toml`），源码里还有 `CONTEXT.get().unwrap()` /
+/// `CLIP_DATA_HELPER.get().unwrap()` 一类断点（`rust/src/android/reader.rs`），
+/// 且 Java 侧 `SuperNativeExtensionsPlugin.onAttachedToEngine` 用
+/// `catch (Throwable)` 把 native init 失败**静默吞成一行 log** ⇒
+/// 任何失败都是**进程级 abort**，Dart 的 `try/catch` 完全兜不住，
+/// 表现为「聊天输入框长按 → 粘贴 → 闪退」。
+///
+/// Windows 早在同类 abort 上实测复现过（改走 `pasteboard` 绕过，见
+/// `tools/patch_windows_irondash.py` 与 `windows/CMakeLists.txt`），
+/// **Android 从未被处置**：输入框菜单把「粘贴」劫持进 `_handlePaste()`，
+/// 而它无条件先探附件 ⇒ 一定进 FFI 路径。
+///
+/// 代价（已知并接受）：移动端不再支持「粘贴图片/文件为附件」，
+/// 剪贴板为纯文本时照常粘贴（引擎 `Clipboard.getData` 通道，安全）。
+/// 彻底解法是升级 `super_clipboard` 到 0.9+（脱离 irondash 0.1.x），
+/// 届时本判据连同两个 pub cache / Windows 补丁脚本一并删除。
+///
+/// 抽成独立判据以便测试用 `debugDefaultTargetPlatformOverride` 覆盖。
+@visibleForTesting
+bool nativeFfiPasteProbeEnabled(TargetPlatform platform) {
+  switch (platform) {
+    case TargetPlatform.android:
+    case TargetPlatform.iOS:
+    case TargetPlatform.fuchsia:
+      return false;
+    case TargetPlatform.windows:
+    case TargetPlatform.linux:
+    case TargetPlatform.macOS:
+      return true;
+  }
+}
 
 /// 核心读取实现。
 Future<PastedAttachment?> readPastedAttachmentFromClipboard({
@@ -96,12 +142,23 @@ Future<PastedAttachment?> readPastedAttachmentFromClipboard({
     }
   }
 
+  // 移动端：整条 FFI 探测路径摘除（「输入框长按 → 粘贴 → 闪退」的止血，
+  // 契约与代价见 nativeFfiPasteProbeEnabled 的文档）。这里直接报告「无附件」，
+  // 由调用方回落纯文本粘贴（引擎 Clipboard.getData 通道，安全）。
+  //
+  // 判据必须排在最前：`defaultTargetPlatform` 可被测试 override，而 `Platform`
+  // 是 dart:io 的真实平台——顺序颠倒会让「在 Windows 主机上跑 Android 分支」
+  // 的测试误进 pasteboard 分支摸真实剪贴板。
+  if (!nativeFfiPasteProbeEnabled(defaultTargetPlatform)) {
+    return null;
+  }
+
   // Windows：使用 pasteboard（纯 Win32 C++），完全绕过 super_clipboard 的 Rust FFI。
   if (!kIsWeb && Platform.isWindows) {
     return await _readFromPasteboardWindows();
   }
 
-  // 非 Windows 生产路径：FFI 带超时，超时/异常一律视为无附件
+  // 桌面（macOS / Linux）生产路径：FFI 带超时，超时/异常一律视为无附件
   try {
     final result = await _probeAttachmentWithTimeout();
     return result;

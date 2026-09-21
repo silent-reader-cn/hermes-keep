@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/utils/clipboard_paste.dart';
 import 'package:mocktail/mocktail.dart';
@@ -82,6 +83,10 @@ class FakeClipboardDataReader extends ClipboardDataReader {
 }
 
 void main() {
+  // 本文件有一条测试要 mock MethodChannel（断言 pasteboard 通道零调用），
+  // 该能力依赖已初始化的测试 binding。
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('ClipboardPaste 工具与服务单测', () {
     test('图片优先：包含 PNG 图片时读取 bytes 并生成正确文件名', () async {
       final pngBytes = Uint8List.fromList([137, 80, 78, 71, 1, 2, 3]);
@@ -240,6 +245,60 @@ void main() {
       );
       final platformRes = await platform.readPastedAttachment();
       expect(platformRes?.bytes, Uint8List.fromList([42]));
+    });
+
+    group('移动端 FFI 探测摘除（点粘贴闪退止血 · A 案）', () {
+      tearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+      });
+
+      test('判据：移动端一律不走 super_clipboard FFI', () {
+        expect(nativeFfiPasteProbeEnabled(TargetPlatform.android), isFalse);
+        expect(nativeFfiPasteProbeEnabled(TargetPlatform.iOS), isFalse);
+        expect(nativeFfiPasteProbeEnabled(TargetPlatform.fuchsia), isFalse);
+      });
+
+      test('判据：桌面端保留 FFI 探测（Windows 另有 pasteboard 分支先接管）', () {
+        expect(nativeFfiPasteProbeEnabled(TargetPlatform.windows), isTrue);
+        expect(nativeFfiPasteProbeEnabled(TargetPlatform.linux), isTrue);
+        expect(nativeFfiPasteProbeEnabled(TargetPlatform.macOS), isTrue);
+      });
+
+      test('Android：短路优先于 Windows 分支（不触碰 pasteboard 通道）', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        var pasteboardCalls = 0;
+        const channel = MethodChannel('pasteboard');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          pasteboardCalls++;
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+        // 测试宿主是 Windows，故 dart:io 的 `Platform.isWindows` 恒为 true：
+        // 若移动端短路没排在 pasteboard 分支之前，这里至少命中 `image` / `files`
+        // 的通道调用。断言调用数为 0 **与宿主剪贴板内容无关**，是可确定判红的
+        // 守卫（只断言返回 null 会在宿主剪贴板为空时假绿 —— 实测已踩过）。
+        final result = await readPastedAttachment();
+
+        expect(pasteboardCalls, 0, reason: '移动端必须完全不进入 pasteboard 分支');
+        expect(result, isNull);
+      });
+
+      test('Android：注入 reader 的测试短路径不受影响（附件仍可解析）', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        final bytes = Uint8List.fromList([1, 2, 3]);
+        final reader = FakeClipboardDataReader(values: {Formats.png: bytes});
+        final result = await readPastedAttachment(customReader: reader);
+        expect(result?.bytes, bytes);
+      });
+
+      test('Android：生产服务对象同样恒 null（PlatformClipboardPasteService）', () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        const service = PlatformClipboardPasteService();
+        expect(await service.readPastedAttachment(), isNull);
+      });
     });
   });
 }

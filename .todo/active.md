@@ -1021,3 +1021,41 @@ flowchart LR
 
 ### 过程备注（两条测试侧新坑，已回写 skill `hermex-flutter-codebase`）
 - **FakeAsync 下真实 I/O 不会自己推进**：widget 测试里 await 一个走真实文件/drift 的 provider future 会**挂住整个 isolate**（实测残留 `flutter_tester` 进程并锁住 `build/native_assets/.../sqlite3.dll`，令下一次跑测试直接 `Flutter failed to delete file`）。正解 = 编排层测「接线」时注入**同步落盘的替身 service**，行为层交给真实 service 的单测。
+
+---
+
+## [已修复·待真机复验] [2026-09-21] Android 输入框长按「粘贴」闪退（super_clipboard 进程级 abort）
+
+**现象**：Android 聊天输入框长按 → 菜单点「粘贴」→ 进程闪退（Dart 层无任何异常/提示）。
+
+**根因（已实证到二进制层）**：`chat_input_bar._handlePaste()` 无条件先探附件 ⇒ Android 走
+`ClipboardReader.readClipboard()`（`core/utils/clipboard_paste.dart`）。`super_clipboard` 的 Dart 侧是
+**懒初始化**（`ClipboardReader.instance`(static final) → `superNativeExtensionsContext`(顶层 final) →
+`DynamicLibrary.open("libsuper_native_extensions.so")` + `super_native_extensions_init_message_channel_context`），
+即**首次用到 ClipboardReader 才进 Rust** ⇒ 启动正常、点粘贴才崩。该 Rust 库 profile `panic = "abort"`
+（包内 `rust/Cargo.toml`，产物 `.so` 内含 `U abort@LIBC`）、源码有 `CONTEXT.get().unwrap()`
+（`rust/src/android/reader.rs:40`），且 Java 侧 `SuperNativeExtensionsPlugin.onAttachedToEngine` 用
+`catch (Throwable)` 把 native init 失败**静默吞成一行 log** ⇒ 失败即**进程级 abort**，
+Dart 的 `try/catch` 完全兜不住。**Windows 早在同类 abort 上复现过**
+（`tools/patch_windows_irondash.py` 屏蔽注册 + 改走 pasteboard），**Android 从未被处置** —— 同一个雷只踩着一半。
+
+**修复（A 案，主人拍板）**：新增可测判据 `nativeFfiPasteProbeEnabled(TargetPlatform)`
+（`core/utils/clipboard_paste.dart`）—— 移动端（Android/iOS/fuchsia）恒 false；附件探测短路
+**排在最前**（优先于 Windows pasteboard 分支，顺序由测试钉住）。移动端只保留引擎纯文本粘贴。
+**代价（已知并接受）**：移动端失去「粘贴图片/文件为附件」。
+**治本（B 案，留待后续）**：升 `super_clipboard 0.9.1`（配 `super_native_extensions 0.9.1`，脱离 irondash 0.1.x），
+届时可连同 `patch_android_pub_cache.py` / `patch_windows_irondash.py` / vendored cargokit 一起删。
+
+**验收**：`flutter analyze` 零告警；`clipboard_paste_test` 15 例全绿（新增 5）；`chat_paste_attachment_test`
+新增 1 例端到端（真实生产服务 + mock pasteboard 通道计数）。
+**RED 红线**：判据回退 ⇒ 精确红 2 条（判据条 `Expected false / Actual true`；通道计数条
+`Expected <0> / Actual <2>`，恰为 `image`+`files` 两次调用）。
+**待主人真机复验**：输入框长按粘贴纯文本不再闪退。
+
+**未定论（需真机 logcat 才能钉死具体 abort 点）**：候选 = `irondash_init_message_channel_context`
+结构体版本不匹配 / `CONTEXT.get().unwrap()` / Java `getFormats` 无 try/catch 的 content-URI 异常跨 JNI。
+取证命令：`adb logcat -b crash -d`（或实况 `adb logcat | grep -E "abort|DEBUG|libc|super_native|irondash"`）。
+
+**5 秒自证判据**：同一台机上**会话搜索框 / 设置页输入框**长按粘贴（走引擎通道）**不崩**，
+只有聊天输入框崩（菜单被劫持进 `_handlePaste`）。全仓 `contextMenuBuilder` 共 9 处，
+仅 `chat_input_bar.dart` 两处劫持粘贴 ⇒ 闪退面只此一处。

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -608,6 +610,78 @@ void main() {
 
       await _unmount(tester);
     });
+
+    testWidgets(
+      'Android：粘贴不再进入 super_clipboard FFI（不触碰 pasteboard 通道），纯文本照常插入',
+      (tester) async {
+        // 注意：widget 测试的 `_verifyInvariants` 在**测试体结束前**就校验
+        // foundation debug 变量是否复位（addTearDown 太晚，实测报
+        // "The value of a foundation debug variable was changed by the test"），
+        // 故必须 try/finally 就地复位。
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        try {
+          final chatApi = FakeChatApi();
+          final adapter = _RecordingAdapter(
+            responder: (_) => ResponseBody.fromString('{"ok":true}', 200),
+          );
+          final client = _buildClient(adapter);
+
+          // 用**真实生产服务**（不注入 fake）：这条要验的正是修复后的真实路径。
+          var pasteboardCalls = 0;
+          const pasteboardChannel = MethodChannel('pasteboard');
+          final messenger = tester.binding.defaultBinaryMessenger;
+          messenger.setMockMethodCallHandler(pasteboardChannel, (call) async {
+            pasteboardCalls++;
+            return null;
+          });
+          addTearDown(
+            () => messenger.setMockMethodCallHandler(pasteboardChannel, null),
+          );
+
+          // 预置系统剪贴板纯文本
+          messenger.setMockMethodCallHandler(SystemChannels.platform, (
+            MethodCall methodCall,
+          ) async {
+            if (methodCall.method == 'Clipboard.getData') {
+              return {'text': 'Android plain text'};
+            }
+            return null;
+          });
+
+          await _pumpPage(
+            tester,
+            chatApi: chatApi,
+            pasteService: const PlatformClipboardPasteService(),
+            apiClient: client,
+          );
+
+          final inputFinder = find.byKey(const ValueKey('chat-input-field'));
+          await tester.tap(inputFinder);
+          await tester.pump();
+
+          Actions.invoke(
+            tester.element(inputFinder),
+            const PasteAttachmentIntent(),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
+
+          // 宿主平台是 Windows：若移动端短路失效，这里必然命中 pasteboard 通道
+          // （`Pasteboard.image` + `Pasteboard.files`）。真机上同一条路就是闪退。
+          expect(pasteboardCalls, 0, reason: '移动端必须完全不进入 pasteboard 分支');
+          expect(
+            adapter.requests.where((r) => r.uri.path == '/api/upload').toList(),
+            isEmpty,
+          );
+          final textField = tester.widget<CupertinoTextField>(inputFinder);
+          expect(textField.controller?.text, 'Android plain text');
+
+          await _unmount(tester);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
   });
 }
 

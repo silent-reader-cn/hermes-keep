@@ -477,10 +477,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final isSending = phase == ChatPhase.sending;
     if (!widget.enabled || isSending || _uploading) return;
 
-    // 对话框复制文本后右键粘贴闪退的主因：纯文本也先走 FFI 的
-    // ClipboardReader.readClipboard()（super_clipboard），在 Windows 上
-    // Dart 3.13 + irondash 0.1.1 会直接 abort。
-    // 修复：附件探测与纯文本路径彻底解耦——任意一边异常都不影响另一边。
+    // 粘贴闪退的两段历史（勿删，是这条解耦的来源）：
+    // ① Windows：纯文本也先走 FFI 的 ClipboardReader.readClipboard()
+    //    （super_clipboard），Dart 3.13 + irondash 0.1.1 会直接 abort
+    //    → 已改走 pasteboard 绕过。
+    // ② Android：同一条 FFI 路径从未被处置——首次用到 ClipboardReader 时
+    //    才做 native 懒初始化，失败即进程级 abort（Dart 的 try/catch 无效）
+    //    → 移动端整条附件探测路径已摘除（见 nativeFfiPasteProbeEnabled）。
+    // 本方法的兜底结构保持不变：附件探测与纯文本路径彻底解耦，
+    // 任意一边异常/空结果都不影响另一边。
     PastedAttachment? attachment;
     try {
       attachment = await ref
