@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/widgets/hermes_page_route.dart';
+import '../../../core/api/api_exception.dart';
 import '../../../core/cache/cache_providers.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/message_attachment.dart';
@@ -33,6 +35,24 @@ export '../../downloads/download_confirm_dialog.dart';
 final mediaFileProvider = FutureProvider.family<File, String>((ref, url) {
   return ref.watch(mediaCacheServiceProvider).get(url);
 });
+
+/// 强制刷新 [url] 的本地媒体缓存，并让所有消费它的图片组件重新解码。
+///
+/// 刷新成功后 `mediaFileProvider(url)` 会拿到**新路径**的缓存文件
+/// （[MediaCacheService.refresh] 换名落盘）⇒ 聊天内联缩略图与灯箱一起换新。
+/// 反过来说：别试图改成「同名写回 + `imageCache.evict`」—— `FileImage` 的 key
+/// 只认路径，同名写回时 widget 不会重新 resolve（详见 service 的 `refresh`）。
+Future<File> refreshCachedMedia(
+  WidgetRef ref,
+  String url, {
+  String? sessionId,
+}) async {
+  final file = await ref
+      .read(mediaCacheServiceProvider)
+      .refresh(url, sessionId: sessionId);
+  ref.invalidate(mediaFileProvider(url));
+  return file;
+}
 
 /// 聊天内联媒体渲染组件（支持图片、base64 Data URI、本地文件与服务器 /api/media 路由）。
 class ChatInlineMediaWidget extends ConsumerStatefulWidget {
@@ -561,6 +581,15 @@ class AttachmentLightbox extends StatelessWidget {
 
     final previewKind = workspaceFileKindOf(titleText);
 
+    // 远端图片（http/https）才有「刷新」语义：内容可能在服务端被改写而 URL
+    // 不变，本地缓存会一直挡着（key = sha256(URL)、TTL 30 天）。内存字节 /
+    // data: URI / 本地文件都没有远端副本，不渲染刷新按钮。
+    final bool refreshableImage =
+        (isImage || previewKind == WorkspaceFileKind.image) &&
+        resolvedUrl != null &&
+        (resolvedUrl!.startsWith('http://') ||
+            resolvedUrl!.startsWith('https://'));
+
     // 下载/状态按钮统一钉导航栏右上角（全分支唯一实例，单一状态显示）：
     // 失败/已下载等状态就地变化，不随兜底卡布局漂移，也不重复渲染。
     final navDownloadBtn = _AttachmentDownloadButton(
@@ -734,7 +763,14 @@ class AttachmentLightbox extends StatelessWidget {
                 ),
               )
             : null,
-        trailing: navDownloadBtn,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (refreshableImage)
+              _MediaRefreshButton(mediaUrl: resolvedUrl!, sessionId: sessionId),
+            navDownloadBtn,
+          ],
+        ),
       ),
       child: SafeArea(child: body),
     );
@@ -1038,6 +1074,87 @@ class _AttachmentDownloadButton extends ConsumerWidget {
             sessionId: sessionId,
           );
     }
+  }
+}
+
+/// 媒体预览的「刷新」按钮：强制绕过本地缓存重取同一 URL。
+///
+/// 只对 http(s) 远端媒体有意义，由调用方判定是否渲染（本组件不做隐式判断，
+/// 保持单一职责便于测试）。刷新失败只提示、不破坏已有缓存（service 层保证）。
+/// 刷新中换活动指示器：既给即时反馈，也顺带防连点。
+class _MediaRefreshButton extends ConsumerStatefulWidget {
+  const _MediaRefreshButton({required this.mediaUrl, this.sessionId});
+
+  final String mediaUrl;
+  final String? sessionId;
+
+  @override
+  ConsumerState<_MediaRefreshButton> createState() =>
+      _MediaRefreshButtonState();
+}
+
+class _MediaRefreshButtonState extends ConsumerState<_MediaRefreshButton> {
+  bool _refreshing = false;
+
+  Future<void> _onPressed() async {
+    if (_refreshing) return;
+    final l10n = AppLocalizations.of(context);
+    setState(() => _refreshing = true);
+    try {
+      await refreshCachedMedia(
+        ref,
+        widget.mediaUrl,
+        sessionId: widget.sessionId,
+      );
+    } catch (error) {
+      // 刷新失败保留旧图（service 先下载后落盘），这里只把原因说清楚。
+      if (!mounted) return;
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: Text(l10n.refreshFailed),
+          content: Text(
+            error is ApiException ? error.message : error.toString(),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              key: const ValueKey('media-refresh-error-ok'),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.ok),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_refreshing) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: CupertinoActivityIndicator(
+          radius: 8,
+          color: CupertinoColors.white,
+        ),
+      );
+    }
+    return Tooltip(
+      message: AppLocalizations.of(context).refreshImage,
+      child: CupertinoButton(
+        key: const ValueKey('media-refresh-button'),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        minimumSize: Size.zero,
+        onPressed: _onPressed,
+        child: const Icon(
+          CupertinoIcons.arrow_clockwise,
+          color: CupertinoColors.white,
+          size: 20,
+        ),
+      ),
+    );
   }
 }
 

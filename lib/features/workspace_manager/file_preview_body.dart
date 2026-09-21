@@ -382,6 +382,7 @@ class FilePreviewBody extends ConsumerStatefulWidget {
     this.onDownload,
     this.downloadButton,
     this.sizeBytes,
+    this.reloadToken = 0,
   });
 
   /// 文件名或路径（用于类型判定及元信息展示）。
@@ -398,6 +399,12 @@ class FilePreviewBody extends ConsumerStatefulWidget {
 
   /// 预估文件大小（字节数）。
   final int? sizeBytes;
+
+  /// 宿主「刷新」按钮的自增令牌：数值一变即丢弃当前内容重新加载。
+  ///
+  /// 走既有 [_load]（自带加载代次校验，连点不会串台），因此图片会重新拉取、
+  /// 文本会重新取回 —— 用于「服务端内容已改写，想看最新」的场景。
+  final int reloadToken;
 
   @override
   ConsumerState<FilePreviewBody> createState() => _FilePreviewBodyState();
@@ -437,6 +444,11 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
     if (oldWidget.fileName != widget.fileName ||
         oldWidget.source != widget.source) {
       _kind = workspaceFileKindOf(widget.fileName);
+      unawaited(_load());
+      return;
+    }
+    if (oldWidget.reloadToken != widget.reloadToken) {
+      // 只换 token（同文件同来源）＝宿主点了刷新。
       unawaited(_load());
     }
   }

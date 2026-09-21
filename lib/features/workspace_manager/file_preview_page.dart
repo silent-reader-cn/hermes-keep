@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
@@ -41,6 +42,12 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
   late final WorkspaceFileKind _kind = workspaceFileKindOf(widget.entry);
   bool _downloading = false;
 
+  /// 「刷新」自增令牌：交给 [FilePreviewBody] 触发一次重新加载。
+  ///
+  /// 单独用 token 而不是靠「重建时 source 实例不同」——后者是副作用，
+  /// 一旦将来给 source 补上值语义就会静默失效。
+  int _reloadToken = 0;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -58,6 +65,7 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
         widget.entry.path ?? '',
       ),
       onDownload: () => unawaited(_onDownload()),
+      reloadToken: _reloadToken,
     );
 
     return CupertinoPageScaffold(
@@ -69,9 +77,15 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
             title: widget.entry.name ?? l10n.unnamedFile,
             alwaysCollapsed: true,
             leading: const AppBackButton(),
-            trailing: _DownloadButton(
-              downloading: _downloading,
-              onPressed: () => unawaited(_onDownload()),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _RefreshButton(onPressed: () => setState(() => _reloadToken++)),
+                _DownloadButton(
+                  downloading: _downloading,
+                  onPressed: () => unawaited(_onDownload()),
+                ),
+              ],
             ),
           ),
           if (_kind == WorkspaceFileKind.pdf ||
@@ -150,6 +164,27 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
             child: Text(l10n.ok),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 导航栏刷新按钮：重新加载当前预览（服务端内容可能已被改写）。
+class _RefreshButton extends StatelessWidget {
+  const _RefreshButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: AppLocalizations.of(context).refreshPreview,
+      child: CupertinoButton(
+        key: const ValueKey('preview-refresh'),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: Size.zero,
+        onPressed: onPressed,
+        child: const Icon(CupertinoIcons.arrow_clockwise),
       ),
     );
   }

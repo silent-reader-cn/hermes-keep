@@ -163,7 +163,14 @@ Image.file / Image.memory 渲染（替换现在的 Image.network）
 - **主 key：`sha256(fullResolvedUrl)`**（hex 字符串）。
   - URL 已包含 `path` + `session_id` query 参数 → 天然区分「同一文件、不同会话授权」的取回；跨会话复用依赖 URL 一致（同 path 同 session 则同 key，合理）。
   - 相比「sessionId + messageId」：URL 更通用（同一图片可能被多个会话/多条消息引用，一条消息可能含多图）；messageId 只存在于历史消息，而流式期间 MEDIA: 已可渲染。
-- 文件名：`<sha256hex>.<ext>`，ext 从 URL path 尾部或响应 Content-Type 推断（无则 `.bin`）。
+- 文件名：两种形态，ext 从 URL path 尾部或响应 Content-Type 推断（无则 `.bin`）：
+  - **首次落盘/兜底**：`<sha256hex>.<ext>`；
+  - **强制刷新落盘**（`MediaCacheService.refresh`，媒体预览的「刷新」按钮）：`<sha256hex>-<version>.<ext>`。
+    ⚠️ 刷新**必须换名**，不能同名覆盖——`Image.file` 的 provider key 是 `FileImage(path, scale)`，
+    **不含 mtime/size**（Flutter 3.47 `painting/image_provider.dart`），同名写回时 `Image` 不会
+    重新 resolve，用户点刷新会「毫无反应」（`imageCache.evict` 也救不回已在监听的 ImageStream）。
+    换名后索引 `filePath` 同步指向新文件、旧文件即刻删除；`_keyFromFileName` 因此按首个 `-` 之前取 key。
+    `_get` 命中时也**必须按索引 filePath** 取文件（按固定名回算会让刷新后的每次访问都判未命中而重下）。
 - drift 索引表结构（schemaVersion 1 → 2）：
 
 ```dart

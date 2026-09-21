@@ -942,3 +942,62 @@ flowchart LR
 
 - 调研轮取证：探针为临时文件（已删、未入库）；复现方式 = `fakeAsync` 容器 + `_setLifecycle(paused)` + 交替 emit，读 `liveTimelineProvider('')` 数 `LiveSegmentKind.tools` 条目与其 `toolGroup.toolCalls.length`。
 
+
+
+---
+
+## #148 图片预览「刷新」：现在永远读本地缓存，看不到服务端已变化的新图
+
+**分类**：功能（方向）　**状态**：已交付（待主人真机复验）　**发现**：2026-09-21（主人报告）
+
+### 位置（源码行号）
+- 缓存实现：`lib/core/cache/media_cache_service.dart`（key = `sha256(完整 URL)` `:152`；TTL 30 天 `:20`；唯一取回入口 `get` `:84`）
+- 聊天内联缩略图：`lib/features/chat/widgets/chat_media_view.dart:250`（watch `mediaFileProvider:33`）
+- 点开的大图灯箱：同文件 `AttachmentLightbox:533` / `_LightboxNetworkImage:1046`（导航栏 trailing 原先只有下载按钮 `:737`）
+- 工作区文件预览（图片）：`lib/features/workspace_manager/file_preview_body.dart:516`（`_WorkspaceFilePreviewSource.loadBytes:250` → `api.downloadFile`）
+
+### 复现 / 现状 vs 预期
+1. 聊天里出现一张图片（`/api/media?path=…&session_id=…`），点开大图看一次（此时已落盘缓存）。
+2. 服务端把**同一路径**的图片改写（重画 / 覆盖写同名文件）。
+3. 再点开大图 → 仍是旧图；重启 App 也一样。**预期**：能拿到最新内容。
+
+### 根因（取证）
+1. **主因**：缓存 key = `sha256(URL)`，而 URL 只含 `path` + `session_id`、**不含内容版本**（mtime/etag），叠加 30 天 TTL ⇒ 同一 URL 的缓存永不失效，`Image.file` 恒读旧文件；缓存层也没有「绕过缓存重取」的入口（只有 `get`）。
+2. **必须一起修的隐藏陷阱**：`Image.file` 的 provider key 是 `FileImage(path, scale)`，**不含 mtime/size**（Flutter 3.47 `packages/flutter/lib/src/painting/image_provider.dart:1640-1655` 实测）。若把新字节写回**同一路径**，`FileImage` 相等 ⇒ `_ImageState.didUpdateWidget` 不会 `_resolveImage()` ⇒ 用户点刷新「毫无反应」；且光 `imageCache.evict` 也救不回来（已在监听的 ImageStream 不会自动重解）。**所以刷新必须换文件名**，让 provider key 必变。
+
+### 同类体检
+- 聊天内联缩略图与灯箱**共用同一份缓存**（同一 `mediaFileProvider(url)`）⇒ 修复必须让两边一起更新。
+- `data:` URI / `Image.memory(bytes)`（待发附件）/ 本地文件路径**没有远端副本** ⇒ 不提供刷新。
+- **工作区文件预览不吃缓存**（`downloadFile` 直连；无 dio cache interceptor；全仓 `Image.file` 仅聊天一处）⇒ 不存在「看缓存」问题；但成功态缺刷新入口，一并补（同类体验）。
+- 下载页 / 记忆 / 看板无媒体预览语义，不在范围。
+
+### 方案
+| 层 | 做法 |
+|---|---|
+| 缓存层 | `MediaCacheService.refresh(url)`：**先下载后落盘**（失败则旧缓存原封不动）；落盘名 `<sha256>-<微秒>.<ext>`（换名 ⇒ `Image` 必重解）；索引 filePath 同步指向新名、旧文件即刻删除；`_get` 命中时**按索引 filePath 取文件**（不可按固定名回算，否则刷新后每次访问都判「未命中」而重下，缓存形同失效）；`_keyFromFileName` 兼容版本后缀；与 `get` 共用 `_inflight` 去重 |
+| UI 层 | 灯箱导航栏右上角加「刷新」（仅 http(s) 网络图显示）；点击 → `refresh` → `ref.invalidate(mediaFileProvider(url))` ⇒ 内联缩略图 + 灯箱同时换新；失败弹 `l10n.refreshFailed`；刷新中即时反馈、防连点 |
+| 工作区预览 | `FilePreviewBody` 增 `reloadToken`（自增即重载，复用既有 `_load` 代次校验）；预览页导航栏加刷新按钮 |
+
+### 交付实现
+| # | 文件 | 改动 |
+|---|---|---|
+| 1 | `lib/core/cache/media_cache_service.dart` | 新增 `refresh()`（先下载后落盘 + 换名落盘 + 索引改指新名 + 删旧文件 + 与 `get` 共享 in-flight）；`_get` 命中改为**按索引 filePath** 取文件；新增 `_canonicalFileName`/`_nextRefreshVersion`；`_keyFromFileName` 兼容版本后缀 |
+| 2 | `lib/features/chat/widgets/chat_media_view.dart` | 新增 `refreshCachedMedia(ref, url)`（refresh + `invalidate(mediaFileProvider)`）；灯箱导航栏 trailing 改 Row，网络图时挂 `_MediaRefreshButton`（key `media-refresh-button`，刷新中换活动指示器，失败弹 `refreshFailed`，带 tooltip） |
+| 3 | `lib/features/workspace_manager/file_preview_body.dart` | 新增 `reloadToken`（自增即 `_load()`；与既有 fileName/source 分支互斥，避免双下载） |
+| 4 | `lib/features/workspace_manager/file_preview_page.dart` | `_reloadToken` 状态 + 导航栏 `_RefreshButton`（key `preview-refresh`，与下载按钮并排） |
+| 5 | `lib/l10n/app_localizations.dart` + `app_zh.arb` / `app_en.arb` | `refreshImage`（刷新图片）/ `refreshPreview`（刷新预览） |
+| 6 | `docs/cache_audit_report.md` | §3.4 补「刷新落盘换名」的两种文件形态与两条硬约束 |
+| 7 | 新增 3 个测试文件（15 例） | `test/core/cache/media_cache_refresh_test.dart`(7) / `test/features/chat/chat_media_lightbox_refresh_test.dart`(6) / `test/features/workspace_manager/file_preview_refresh_test.dart`(2) |
+
+### 验收（实测）
+- [x] `flutter analyze`：**No issues found!**（含 `test/`）
+- [x] 全量 `flutter test`：**4963 通过 / 8 skipped / 0 失败**；三个新文件独立跑 **15 例全绿**
+- [x] **RED 校验三连（均精确命中，非空转）**：
+  - `_get` 退回「按固定名回算」→ 精确红 **2 例**（「刷新后 get 命中新条目」「刷新后仍守 TTL」，断言值均为 `Expected: 2 / Actual: 3`，即刷新后多下一遍）
+  - `refresh` 退回「同名写回」→ 精确红 **3 例**（换名落盘 / 连续两次刷新路径不同 / 版本后缀被淘汰），失败理由均为「路径不再变化」
+  - 摘掉 `FilePreviewBody` 的 `reloadToken` 分支 → 精确红 **1 例**（`Expected: length 2 / Actual: ['s1|pic.png']`，只剩首次加载）
+- [x] `dart format`：本轮触碰的 5 个 lib 文件 + 3 个新测试文件零差异；**HEAD 存量未格式化的 `app_localizations.dart` 未夹带整篇重排**（仅 +2 行）
+- [ ] 主人真机复验：改图后点刷新即见新图（灯箱与聊天内联同步）
+
+### 过程备注（两条测试侧新坑，已回写 skill `hermex-flutter-codebase`）
+- **FakeAsync 下真实 I/O 不会自己推进**：widget 测试里 await 一个走真实文件/drift 的 provider future 会**挂住整个 isolate**（实测残留 `flutter_tester` 进程并锁住 `build/native_assets/.../sqlite3.dll`，令下一次跑测试直接 `Flutter failed to delete file`）。正解 = 编排层测「接线」时注入**同步落盘的替身 service**，行为层交给真实 service 的单测。

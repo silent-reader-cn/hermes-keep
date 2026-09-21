@@ -33,6 +33,10 @@ const Duration kDefaultMediaTtl = Duration(days: 30);
 /// 缓存 key = `sha256(完整 URL)`（URL 已含 `path` + `session_id`，天然区分
 /// 「同一文件、不同会话授权」的取回）。失效策略：200MB LRU + 30 天 TTL +
 /// 启动孤儿清理（§3.3/§3.5）。
+///
+/// ⚠️ 同一 URL 的**内容**若在服务端被改写，key 与 TTL 都不会变 ⇒ 只能靠用户
+/// 显式 [refresh]（媒体预览的刷新按钮）。本层不做条件请求（URL 无版本参数、
+/// 也未消费 ETag/Last-Modified）。
 class MediaCacheService {
   MediaCacheService({
     required AppDatabase database,
@@ -107,6 +111,80 @@ class MediaCacheService {
     }
   }
 
+  /// 强制刷新：绕过缓存重新下载 [fullUrl]，返回**新路径**的本地文件。
+  ///
+  /// 供「图片预览 · 刷新」使用：同一 URL 的内容在服务端被改写时，缓存 key
+  /// （`sha256(URL)`）不会变，[get] 会一直返回旧内容（TTL 30 天），必须由用户
+  /// 显式触发重取。
+  ///
+  /// 两条硬约束（改动前必读）：
+  /// 1. **先下载后落盘**：下载失败时旧缓存（文件 + 索引）原封不动 —— 否则
+  ///    网络一抖，用户点一下刷新就把手里唯一能看的图弄没了。
+  /// 2. **落盘换名**（`<sha256>-<version>.<ext>`）：`Image.file` 的 provider key
+  ///    是 `FileImage(path, scale)`，**不含 mtime/size**（Flutter 3.47
+  ///    `painting/image_provider.dart` 的 `FileImage.==`）。把新字节写回同一
+  ///    路径时 `FileImage` 相等 ⇒ `_ImageState.didUpdateWidget` 不会
+  ///    `_resolveImage()` ⇒ 用户点刷新「毫无反应」（且 `imageCache.evict` 也
+  ///    救不回已在监听的 ImageStream）。换名后 provider key 必变，所有消费该
+  ///    URL 的 `Image` 自动重新解码。
+  /// 索引同步指向新名，旧文件即刻删除（删不掉则留给启动孤儿清理）。
+  Future<File> refresh(String fullUrl, {String? sessionId}) {
+    // 与 [get] 共享 in-flight 表：刷新期间并发的 get 直接拿到刷新结果，反之
+    // 亦然（两个方向都不会对同一 URL 并发写同一份文件）。
+    final existing = _inflight[fullUrl];
+    if (existing != null) return existing;
+    final completer = Completer<File>();
+    _inflight[fullUrl] = completer.future;
+    unawaited(_runRefresh(fullUrl, sessionId, completer));
+    return completer.future;
+  }
+
+  Future<void> _runRefresh(
+    String fullUrl,
+    String? sessionId,
+    Completer<File> completer,
+  ) async {
+    try {
+      completer.complete(await _refresh(fullUrl, sessionId));
+    } catch (error, stackTrace) {
+      completer.completeError(error, stackTrace);
+    } finally {
+      unawaited(_inflight.remove(fullUrl)!);
+    }
+  }
+
+  Future<File> _refresh(String fullUrl, String? sessionId) async {
+    await initialize();
+    final uri = Uri.parse(fullUrl);
+    final key = _sha256(fullUrl);
+    final root = await _ensureRoot();
+
+    // 1) 先取字节：失败在此抛出，旧缓存保持可读。
+    final bytes = await _download(uri);
+
+    // 2) 换名落盘 + 索引改指新文件。
+    final previous = await _fetchRow(key);
+    final fileName = '$key-${_nextRefreshVersion()}.${_extForUrl(fullUrl)}';
+    final file = await _absoluteFile(fileName);
+    await file.writeAsBytes(bytes, flush: true);
+    await _insertRow(key, fullUrl, file, sessionId);
+
+    // 3) 旧文件删除失败不报错：索引已指向新名，旧文件成了无索引孤儿，
+    //    由 [cleanupOrphans] 在下次启动时收掉。
+    if (previous != null && previous.filePath != fileName) {
+      final stale = await _absoluteFile(previous.filePath);
+      try {
+        if (await stale.exists()) await stale.delete();
+      } on FileSystemException {
+        // 文件被占用（可能正被渲染）等：留给孤儿清理。
+      }
+    }
+
+    // 4) 写入后做一次容量达标（低频）。
+    await _evictIfNeeded(root);
+    return file;
+  }
+
   /// 启动诊断/清理：删除「有文件无索引」「有索引无文件」的孤儿，并触发一次
   /// 容量达标。首次 [get] 前自动执行一次，也可由宿主显式调用。
   @visibleForTesting
@@ -151,39 +229,44 @@ class MediaCacheService {
     final uri = Uri.parse(fullUrl);
     final key = _sha256(fullUrl);
     final root = await _ensureRoot();
-    final fileName = '$key.${_extForUrl(fullUrl)}';
-    final file = await _absoluteFile(fileName);
+    // 固定名只用于「首次落盘」与「补索引」；[refresh] 落盘的是带版本后缀的
+    // 新名，故命中路径一律以索引 filePath 为准（见下方 ⚠️）。
+    final canonical = await _absoluteFile(_canonicalFileName(key, fullUrl));
 
     // 1) 索引命中：文件仍存在 → 校验/更新访问时间后直接返回。
     final row = await _fetchRow(key);
     if (row != null) {
-      if (await file.exists()) {
+      // ⚠️ 必须按索引里的 filePath 取文件，不能按固定名回算：刷新会换名落盘
+      // 并删掉旧文件，若这里仍盯着固定名，刷新后每次访问都会判「未命中」而
+      // 重下 —— 缓存形同失效（外加白跑一次网络）。
+      final cached = await _absoluteFile(row.filePath);
+      if (await cached.exists()) {
         final now = _now();
         if (now - row.lastAccessedAt > ttl.inMilliseconds) {
           // 超 TTL → 过期删除重下。
-          await _removeEntry(key, file);
+          await _removeEntry(key, cached);
         } else {
           await _touch(key, now);
-          return file;
+          return cached;
         }
       } else {
         // 索引在但文件丢失 → 删索引（孤儿），走重下。
         await _deleteIndexRow(key);
       }
-    } else if (await file.exists()) {
+    } else if (await canonical.exists()) {
       // 文件在但索引缺失（例如索引被外部清理）：补索引即可，避免无谓重下。
-      await _insertRow(key, fullUrl, file, sessionId);
-      return file;
+      await _insertRow(key, fullUrl, canonical, sessionId);
+      return canonical;
     }
 
     // 2) 未命中 → 下载（非 2xx 抛错，调用方走占位符；不写缓存）。
     final bytes = await _download(uri);
-    await file.writeAsBytes(bytes, flush: true);
-    await _insertRow(key, fullUrl, file, sessionId);
+    await canonical.writeAsBytes(bytes, flush: true);
+    await _insertRow(key, fullUrl, canonical, sessionId);
 
     // 3) 写入后做一次容量达标（低频）。
     await _evictIfNeeded(root);
-    return file;
+    return canonical;
   }
 
   Future<Directory> _ensureRoot() async {
@@ -307,10 +390,31 @@ class MediaCacheService {
     }
   }
 
-  /// 由文件内名反推 cacheKey（文件名 = `<sha256hex>.<ext>`，key 为点前段）。
+  /// 由文件内名反推 cacheKey。
+  ///
+  /// 文件名两种形态：首落/兜底 `<sha256hex>.<ext>`、刷新落盘
+  /// `<sha256hex>-<version>.<ext>`；两者的 key 都是点前段里首个 `-` 之前
+  /// 的部分（sha256 hex 不含 `-`）。
   static String _keyFromFileName(String fileName) {
     final dot = fileName.lastIndexOf('.');
-    return dot == -1 ? fileName : fileName.substring(0, dot);
+    final stem = dot == -1 ? fileName : fileName.substring(0, dot);
+    final dash = stem.indexOf('-');
+    return dash == -1 ? stem : stem.substring(0, dash);
+  }
+
+  /// 首次落盘的固定文件名（`<sha256hex>.<ext>`）。
+  static String _canonicalFileName(String key, String url) =>
+      '$key.${_extForUrl(url)}';
+
+  /// 刷新落盘的版本号：进程内严格递增，保证「同一 URL 的相邻两次刷新」必得
+  /// 不同文件名（否则 `FileImage` key 不变 ⇒ 新图不上屏，见 [refresh]）。
+  static int _lastRefreshVersion = 0;
+  static int _nextRefreshVersion() {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    _lastRefreshVersion = now > _lastRefreshVersion
+        ? now
+        : _lastRefreshVersion + 1;
+    return _lastRefreshVersion;
   }
 
   /// 由 URL path 尾部推断扩展名（无则 `.bin`）。dio `downloadData` 只返回

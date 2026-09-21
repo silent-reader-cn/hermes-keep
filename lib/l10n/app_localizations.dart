@@ -614,6 +614,8 @@ class AppLocalizations {
   String get mediaVideo => isEnglish ? 'Video' : '视频';
   String get mediaDocument => isEnglish ? 'Document' : '文档';
   String get mediaImage => isEnglish ? 'Image' : '图片';
+  String get refreshImage => isEnglish ? 'Refresh image' : '刷新图片';
+  String get refreshPreview => isEnglish ? 'Refresh preview' : '刷新预览';
   String get downloadsTitle => isEnglish ? 'Downloads' : '下载';
   String get downloadStatusQueued => isEnglish ? 'Queued' : '等待中';
   String get downloadStatusDownloading => isEnglish ? 'Downloading…' : '下载中…';
