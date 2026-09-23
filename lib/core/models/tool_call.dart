@@ -282,6 +282,40 @@ class ToolCallGroup {
     ToolCallGroup mergedWith(ToolCallGroup other) =>
         _mergingToolCallGroup(this, other);
 
+    /// 本组是否被 [others] 完全覆盖（每个非思考调用都能在 others 里配到同一调用）。
+    ///
+    /// 供「服务端已有真身时丢弃 live 派生归档组」判定（#147 家族）：live 堆是
+    /// 「一整轮工具挤进一个 `live-tools-*` 组」的产物，服务端分组已覆盖它时再留作
+    /// fallback，会把别段工具搬进同一张卡、并把卡位从「首条正文之上」降级到正文
+    /// 之下（主人现象：回合末尾一张位置错误、tools 超多的大卡）。
+    bool isCoveredByOthers(List<ToolCallGroup> others) {
+      final own = [
+        for (final call in toolCalls)
+          if (!call.isThinking) call,
+      ];
+      if (own.isEmpty) return true;
+      final pool = [
+        for (final group in others)
+          for (final call in group.toolCalls)
+            if (!call.isThinking) call,
+      ];
+      if (pool.isEmpty) return false;
+      final used = <int>{};
+      for (final call in own) {
+        var matched = false;
+        for (var i = 0; i < pool.length; i++) {
+          if (used.contains(i)) continue;
+          if (_toolCallsMatch(call, pool[i])) {
+            used.add(i);
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) return false;
+      }
+      return true;
+    }
+
   /// 实时组：id = `live-tools-<anchor ?? unanchored>`。
   static ToolCallGroup live({
     String? anchorMessageID,
