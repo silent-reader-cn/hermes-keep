@@ -75,6 +75,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   final ScrollController _scrollController = ScrollController();
   Timer? _searchDebounce;
 
+  /// #151：当前悬停的工作区组 key —— 组头右侧的「+」（为该工作区新建会话）
+  /// 只在被悬停的那一组上出现。
+  String? _hoveredSectionKey;
+
   /// 窄屏「点击大标题 = 点击 ▾」的请求通道（#128）。
   ///
   /// 「会话」大标题由 [SessionListHeaderDelegate] 自绘，触达不了
@@ -585,21 +589,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 8.0,
                 6.0,
               ),
-              sliver: SliverList.separated(
+              // #151：项与项之间不要分隔线（主人要求），改 builder 形态。
+              sliver: SliverList.builder(
                 itemCount: section.sessions.length,
-                findItemIndexCallback: (Key key) {
-                  if (key is ValueKey<String>) {
-                    final value = key.value;
-                    if (value.startsWith('session-row-')) {
-                      final id = value.substring('session-row-'.length);
-                      final index = section.sessions.indexWhere(
-                        (s) => (s.sessionId ?? s.id) == id,
-                      );
-                      return index >= 0 ? index : null;
-                    }
-                  }
-                  return null;
-                },
                 itemBuilder: (context, index) {
                   final session = section.sessions[index];
                   return _SessionRow(
@@ -632,15 +624,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                               _showRowActions(context, session, anchorKey),
                   );
                 },
-                // #28 分割线全宽：dividerMargin 0，全长贯穿
-                separatorBuilder: (context, index) => Container(
-                  color: LightSurfaces.resolve(
-                    context,
-                    LightSurfaces.divider,
-                    dark: CupertinoColors.separator,
-                  ),
-                  height: 1.0 / MediaQuery.devicePixelRatioOf(context),
-                ),
               ),
             ),
         ],
@@ -671,8 +654,18 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       dark: const Color(0xFF2C2C2E),
     );
 
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
+    // #151：组头占满整行宽度，右侧留出「悬停出现的新建按钮」（为该工作区新建
+    // 会话）。原来 mainAxisSize.min 只包内容宽度，右侧无处放置操作。
+    final canCreateInGroup = section.workspacePath != null &&
+        !section.isPinned &&
+        !section.isOther;
+    return MouseRegion(
+      onEnter: canCreateInGroup
+          ? (_) => setState(() => _hoveredSectionKey = section.key)
+          : null,
+      onExit: canCreateInGroup
+          ? (_) => setState(() => _hoveredSectionKey = null)
+          : null,
       child: GestureDetector(
         key: ValueKey('session-section-header-${section.key}'),
         behavior: HitTestBehavior.opaque,
@@ -685,7 +678,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             6.0,
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               // 用 CupertinoIcons 而非 Unicode 三角字符（'▸'/'▾'）：后者在
               // 缺该字形的字体环境下会渲染成 tofu 方框（金照实测踩到），
@@ -725,6 +717,25 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   ),
                 ),
               ),
+              const Spacer(),
+              // #151：悬停本组时右侧出现「+」→ 直接为该工作区新建会话。
+              if (canCreateInGroup &&
+                  _hoveredSectionKey == section.key &&
+                  section.workspacePath != null)
+                AccessibleButton(
+                  key: ValueKey('session-section-new-${section.key}'),
+                  label: AppLocalizations.of(context).newSession,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(22, 22),
+                  onPressed: () => unawaited(
+                    _onNewSession(context, workspace: section.workspacePath),
+                  ),
+                  child: Icon(
+                    CupertinoIcons.add,
+                    size: 13,
+                    color: secondaryColor,
+                  ),
+                ),
             ],
           ),
         ),
@@ -1583,6 +1594,10 @@ class _SessionRowState extends State<_SessionRow> {
   /// 以整行为锚定位（原来用按钮自身的 key）。
   final GlobalKey _rowAnchorKey = GlobalKey();
 
+  /// #151：鼠标是否悬停在本行（桌面）。悬停时右侧「时间」换成「⋯」按钮
+  /// （点它开操作菜单）；左键长按与右键同样可开菜单。
+  bool _hovering = false;
+
 
   /// 紧凑单行的右侧摘要（#150 档 B）：**只有相对时间**（主人明确：设计稿右侧
   /// 灰字是时间、不是消息数），靠右对齐；拿不到时间 → 不显示（返回 null）。
@@ -1676,10 +1691,13 @@ class _SessionRowState extends State<_SessionRow> {
         ? _compactTrailingLabel(widget.session)
         : null;
     final rowContent = Padding(
-      // 设计稿 `.sess{padding:6px 8px}`（紧凑）/ 手机保持原 16/8
-      padding: EdgeInsets.symmetric(
-        horizontal: widget.compact ? 8 : 16,
-        vertical: widget.compact ? 6 : 8,
+      // #151：紧凑模式会话项左缩进加大（视觉上从属于所属工作区组），
+      // 右侧保持 8 让时间贴边；手机保持原 16/8。
+      padding: EdgeInsetsDirectional.only(
+        start: widget.compact ? 22 : 16,
+        end: widget.compact ? 8 : 16,
+        top: widget.compact ? 6 : 8,
+        bottom: widget.compact ? 6 : 8,
       ),
       child: Row(
         children: [
@@ -1728,9 +1746,13 @@ class _SessionRowState extends State<_SessionRow> {
                           style: const TextStyle(fontSize: 17),
                         ),
                       ),
-                    // #150 档 B：右侧极简相对时间（2h / 昨天 / 3d），右对齐；
-                    // 只在紧凑模式且未显示元信息行时出现（避免一屏两处信息）。
-                    if (widget.compact && compactTrailingLabel != null) ...[
+                    // #151：紧凑模式右侧槽 —— 悬停时把「时间」换成「⋯」菜单按钮，
+                    // 未悬停时显示极简相对时间（2h / 昨天 / 3d），右对齐。
+                    if (widget.compact && _hovering && widget.onActions != null) ...[
+                      const SizedBox(width: 6),
+                      _buildInlineActionsButton(context),
+                    ] else if (widget.compact &&
+                        compactTrailingLabel != null) ...[
                       const SizedBox(width: 6),
                       Text(
                         compactTrailingLabel,
@@ -1824,7 +1846,11 @@ class _SessionRowState extends State<_SessionRow> {
     final compactActions = widget.compact && widget.onActions != null
         ? () => widget.onActions!(_rowAnchorKey)
         : null;
-    return GestureDetector(
+    return MouseRegion(
+      // #151：桌面悬停 —— 右侧「时间」与「⋯」按钮互换（手机无 hover，不受影响）。
+      onEnter: widget.compact ? (_) => setState(() => _hovering = true) : null,
+      onExit: widget.compact ? (_) => setState(() => _hovering = false) : null,
+      child: GestureDetector(
       key: _rowAnchorKey,
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
@@ -1847,6 +1873,30 @@ class _SessionRowState extends State<_SessionRow> {
               child: rowContent,
             )
           : rowContent,
+      ),
+    );
+  }
+
+  /// #151：紧凑模式行内「⋯」按钮（悬停时占据右侧槽，与时间同位互换）。
+  /// 点它用整行锚点打开操作菜单 —— 与右键、长按同一套动作。
+  Widget _buildInlineActionsButton(BuildContext context) {
+    return AccessibleButton(
+      key: ValueKey(
+        'session-inline-actions-${widget.session.sessionId ?? widget.session.id}',
+      ),
+      label: AppLocalizations.of(context).sessionActions,
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(20, 20),
+      onPressed: () => widget.onActions?.call(_rowAnchorKey),
+      child: Icon(
+        CupertinoIcons.ellipsis,
+        size: 14,
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.textSecondary,
+          dark: CupertinoColors.systemGrey,
+        ),
+      ),
     );
   }
 
