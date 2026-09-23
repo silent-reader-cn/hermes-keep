@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/shell/adaptive_shell.dart';
 import 'package:hermes_ui/app/shell/sidebar_tools_list.dart';
 import 'package:hermes_ui/features/session_list/session_auto_refresh.dart';
-import 'package:hermes_ui/features/session_list/session_list_header.dart';
 import 'package:hermes_ui/features/session_list/session_list_page.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
@@ -116,26 +115,33 @@ void main() {
           .dy;
       expect(brandTop, moreOrLessEquals(48.0, epsilon: 0.001));
 
-      // 现象②：header 读到的 topPadding 已归零（SafeArea removePadding 生效）。
-      final persistentHeader = tester.widget<SliverPersistentHeader>(
-        find.byType(SliverPersistentHeader),
+      // #150：侧栏场景（宽屏 + showUtilityRows=false）下，列表头部已被移除 ——
+      // 它的四个 action 渲染条件（筛选/设置/新建/刷新）在侧栏全不成立，只剩
+      // 一个 50px 的空架子（表现为「工具列表下方一大块空白」），故整块不渲染。
+      // ⇒ 此处断言「不存在」；topPadding 归零的验证由窄屏用例承担（那里 header 仍在）。
+      expect(find.byType(SliverPersistentHeader), findsNothing);
+      expect(
+        find.byKey(const ValueKey('session-list-header')),
+        findsNothing,
       );
-      final delegate = persistentHeader.delegate as SessionListHeaderDelegate;
-      expect(delegate.topPadding, 0);
 
-      // 现象②：会话列表 header 不再与侧栏顶平齐 —— #149 后侧栏顶部依次是
-      // 品牌行（SidebarBrandBar）+ 常用功能列表（SidebarToolsList），
-      // header 紧贴工具列表底部。故断言相对关系，不硬编码绝对值。
-      final toolsBottom = tester
+      // 顶部对齐：侧栏自上而下 = 品牌行 → 常用功能列表 → 会话列表，
+      // 且品牌行整体吸收了 SafeArea 的顶部 inset（48）。断言相对关系，不写死绝对值。
+      final absorbedBrandTop = tester
+          .getTopLeft(find.byType(SidebarBrandBar))
+          .dy;
+      final absorbedToolsTop = tester
+          .getTopLeft(find.byType(SidebarToolsList))
+          .dy;
+      final absorbedToolsBottom = tester
           .getBottomLeft(find.byType(SidebarToolsList))
           .dy;
-      final headerTop = tester
-          .getTopLeft(find.byKey(const ValueKey('session-list-header')))
-          .dy;
+      expect(absorbedBrandTop, moreOrLessEquals(48, epsilon: 0.5));
       expect(
-        headerTop,
-        moreOrLessEquals(toolsBottom, epsilon: 0.5),
+        absorbedToolsTop,
+        moreOrLessEquals(absorbedBrandTop + 40.5, epsilon: 0.5),
       );
+      expect(absorbedToolsBottom, greaterThan(absorbedToolsTop));
     });
 
     testWidgets('宽屏 padding == 0（默认视口语义）：SafeArea 空转，工具条顶零，零回归', (

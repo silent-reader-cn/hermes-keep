@@ -106,20 +106,33 @@ void main() {
         ),
         greaterThanOrEqualTo(4.5),
       );
-      final card =
-          tester
-                  .widget<DecoratedSliver>(find.byType(DecoratedSliver))
-                  .decoration
-              as ShapeDecoration;
-      final outline = card.shape as RoundedSuperellipseBorder;
-      expect(card.color, LightSurfaces.card);
-      expect(outline.side.width, inInclusiveRange(0.5, 1));
-      expect(outline.side.color, LightSurfaces.cardBorder);
-      final menu = tester.widget<Icon>(find.byIcon(CupertinoIcons.ellipsis));
+      // #150：会话项按设计稿改为「朴素行 + 分割线」（原圆角卡片容器已移除，
+      // 设计稿手机端 `.psess{border-bottom:1px solid var(--line2)}` 亦无卡片）
+      // ⇒ 审计对象由「卡片边框」改为「分割线」，仍在同一对比度门限下。
+      // #150：会话项按设计稿改为「朴素行」（无圆角卡片容器）。这里审计其反面
+      // —— 断言不再存在「白卡底色的会话容器」。分割线不做断言：单条会话时
+      // SliverList.separated 不会渲染 separator，断言它会变成数据条数的函数。
+      final cardSurfaces = tester.widgetList<Container>(find.byType(Container))
+          .where((c) => c.color == LightSurfaces.card)
+          .toList();
       expect(
-        contrastRatio(menu.color!, card.color!),
-        greaterThanOrEqualTo(4.5),
+        cardSurfaces,
+        isEmpty,
+        reason: '会话项不应再使用白卡容器（设计稿为朴素行）',
       );
+      // 行尾「⋯」按钮已移除（主人要求：改长按/右键）⇒ 改审计行内最次要文字
+      // （紧凑模式右侧的相对时间）在页面底上的可读性。
+      final pageColor = LightSurfaces.page;
+      final rowTexts = tester.widgetList<Text>(find.byType(Text)).where(
+        (t) => (t.style?.color != null) && t.data != null && t.data!.isNotEmpty,
+      );
+      for (final t in rowTexts) {
+        expect(
+          contrastRatio(t.style!.color!, pageColor),
+          greaterThanOrEqualTo(4.5),
+          reason: '「${t.data}」在页面底上对比度过低',
+        );
+      }
       final headerColors = tester.widgetList<ColoredBox>(
         find.descendant(
           of: find.byKey(const ValueKey('session-list-header')),

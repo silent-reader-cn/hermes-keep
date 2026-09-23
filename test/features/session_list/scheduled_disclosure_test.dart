@@ -392,10 +392,9 @@ void main() {
 
       await pumpSessionListPage(tester, api, showCron: true);
 
-      // 点击 ellipsis 按钮
-      await tester.tap(
-        find.byKey(const ValueKey('session-actions-cron_1')),
-      );
+      // #150：行尾「⋯」按钮已按设计稿移除（主人要求改长按/右键）⇒ 长按行
+      // 打开同一套操作菜单（紧凑模式下长按 = 行操作，非多选）。
+      await tester.longPress(find.text('每日自动同步'));
       await tester.pumpAndSettle();
 
       // 确认弹出了 CupertinoActionSheet

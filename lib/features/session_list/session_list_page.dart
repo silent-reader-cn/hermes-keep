@@ -161,41 +161,47 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: SessionListHeaderDelegate(
-                    title: l10n.sessions,
-                    topPadding: MediaQuery.paddingOf(context).top,
-                    brightness:
-                        CupertinoTheme.of(context).brightness ??
-                        Brightness.light,
-                    // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不渲染「会话」
-                    // 大标题，搜索框与操作按钮（筛选/加号）整合为单行 pinned 头部；
-                    // 手机端单栈 → 宽敞大标题头部（49pt）。
-                    compactHeader: !widget.showUtilityRows,
-                    // #149：侧栏场景的搜索框改由顶部品牌行（SidebarBrandBar）
-                    // 承担（其搜索图标展开），列表内不再重复出一条搜索行。
-                    searchField: null,
-                    titleTrailing: !isWide && !isSearchMode
-                        ? _buildNarrowNavigationAction()
-                        : null,
-                    // #128：窄屏点击「会话」大标题（及收起态中标题）= 点击 ▾；
-                    // 条件与 titleTrailing 完全一致（无 ▾ 则不接线、点击无效）。
-                    onTitleTap: !isWide && !isSearchMode
-                        ? _requestNarrowNavMenu
-                        : null,
-                    actions: [
-                      // #149：筛选/新建/刷新在侧栏场景由品牌行与工具列表承担，
-                      // 列表头部只在非侧栏（窄屏单栈）时保留这些入口，避免双入口。
-                      if (!isSearchMode && widget.showUtilityRows)
-                        _buildFilterAction(state),
-                      if (widget.showSettingsTrailing)
-                        _buildSettingsOrDoneAction(state),
-                      if (!widget.showUtilityRows && !isWide)
-                        _buildNewSessionAction(),
-                      if (showDesktopRefresh && widget.showUtilityRows)
-                        _buildDesktopRefreshAction(refreshing),
-                    ],
+                // #149 修正：侧栏场景（宽屏 + showUtilityRows=false）下头部四个
+                // action 的渲染条件全部不成立（筛选/设置/新建/刷新都已由品牌行与
+                // 工具列表承担）⇒ 该 SliverPersistentHeader 只剩一个 50px 的空架子，
+                // 表现为「工具列表下方一大块空白」。侧栏场景直接不渲染它；
+                // 窄屏单栈（!isWide）仍然需要它承载大标题与新建入口。
+                if (widget.showUtilityRows || !isWide)
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: SessionListHeaderDelegate(
+                      title: l10n.sessions,
+                      topPadding: MediaQuery.paddingOf(context).top,
+                      brightness:
+                          CupertinoTheme.of(context).brightness ??
+                          Brightness.light,
+                      // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不渲染「会话」
+                      // 大标题，搜索框与操作按钮（筛选/加号）整合为单行 pinned 头部；
+                      // 手机端单栈 → 宽敞大标题头部（49pt）。
+                      compactHeader: !widget.showUtilityRows,
+                      // #149：侧栏场景的搜索框改由顶部品牌行（SidebarBrandBar）
+                      // 承担（其搜索图标展开），列表内不再重复出一条搜索行。
+                      searchField: null,
+                      titleTrailing: !isWide && !isSearchMode
+                          ? _buildNarrowNavigationAction()
+                          : null,
+                      // #128：窄屏点击「会话」大标题（及收起态中标题）= 点击 ▾；
+                      // 条件与 titleTrailing 完全一致（无 ▾ 则不接线、点击无效）。
+                      onTitleTap: !isWide && !isSearchMode
+                          ? _requestNarrowNavMenu
+                          : null,
+                      actions: [
+                        // #149：筛选/新建/刷新在侧栏场景由品牌行与工具列表承担，
+                        // 列表头部只在非侧栏（窄屏单栈）时保留这些入口，避免双入口。
+                        if (!isSearchMode && widget.showUtilityRows)
+                          _buildFilterAction(state),
+                        if (widget.showSettingsTrailing)
+                          _buildSettingsOrDoneAction(state),
+                        if (!widget.showUtilityRows && !isWide)
+                          _buildNewSessionAction(),
+                        if (showDesktopRefresh && widget.showUtilityRows)
+                          _buildDesktopRefreshAction(refreshing),
+                      ],
                   ),
                 ),
                 // 注意：刷新指示器必须排在所有 SliverToBoxAdapter 之前
@@ -570,29 +576,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           ),
           if (isSearchMode || !collapsedSections.contains(section.key))
             SliverPadding(
+              // #150：去掉圆角卡片容器（背景 + 0.5px 边框 + 10px 圆角），改为
+              // 朴素行 —— 只在行自身做选中/按下的圆角染色。
+              // 内缩严格对齐设计稿 `.sb-list{padding:6px 8px}`：左右 8、组间距 6。
               padding: const EdgeInsetsDirectional.fromSTEB(
-                20.0,
+                8.0,
                 0.0,
-                20.0,
-                10.0,
-              ),
-              sliver: DecoratedSliver(
-              decoration: ShapeDecoration(
-                color: LightSurfaces.resolve(
-                  context,
-                  LightSurfaces.card,
-                  dark: CupertinoColors.secondarySystemGroupedBackground,
-                ),
-                shape: RoundedSuperellipseBorder(
-                  borderRadius: const BorderRadius.all(Radius.circular(10.0)),
-                  side: CupertinoTheme.brightnessOf(context) == Brightness.light
-                      ? const BorderSide(
-                          color: LightSurfaces.cardBorder,
-                          width: 0.5,
-                          strokeAlign: BorderSide.strokeAlignOutside,
-                        )
-                      : BorderSide.none,
-                ),
+                8.0,
+                6.0,
               ),
               sliver: SliverList.separated(
                 itemCount: section.sessions.length,
@@ -616,6 +607,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                       'session-row-${session.sessionId ?? session.id}',
                     ),
                     session: session,
+                    // #150：侧栏（宽屏）用紧凑单行；窄屏单栈保持原两行。
+                    compact: !widget.showUtilityRows,
                     subtitleSettings: subtitleSettings,
                     projectNames: projectNames,
                     highlightQuery: isSearchMode
@@ -650,7 +643,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 ),
               ),
             ),
-          ),
         ],
       if (hasMore)
         const SliverToBoxAdapter(
@@ -1510,7 +1502,14 @@ class _SessionRow extends StatefulWidget {
     this.selectionMode = false,
     this.selected = false,
     this.highlightQuery,
+    this.compact = false,
   });
+
+  /// 紧凑单行（#150 档 B）：侧栏（宽屏）为提升信息密度而启用 ——
+  /// 标题字号 17→13.5、左右内缩 16→10、上下 8→5，元信息从「第二行」改为
+  /// 「同行右侧极简相对时间」，行高约 59→30px（一屏 10 → 17 条）。
+  /// 窄屏单栈（手机）保持原两行布局，逐像素不变。
+  final bool compact;
 
   final SessionSummary session;
   final VoidCallback onTap;
@@ -1580,6 +1579,49 @@ class _SessionRow extends StatefulWidget {
 }
 
 class _SessionRowState extends State<_SessionRow> {
+  /// #150：整行锚点 —— 紧凑模式去掉行尾「⋯」后，长按/右键弹出的操作菜单
+  /// 以整行为锚定位（原来用按钮自身的 key）。
+  final GlobalKey _rowAnchorKey = GlobalKey();
+
+
+  /// 紧凑单行的右侧摘要（#150 档 B）：**只有相对时间**（主人明确：设计稿右侧
+  /// 灰字是时间、不是消息数），靠右对齐；拿不到时间 → 不显示（返回 null）。
+  static String? _compactTrailingLabel(SessionSummary session) {
+    return _relativeTimeLabel(session);
+  }
+
+  /// #150 档 B：极简相对时间（对齐设计稿 `2h / 昨天 / 3d` 口径）。
+  ///
+  /// 口径与设计稿一致 —— 一周内用小时/天，昨天单独命名，更早用周：
+  /// `<1h` → `刚刚`；`<24h` → `Nh`；昨天 → `昨天`；`<7d` → `Nd`；
+  /// 其余 → `Nw`；跨年或时间戳缺失/异常 → 不显示（返回 null）。
+  /// 时间取 `lastMessageAt ?? updatedAt ?? createdAt`（取到最新活动时间）。
+  static String? _relativeTimeLabel(SessionSummary s) {
+    // 金照与部分测试使用固定时钟；注入 now 以便可测。
+    final raw =
+        s.lastMessageAt ?? s.updatedAt ?? s.createdAt;
+    if (raw == null || raw <= 0) return null;
+    final DateTime moment;
+    try {
+      moment = DateTime.fromMillisecondsSinceEpoch((raw * 1000).round());
+    } catch (_) {
+      return null;
+    }
+    final now = DateTime.now();
+    final diff = now.difference(moment);
+    if (diff.isNegative) return null;
+    if (diff.inMinutes < 60) return '刚刚';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    // 昨天（按自然日差 1 天）
+    final today = DateTime(now.year, now.month, now.day);
+    final thatDay = DateTime(moment.year, moment.month, moment.day);
+    final dayDiff = today.difference(thatDay).inDays;
+    if (dayDiff == 1) return '昨天';
+    if (dayDiff < 7) return '${dayDiff}d';
+    if (dayDiff < 365) return '${(dayDiff / 7).floor()}w';
+    return null;
+  }
+
   final GlobalKey _actionKey = GlobalKey();
   bool _pressed = false;
 
@@ -1622,8 +1664,23 @@ class _SessionRowState extends State<_SessionRow> {
     final hasIcons = iconWidgets.isNotEmpty;
 
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    // #150 档 B（对齐设计稿）：侧栏紧凑模式下，元信息不再另起一行，
+    // 只在用户显式开启副标题项时保留第二行；默认右侧显示极简相对时间。
+    // 紧凑模式（侧栏）**永远单行**：副标题项不另起一行，而是把「最有信息量的
+    // 一项」压缩到同行右侧（消息数 > 相对时间）。理由：默认设置里
+    // 消息数/项目名/工作区三项全开，若尊重它则紧凑模式永远两行 = 等于没改；
+    // 且分组后工作区名已在组头出现（设计稿口径：行内属重复）。
+    // 窄屏单栈（手机）保持原两行布局与全部副标题项，逐像素不变。
+    final showMetadataRow = !widget.compact;
+    final compactTrailingLabel = widget.compact
+        ? _compactTrailingLabel(widget.session)
+        : null;
     final rowContent = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      // 设计稿 `.sess{padding:6px 8px}`（紧凑）/ 手机保持原 16/8
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.compact ? 8 : 16,
+        vertical: widget.compact ? 6 : 8,
+      ),
       child: Row(
         children: [
           if (widget.selectionMode) ...[
@@ -1653,16 +1710,41 @@ class _SessionRowState extends State<_SessionRow> {
               children: [
                 Row(
                   children: [
-                    Flexible(
-                      child: _highlightedSpan(
-                        context,
-                        _displayTitle(context, widget.session),
-                        style: const TextStyle(fontSize: 17),
+                    // 紧凑模式：标题占满剩余空间，时间贴最右（右对齐）；
+                    // 非紧凑（手机）保持 Flexible 由内容决定宽度。
+                    if (widget.compact)
+                      Expanded(
+                        child: _highlightedSpan(
+                          context,
+                          _displayTitle(context, widget.session),
+                          style: const TextStyle(fontSize: 12.5),
+                        ),
+                      )
+                    else
+                      Flexible(
+                        child: _highlightedSpan(
+                          context,
+                          _displayTitle(context, widget.session),
+                          style: const TextStyle(fontSize: 17),
+                        ),
                       ),
-                    ),
+                    // #150 档 B：右侧极简相对时间（2h / 昨天 / 3d），右对齐；
+                    // 只在紧凑模式且未显示元信息行时出现（避免一屏两处信息）。
+                    if (widget.compact && compactTrailingLabel != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        compactTrailingLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: secondaryColor,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                if (metadata != null || hasIcons) ...[
+                if (showMetadataRow && (metadata != null || hasIcons)) ...[
                   const SizedBox(height: 2),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1691,7 +1773,9 @@ class _SessionRowState extends State<_SessionRow> {
               ],
             ),
           ),
-          if (widget.onActions != null)
+          // #150：紧凑模式（侧栏）去掉行尾「⋯」按钮 —— 由长按 / 右键打开
+          // 同一套操作菜单，行更干净（主人要求「三个点不要了」）。
+          if (widget.onActions != null && !widget.compact)
             KeyedSubtree(
               key: _actionKey,
               child: AccessibleButton(
@@ -1735,10 +1819,17 @@ class _SessionRowState extends State<_SessionRow> {
         ],
       ),
     );
+    // #150：紧凑模式（侧栏）去掉行尾「⋯」后，长按与右键都打开同一套操作菜单
+    // （以整行为锚）；非紧凑（手机）保持原语义：长按 = 切换多选。
+    final compactActions = widget.compact && widget.onActions != null
+        ? () => widget.onActions!(_rowAnchorKey)
+        : null;
     return GestureDetector(
+      key: _rowAnchorKey,
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
-      onLongPress: widget.onLongPress,
+      onLongPress: widget.compact ? compactActions : widget.onLongPress,
+      onSecondaryTap: widget.compact ? compactActions : null,
       onTapDown: isLight ? (_) => _setPressed(true) : null,
       onTapUp: isLight ? (_) => _setPressed(false) : null,
       onTapCancel: isLight ? () => _setPressed(false) : null,
@@ -1749,7 +1840,8 @@ class _SessionRowState extends State<_SessionRow> {
                     ? LightSurfaces.selection
                     : (_pressed ? LightSurfaces.pressed : null),
                 shape: const RoundedSuperellipseBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(10)),
+                  // 设计稿 `.sess{border-radius:7px}`（行自身圆角，不含卡片容器）
+                  borderRadius: BorderRadius.all(Radius.circular(7)),
                 ),
               ),
               child: rowContent,
