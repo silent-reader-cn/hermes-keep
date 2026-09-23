@@ -537,9 +537,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       ];
     }
 
-    final l10n = AppLocalizations.of(context);
     final hasMore = ref.watch(sessionListHasMoreProvider);
-    final filteredSessions = ref.watch(filteredDisplaySessionsProvider);
     final collapsedSections = ref.watch(sessionListCollapsedSectionsProvider);
     return [
       for (final section in sections)
@@ -646,26 +644,6 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(child: CupertinoActivityIndicator(radius: 12)),
-          ),
-        ),
-      if (!hasMore &&
-          filteredSessions.length > SessionListState.pageSize)
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Center(
-              child: Text(
-                l10n.noMore,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: LightSurfaces.resolve(
-                    context,
-                    LightSurfaces.textSecondary,
-                    dark: secondaryText,
-                  ),
-                ),
-              ),
-            ),
           ),
         ),
     ];

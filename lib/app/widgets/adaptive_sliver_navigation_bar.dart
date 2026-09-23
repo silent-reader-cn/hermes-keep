@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
 import '../shell/adaptive_shell.dart';
-import '../shell/left_pane_module.dart';
 import 'large_title_sliver_header.dart';
 import 'narrow_navigation_dropdown.dart';
 
@@ -119,8 +118,7 @@ class _AdaptiveSliverNavigationBarState
     }
 
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
-    final hideLeading = LeftPaneScope.of(context);
-    final effectiveLeading = hideLeading ? null : widget.leading;
+    final effectiveLeading = widget.leading;
 
     if (isWide || widget.alwaysCollapsed) {
       // 桌面宽屏：44pt 固定紧凑导航条（SliverNavigationBar 不允许

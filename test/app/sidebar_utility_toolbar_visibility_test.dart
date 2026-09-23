@@ -259,7 +259,7 @@ void main() {
       // 功能入口全关时工具条仅保留设置（桌面唯一设置入口）
       expect(find.byKey(const ValueKey('sidebar-utility-tasks')), findsNothing);
       expect(
-        find.byKey(const ValueKey('sidebar-utility-settings')),
+        find.byKey(const ValueKey('sidebar-secondary-settings')),
         findsOneWidget,
       );
 

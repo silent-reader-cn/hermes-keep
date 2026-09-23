@@ -240,12 +240,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 滚动到底部后，最后一项已构建，底部「没有更多了」出现
+      // 滚动到底部后，最后一项已构建（#147：分组列表底部不再显示「没有更多了」）
       expect(
         find.byKey(const ValueKey('session-row-page-sess-79')),
         findsOneWidget,
       );
-      expect(find.textContaining('没有更多'), findsOneWidget);
+      expect(find.textContaining('没有更多'), findsNothing);
     });
   });
 }

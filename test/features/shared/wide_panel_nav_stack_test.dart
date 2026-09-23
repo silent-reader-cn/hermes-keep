@@ -228,7 +228,7 @@ void main() {
       expect(find.byType(_ShellProbe), findsOneWidget);
 
       // 点击侧栏设置入口（push）
-      await tester.tap(find.byKey(const ValueKey('sidebar-utility-settings')));
+      await tester.tap(find.byKey(const ValueKey('sidebar-secondary-settings')));
       await tester.pumpAndSettle();
 
       // 断言模块页出现，栈深度积累（canPop=true），Shell 仍为单实例（不叠 shell）
@@ -261,7 +261,7 @@ void main() {
       await _pumpApp(tester, api: api, viewport: const Size(1280, 800));
 
       // 1. 点击侧栏设置（第一级 push）
-      await tester.tap(find.byKey(const ValueKey('sidebar-utility-settings')));
+      await tester.tap(find.byKey(const ValueKey('sidebar-secondary-settings')));
       await tester.pumpAndSettle();
       expect(find.text('Settings Page'), findsOneWidget);
       expect(find.text('canPop=true'), findsOneWidget);
@@ -307,7 +307,7 @@ void main() {
       await _pumpApp(tester, api: api, viewport: const Size(1280, 800));
 
       // 1. 点击侧栏设置进入设置页（push 积累栈）
-      await tester.tap(find.byKey(const ValueKey('sidebar-utility-settings')));
+      await tester.tap(find.byKey(const ValueKey('sidebar-secondary-settings')));
       await tester.pumpAndSettle();
       expect(find.text('Settings Page'), findsOneWidget);
       expect(find.text('canPop=true'), findsOneWidget);

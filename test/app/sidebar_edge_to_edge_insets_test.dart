@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/shell/adaptive_shell.dart';
-import 'package:hermes_ui/app/shell/sidebar_nav_rail.dart';
+import 'package:hermes_ui/app/shell/sidebar_tools_list.dart';
 import 'package:hermes_ui/features/session_list/session_auto_refresh.dart';
 import 'package:hermes_ui/features/session_list/session_list_header.dart';
 import 'package:hermes_ui/features/session_list/session_list_page.dart';
@@ -111,7 +111,7 @@ void main() {
 
       // 现象①：导航轨整体下移一个状态栏高（顶部恰在状态栏下沿），不再被盖。
       final railTop = tester
-          .getTopLeft(find.byType(SidebarNavRail))
+          .getTopLeft(find.byType(SidebarToolsList))
           .dy;
       expect(railTop, moreOrLessEquals(48.0, epsilon: 0.001));
 
@@ -122,11 +122,19 @@ void main() {
       final delegate = persistentHeader.delegate as SessionListHeaderDelegate;
       expect(delegate.topPadding, 0);
 
-      // 现象②：会话列表 header 顶部同样在状态栏下沿（48px），顶端对齐导航轨。
+      // 现象②：会话列表 header 不再与侧栏顶平齐 —— #147 后侧栏顶部多了
+      // 常用功能列表（SidebarToolsList），header 位于其下方。故这里断言
+      // 相对关系（header 顶 >= 工具列表底），不再硬编码 48px。
+      final toolsBottom = tester
+          .getBottomLeft(find.byType(SidebarToolsList))
+          .dy;
       final headerTop = tester
           .getTopLeft(find.byKey(const ValueKey('session-list-header')))
           .dy;
-      expect(headerTop, moreOrLessEquals(48.0, epsilon: 0.001));
+      expect(
+        headerTop,
+        moreOrLessEquals(toolsBottom, epsilon: 0.5),
+      );
     });
 
     testWidgets('宽屏 padding == 0（默认视口语义）：SafeArea 空转，工具条顶零，零回归', (
@@ -146,7 +154,7 @@ void main() {
         findsOneWidget,
       );
       final railTop = tester
-          .getTopLeft(find.byType(SidebarNavRail))
+          .getTopLeft(find.byType(SidebarToolsList))
           .dy;
       expect(railTop, moreOrLessEquals(0.0, epsilon: 0.001));
     });
@@ -176,7 +184,7 @@ void main() {
         find.byKey(const ValueKey('adaptive-session-sidebar')),
         findsNothing,
       );
-      expect(find.byType(SidebarNavRail), findsNothing);
+      expect(find.byType(SidebarToolsList), findsNothing);
     });
   });
 }
