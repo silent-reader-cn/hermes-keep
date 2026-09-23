@@ -1691,10 +1691,12 @@ class _SessionRowState extends State<_SessionRow> {
         ? _compactTrailingLabel(widget.session)
         : null;
     final rowContent = Padding(
-      // #151：紧凑模式会话项左缩进加大（视觉上从属于所属工作区组），
+      // #151/#152：紧凑模式会话项与「工作区名」左对齐（主人要求）。
+      // 几何：组头文字 x = 组头 Padding.start(20) + chevron(11) + gap(4) = 35；
+      //       会话项文字 x = 列表内缩(8) + 本 padding.start ⇒ 8 + 27 = 35 ✔
       // 右侧保持 8 让时间贴边；手机保持原 16/8。
       padding: EdgeInsetsDirectional.only(
-        start: widget.compact ? 22 : 16,
+        start: widget.compact ? 27 : 16,
         end: widget.compact ? 8 : 16,
         top: widget.compact ? 6 : 8,
         bottom: widget.compact ? 6 : 8,
@@ -1746,9 +1748,23 @@ class _SessionRowState extends State<_SessionRow> {
                           style: const TextStyle(fontSize: 17),
                         ),
                       ),
-                    // #151：紧凑模式右侧槽 —— 悬停时把「时间」换成「⋯」菜单按钮，
-                    // 未悬停时显示极简相对时间（2h / 昨天 / 3d），右对齐。
-                    if (widget.compact && _hovering && widget.onActions != null) ...[
+                    // #151：紧凑模式右侧槽，按优先级三态（右对齐）：
+                    //   ① 会话进行中 → loading 指示器（最高优先，不可被悬停盖掉）
+                    //   ② 鼠标悬停    → 「⋯」菜单按钮
+                    //   ③ 其余        → 极简相对时间（2h / 昨天 / 3d）
+                    if (widget.compact && isStreaming) ...[
+                      const SizedBox(width: 6),
+                      CupertinoActivityIndicator(
+                        key: ValueKey(
+                          'session-inline-streaming-'
+                          '${widget.session.sessionId ?? widget.session.id}',
+                        ),
+                        radius: 6,
+                        color: secondaryColor,
+                      ),
+                    ] else if (widget.compact &&
+                        _hovering &&
+                        widget.onActions != null) ...[
                       const SizedBox(width: 6),
                       _buildInlineActionsButton(context),
                     ] else if (widget.compact &&
