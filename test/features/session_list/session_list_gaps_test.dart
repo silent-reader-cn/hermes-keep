@@ -13,6 +13,7 @@ import 'package:hermes_ui/features/session_list/session_row_subtitle_settings.da
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_session_list_api.dart';
+import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 /// Phase2 会话列表 UI：筛选（归档/来源）、多选批量、项目移动、行 badge。
 void main() {
@@ -735,11 +736,7 @@ void main() {
         routes: [
           GoRoute(
             path: '/',
-            builder: (_, _) => const SessionListPage(
-              showUtilityRows: false,
-              showSettingsTrailing: false,
-              showFab: false,
-            ),
+            builder: (_, _) => const SessionSidebar(currentLocation: '/'),
           ),
         ],
       );
@@ -764,7 +761,7 @@ void main() {
       expect(find.text('会话'), findsNothing);
       // 筛选按钮与新建按钮存在
       expect(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
         findsOneWidget,
       );
       expect(
@@ -774,7 +771,7 @@ void main() {
 
       // 点击筛选
       await tester.tap(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
       );
       await tester.pumpAndSettle();
       expect(

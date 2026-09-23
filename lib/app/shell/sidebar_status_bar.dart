@@ -28,6 +28,7 @@ enum SidebarConnectionStatus {
 /// - 右侧：端口号 + 服务类型（内置服务 / 外部服务器）
 class SidebarStatusBar extends ConsumerWidget {
   const SidebarStatusBar({
+    this.trailing,
     super.key,
     this.statusOverride,
     this.onRetry,
@@ -38,6 +39,10 @@ class SidebarStatusBar extends ConsumerWidget {
   /// 若未显式传入：
   /// - 当 [activeConnectionProvider] 有激活连接时渲染 [SidebarConnectionStatus.connected]
   /// - 当无激活连接时渲染 [SidebarConnectionStatus.offline]
+  /// 底部行最右侧的附加控件槽（#149：次级功能图标并入住状态条同一行，
+  /// 不再单独占一行高度）。
+  final Widget? trailing;
+
   final SidebarConnectionStatus? statusOverride;
 
   /// 重连动作回调。若未提供且存在激活连接，触发既有连接的重新激活。
@@ -102,20 +107,46 @@ class SidebarStatusBar extends ConsumerWidget {
             _buildRetryButton(context, ref, l10n, active),
           ],
           const Spacer(),
-          if (portText != null) ...[
-            _buildPill(
-              context,
-              key: const ValueKey('sidebar-status-port'),
-              child: Text(portText),
+          // 端口/服务信息可伸缩：#149 把次级功能图标并进本行后，296px（最窄
+          // 侧栏）下「状态 + 端口 + 服务 + 5 图标」会超出 → 让这两个 pill 在
+          // 空间不足时收缩省略，图标与状态始终完整可见。
+          if (portText != null || serviceTypeText != null)
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (portText != null) ...[
+                    Flexible(
+                      child: _buildPill(
+                        context,
+                        key: const ValueKey('sidebar-status-port'),
+                        child: Text(
+                          portText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4.0),
+                  ],
+                  if (serviceTypeText != null)
+                    Flexible(
+                      child: _buildPill(
+                        context,
+                        key: const ValueKey('sidebar-status-service-type'),
+                        child: Text(
+                          serviceTypeText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            const SizedBox(width: 4.0),
-          ],
-          if (serviceTypeText != null) ...[
-            _buildPill(
-              context,
-              key: const ValueKey('sidebar-status-service-type'),
-              child: Text(serviceTypeText),
-            ),
+          if (trailing != null) ...[
+            const SizedBox(width: 6.0),
+            trailing!,
           ],
         ],
       ),

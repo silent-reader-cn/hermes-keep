@@ -12,6 +12,7 @@ import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:hermes_ui/features/session_list/session_list_utility_rows.dart';
 
 import '../../helpers/fake_session_list_api.dart';
+import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 class _FilteredVisibilityNotifier extends SessionEntryVisibilityController {
   @override
@@ -718,11 +719,7 @@ void main() {
         routes: [
           GoRoute(
             path: '/',
-            builder: (_, _) => const SessionListPage(
-              showUtilityRows: false,
-              showSettingsTrailing: false,
-              showFab: false,
-            ),
+            builder: (_, _) => const SessionSidebar(currentLocation: '/'),
           ),
         ],
       );
@@ -751,9 +748,15 @@ void main() {
         findsNothing,
       );
       expect(find.text('会话'), findsNothing);
+      // #149：侧栏顶部品牌行承担搜索入口（列表内不再有搜索框，
+      // 搜索框由品牌行的搜索图标展开）。
+      expect(
+        find.byKey(const ValueKey('sidebar-brand-search')),
+        findsOneWidget,
+      );
       expect(
         find.byKey(const ValueKey('session-list-search')),
-        findsOneWidget,
+        findsNothing,
       );
     });
   });

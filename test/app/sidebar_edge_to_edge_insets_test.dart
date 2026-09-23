@@ -13,6 +13,7 @@ import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/fake_session_list_api.dart';
+import 'package:hermes_ui/app/shell/sidebar_brand_bar.dart';
 
 /// todo #16：Android 15+ 强制 edge-to-edge 下，宽屏侧栏顶部 inset 处理。
 ///
@@ -109,11 +110,11 @@ void main() {
       );
       expect(safeArea.bottom, isFalse);
 
-      // 现象①：导航轨整体下移一个状态栏高（顶部恰在状态栏下沿），不再被盖。
-      final railTop = tester
-          .getTopLeft(find.byType(SidebarToolsList))
+      // 现象①：侧栏最顶的品牌行整体下移一个状态栏高（顶部恰在状态栏下沿），不再被盖。
+      final brandTop = tester
+          .getTopLeft(find.byType(SidebarBrandBar))
           .dy;
-      expect(railTop, moreOrLessEquals(48.0, epsilon: 0.001));
+      expect(brandTop, moreOrLessEquals(48.0, epsilon: 0.001));
 
       // 现象②：header 读到的 topPadding 已归零（SafeArea removePadding 生效）。
       final persistentHeader = tester.widget<SliverPersistentHeader>(
@@ -122,9 +123,9 @@ void main() {
       final delegate = persistentHeader.delegate as SessionListHeaderDelegate;
       expect(delegate.topPadding, 0);
 
-      // 现象②：会话列表 header 不再与侧栏顶平齐 —— #147 后侧栏顶部多了
-      // 常用功能列表（SidebarToolsList），header 位于其下方。故这里断言
-      // 相对关系（header 顶 >= 工具列表底），不再硬编码 48px。
+      // 现象②：会话列表 header 不再与侧栏顶平齐 —— #149 后侧栏顶部依次是
+      // 品牌行（SidebarBrandBar）+ 常用功能列表（SidebarToolsList），
+      // header 紧贴工具列表底部。故断言相对关系，不硬编码绝对值。
       final toolsBottom = tester
           .getBottomLeft(find.byType(SidebarToolsList))
           .dy;
@@ -153,10 +154,10 @@ void main() {
         find.byKey(const ValueKey('adaptive-session-sidebar')),
         findsOneWidget,
       );
-      final railTop = tester
-          .getTopLeft(find.byType(SidebarToolsList))
+      final brandTop = tester
+          .getTopLeft(find.byType(SidebarBrandBar))
           .dy;
-      expect(railTop, moreOrLessEquals(0.0, epsilon: 0.001));
+      expect(brandTop, moreOrLessEquals(0.0, epsilon: 0.001));
     });
 
     testWidgets('窄屏（800 < 900）注入 padding(top: 48)：不渲染侧栏，child 直接展示，布局零变化', (
@@ -184,7 +185,7 @@ void main() {
         find.byKey(const ValueKey('adaptive-session-sidebar')),
         findsNothing,
       );
-      expect(find.byType(SidebarToolsList), findsNothing);
+      expect(find.byType(SidebarBrandBar), findsNothing);
     });
   });
 }

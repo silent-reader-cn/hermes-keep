@@ -13,6 +13,7 @@ import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
 
 import '../../helpers/fake_session_list_api.dart';
+import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 double _sec(DateTime d) => d.millisecondsSinceEpoch / 1000;
 
@@ -296,11 +297,7 @@ void main() {
               GlobalWidgetsLocalizations.delegate,
             ],
             home: CupertinoPageScaffold(
-              child: SessionListPage(
-                showUtilityRows: false,
-                showSettingsTrailing: false,
-                showFab: false,
-              ),
+              child: SessionSidebar(currentLocation: '/'),
             ),
           ),
         ),
@@ -345,7 +342,7 @@ void main() {
 
       // 筛选按钮存在
       expect(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
         findsOneWidget,
       );
     });
@@ -365,7 +362,7 @@ void main() {
 
       // 打开筛选菜单
       await tester.tap(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
       );
       await tester.pumpAndSettle();
 
@@ -417,7 +414,7 @@ void main() {
 
       // 打开筛选菜单
       await tester.tap(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
       );
       await tester.pumpAndSettle();
 
@@ -434,7 +431,7 @@ void main() {
 
       // 再次打开筛选菜单，确认 Alpha 项目项被勾选，「全部工作区」未勾选
       await tester.tap(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
       );
       await tester.pumpAndSettle();
 
@@ -465,7 +462,7 @@ void main() {
 
       // 打开筛选菜单
       await tester.tap(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
       );
       await tester.pumpAndSettle();
 
@@ -488,7 +485,7 @@ void main() {
 
       // 打开筛选菜单
       await tester.tap(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
       );
       await tester.pumpAndSettle();
 
@@ -521,7 +518,7 @@ void main() {
 
       // 打开筛选菜单
       await tester.tap(
-        find.byKey(const ValueKey('session-list-filter-trigger')),
+        find.byKey(const ValueKey('sidebar-brand-filter')),
       );
       await tester.pumpAndSettle();
 

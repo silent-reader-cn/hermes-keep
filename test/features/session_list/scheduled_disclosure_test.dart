@@ -8,13 +8,13 @@ import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
 import 'package:hermes_ui/features/session_list/scheduled_session_disclosure.dart';
-import 'package:hermes_ui/features/session_list/session_list_page.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:hermes_ui/features/settings/cron_visibility_settings.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_session_list_api.dart';
+import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 /// 秒级时间戳辅助（会话模型时间字段为 epoch 秒）。
 double sec(DateTime d) => d.millisecondsSinceEpoch / 1000;
@@ -249,7 +249,7 @@ void main() {
           GoRoute(
             path: '/',
             builder: (context, state) =>
-                const SessionListPage(showUtilityRows: false),
+                const SessionSidebar(currentLocation: '/'),
           ),
           GoRoute(
             path: '/chat/:sessionId',
@@ -422,9 +422,12 @@ void main() {
 
       await pumpSessionListPage(tester, api);
 
+      // #149：宽屏侧栏的搜索框在品牌行内（默认收起）→ 先点搜索图标展开
+      await tester.tap(find.byKey(const ValueKey('sidebar-brand-search')));
+      await tester.pumpAndSettle();
       // 输入搜索词
       await tester.enterText(
-        find.byKey(const ValueKey('session-list-search')),
+        find.byKey(const ValueKey('sidebar-brand-search-field')),
         '备份',
       );
       // 350ms 防抖 + 异步搜索响应

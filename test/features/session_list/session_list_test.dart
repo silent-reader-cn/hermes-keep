@@ -19,6 +19,7 @@ import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_session_list_api.dart';
+import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 /// 秒级时间戳辅助（会话模型时间字段为 epoch 秒）。
 double sec(DateTime d) => d.millisecondsSinceEpoch / 1000;
@@ -839,11 +840,7 @@ void main() {
           routes: [
             GoRoute(
               path: '/',
-              builder: (_, _) => const SessionListPage(
-                showUtilityRows: false,
-                showSettingsTrailing: false,
-                showFab: false,
-              ),
+              builder: (_, _) => const SessionSidebar(currentLocation: '/'),
             ),
             GoRoute(
               path: '/chat/:sessionId',
@@ -872,29 +869,34 @@ void main() {
         // 1. 彻底移除「会话」大标题文本
         expect(find.text('会话'), findsNothing);
 
-        // 2. 搜索框、筛选按钮、新建按钮均存在且仅渲染一个搜索框
+        // 2. #149：搜索/刷新/筛选移入顶部品牌行，新建会话移入工具列表首项；
+        //    列表页自身不再自带搜索框（搜索框由品牌行图标展开，默认收起）。
+        expect(
+          find.byKey(const ValueKey('sidebar-brand-search')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('sidebar-brand-filter')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('sidebar-tool-new_session')),
+          findsOneWidget,
+        );
         expect(
           find.byKey(const ValueKey('session-list-search')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(const ValueKey('session-list-filter-trigger')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(const ValueKey('session-list-header-new')),
-          findsOneWidget,
+          findsNothing,
         );
 
-        // 3. 搜索框、筛选按钮、新建按钮与搜索框同行（垂直中心对齐）
+        // 3. 品牌行图标同行（垂直中心对齐）+ 水平顺序 搜索 → 筛选。
+        //    刻意不含刷新：刷新按钮是「桌面平台专属」（isDesktopPlatform），
+        //    而本用例未切平台（Flutter 测试默认 android）→ 该维度由
+        //    session_auto_refresh_test 用显式平台覆盖验证，不在这里重复。
         final searchRect = tester.getRect(
-          find.byKey(const ValueKey('session-list-search')),
+          find.byKey(const ValueKey('sidebar-brand-search')),
         );
         final filterRect = tester.getRect(
-          find.byKey(const ValueKey('session-list-filter-trigger')),
-        );
-        final newRect = tester.getRect(
-          find.byKey(const ValueKey('session-list-header-new')),
+          find.byKey(const ValueKey('sidebar-brand-filter')),
         );
 
         // 垂直居中对齐误差在合理阈值内
@@ -902,18 +904,12 @@ void main() {
           (searchRect.center.dy - filterRect.center.dy).abs(),
           lessThanOrEqualTo(2.0),
         );
-        expect(
-          (searchRect.center.dy - newRect.center.dy).abs(),
-          lessThanOrEqualTo(2.0),
-        );
-        expect((filterRect.top - newRect.top).abs(), lessThanOrEqualTo(2.0));
-        // 水平顺序：搜索框在左，筛选在中间，加号在右侧
+        // 水平顺序：搜索在左、筛选在右
         expect(searchRect.right, lessThanOrEqualTo(filterRect.left));
-        expect(filterRect.right, lessThanOrEqualTo(newRect.left));
 
         // 4. 筛选按钮可正常触发筛选弹层
         await tester.tap(
-          find.byKey(const ValueKey('session-list-filter-trigger')),
+          find.byKey(const ValueKey('sidebar-brand-filter')),
         );
         await tester.pumpAndSettle();
         expect(
@@ -928,7 +924,7 @@ void main() {
           sessionId: 'desktop-new-1',
           title: '桌面新建',
         );
-        await tester.tap(find.byKey(const ValueKey('session-list-header-new')));
+        await tester.tap(find.byKey(const ValueKey('sidebar-tool-new_session')));
         await tester.pumpAndSettle();
         expect(api.createCount, 1);
         expect(find.text('chat-desktop-new-1'), findsOneWidget);

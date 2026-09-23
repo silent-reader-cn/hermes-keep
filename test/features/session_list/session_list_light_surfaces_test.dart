@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../helpers/contrast_utils.dart';
 import '../../helpers/fake_session_list_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
+import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 class _EmptyProjectsController extends ProjectsController {
   @override
@@ -54,11 +55,10 @@ Future<ProviderContainer> _pumpPage(
       container: container,
       child: CupertinoApp(
         theme: buildCupertinoTheme(Brightness.light),
-        home: SessionListPage(
-          showUtilityRows: !sidebar,
-          showSettingsTrailing: !sidebar,
-          showFab: !sidebar,
-        ),
+        // #149：sidebar 模式改挂整条侧栏（搜索/筛选/刷新入口在品牌行内）。
+        home: sidebar
+            ? const SessionSidebar(currentLocation: '/')
+            : const SessionListPage(),
       ),
     ),
   );
@@ -88,9 +88,16 @@ void main() {
             .backgroundColor,
         LightSurfaces.page,
       );
-      final search = tester.widget<CupertinoSearchTextField>(
-        find.byKey(const ValueKey('session-list-search')),
-      );
+      // #149：sidebar=true 改挂 SessionSidebar，搜索框在品牌行内（先展开）；
+      // sidebar=false 走默认列表页，搜索框仍在列表头部。
+      final searchKey = sidebar
+          ? const ValueKey('sidebar-brand-search-field')
+          : const ValueKey('session-list-search');
+      if (sidebar) {
+        await tester.tap(find.byKey(const ValueKey('sidebar-brand-search')));
+        await tester.pumpAndSettle();
+      }
+      final search = tester.widget<CupertinoSearchTextField>(find.byKey(searchKey));
       expect(search.decoration!.color, LightSurfaces.card);
       expect(
         contrastRatio(

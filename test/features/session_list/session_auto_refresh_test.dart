@@ -13,11 +13,11 @@ import 'package:hermes_ui/features/notifications/notification_providers.dart';
 import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
 import 'package:hermes_ui/features/session_list/session_auto_refresh.dart';
-import 'package:hermes_ui/features/session_list/session_list_page.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_session_list_api.dart';
+import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 double sec(DateTime d) => d.millisecondsSinceEpoch / 1000;
 
@@ -243,7 +243,7 @@ void main() {
       final router = GoRouter(
         initialLocation: '/',
         routes: [
-          GoRoute(path: '/', builder: (_, _) => const SessionListPage(showUtilityRows: false, showFab: false)),
+          GoRoute(path: '/', builder: (_, _) => const SessionSidebar(currentLocation: '/')),
         ],
       );
       await tester.pumpWidget(
@@ -265,20 +265,20 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('桌面宽屏显示刷新按钮，窄屏/移动端不显示', (tester) async {
+    testWidgets('桌面平台显示刷新按钮，移动平台不显示', (tester) async {
+      // #149：刷新按钮已从列表头部移入侧栏品牌行。品牌行是宽屏侧栏的一部分，
+      // 其可见性判据 = 平台（桌面专属，沿用原 showDesktopRefresh 语义）。
+      // 注意「窄屏不显示」不再在此断言：SessionSidebar 是宽屏专用组件、自身
+      // 不判宽窄（判宽窄的是 AdaptiveShell），窄屏下整条侧栏不渲染，
+      // 该行为由 app 级外壳测试覆盖。
       final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       await pump(tester, api, const Size(1200, 800), TargetPlatform.windows);
-      expect(find.byKey(const ValueKey('session-list-desktop-refresh')), findsOneWidget);
-      debugDefaultTargetPlatformOverride = null;
-
-      final api2 = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
-      await pump(tester, api2, const Size(500, 800), TargetPlatform.windows);
-      expect(find.byKey(const ValueKey('session-list-desktop-refresh')), findsNothing);
+      expect(find.byKey(const ValueKey('sidebar-brand-refresh')), findsOneWidget);
       debugDefaultTargetPlatformOverride = null;
 
       final api3 = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       await pump(tester, api3, const Size(1200, 800), TargetPlatform.android);
-      expect(find.byKey(const ValueKey('session-list-desktop-refresh')), findsNothing);
+      expect(find.byKey(const ValueKey('sidebar-brand-refresh')), findsNothing);
       debugDefaultTargetPlatformOverride = null;
     });
 
@@ -286,7 +286,7 @@ void main() {
       final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       await pump(tester, api, const Size(1200, 800), TargetPlatform.windows);
       final before = api.fetchCount;
-      await tester.tap(find.byKey(const ValueKey('session-list-desktop-refresh')));
+      await tester.tap(find.byKey(const ValueKey('sidebar-brand-refresh')));
       await tester.pumpAndSettle();
       expect(api.fetchCount, before + 1);
       debugDefaultTargetPlatformOverride = null;

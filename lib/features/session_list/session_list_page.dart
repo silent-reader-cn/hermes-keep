@@ -30,6 +30,7 @@ import '../shared/app_navigation.dart';
 import 'session_auto_refresh.dart';
 import 'session_list_header.dart';
 import 'session_list_providers.dart';
+import 'session_list_shell_requests.dart';
 import 'session_list_utility_rows.dart';
 import 'session_row_subtitle_settings.dart';
 
@@ -112,6 +113,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final async = ref.watch(sessionListControllerProvider);
     final state = async.valueOrNull;
     final sections = ref.watch(sessionListSectionsProvider);
+    // #149：顶部品牌行的筛选按钮不直接持有筛选弹层（弹层依赖本页私有状态/
+    // 方法，搬迁成本高），改为 bump 信号；这里监听并复用本页既有实现打开。
+    ref.listen<int>(sessionListFilterRequestProvider, (previous, next) {
+      if (previous == next) return;
+      final current = ref.read(sessionListControllerProvider).valueOrNull;
+      if (current != null) _showFilterSheet(current);
+    });
+
     final isSearchMode = state?.searchQuery?.trim().isNotEmpty == true;
     // 会话行副标题显示开关（设置页配置）+ projectId→名称映射（同屏一次解析）。
     final subtitleSettings = ref.watch(sessionRowSubtitleSettingsProvider);
@@ -164,9 +173,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                     // 大标题，搜索框与操作按钮（筛选/加号）整合为单行 pinned 头部；
                     // 手机端单栈 → 宽敞大标题头部（49pt）。
                     compactHeader: !widget.showUtilityRows,
-                    searchField: !widget.showUtilityRows
-                        ? _buildSearchField()
-                        : null,
+                    // #149：侧栏场景的搜索框改由顶部品牌行（SidebarBrandBar）
+                    // 承担（其搜索图标展开），列表内不再重复出一条搜索行。
+                    searchField: null,
                     titleTrailing: !isWide && !isSearchMode
                         ? _buildNarrowNavigationAction()
                         : null,
@@ -176,11 +185,15 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                         ? _requestNarrowNavMenu
                         : null,
                     actions: [
-                      if (!isSearchMode) _buildFilterAction(state),
+                      // #149：筛选/新建/刷新在侧栏场景由品牌行与工具列表承担，
+                      // 列表头部只在非侧栏（窄屏单栈）时保留这些入口，避免双入口。
+                      if (!isSearchMode && widget.showUtilityRows)
+                        _buildFilterAction(state),
                       if (widget.showSettingsTrailing)
                         _buildSettingsOrDoneAction(state),
-                      if (!widget.showUtilityRows) _buildNewSessionAction(),
-                      if (showDesktopRefresh)
+                      if (!widget.showUtilityRows && !isWide)
+                        _buildNewSessionAction(),
+                      if (showDesktopRefresh && widget.showUtilityRows)
                         _buildDesktopRefreshAction(refreshing),
                     ],
                   ),
