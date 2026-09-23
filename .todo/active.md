@@ -1059,3 +1059,29 @@ Dart 的 `try/catch` 完全兜不住。**Windows 早在同类 abort 上复现过
 **5 秒自证判据**：同一台机上**会话搜索框 / 设置页输入框**长按粘贴（走引擎通道）**不崩**，
 只有聊天输入框崩（菜单被劫持进 `_handlePaste`）。全仓 `contextMenuBuilder` 共 9 处，
 仅 `chat_input_bar.dart` 两处劫持粘贴 ⇒ 闪退面只此一处。
+
+## #149 侧栏顶部常用功能区，回退 50px 导航轨（案 A · 参考 Codex）
+
+**分类**：方向（UI 重设计）　**状态**：✅ 代码已交付 @`8c660e8`（待主人实机复验）　**发现**：2026-09-20（主人实机判定导航轨不佳）
+
+主人反馈四条：① 50px 竖排导航轨设计不好 → 回退；② 参考 Codex 把常用功能放到侧栏最上方；③ 分组后底部「没有更多了」多余；④ 会话行太高信息太多 —— **密度与手机端本轮按主人指示不变**。
+
+**交付（案 A）**：
+- 新增 `lib/app/shell/sidebar_tools_list.dart`：顶部纵向功能列表（新建会话 / 定时任务 / 看板 / 技能）。纵向列表与会话行同构；「新建会话」组件内自行 `createSession` + 跳转（不复用页面私有方法，避免跨层耦合）。
+- 新增 `lib/app/shell/sidebar_secondary_tools.dart`：底部次级横排图标（工作区 / 统计 / 记忆 / 下载 / 设置）。
+- `session_sidebar.dart` 重写为四段式：工具列表 / 会话列表 / 次级图标 / 状态条。
+- 删除 `sidebar_nav_rail.dart` + `left_pane_module.dart`（导航轨与左栏模块切换机制）；功能入口统一走宽屏右侧面板栈（`context.push`，#77 既有设计），左栏只承载会话列表；摘除 `adaptive_sliver_navigation_bar` / `app_back_button` 的 `LeftPaneScope` 依赖。
+- 去掉会话列表底部「没有更多了」；断言改 `findsNothing` 守卫新契约。
+- 刻意不引 `adaptive_shell` 的 `kAdaptiveBreakpoint`（避免循环依赖）——该组件只出现在宽屏侧栏。
+
+**验收**：analyze 零告警；全量 **4948 通过 / 8 skipped**（1 例下载域 flaky，单跑全绿）；`test/app` + `session_list` + `wide_panel_nav_stack` **507 全绿**；金照 26 全绿；README 截图 4 张更新（**已人眼验收**：顶部功能区 / 图标无豆腐块 / 分组保留 / 底部次级条均正常）。
+
+**踩坑（3 类，均已修）**：
+1. `str.replace` 未断言命中数 → 误删全文 20 处 `final l10n = ...`（84 issues）；恢复文件后改「带唯一上下文锚定 + 断言 count == 1」。
+2. 批量改测试 key 未区分「测旧组件 SidebarUtilityToolbar」与「测新结构」的用例 → 凭空造出 3 个失败；逐一分辨渲染对象后纠正。
+3. `Expected 48.0 / Actual 178.5` 实为 **header 被新增工具区下推**（结构调整的预期结果，不是 bug）→ 硬编码期望改相对断言。
+
+**遗留待主人定**：会话行密度（现两行 + 副标题）、手机版方案（设计稿已出三案：底部 Tab / 抽屉 / 顶部工具行，推荐底部 Tab）。
+
+---
+
