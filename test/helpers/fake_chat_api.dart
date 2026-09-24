@@ -89,6 +89,9 @@ class FakeChatApi implements ChatServerApi {
   int startStreamCalls = 0;
   int stopStreamCalls = 0;
 
+  /// 被精确停止的 streamId 序列（多会话隔离断言用）。
+  final List<String> stopStreamIds = <String>[];
+
   String? lastSentText;
   String? lastModel;
   String? lastModelProvider;
@@ -414,8 +417,9 @@ class FakeChatApi implements ChatServerApi {
   }
 
   @override
-  void stopStream() {
+  void stopStream(String streamId) {
     stopStreamCalls++;
+    stopStreamIds.add(streamId);
   }
 
   void Function(SseEvent event)? _onClarifyEvent;

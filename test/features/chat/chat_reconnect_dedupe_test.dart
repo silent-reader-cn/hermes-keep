@@ -532,8 +532,8 @@ class _DisconnectTrackingChatApi extends FakeChatApi {
   }
 
   @override
-  void stopStream() {
-    super.stopStream();
+  void stopStream(String streamId) {
+    super.stopStream(streamId);
     _oldOnEvent = null;
     _currentOnEvent = null;
   }

@@ -496,7 +496,7 @@ void main() {
     });
 
     test(
-      '同一 SseClient 连续两次 start，第一次请求在第二次 start 后处于 cancelled（防连接泄漏）',
+      '同一 SseClient 实例内重建连接必须取消旧连接（实例级契约：调用方须按流池化实例，禁止跨会话复用）',
       () async {
         final streamController = StreamController<Uint8List>();
         final adapter = _RecordingAdapter(
@@ -524,7 +524,11 @@ void main() {
         expect(firstCancelToken, isNotNull);
         expect(firstCancelToken!.isCancelled, isFalse);
 
-        // 第二次启动同一 client：必须 cancel 旧 token，防止旧连接残留
+        // 第二次启动同一 client：必须 cancel 旧 token，防止旧连接残留。
+        // ⚠️ 这是**单实例单流**的实例级契约 —— 多会话并行时每条流必须各持一个
+        // SseClient（见 ChatApiClient 的 per-stream 池）；跨会话复用同一实例会让
+        // 「B 开流」踩断「A 的流」，正是 chat_watchdog transport silence 重连
+        // 风暴的根因。隔离性由 chat_multisession_stream_isolation_test 守卫。
         final secondStart = client.start(
           Uri.parse('http://hermes.local:8787/stream?id=2'),
           onEvent: (_) {},
