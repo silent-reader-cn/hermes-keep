@@ -125,6 +125,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       if (current != null) _showFilterSheet(current);
     });
 
+    // #158：桌面侧栏（宽屏 + 非工具行模式）用「朴素行」；手机窄屏保留白卡。
+
     final isSearchMode = state?.searchQuery?.trim().isNotEmpty == true;
     // 会话行副标题显示开关（设置页配置）+ projectId→名称映射（同屏一次解析）。
     final subtitleSettings = ref.watch(sessionRowSubtitleSettingsProvider);
@@ -206,8 +208,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                         if (showDesktopRefresh && widget.showUtilityRows)
                           _buildDesktopRefreshAction(refreshing),
                       ],
+                    ),
                   ),
-                ),
                 // 注意：刷新指示器必须排在所有 SliverToBoxAdapter 之前
                 // （视口会把 overscroll 逐级分给前面的 box sliver，导致
                 // 指示器拿不到负 overlap 而无法触发）。
@@ -538,6 +540,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     SessionRowSubtitleSettings subtitleSettings,
     Map<String, String> projectNames,
   ) {
+    // #158：桌面侧栏用「朴素行」，手机窄屏保留白卡容器 —— 本方法是独立方法，
+    // 不能引用 build 的局部变量，故按 context 与 widget 自行判定。
+    final isCompactSidebar =
+        MediaQuery.sizeOf(context).width >= 900 && !widget.showUtilityRows;
     if (state == null) {
       if (async.isLoading) {
         return const [
@@ -574,57 +580,135 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               onTap: isSearchMode
                   ? null
                   : () => ref
-                      .read(sessionListCollapsedSectionsProvider.notifier)
-                      .toggle(section.key),
+                        .read(sessionListCollapsedSectionsProvider.notifier)
+                        .toggle(section.key),
             ),
           ),
           if (isSearchMode || !collapsedSections.contains(section.key))
             SliverPadding(
-              // #150：去掉圆角卡片容器（背景 + 0.5px 边框 + 10px 圆角），改为
-              // 朴素行 —— 只在行自身做选中/按下的圆角染色。
-              // 内缩严格对齐设计稿 `.sb-list{padding:6px 8px}`：左右 8、组间距 6。
-              padding: const EdgeInsetsDirectional.fromSTEB(
-                8.0,
+              // #158：**桌面侧栏**才是「朴素行」(#150 的设计) —— 手机窄屏必须
+              // 保留原来的白卡容器（圆角 10 + 0.5px 边框 + 20px 内缩）。
+              // 上一轮我按「设计稿手机端也无卡片」做了全局删除，误伤了窄屏
+              // （主人实测：窄屏会话项底色与边框都没了）。这里按屏宽分流。
+              padding: EdgeInsetsDirectional.fromSTEB(
+                isCompactSidebar ? 8.0 : 20.0,
                 0.0,
-                8.0,
-                6.0,
+                isCompactSidebar ? 8.0 : 20.0,
+                isCompactSidebar ? 6.0 : 10.0,
               ),
               // #151：项与项之间不要分隔线（主人要求），改 builder 形态。
-              sliver: SliverList.builder(
-                itemCount: section.sessions.length,
-                itemBuilder: (context, index) {
-                  final session = section.sessions[index];
-                  return _SessionRow(
-                    key: ValueKey(
-                      'session-row-${session.sessionId ?? session.id}',
-                    ),
-                    session: session,
-                    // #150：侧栏（宽屏）用紧凑单行；窄屏单栈保持原两行。
-                    compact: !widget.showUtilityRows,
-                    subtitleSettings: subtitleSettings,
-                    projectNames: projectNames,
-                    highlightQuery: isSearchMode
-                        ? state.searchQuery?.trim()
-                        : null,
-                    selectionMode: state.isSelectionMode,
-                    selected: state.selectedSessionIds.contains(
-                      session.sessionId ?? session.id,
-                    ),
-                    onTap: () => state.isSelectionMode
-                        ? ref
+              sliver: isCompactSidebar
+                  ? SliverList.builder(
+                      itemCount: section.sessions.length,
+                      itemBuilder: (context, index) {
+                        final session = section.sessions[index];
+                        return _SessionRow(
+                          key: ValueKey(
+                            'session-row-${session.sessionId ?? session.id}',
+                          ),
+                          session: session,
+                          // #150：侧栏（宽屏）用紧凑单行；窄屏单栈保持原两行。
+                          compact: !widget.showUtilityRows,
+                          subtitleSettings: subtitleSettings,
+                          projectNames: projectNames,
+                          highlightQuery: isSearchMode
+                              ? state.searchQuery?.trim()
+                              : null,
+                          selectionMode: state.isSelectionMode,
+                          selected: state.selectedSessionIds.contains(
+                            session.sessionId ?? session.id,
+                          ),
+                          onTap: () => state.isSelectionMode
+                              ? ref
+                                    .read(
+                                      sessionListControllerProvider.notifier,
+                                    )
+                                    .toggleSelection(
+                                      session.sessionId ?? session.id,
+                                    )
+                              : _openSession(context, session),
+                          onLongPress: () => ref
                               .read(sessionListControllerProvider.notifier)
-                              .toggleSelection(session.sessionId ?? session.id)
-                        : _openSession(context, session),
-                    onLongPress: () => ref
-                        .read(sessionListControllerProvider.notifier)
-                        .toggleSelection(session.sessionId ?? session.id),
-                    onActions: state.isSelectionMode
-                        ? null
-                        : (anchorKey) =>
-                              _showRowActions(context, session, anchorKey),
-                  );
-                },
-              ),
+                              .toggleSelection(session.sessionId ?? session.id),
+                          onActions: state.isSelectionMode
+                              ? null
+                              : (anchorKey) => _showRowActions(
+                                  context,
+                                  session,
+                                  anchorKey,
+                                ),
+                        );
+                      },
+                    )
+                  // #158：窄屏（手机）保留原白卡容器 —— 背景 + 0.5px 边框 +
+                  // 10px 圆角，与 #150 之前完全一致。
+                  : DecoratedSliver(
+                      decoration: ShapeDecoration(
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.card,
+                          dark:
+                              CupertinoColors.secondarySystemGroupedBackground,
+                        ),
+                        shape: RoundedSuperellipseBorder(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(10.0),
+                          ),
+                          side:
+                              CupertinoTheme.brightnessOf(context) ==
+                                  Brightness.light
+                              ? const BorderSide(
+                                  color: LightSurfaces.cardBorder,
+                                  width: 0.5,
+                                  strokeAlign: BorderSide.strokeAlignOutside,
+                                )
+                              : BorderSide.none,
+                        ),
+                      ),
+                      sliver: SliverList.builder(
+                        itemCount: section.sessions.length,
+                        itemBuilder: (context, index) {
+                          final session = section.sessions[index];
+                          return _SessionRow(
+                            key: ValueKey(
+                              'session-row-${session.sessionId ?? session.id}',
+                            ),
+                            session: session,
+                            compact: false,
+                            subtitleSettings: subtitleSettings,
+                            projectNames: projectNames,
+                            highlightQuery: isSearchMode
+                                ? state.searchQuery?.trim()
+                                : null,
+                            selectionMode: state.isSelectionMode,
+                            selected: state.selectedSessionIds.contains(
+                              session.sessionId ?? session.id,
+                            ),
+                            onTap: () => state.isSelectionMode
+                                ? ref
+                                      .read(
+                                        sessionListControllerProvider.notifier,
+                                      )
+                                      .toggleSelection(
+                                        session.sessionId ?? session.id,
+                                      )
+                                : _openSession(context, session),
+                            onLongPress: () => ref
+                                .read(sessionListControllerProvider.notifier)
+                                .toggleSelection(
+                                  session.sessionId ?? session.id,
+                                ),
+                            onActions: state.isSelectionMode
+                                ? null
+                                : (anchorKey) => _showRowActions(
+                                    context,
+                                    session,
+                                    anchorKey,
+                                  ),
+                          );
+                        },
+                      ),
+                    ),
             ),
         ],
       if (hasMore)
@@ -656,9 +740,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
     // #151：组头占满整行宽度，右侧留出「悬停出现的新建按钮」（为该工作区新建
     // 会话）。原来 mainAxisSize.min 只包内容宽度，右侧无处放置操作。
-    final canCreateInGroup = section.workspacePath != null &&
-        !section.isPinned &&
-        !section.isOther;
+    final canCreateInGroup =
+        section.workspacePath != null && !section.isPinned && !section.isOther;
     return MouseRegion(
       onEnter: canCreateInGroup
           ? (_) => setState(() => _hoveredSectionKey = section.key)
@@ -671,96 +754,91 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(
-            20.0,
-            14.0,
-            20.0,
-            6.0,
-          ),
+          padding: const EdgeInsetsDirectional.fromSTEB(20.0, 14.0, 20.0, 6.0),
           // #155：内容行高度锁定 20px（与「无 + 时」一致），配合上面的占位方案
           // 双保险 —— 组头高度在任何悬停状态下都不变。
           child: SizedBox(
             height: 20.0,
             child: Row(
-            children: [
-              // 用 CupertinoIcons 而非 Unicode 三角字符（'▸'/'▾'）：后者在
-              // 缺该字形的字体环境下会渲染成 tofu 方框（金照实测踩到），
-              // 且与「iOS 原生细 icon」的视觉口径不一致。
-              Icon(
-                isCollapsed
-                    ? CupertinoIcons.chevron_right
-                    : CupertinoIcons.chevron_down,
-                size: 11.0,
-                color: secondaryColor,
-              ),
-              const SizedBox(width: 4.0),
-              Text(
-                _sectionTitle(context, section.title),
-                style: TextStyle(
-                  // #153：随正文基准一起上调（11.5 → 13）。
-                  fontSize: 13.0,
-                  fontWeight: FontWeight.bold,
+              children: [
+                // 用 CupertinoIcons 而非 Unicode 三角字符（'▸'/'▾'）：后者在
+                // 缺该字形的字体环境下会渲染成 tofu 方框（金照实测踩到），
+                // 且与「iOS 原生细 icon」的视觉口径不一致。
+                Icon(
+                  isCollapsed
+                      ? CupertinoIcons.chevron_right
+                      : CupertinoIcons.chevron_down,
+                  size: 11.0,
                   color: secondaryColor,
                 ),
-              ),
-              const SizedBox(width: 6.0),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6.0,
-                  vertical: 1.5,
-                ),
-                decoration: BoxDecoration(
-                  color: pillBg,
-                  borderRadius: BorderRadius.circular(10.0),
-                ),
-                child: Text(
-                  '${section.sessions.length}',
+                const SizedBox(width: 4.0),
+                Text(
+                  _sectionTitle(context, section.title),
                   style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
+                    // #153：随正文基准一起上调（11.5 → 13）。
+                    fontSize: 13.0,
+                    fontWeight: FontWeight.bold,
                     color: secondaryColor,
                   ),
                 ),
-              ),
-              const Spacer(),
-              // #155：悬停本组时右侧出现「+」→ 直接为该工作区新建会话。
-              //
-              // 关键：图标**始终参与布局**（固定 22×20 的槽位），悬停只切换
-              // 不透明度 —— 若用 `if (hovering)` 条件插入，22px 的命中区会把
-              // 组头撑高（主人实测反馈「hover 后高度变化」）。占位方案下高度
-              // 在数学上不可能改变。不可见时不接收指针事件。
-              if (canCreateInGroup && section.workspacePath != null)
-                IgnorePointer(
-                  ignoring: _hoveredSectionKey != section.key,
-                  child: Opacity(
-                    opacity: _hoveredSectionKey == section.key ? 1.0 : 0.0,
-                    child: SizedBox(
-                      width: 22.0,
-                      height: 20.0,
-                      child: AccessibleButton(
-                        key: ValueKey('session-section-new-${section.key}'),
-                        label: AppLocalizations.of(context).newSession,
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(22.0, 20.0),
-                        onPressed: () => unawaited(
-                          _onNewSession(
-                            context,
-                            workspace: section.workspacePath,
+                const SizedBox(width: 6.0),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6.0,
+                    vertical: 1.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: pillBg,
+                    borderRadius: BorderRadius.circular(10.0),
+                  ),
+                  child: Text(
+                    '${section.sessions.length}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: secondaryColor,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                // #155：悬停本组时右侧出现「+」→ 直接为该工作区新建会话。
+                //
+                // 关键：图标**始终参与布局**（固定 22×20 的槽位），悬停只切换
+                // 不透明度 —— 若用 `if (hovering)` 条件插入，22px 的命中区会把
+                // 组头撑高（主人实测反馈「hover 后高度变化」）。占位方案下高度
+                // 在数学上不可能改变。不可见时不接收指针事件。
+                if (canCreateInGroup && section.workspacePath != null)
+                  IgnorePointer(
+                    ignoring: _hoveredSectionKey != section.key,
+                    child: Opacity(
+                      opacity: _hoveredSectionKey == section.key ? 1.0 : 0.0,
+                      child: SizedBox(
+                        width: 22.0,
+                        height: 20.0,
+                        child: AccessibleButton(
+                          key: ValueKey('session-section-new-${section.key}'),
+                          label: AppLocalizations.of(context).newSession,
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(22.0, 20.0),
+                          onPressed: () => unawaited(
+                            _onNewSession(
+                              context,
+                              workspace: section.workspacePath,
+                            ),
                           ),
-                        ),
-                        child: Icon(
-                          CupertinoIcons.add,
-                          size: 13,
-                          color: secondaryColor,
+                          child: Icon(
+                            CupertinoIcons.add,
+                            size: 13,
+                            color: secondaryColor,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -828,11 +906,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       icon = CupertinoIcons.folder_badge_minus;
       title = isSearchMode
           ? (l10n.isEnglish
-              ? 'No matching sessions in this workspace'
-              : '该工作区下未找到相关会话')
-          : (l10n.isEnglish
-              ? 'No sessions in this workspace'
-              : '该工作区下暂无会话');
+                ? 'No matching sessions in this workspace'
+                : '该工作区下未找到相关会话')
+          : (l10n.isEnglish ? 'No sessions in this workspace' : '该工作区下暂无会话');
       subtitle = l10n.isEnglish
           ? 'Clear the filter to view all sessions'
           : '清除筛选以查看全部会话';
@@ -1620,7 +1696,6 @@ class _SessionRowState extends State<_SessionRow> {
   /// （点它开操作菜单）；左键长按与右键同样可开菜单。
   bool _hovering = false;
 
-
   /// 紧凑单行的右侧摘要（#150 档 B）：**只有相对时间**（主人明确：设计稿右侧
   /// 灰字是时间、不是消息数），靠右对齐；拿不到时间 → 不显示（返回 null）。
   static String? _compactTrailingLabel(SessionSummary session) {
@@ -1635,8 +1710,7 @@ class _SessionRowState extends State<_SessionRow> {
   /// 时间取 `lastMessageAt ?? updatedAt ?? createdAt`（取到最新活动时间）。
   static String? _relativeTimeLabel(SessionSummary s) {
     // 金照与部分测试使用固定时钟；注入 now 以便可测。
-    final raw =
-        s.lastMessageAt ?? s.updatedAt ?? s.createdAt;
+    final raw = s.lastMessageAt ?? s.updatedAt ?? s.createdAt;
     if (raw == null || raw <= 0) return null;
     final DateTime moment;
     try {
@@ -1716,178 +1790,176 @@ class _SessionRowState extends State<_SessionRow> {
       // #153：锁死行高 —— 悬停时右侧由「时间」换成「⋯」按钮，两者尺寸不同，
       // 原先会让行高浮动（主人反馈 hover 后行高变化）。固定最小高度后，
       // 两种状态的行在视觉上完全等高。
-      constraints: BoxConstraints(
-        minHeight: widget.compact ? 34.0 : 0.0,
-      ),
+      constraints: BoxConstraints(minHeight: widget.compact ? 34.0 : 0.0),
       child: Padding(
-      // #151/#152：紧凑模式会话项与「工作区名」左对齐（主人要求）。
-      // 几何：组头文字 x = 组头 Padding.start(20) + chevron(11) + gap(4) = 35；
-      //       会话项文字 x = 列表内缩(8) + 本 padding.start ⇒ 8 + 27 = 35 ✔
-      // #153：改为「固定行高」—— 悬停时右侧由时间换成「⋯」按钮（原实现会
-      // 撑高一行，主人反馈 hover 后行高变化）。左右内距固定，行高由
-      // _compactRowHeight 常量锁定；手机保持原 16/8。
-      padding: EdgeInsetsDirectional.only(
-        start: widget.compact ? 27 : 16,
-        end: widget.compact ? 8 : 16,
-        top: widget.compact ? 7 : 8,
-        bottom: widget.compact ? 7 : 8,
-      ),
-      child: Row(
-        children: [
-          if (widget.selectionMode) ...[
-            Icon(
-              widget.selected
-                  ? CupertinoIcons.checkmark_circle_fill
-                  : CupertinoIcons.circle,
-              size: 22,
-              color: widget.selected
-                  ? LightSurfaces.resolve(
-                      context,
-                      CupertinoColors.activeBlue.resolveFrom(context),
-                      // Legacy Icon painted the unresolved blue in dark mode.
-                      dark: const Color(0xFF007AFF),
-                    )
-                  : LightSurfaces.resolve(
-                      context,
-                      LightSurfaces.textSecondary,
-                      dark: CupertinoColors.secondaryLabel,
-                    ),
-            ),
-            const SizedBox(width: 10),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    // 紧凑模式：标题占满剩余空间，时间贴最右（右对齐）；
-                    // 非紧凑（手机）保持 Flexible 由内容决定宽度。
-                    if (widget.compact)
-                      Expanded(
-                        child: _highlightedSpan(
-                          context,
-                          _displayTitle(context, widget.session),
-                          // #153：对齐 markdown 正文基准（kMarkdownBodyFontSize=15）。
-                          style: const TextStyle(fontSize: 15.0),
-                        ),
+        // #151/#152：紧凑模式会话项与「工作区名」左对齐（主人要求）。
+        // 几何：组头文字 x = 组头 Padding.start(20) + chevron(11) + gap(4) = 35；
+        //       会话项文字 x = 列表内缩(8) + 本 padding.start ⇒ 8 + 27 = 35 ✔
+        // #153：改为「固定行高」—— 悬停时右侧由时间换成「⋯」按钮（原实现会
+        // 撑高一行，主人反馈 hover 后行高变化）。左右内距固定，行高由
+        // _compactRowHeight 常量锁定；手机保持原 16/8。
+        padding: EdgeInsetsDirectional.only(
+          start: widget.compact ? 27 : 16,
+          end: widget.compact ? 8 : 16,
+          top: widget.compact ? 7 : 8,
+          bottom: widget.compact ? 7 : 8,
+        ),
+        child: Row(
+          children: [
+            if (widget.selectionMode) ...[
+              Icon(
+                widget.selected
+                    ? CupertinoIcons.checkmark_circle_fill
+                    : CupertinoIcons.circle,
+                size: 22,
+                color: widget.selected
+                    ? LightSurfaces.resolve(
+                        context,
+                        CupertinoColors.activeBlue.resolveFrom(context),
+                        // Legacy Icon painted the unresolved blue in dark mode.
+                        dark: const Color(0xFF007AFF),
                       )
-                    else
-                      Flexible(
-                        child: _highlightedSpan(
-                          context,
-                          _displayTitle(context, widget.session),
-                          style: const TextStyle(fontSize: 17),
-                        ),
+                    : LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.textSecondary,
+                        dark: CupertinoColors.secondaryLabel,
                       ),
-                    // #151：紧凑模式右侧槽，按优先级三态（右对齐）：
-                    //   ① 会话进行中 → loading 指示器（最高优先，不可被悬停盖掉）
-                    //   ② 鼠标悬停    → 「⋯」菜单按钮
-                    //   ③ 其余        → 极简相对时间（2h / 昨天 / 3d）
-                    if (widget.compact && isStreaming) ...[
-                      const SizedBox(width: 6),
-                      CupertinoActivityIndicator(
-                        key: ValueKey(
-                          'session-inline-streaming-'
-                          '${widget.session.sessionId ?? widget.session.id}',
-                        ),
-                        radius: 6,
-                        color: secondaryColor,
-                      ),
-                    ] else if (widget.compact &&
-                        _hovering &&
-                        widget.onActions != null) ...[
-                      const SizedBox(width: 6),
-                      _buildInlineActionsButton(context),
-                    ] else if (widget.compact &&
-                        compactTrailingLabel != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        compactTrailingLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: secondaryColor,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                if (showMetadataRow && (metadata != null || hasIcons)) ...[
-                  const SizedBox(height: 2),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (metadata != null)
+                      // 紧凑模式：标题占满剩余空间，时间贴最右（右对齐）；
+                      // 非紧凑（手机）保持 Flexible 由内容决定宽度。
+                      if (widget.compact)
+                        Expanded(
+                          child: _highlightedSpan(
+                            context,
+                            _displayTitle(context, widget.session),
+                            // #153：对齐 markdown 正文基准（kMarkdownBodyFontSize=15）。
+                            style: const TextStyle(fontSize: 15.0),
+                          ),
+                        )
+                      else
                         Flexible(
                           child: _highlightedSpan(
                             context,
-                            metadata,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: secondaryColor,
-                            ),
+                            _displayTitle(context, widget.session),
+                            style: const TextStyle(fontSize: 17),
                           ),
                         ),
-                      if (hasIcons) ...[
-                        if (metadata != null) const SizedBox(width: 6),
-                        for (var i = 0; i < iconWidgets.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 4),
-                          iconWidgets[i],
-                        ],
+                      // #151：紧凑模式右侧槽，按优先级三态（右对齐）：
+                      //   ① 会话进行中 → loading 指示器（最高优先，不可被悬停盖掉）
+                      //   ② 鼠标悬停    → 「⋯」菜单按钮
+                      //   ③ 其余        → 极简相对时间（2h / 昨天 / 3d）
+                      if (widget.compact && isStreaming) ...[
+                        const SizedBox(width: 6),
+                        CupertinoActivityIndicator(
+                          key: ValueKey(
+                            'session-inline-streaming-'
+                            '${widget.session.sessionId ?? widget.session.id}',
+                          ),
+                          radius: 6,
+                          color: secondaryColor,
+                        ),
+                      ] else if (widget.compact &&
+                          _hovering &&
+                          widget.onActions != null) ...[
+                        const SizedBox(width: 6),
+                        _buildInlineActionsButton(context),
+                      ] else if (widget.compact &&
+                          compactTrailingLabel != null) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          compactTrailingLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: secondaryColor,
+                          ),
+                        ),
                       ],
                     ],
                   ),
-                ],
-              ],
-            ),
-          ),
-          // #150：紧凑模式（侧栏）去掉行尾「⋯」按钮 —— 由长按 / 右键打开
-          // 同一套操作菜单，行更干净（主人要求「三个点不要了」）。
-          if (widget.onActions != null && !widget.compact)
-            KeyedSubtree(
-              key: _actionKey,
-              child: AccessibleButton(
-                key: ValueKey(
-                  'session-actions-${widget.session.sessionId ?? widget.session.id}',
-                ),
-                label: isStreaming
-                    ? '${l10n.sessionActions} — Active'
-                    : l10n.sessionActions,
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(36, 36),
-                onPressed: () => widget.onActions!(_actionKey),
-                child: isStreaming
-                    ? Semantics(
-                        label: 'Active',
-                        excludeSemantics: true,
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CupertinoActivityIndicator(
-                            radius: 9,
-                            color: CupertinoColors.activeBlue.resolveFrom(
+                  if (showMetadataRow && (metadata != null || hasIcons)) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (metadata != null)
+                          Flexible(
+                            child: _highlightedSpan(
                               context,
+                              metadata,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: secondaryColor,
+                              ),
                             ),
                           ),
-                        ),
-                      )
-                    : Icon(
-                        CupertinoIcons.ellipsis,
-                        size: 20,
-                        color: LightSurfaces.resolve(
-                          context,
-                          LightSurfaces.textSecondary,
-                          // Preserve the previously unresolved dark icon paint value,
-                          // including in high contrast mode.
-                          dark: CupertinoColors.systemGrey,
-                        ),
-                      ),
+                        if (hasIcons) ...[
+                          if (metadata != null) const SizedBox(width: 6),
+                          for (var i = 0; i < iconWidgets.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 4),
+                            iconWidgets[i],
+                          ],
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ),
-        ],
-      ),
+            // #150：紧凑模式（侧栏）去掉行尾「⋯」按钮 —— 由长按 / 右键打开
+            // 同一套操作菜单，行更干净（主人要求「三个点不要了」）。
+            if (widget.onActions != null && !widget.compact)
+              KeyedSubtree(
+                key: _actionKey,
+                child: AccessibleButton(
+                  key: ValueKey(
+                    'session-actions-${widget.session.sessionId ?? widget.session.id}',
+                  ),
+                  label: isStreaming
+                      ? '${l10n.sessionActions} — Active'
+                      : l10n.sessionActions,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(36, 36),
+                  onPressed: () => widget.onActions!(_actionKey),
+                  child: isStreaming
+                      ? Semantics(
+                          label: 'Active',
+                          excludeSemantics: true,
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CupertinoActivityIndicator(
+                              radius: 9,
+                              color: CupertinoColors.activeBlue.resolveFrom(
+                                context,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          CupertinoIcons.ellipsis,
+                          size: 20,
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.textSecondary,
+                            // Preserve the previously unresolved dark icon paint value,
+                            // including in high contrast mode.
+                            dark: CupertinoColors.systemGrey,
+                          ),
+                        ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
     // #150：紧凑模式（侧栏）去掉行尾「⋯」后，长按与右键都打开同一套操作菜单
@@ -1900,28 +1972,28 @@ class _SessionRowState extends State<_SessionRow> {
       onEnter: widget.compact ? (_) => setState(() => _hovering = true) : null,
       onExit: widget.compact ? (_) => setState(() => _hovering = false) : null,
       child: GestureDetector(
-      key: _rowAnchorKey,
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.onTap,
-      onLongPress: widget.compact ? compactActions : widget.onLongPress,
-      onSecondaryTap: widget.compact ? compactActions : null,
-      onTapDown: isLight ? (_) => _setPressed(true) : null,
-      onTapUp: isLight ? (_) => _setPressed(false) : null,
-      onTapCancel: isLight ? () => _setPressed(false) : null,
-      child: isLight
-          ? DecoratedBox(
-              decoration: ShapeDecoration(
-                color: widget.selected
-                    ? LightSurfaces.selection
-                    : (_pressed ? LightSurfaces.pressed : null),
-                shape: const RoundedSuperellipseBorder(
-                  // 设计稿 `.sess{border-radius:7px}`（行自身圆角，不含卡片容器）
-                  borderRadius: BorderRadius.all(Radius.circular(7)),
+        key: _rowAnchorKey,
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        onLongPress: widget.compact ? compactActions : widget.onLongPress,
+        onSecondaryTap: widget.compact ? compactActions : null,
+        onTapDown: isLight ? (_) => _setPressed(true) : null,
+        onTapUp: isLight ? (_) => _setPressed(false) : null,
+        onTapCancel: isLight ? () => _setPressed(false) : null,
+        child: isLight
+            ? DecoratedBox(
+                decoration: ShapeDecoration(
+                  color: widget.selected
+                      ? LightSurfaces.selection
+                      : (_pressed ? LightSurfaces.pressed : null),
+                  shape: const RoundedSuperellipseBorder(
+                    // 设计稿 `.sess{border-radius:7px}`（行自身圆角，不含卡片容器）
+                    borderRadius: BorderRadius.all(Radius.circular(7)),
+                  ),
                 ),
-              ),
-              child: rowContent,
-            )
-          : rowContent,
+                child: rowContent,
+              )
+            : rowContent,
       ),
     );
   }
@@ -2307,7 +2379,10 @@ class _SessionFilterSheet extends ConsumerWidget {
                             CupertinoListSection.insetGrouped(
                               key: const ValueKey('filter-section-workspaces'),
                               hasLeading: false,
-                              header: Text(l10n.workspacesTitle, style: headerStyle),
+                              header: Text(
+                                l10n.workspacesTitle,
+                                style: headerStyle,
+                              ),
                               backgroundColor: CupertinoColors.transparent,
                               separatorColor: LightSurfaces.resolve(
                                 context,
@@ -2323,24 +2398,26 @@ class _SessionFilterSheet extends ConsumerWidget {
                                 _SheetOptionRow(
                                   key: const ValueKey('workspace-chip-all'),
                                   label: l10n.allWorkspaces,
-                                  selected: mode == SessionListFilterMode.all ||
-                                      (mode == SessionListFilterMode.workspace &&
+                                  selected:
+                                      mode == SessionListFilterMode.all ||
+                                      (mode ==
+                                              SessionListFilterMode.workspace &&
                                           (current.filterValue == null ||
                                               current.filterValue!.isEmpty)),
-                                  onTap: () => onSelect(
-                                    SessionListFilterMode.all,
-                                    null,
-                                  ),
+                                  onTap: () =>
+                                      onSelect(SessionListFilterMode.all, null),
                                 ),
                                 for (final ws in workspaces)
                                   _SheetOptionRow(
                                     key: ValueKey('workspace-chip-${ws.path}'),
-                                    label: (ws.name != null &&
+                                    label:
+                                        (ws.name != null &&
                                             ws.name!.trim().isNotEmpty)
                                         ? ws.name!.trim()
                                         : (ws.path?.trim() ?? ''),
                                     selected:
-                                        mode == SessionListFilterMode.workspace &&
+                                        mode ==
+                                            SessionListFilterMode.workspace &&
                                         matchesWorkspace(
                                           current.filterValue,
                                           ws.path,
