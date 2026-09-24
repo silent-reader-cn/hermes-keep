@@ -217,20 +217,22 @@ void main() {
       expect(done.sessionDetail?.title, '会话标题');
     });
 
-    test('done 畸形（非 JSON / 缺 event / event 非对象）→ TransportError', () {
+    test('done 畸形（非 JSON / 缺 event / event 非对象）→ MalformedDone（#155）', () {
+      // 旧断言钉的是「done 畸形 → TransportError」，即缺陷本身：那会让控制层
+      // 落进回放/重连链（回放把 ~9.7MB 巨帧原样重发 → 界面永远停在生成中）。
       expect(
         SseEventDecoder.decode('done', 'not-json'),
-        isA<TransportErrorSseEvent>(),
+        isA<MalformedDoneSseEvent>(),
       );
       expect(
         SseEventDecoder.decode('done', '{"foo":1}'),
-        isA<TransportErrorSseEvent>(),
+        isA<MalformedDoneSseEvent>(),
       );
       expect(
         SseEventDecoder.decode('done', '{"event":"oops"}'),
-        isA<TransportErrorSseEvent>(),
+        isA<MalformedDoneSseEvent>(),
       );
-      expect(SseEventDecoder.decode('done', ''), isA<TransportErrorSseEvent>());
+      expect(SseEventDecoder.decode('done', ''), isA<MalformedDoneSseEvent>());
     });
 
     test('initial 含澄清标记 → ClarificationPending，否则 ApprovalPending（含强类型字段）', () {

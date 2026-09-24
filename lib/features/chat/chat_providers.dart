@@ -147,6 +147,7 @@ class ChatWatchdogConfig {
       Duration(seconds: 30),
     ],
     this.maxReconnectAttempts = 6,
+    this.maxMalformedDoneSettleAttempts = 3,
     this.reconnectJitterMax = const Duration(milliseconds: 1500),
     this.fullReconnectCooldown = const Duration(seconds: 60),
     this.recoverySentinelInterval = const Duration(seconds: 60),
@@ -189,6 +190,10 @@ class ChatWatchdogConfig {
   /// 传输错误最大自动重连尝试次数（达到后停止自动重连）。
   final int maxReconnectAttempts;
 
+  /// 收尾帧（done）连续解析失败的最大容忍次数：超过即熔断——按 REST transcript
+  /// 收尾 + 显式报错，不再尝试任何恢复（默认 3，测试可 override）。
+  final int maxMalformedDoneSettleAttempts;
+
   /// 强制重连/轮询探活的最大随机错峰延迟（防多会话并发风暴；默认 1500ms，测试可 override 为 Duration.zero）。
   final Duration reconnectJitterMax;
 
@@ -221,6 +226,10 @@ class ChatWatchdogConfig {
 
   /// 实际最大自动重连尝试次数。
   int get effectiveMaxReconnectAttempts => maxReconnectAttempts;
+
+  /// 实际熔断阈值（收尾帧连续解析失败上限）。
+  int get effectiveMaxMalformedDoneSettleAttempts =>
+      maxMalformedDoneSettleAttempts;
 
   /// 获取指定尝试序号的退避等待时长（attempt 从 0 开始）。
   Duration backoffDelayForAttempt(int attempt) {

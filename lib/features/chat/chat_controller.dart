@@ -90,6 +90,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 传输错误重连尝试次数（收到任意成功事件重置为 0）。
   int _reconnectAttempts = 0;
 
+  /// 本回合收尾帧（done）连续解析失败次数（回合收尾 / 新回合起始归零）。
+  int _malformedDoneStreak = 0;
+
   /// 词级 reveal 队列（合并缓冲产出、逐 tick 消费）。
   final List<String> _revealQueue = [];
 
@@ -1199,6 +1202,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
                 ),
             ],
     );
+    _malformedDoneStreak = 0;
     state = state.copyWith(
       phase: ChatPhase.sending,
       messages: [...state.messages, optimistic],
@@ -1586,6 +1590,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         _reportTurnSettled(interrupted: true);
       case TransportErrorSseEvent(:final message):
         _handleTransportError(message);
+      case MalformedDoneSseEvent(:final message):
+        // #155：done 是终结帧 —— 载荷没吃全 ≠ 回合没结束。按「收尾」处理，
+        // 不进传输错误的回放/重连链（详见 _handleMalformedDone）。
+        unawaited(_handleMalformedDone(message));
       case HeartbeatSseEvent():
         _handleHeartbeat();
       case IgnoredSseEvent():
@@ -3363,6 +3371,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _resetReconnectBackoff();
     _cancelJitterTimers();
     _resetFullReconnectThrottle();
+    _malformedDoneStreak = 0;
     _prefillSince = null;
     var messages = state.messages;
     if (state.pinnedLocalNotices.isNotEmpty) {
@@ -3702,6 +3711,140 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           'Recovery exhausted, re-probing (attempts: $_reconnectAttempts, session: ${state.sessionId})',
     );
     unawaited(_checkStatusAndReconnect(isThrottledFallback: true));
+  }
+
+  /// 收尾帧（done）载荷解析失败的处理（#155）。
+  ///
+  /// done 是**终结帧**：解析失败只说明这一帧没吃全（该帧可含全量 session，实测
+  /// ~9.7 MB，慢链路/服务端写超时会把它截断），**不代表回合还在跑**。故按「收尾」
+  /// 语义处理，而不是走传输错误的恢复链：
+  ///
+  /// 1. 停流 + 撤掉一切恢复定时器。**绝不回放**：journal 回放会把同一张巨帧原样
+  ///    重发，且回合结束后回放仍可用（`replay_available` 只看 journal 是否存在），
+  ///    旧实现会在这里反复重吃 9.7 MB —— 既不收敛也不报错，界面永远停在「生成中」；
+  /// 2. 探活一次：服务端确实还在写 → 正常 resume（断点未知时不做全量重连，避免整段
+  ///    重放把巨帧再拉一遍）；已结束（绝大多数）→ 用 REST transcript 收尾；
+  /// 3. 连续失败达熔断阈值 → 按 transcript 收尾 + 显式报错，绝不静默挂死。
+  Future<void> _handleMalformedDone(String message) async {
+    if (_disposed) return;
+    if (state.stream.activeStreamId == null ||
+        state.stream.hasCompletedResponse) {
+      // 已收尾 / 本就没有活动流：仅清理，不进任何恢复链。
+      _finishStream();
+      return;
+    }
+    final streamId = state.stream.activeStreamId!;
+    _malformedDoneStreak++;
+    final breaker = _malformedDoneStreak >
+        _watchdogConfig.effectiveMaxMalformedDoneSettleAttempts;
+    DiagnosticsService.instance.log(
+      level: breaker ? DiagnosticsLogLevel.error : DiagnosticsLogLevel.warn,
+      tag: 'chat_reconnect',
+      message:
+          'Malformed done frame handled as turn end (streak: $_malformedDoneStreak, '
+          'breaker: $breaker, streamId: $streamId, session: ${state.sessionId}): $message',
+    );
+    _api?.stopStream();
+    _cancelReconnectTimer();
+    _cancelJitterTimers();
+    _cancelRecoverySentinel();
+    _cancelResumeProbeRetry();
+    if (breaker) {
+      await _settleTurnFromTranscript(
+        streamId,
+        notice: '收尾数据不完整（已重试多次），已按服务器记录收尾。',
+        interrupted: true,
+      );
+      return;
+    }
+    state = state.copyWith(
+      stream: state.stream.copyWith(
+        isSuspended: true,
+        recovery: ActiveStreamRecoveryState.checking,
+      ),
+    );
+    final gen = _generation;
+    try {
+      final status = await _api!.chatStreamStatus(streamId);
+      if (_disposed || gen != _generation) return;
+      if (state.stream.activeStreamId != streamId) return;
+      if (status.active == true &&
+          _replayAfterSeq(state.stream.lastEventId) > 0) {
+        await _loadMessagesAndResume(streamId);
+        return;
+      }
+      await _settleTurnFromTranscript(
+        streamId,
+        notice: null,
+        interrupted: false,
+      );
+    } on ApiException {
+      if (_disposed || gen != _generation) return;
+      if (state.stream.activeStreamId != streamId) return;
+      // 探活本身失败 = 真·网络故障：交给既有（带预算上限的）恢复链。
+      _handleTransportError(message);
+    }
+  }
+
+  /// 用 REST transcript 收尾回合（收尾帧损坏时的权威收尾路径）。
+  ///
+  /// 与 [_finalizeAfterRecovery] 的差别：本路径**从不回放**，只在确有必要时显式
+  /// 提示；并以「transcript 是否前进」判断是否有丢尾风险（前进 = 服务端已落库）。
+  Future<void> _settleTurnFromTranscript(
+    String streamId, {
+    required String? notice,
+    required bool interrupted,
+  }) async {
+    final serverAssistantIdsBefore = _serverAssistantMessageIds();
+    await loadMessages();
+    if (_disposed) return;
+    if (state.stream.activeStreamId != streamId) return;
+    final hasAssistantResponse = state.messages.any(
+      (m) => m.role == 'assistant',
+    );
+    if (!hasAssistantResponse) {
+      state = state.copyWith(sendErrorMessage: '连接已断开，未能恢复流。');
+      _notifySessionError('连接已断开', '未能恢复流，会话已终止。');
+      _finishStream(endPhase: ChatPhase.error);
+      _reportTurnSettled(interrupted: true);
+      return;
+    }
+    _completeCurrentResponse(
+      needsTranscriptRefresh: false,
+      completedStreamId: streamId,
+    );
+    // 判据＝**服务端新落库**的 assistant 消息是否出现。本地流式占位消息
+    // （`stream-*`）合并后会一直排在列表末尾，拿「末条 assistant 指纹」当判据
+    // 会永远判成「没前进」（实测踩过）。
+    final transcriptAdvanced = _serverAssistantMessageIds()
+        .difference(serverAssistantIdsBefore)
+        .isNotEmpty;
+    final effectiveNotice =
+        notice ??
+        (transcriptAdvanced ? null : '收尾数据不完整，已按当前记录收尾。');
+    if (effectiveNotice != null) {
+      state = state.copyWith(sendErrorMessage: effectiveNotice);
+    }
+    _notifyTurnCompleted();
+    _triggerSessionListRefreshForCompleted(state.sessionId);
+    _finishStream();
+    unawaited(_writeCacheMessages(state.sessionId, state.messages));
+    _reportTurnSettled(interrupted: interrupted);
+  }
+
+  /// transcript 中「服务端落库」的 assistant 消息 id 集合（排除本地流式占位）。
+  ///
+  /// 占位 id 形如 `stream-<uuid>`（全仓既有约定，见锚定/合并逻辑），合并后会留在
+  /// 列表尾部 ⇒ **不能**以「末条 assistant 的指纹」判断 transcript 是否前进。
+  Set<String> _serverAssistantMessageIds() {
+    final ids = <String>{};
+    for (final message in state.messages) {
+      final id = message.messageId;
+      if (message.role != 'assistant' || id == null) continue;
+      if (id.startsWith('stream-')) continue;
+      ids.add(id);
+    }
+    return ids;
   }
 
   void _handleTransportError(String message) {

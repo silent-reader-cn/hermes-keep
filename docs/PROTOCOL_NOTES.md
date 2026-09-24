@@ -28,7 +28,7 @@
 | `tool_complete` | ToolStreamEvent（见下） | ToolCompleted(evt) |
 | `title` | `{session_id, title}` | Title(sessionId, title) |
 | `metering` | `{tps, tps_available, estimated, session_id}` | Metering(tps, tpsAvailable, estimated, sessionId) |
-| `done` | DonePayload.event（缺失/畸形 → transportError） | Done(event) |
+| `done` | DonePayload.event（缺失/畸形 → MalformedDone，按「回合已收尾」处理） | Done(event) |
 | `initial` | 含澄清标记 → ClarificationPending，否则 ApprovalPending | （分流） |
 | `approval` | ApprovalPendingResponse | ApprovalPending |
 | `clarify` | ClarificationPendingResponse | ClarificationPending |
@@ -52,13 +52,17 @@ is_error(Bool), stable_id ← 依次取 tid / id / tool_call_id / tool_use_id / 
 - **MeteringStreamEvent**: `{tps, tps_available, estimated, session_id}`
   - 可展示 tps = tps_available==true && estimated!=true && tps>0 且有限
 - **TitleStreamEvent**: `{session_id, title}`
-- **DonePayload**: 内含 `event` 字段（event 即 done 事件详情；malformed → transportError）
+- **DonePayload**: 内含 `event` 字段（event 即 done 事件详情；malformed → `MalformedDoneSseEvent`）
+  - done 帧可含全量 session（实测 ~9.7 MB 单帧），慢链路/服务端写超时会截断它；
+    截断**不代表回合没结束**（done 是终结帧），故按收尾语义处理而非传输错误
 - **ApprovalPendingResponse / ClarificationPendingResponse**：见对应 Swift 模型（approval/clarify 流专用）
 
 ## 5. 解码策略（对齐 Hermex 容错）
 
 - 单个事件解码失败 → 返回安全默认值（如空文本），**不中断流**
-- done 畸形是唯一视为 transportError 的
+- done 畸形是唯一**不按传输错误、而按回合收尾**处理的特例（`MalformedDoneSseEvent`）：
+  控制层只做一次 status 探活（服务端仍在写 → 正常 resume），否则用 REST transcript 收尾；
+  **绝不走 journal 回放**（回放会把同一张巨帧原样重发）
 - 未知事件类型 → ignored，不报错
 - 所有字符串字段用 lossy 解码（类型不符→nil，不 throw）
 
@@ -66,6 +70,6 @@ is_error(Bool), stable_id ← 依次取 tid / id / tool_call_id / tool_use_id / 
 
 - [ ] 事件名→事件映射与上表完全一致
 - [ ] 畸形载荷不崩流
-- [ ] done 畸形 → TransportError
+- [ ] done 畸形 → MalformedDone（控制层按收尾处理：探活 → REST transcript 收尾，不回放）
 - [ ] 自定义头与内置头合并顺序正确
 - [ ] 单测覆盖每个事件类型 + 畸形输入

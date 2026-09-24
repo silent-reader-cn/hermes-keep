@@ -289,9 +289,25 @@ class ErrorSseEvent extends SseEvent {
   final String message;
 }
 
-/// 传输层错误（连接失败 / done 畸形 / 流中断）。
+/// 传输层错误（连接失败 / 流读取中断）。
+///
+/// 注意：**收尾帧（done）载荷解析失败不属于此列** —— 那是「回合已结束」的信号，
+/// 见 [MalformedDoneSseEvent]。
 class TransportErrorSseEvent extends SseEvent {
   const TransportErrorSseEvent(this.message);
+
+  final String message;
+}
+
+/// 收尾帧（`done`）载荷解析失败。
+///
+/// 语义：**回合已结束**（服务端只在收尾时发 done），只是这一帧没吃全：该帧可含
+/// 全量 session（实测单帧 ~9.7 MB），慢链路/服务端写超时会让它被截断。旧实现把它
+/// 归到 [TransportErrorSseEvent] → 落进「重连 + journal 回放」链（回放会把同一张巨帧
+/// 原样重发，且回合结束后回放仍可用）→ 既不收敛也不报错，界面永远停在「生成中」。
+/// 故单列一类，由控制层按「收尾」语义处理（探活 → REST transcript 收尾，绝不回放）。
+class MalformedDoneSseEvent extends SseEvent {
+  const MalformedDoneSseEvent(this.message);
 
   final String message;
 }
@@ -498,7 +514,7 @@ class DoneStreamEvent {
 }
 
 // ---------------------------------------------------------------------------
-// 事件解码器（PROTOCOL_NOTES.md §2/§5：畸形载荷不崩流，done 畸形 → transportError）
+// 事件解码器（PROTOCOL_NOTES.md §2/§5：畸形载荷不崩流；done 畸形 → MalformedDone）
 // ---------------------------------------------------------------------------
 
 /// 事件名 + data JSON → [SseEvent]。
@@ -571,7 +587,7 @@ class SseEventDecoder {
     final json = _jsonOrNull(data);
     final map = _asMap(json);
     if (map.isEmpty) {
-      return const TransportErrorSseEvent('连接异常：完成事件格式异常');
+      return const MalformedDoneSseEvent('收尾帧格式异常（done 载荷未吃全）');
     }
     // 兼容两种形态：
     // 1) 旧契约/测试：{"event": {"session":..., "usage":...}}
@@ -586,7 +602,7 @@ class SseEventDecoder {
     } else if (map.containsKey('session') || map.containsKey('usage')) {
       event = map;
     } else {
-      return const TransportErrorSseEvent('连接异常：完成事件格式异常');
+      return const MalformedDoneSseEvent('收尾帧格式异常（done 载荷未吃全）');
     }
     final rawUsage = event['usage'];
     final rawSession = event['session'];
@@ -925,6 +941,13 @@ void _logSseEvent(SseEvent event) {
         tag: 'sse',
         message: 'transportError: $message',
         errorKind: 'TransportError',
+      );
+    case MalformedDoneSseEvent(:final message):
+      service.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'sse',
+        message: 'malformedDone: $message',
+        errorKind: 'MalformedDone',
       );
     case InterimAssistantSseEvent(:final text, :final alreadyStreamed):
       service.log(
