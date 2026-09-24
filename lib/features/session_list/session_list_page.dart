@@ -677,7 +677,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             20.0,
             6.0,
           ),
-          child: Row(
+          // #155：内容行高度锁定 20px（与「无 + 时」一致），配合上面的占位方案
+          // 双保险 —— 组头高度在任何悬停状态下都不变。
+          child: SizedBox(
+            height: 20.0,
+            child: Row(
             children: [
               // 用 CupertinoIcons 而非 Unicode 三角字符（'▸'/'▾'）：后者在
               // 缺该字形的字体环境下会渲染成 tofu 方框（金照实测踩到），
@@ -719,27 +723,44 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 ),
               ),
               const Spacer(),
-              // #151：悬停本组时右侧出现「+」→ 直接为该工作区新建会话。
-              if (canCreateInGroup &&
-                  _hoveredSectionKey == section.key &&
-                  section.workspacePath != null)
-                AccessibleButton(
-                  key: ValueKey('session-section-new-${section.key}'),
-                  label: AppLocalizations.of(context).newSession,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(22, 22),
-                  onPressed: () => unawaited(
-                    _onNewSession(context, workspace: section.workspacePath),
-                  ),
-                  child: Icon(
-                    CupertinoIcons.add,
-                    size: 13,
-                    color: secondaryColor,
+              // #155：悬停本组时右侧出现「+」→ 直接为该工作区新建会话。
+              //
+              // 关键：图标**始终参与布局**（固定 22×20 的槽位），悬停只切换
+              // 不透明度 —— 若用 `if (hovering)` 条件插入，22px 的命中区会把
+              // 组头撑高（主人实测反馈「hover 后高度变化」）。占位方案下高度
+              // 在数学上不可能改变。不可见时不接收指针事件。
+              if (canCreateInGroup && section.workspacePath != null)
+                IgnorePointer(
+                  ignoring: _hoveredSectionKey != section.key,
+                  child: Opacity(
+                    opacity: _hoveredSectionKey == section.key ? 1.0 : 0.0,
+                    child: SizedBox(
+                      width: 22.0,
+                      height: 20.0,
+                      child: AccessibleButton(
+                        key: ValueKey('session-section-new-${section.key}'),
+                        label: AppLocalizations.of(context).newSession,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(22.0, 20.0),
+                        onPressed: () => unawaited(
+                          _onNewSession(
+                            context,
+                            workspace: section.workspacePath,
+                          ),
+                        ),
+                        child: Icon(
+                          CupertinoIcons.add,
+                          size: 13,
+                          color: secondaryColor,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
             ],
           ),
         ),
+      ),
       ),
     );
   }
