@@ -16,31 +16,42 @@ enum LiveSegmentKind { thinking, text, tools }
 /// - [kind] == thinking → [start] 为 liveReasoningText 的字符偏移；
 /// - [kind] == tools    → [start] 为 liveToolCalls 的下标。
 /// [sequence] 单调递增，用于渲染 key（List 复用稳定）。
+///
+/// [contentful]：该断点建立时「到达的是内容性正文」（#147）。token 到达的那一刻
+/// 文本就在手上，纯空白 token 不建点 ⇒ controller 建的 text 断点恒为 true。
+/// 渲染层据此切卡，**与 reveal 进度无关**：内容性正文还没被打字机吐出来也照切。
+/// 缺省 false = 兼容旧语义（按「已 reveal 的可见切片」判定，#62 的 hand-fed 断点）。
 class LiveTimelinePoint {
   const LiveTimelinePoint({
     required this.kind,
     required this.start,
     required this.sequence,
+    this.contentful = false,
   });
 
   final LiveSegmentKind kind;
   final int start;
   final int sequence;
 
+  /// 见类文档：true = 该 text 断点由「内容性正文到达」建立。
+  final bool contentful;
+
   @override
   bool operator ==(Object other) {
     return other is LiveTimelinePoint &&
         other.kind == kind &&
         other.start == start &&
-        other.sequence == sequence;
+        other.sequence == sequence &&
+        other.contentful == contentful;
   }
 
   @override
-  int get hashCode => Object.hash(kind, start, sequence);
+  int get hashCode => Object.hash(kind, start, sequence, contentful);
 
   @override
   String toString() =>
-      'LiveTimelinePoint(kind: $kind, start: $start, seq: $sequence)';
+      'LiveTimelinePoint(kind: $kind, start: $start, seq: $sequence, '
+      'contentful: $contentful)';
 }
 
 /// live 时间线条目（[liveTimelineProvider] 输出，渲染层按 [kind] 分发 widget）。
@@ -620,9 +631,7 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
         ? content.substring(0, minTextStart)
         : null;
     final orphanThink =
-        thinkStarts.isNotEmpty &&
-            minThinkStart > 0 &&
-            reasoningText.isNotEmpty
+        thinkStarts.isNotEmpty && minThinkStart > 0 && reasoningText.isNotEmpty
         ? reasoningText.substring(0, minThinkStart).trim()
         : null;
     final orphanToolCount = minToolStart > 0 ? minToolStart : 0;
@@ -672,9 +681,14 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
       switch (point.kind) {
         case LiveSegmentKind.text:
           // 关闭聚合：text 断点分区块（思考行/工具行随区段合并）。
-          // #62：纯空白 text 段（'\n\n'/空格 token、interim 分隔符残留）
-          // 渲染为零高度隐形文本，不是分隔符——不 flush 不渲染，相邻
-          // 工具块自然并为一张卡（修复 live 中「连续四张 tools 折叠卡」）。
+          //
+          // 切卡判据（#62 + #147）：
+          // ① 断点由「内容性正文到达」建立（`contentful`，事件时刻记录）→ 一定是
+          //    分隔符，**即便这段字此刻还没被打字机吐出来**（后台冻结 / 回前台重放
+          //    补课 / 打字机滞后都不改变卡片边界）；
+          // ② 或该段已有可见正文（旧语义，#62 的纯函数契约与 hand-fed 断点兼容）。
+          // 唯独「到达空段占位」（断点被 clamp 成零长、无正文到达）不切卡 —— 它
+          // 只是段列表的占位，不是事件真相。
           final segment = textIndex < textSegments.length
               ? textSegments[textIndex]
               : null;
@@ -687,8 +701,12 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
           final segText = segEnd > segStart
               ? content.substring(segStart, segEnd)
               : '';
-          if (segText.trim().isNotEmpty) {
-            if (!toolCoalesce) flushBlock();
+          final hasVisibleText = segText.trim().isNotEmpty;
+          if (!toolCoalesce && (point.contentful || hasVisibleText)) {
+            flushBlock();
+          }
+          // 未 reveal（空/半截）时不建条目：文字随打字机随后填入该槽位。
+          if (hasVisibleText) {
             entries.add(
               LiveTimelineEntry(
                 kind: LiveSegmentKind.text,

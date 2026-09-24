@@ -930,18 +930,26 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     required SessionDetail detail,
     required List<ChatMessage> mergedMessages,
   }) {
+    // #147 家族：幽灵行退役。流已结束（无活跃流）时，客户端 `stream-` 临时行若其
+    // 正文已被权威行覆盖，必须退场 —— 否则它作为独立一行再渲染一遍整轮正文，并把
+    // 工具组锚点拖进「临时锚空间」（回前台后卡片锚到 raw:N，再刷新即漂到末条
+    // assistant = 主人报的「回合末尾攒一张 tools 超多且位置错误的大卡」）。
+    // 活跃流期间不改行为（#121 的 live 承接语义保持）。
+    final effectiveMessages = state.stream.activeStreamId == null
+        ? _retireStaleLiveRows(mergedMessages)
+        : mergedMessages;
     final persistedToolCalls = detail.toolCalls ?? const <PersistedToolCall>[];
     _lastPersistedToolCalls = persistedToolCalls;
     _recordPersistedMessageCount(detail.messageCount);
     final newOffset = detail.messagesOffset ?? state.messagesOffset;
     final serverDerivedGroups = ToolCallGroup.groups(
       persistedToolCalls: persistedToolCalls,
-      messages: mergedMessages,
+      messages: effectiveMessages,
       messageOffset: newOffset,
       coalesce: _coalesceTools,
     );
     final serverDerivedReasoning = ReasoningGroup.groups(
-      messages: mergedMessages,
+      messages: effectiveMessages,
       messageOffset: newOffset,
     );
     List<ToolCallGroup> nextCompletedGroups;
@@ -959,13 +967,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
     final existingToolGroups = _reanchorGroupsToMessages(
       state.completedToolCallGroups,
-      mergedMessages,
+      effectiveMessages,
       messageOffset: newOffset,
       oldStreamingId: state.stream.streamingAssistantMessageId,
     );
     final existingReasoningGroups = _reanchorReasoningToMessages(
       state.completedReasoningGroups,
-      mergedMessages,
+      effectiveMessages,
       messageOffset: newOffset,
       oldStreamingId: state.stream.streamingAssistantMessageId,
     );
@@ -975,13 +983,22 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       // 非 live 态才清空 live（历史/收尾路径），live 活跃时保留继续切片展示。
       nextCompletedGroups = ToolCallGroup.merging(
         primaryGroups: serverDerivedGroups,
-        fallbackGroups: existingToolGroups,
+        // live 派生的归档组（`live-tools-*`）在服务端已给出该回合工具真身时退场：
+        // 整堆（一轮全部工具，`isAboveContent` 恒 false）一旦作为 fallback 参与
+        // 合并，就会把别段的工具搬进同一张卡、并把卡位从「首条正文之上」降级到
+        // 正文之下（#147 家族：位置错误 + tools 超多）。服务端未覆盖其工具时仍
+        // 保留（防 transcript 窗口缺工具造成丢内容）。
+        fallbackGroups: [
+          for (final group in existingToolGroups)
+            if (!_isStaleLiveGroupCoveredByServer(group, serverDerivedGroups))
+              group,
+        ],
       );
       nextLiveToolCalls = isLiveActive ? state.liveToolCalls : const [];
     } else {
       if (state.liveToolCalls.isNotEmpty) {
         final anchor = _resolveLiveArchiveAnchor(
-          messages: mergedMessages,
+          messages: effectiveMessages,
           messageOffset: newOffset,
           candidateId:
               state.stream.toolCallAnchorMessageId ??
@@ -1006,7 +1023,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final liveReasoningList = <ReasoningGroup>[];
     if (state.liveReasoningText.isNotEmpty) {
       final anchor = _resolveLiveArchiveAnchor(
-        messages: mergedMessages,
+        messages: effectiveMessages,
         messageOffset: newOffset,
         candidateId:
             state.stream.reasoningAnchorMessageId ??
@@ -1023,7 +1040,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
     // 历史思考归档：从已加载消息的 reasoning 字段提取，补入 completedReasoningGroups
     final persistedReasoning = _reasoningGroupsFromMessages(
-      mergedMessages,
+      effectiveMessages,
       newOffset,
     );
     if (persistedReasoning.isNotEmpty) {
@@ -1040,23 +1057,23 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
     nextCompletedGroups = _reanchorGroupsToMessages(
       nextCompletedGroups,
-      mergedMessages,
+      effectiveMessages,
       messageOffset: newOffset,
       oldStreamingId: state.stream.streamingAssistantMessageId,
     );
     nextCompletedReasoning = _reanchorReasoningToMessages(
       nextCompletedReasoning,
-      mergedMessages,
+      effectiveMessages,
       messageOffset: newOffset,
       oldStreamingId: state.stream.streamingAssistantMessageId,
     );
 
     state = state.copyWith(
-      messages: mergedMessages,
+      messages: effectiveMessages,
       messagesOffset: detail.messagesOffset ?? state.messagesOffset,
       hasOlderMessages:
           detail.messageCount != null &&
-          detail.messageCount! > mergedMessages.length,
+          detail.messageCount! > effectiveMessages.length,
       displayTitle: _resolveTitle(detail),
       workspace: detail.workspace ?? state.workspace,
       model: detail.model ?? state.model,
@@ -1086,7 +1103,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       isViewingCachedData: false,
       isShowingOfflineCache: false,
     );
-    unawaited(_writeCacheMessages(state.sessionId, mergedMessages));
+    unawaited(_writeCacheMessages(state.sessionId, effectiveMessages));
     final activeStreamId = detail.activeStreamId;
     if (activeStreamId != null &&
         activeStreamId.isNotEmpty &&
@@ -1633,18 +1650,33 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         // _replayRebuildTimeline）执行，避免时间线为空 + 归档锚定 →
         // liveTimeline=null → 旧分组式气泡沉底；正常 live 重连断点仍在，
         // 此时补点会把已展示段重复叠加到时间线尾部（成簇卡片）。
-        if (_replayRebuildTimeline) {
-          _ensureTimelinePoint(LiveSegmentKind.text, prevCursor);
+        // #147：与主路径同一条「内容性」判据 —— 纯空白重放帧同样不建点，
+        // 保证「存在 text 断点 ⇒ 内容性正文到达过」这条不变量无例外。
+        if (_replayRebuildTimeline && text.trim().isNotEmpty) {
+          _ensureTimelinePoint(
+            LiveSegmentKind.text,
+            prevCursor,
+            contentful: true,
+          );
         }
         return false;
       }
     }
     // 时间线断点：在「事件到达」时记录（而非 flush 时），保证与真实事件顺序一致；
     // start 取缓冲全量（content + 待合并 + 待揭示），使切片与最终 content 对齐。
-    _ensureTimelinePoint(
-      LiveSegmentKind.text,
-      _currentStreamingContent().length,
-    );
+    //
+    // #147：纯空白正文（'\n\n' / 空格 token）**不建断点**。「是否内容性正文」必须
+    // 在事件到达时判定 —— 此刻 token 文本就在手上；若把它留给渲染端按「已 reveal
+    // 的 content」去猜，则 reveal 滞后（后台冻结 / 回前台重放补课 / 打字机落后）期间
+    // 内容性正文会被 clamp 成空段，渲染端据此拒绝切卡 ⇒ 相邻工具挤成一张大卡。
+    // 不建点的效果与 #62 一致：空白不构成分隔符，相邻工具仍并一张卡。
+    if (remainder.trim().isNotEmpty) {
+      _ensureTimelinePoint(
+        LiveSegmentKind.text,
+        _currentStreamingContent().length,
+        contentful: true,
+      );
+    }
     state = state.copyWith(
       pendingAssistantTokenChunks: [
         ...state.pendingAssistantTokenChunks,
@@ -1771,9 +1803,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (recovery == ActiveStreamRecoveryState.checking ||
         recovery == ActiveStreamRecoveryState.reconnecting) {
       state = state.copyWith(
-        stream: state.stream.copyWith(
-          recovery: ActiveStreamRecoveryState.idle,
-        ),
+        stream: state.stream.copyWith(recovery: ActiveStreamRecoveryState.idle),
       );
     }
     // #29 后台恢复主动探测：重基线前捕获「后台空窗」——后台冻结点到 resumed
@@ -2091,7 +2121,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   ///
   /// 断点按 SSE 事件到达顺序记录；[start] 为该段缓冲起始游标，渲染层据此
   /// 对 content / liveReasoningText / liveToolCalls 切片穿插展示。
-  void _ensureTimelinePoint(LiveSegmentKind kind, int start) {
+  ///
+  /// [contentful]：text 断点专用 —— 建立时「到达的是内容性正文」（#147）。
+  /// 调用方在 token 文本就在手上时置位；空白 token 一律不建点，故 controller
+  /// 建的 text 断点恒为 true，渲染层因此可以**脱离 reveal 进度**切卡。
+  void _ensureTimelinePoint(
+    LiveSegmentKind kind,
+    int start, {
+    bool contentful = false,
+  }) {
     final points = state.liveTimelinePoints;
     if (points.isNotEmpty && points.last.kind == kind) return;
     state = state.copyWith(
@@ -2101,6 +2139,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           kind: kind,
           start: start,
           sequence: ++_timelineSequence,
+          contentful: contentful,
         ),
       ],
     );
@@ -2148,6 +2187,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _ensureTimelinePoint(
         LiveSegmentKind.text,
         _currentStreamingContent().length,
+        // 本路径只由 `_handleInterimAssistant` 触发，且上游已判过
+        // `text.trim().isNotEmpty` ⇒ 到达的就是内容性正文（#147）。
+        contentful: true,
       );
     }
     final next = List<ChatMessage>.of(state.messages);
@@ -3065,22 +3107,31 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _api?.stopStream();
     _syncSessionStreaming(state.sessionId, false);
     _prefillSince = null;
-    final nextToolGroups = _archiveLiveToolCallsToGroups();
-    final nextReasoningGroups = _archiveLiveReasoningToGroups();
+    // 幽灵行退役（先于归档/重锚）：live 身份随收尾失效，客户端临时行若正文已被
+    // 权威行覆盖即退场。否则 ① 它作为独立一行重复渲染整轮正文；② 工具组锚点留在
+    // 「临时锚空间」（raw:N），下一次刷新即漂到末条 assistant（位置错误）。
+    final settledMessages = _retireStaleLiveRows(state.messages);
+    final nextToolGroups = _archiveLiveToolCallsToGroups(
+      messages: settledMessages,
+    );
+    final nextReasoningGroups = _archiveLiveReasoningToGroups(
+      messages: settledMessages,
+    );
     final reanchoredToolGroups = _reanchorGroupsToMessages(
       nextToolGroups,
-      state.messages,
+      settledMessages,
       messageOffset: state.messagesOffset,
       oldStreamingId: state.stream.streamingAssistantMessageId,
     );
     final reanchoredReasoningGroups = _reanchorReasoningToMessages(
       nextReasoningGroups,
-      state.messages,
+      settledMessages,
       messageOffset: state.messagesOffset,
       oldStreamingId: state.stream.streamingAssistantMessageId,
     );
     state = state.copyWith(
       phase: ChatPhase.idle,
+      messages: settledMessages,
       completedToolCallGroups: reanchoredToolGroups,
       completedReasoningGroups: reanchoredReasoningGroups,
       liveToolCalls: const [],
@@ -4148,8 +4199,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     // 本次动作之前）时以动作时刻为基线 —— 否则刚动作就会因
     // `_lastProgress == null` 被立刻判定静止。
     final lastProgress = _lastProgress;
-    final baseline =
-        (lastProgress == null || lastProgress.isBefore(actionAt))
+    final baseline = (lastProgress == null || lastProgress.isBefore(actionAt))
         ? actionAt
         : lastProgress;
     if (now.difference(baseline) < _stallGuardStallThreshold) return;
@@ -4191,8 +4241,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final cooldown = _deadZoneCooldownUntil;
     if (cooldown != null && now.isBefore(cooldown)) return;
     _deadZoneCooldownUntil = now.add(_watchdogConfig.deadZoneCooldown);
-    final lastProgressAgeMs =
-        lastProgress == null ? -1 : now.difference(lastProgress).inMilliseconds;
+    final lastProgressAgeMs = lastProgress == null
+        ? -1
+        : now.difference(lastProgress).inMilliseconds;
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.info,
       tag: 'chat_deadzone',
@@ -4563,6 +4614,96 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
+  /// 幽灵行退役：把「已被权威行覆盖」的客户端临时 assistant 行摘掉。
+  ///
+  /// 只动 assistant 行（乐观 user 行不动），且只在**正文确实被权威行覆盖**时摘
+  /// （防丢内容）：否则保留原样。空白压缩后做包含判定 —— 服务端逐轮行拼起来应
+  /// 覆盖 live 行的整轮正文。
+  List<ChatMessage> _retireStaleLiveRows(List<ChatMessage> messages) {
+    if (messages.length < 2) return messages;
+    final authoritative = StringBuffer();
+    for (final message in messages) {
+      if (_isClientTempRow(message)) continue;
+      authoritative.write(_squeezeWhitespace(message.content ?? ''));
+    }
+    final authoritativeText = authoritative.toString();
+    if (authoritativeText.isEmpty) return messages;
+    // 空内容临时行（纯工具/纯思考轮）只在窗口里确实存在权威 assistant 行时退场，
+    // 避免分页窗口边缘把「本地唯一那一行」误摘。
+    final hasAuthoritativeAssistant = messages.any(
+      (m) => m.role == 'assistant' && !_isClientTempRow(m),
+    );
+    final kept = <ChatMessage>[];
+    for (final message in messages) {
+      if (!_isClientTempRow(message)) {
+        kept.add(message);
+        continue;
+      }
+      final own = _squeezeWhitespace(message.content ?? '');
+      // 注意判定顺序：空串被任何字符串 contains ⇒ 必须先判空。空内容临时行是
+      // **纯工具/纯思考轮**的挂载行（工具组锚在它身上、由它渲染），有权威行兜底
+      // 才退场；否则摘掉即等于整卡消失（todo.md #15 复现 2 的回归点）。
+      if (own.isEmpty) {
+        if (hasAuthoritativeAssistant) continue;
+        kept.add(message);
+        continue;
+      }
+      if (authoritativeText.contains(own)) continue;
+      kept.add(message);
+    }
+    return kept;
+  }
+
+  bool _isClientTempRow(ChatMessage message) {
+    if (message.role != 'assistant') return false;
+    final id = message.messageId ?? '';
+    return id.startsWith('stream-') || id.startsWith('local-');
+  }
+
+  String _squeezeWhitespace(String value) =>
+      value.replaceAll(RegExp(r'\s+'), '');
+
+  /// live 派生的归档组（`live-tools-*`）是否已被服务端分组覆盖（可安全退场）。
+  ///
+  /// 非 live 派生组一律返回 false（不动历史归档组的行为）。
+  bool _isStaleLiveGroupCoveredByServer(
+    ToolCallGroup group,
+    List<ToolCallGroup> serverGroups,
+  ) {
+    if (!group.id.startsWith('live-tools-')) return false;
+    if (serverGroups.isEmpty) return false;
+    return group.isCoveredByOthers(serverGroups);
+  }
+
+  /// 最后一个用户回合内「首条带正文的 assistant」锚（整回合大卡的合法卡位）。
+  ///
+  /// 与 `ToolCallGroup.coalescingByAssistantTurn` 的 `firstTextAssistantAnchor`
+  /// 同源：live 堆需要兜底卡位时用它，绝不回落到「末条 assistant」（那是把整轮
+  /// 工具甩到回合末尾）。找不到时回落到本回合首条 assistant。
+  String? _lastTurnFirstTextAnchor(List<ChatMessage> messages, int offset) {
+    if (messages.isEmpty) return null;
+    var start = 0;
+    for (var i = messages.length - 1; i >= 0; i--) {
+      if (TranscriptTurnClassifier.isUserTurnBoundary(messages[i])) {
+        start = i;
+        break;
+      }
+    }
+    String? earliestAssistant;
+    for (var i = start; i < messages.length; i++) {
+      final message = messages[i];
+      if (message.role != 'assistant') continue;
+      final anchor = TranscriptTurnClassifier.anchorID(
+        message,
+        at: i,
+        messageOffset: offset,
+      );
+      earliestAssistant ??= anchor;
+      if ((message.content ?? '').trim().isNotEmpty) return anchor;
+    }
+    return earliestAssistant;
+  }
+
   String? _resolveLiveArchiveAnchor({
     required List<ChatMessage> messages,
     int? messageOffset,
@@ -4615,10 +4756,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     return null;
   }
 
-  List<ReasoningGroup> _archiveLiveReasoningToGroups([String? overrideAnchor]) {
+  List<ReasoningGroup> _archiveLiveReasoningToGroups({
+    String? overrideAnchor,
+    List<ChatMessage>? messages,
+  }) {
     if (state.liveReasoningText.isEmpty) return state.completedReasoningGroups;
     final anchor = _resolveLiveArchiveAnchor(
-      messages: state.messages,
+      messages: messages ?? state.messages,
       messageOffset: state.messagesOffset,
       candidateId:
           overrideAnchor ??
@@ -4645,10 +4789,29 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     );
   }
 
-  List<ToolCallGroup> _archiveLiveToolCallsToGroups([String? overrideAnchor]) {
+  List<ToolCallGroup> _archiveLiveToolCallsToGroups({
+    String? overrideAnchor,
+    List<ChatMessage>? messages,
+  }) {
     if (state.liveToolCalls.isEmpty) return state.completedToolCallGroups;
+    final sourceMessages = messages ?? state.messages;
+    // 服务端真身已覆盖本轮 live 工具（回前台补拉后的收尾路径）→ 不再造整堆组：
+    // 否则一整轮工具会被塞进一个 `live-tools-*` 组，并锚到临时锚（幽灵行）或
+    // 末条 assistant 上 —— 主人现象「回合末尾攒一张 tools 超多、位置错误的卡」。
+    final alreadyCoveredByServer = [
+      for (final group in state.completedToolCallGroups)
+        if (!group.id.startsWith('live-tools-')) group,
+    ];
+    if (alreadyCoveredByServer.isNotEmpty) {
+      final pile = ToolCallGroup.live(
+        toolCalls: List<ToolCall>.of(state.liveToolCalls),
+      );
+      if (pile.isCoveredByOthers(alreadyCoveredByServer)) {
+        return state.completedToolCallGroups;
+      }
+    }
     final anchor = _resolveLiveArchiveAnchor(
-      messages: state.messages,
+      messages: sourceMessages,
       messageOffset: state.messagesOffset,
       candidateId:
           overrideAnchor ??
@@ -4718,6 +4881,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         return g;
       }
 
+      // live 派生的归档组（`live-tools-*`）：整轮工具被堆在一组、卡位恒 false。
+      final isLiveDerived = g.id.startsWith('live-tools-');
       String? newAnchor;
 
       if (anchor != null && anchor.isNotEmpty) {
@@ -4767,6 +4932,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         if (fallbackAnchorId != null &&
             validAnchors.contains(fallbackAnchorId)) {
           newAnchor = fallbackAnchorId;
+        } else if (isLiveDerived) {
+          // live 派生的整堆组**不得**回落「末条 assistant」——那会把整轮工具甩到
+          // 回合末尾（主人看到的「位置错误」）；改钉本回合「首条带正文的
+          // assistant」，与 `coalescingByAssistantTurn` 的整回合大卡卡位同源。
+          newAnchor = _lastTurnFirstTextAnchor(messages, offset);
         } else if (latestAssistantAnchor != null) {
           newAnchor = latestAssistantAnchor;
         }
@@ -5245,10 +5415,9 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   @visibleForTesting
   void recoverOrphanedStreamingPhaseForTesting({
     bool ignoreStallThreshold = false,
-  }) =>
-      _recoverOrphanedStreamingPhaseIfNeeded(
-        ignoreStallThreshold: ignoreStallThreshold,
-      );
+  }) => _recoverOrphanedStreamingPhaseIfNeeded(
+    ignoreStallThreshold: ignoreStallThreshold,
+  );
 
   @visibleForTesting
   void setLastContextPollTimeForTesting(DateTime? value) =>
