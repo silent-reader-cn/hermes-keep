@@ -244,7 +244,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('压缩：输入聚焦主题 → confirm → compressSession(focusTopic)', (
+    testWidgets('压缩：输入聚焦主题 → confirm → startCompression(focusTopic)', (
       tester,
     ) async {
       final api = _FakeChatApi()..sessionResult = plainSession();
@@ -267,8 +267,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(api.compressCalls, 1);
-      expect(api.lastFocusTopic, '聚焦主题A');
+      // #156：改走异步 start（立刻返回）；聚焦主题原样透传。
+      expect(api.compressStartCalls, 1);
+      expect(api.lastCompressFocusTopic, '聚焦主题A');
 
       await _unmount(tester);
     });
@@ -288,9 +289,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(api.compressCalls, 1);
+      expect(api.compressStartCalls, 1);
       // 空串经 controller 归一为 null（全量压缩，不聚焦主题）
-      expect(api.lastFocusTopic, isNull);
+      expect(api.lastCompressFocusTopic, isNull);
 
       await _unmount(tester);
     });
@@ -308,7 +309,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(api.compressCalls, 0);
+      expect(api.compressStartCalls, 0);
 
       await _unmount(tester);
     });
@@ -336,7 +337,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('chat-compress-cancel')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(api.compressCalls, 0);
+      expect(api.compressStartCalls, 0);
 
       await _unmount(tester);
     });

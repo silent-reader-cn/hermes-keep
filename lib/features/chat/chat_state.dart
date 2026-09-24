@@ -354,6 +354,7 @@ class ChatState {
     this.stream = const ChatStreamState(),
     this.pendingAction = const ChatPendingActionState(),
     this.contextWindowSnapshot,
+    this.isCompressingContext = false,
     this.responseCompletionNeedsTranscriptRefresh = false,
     this.streamingScrollTrigger = 0,
     this.isRevealQueueEmpty = true,
@@ -469,6 +470,13 @@ class ChatState {
   /// 上下文窗口快照（done usage / 会话加载）。
   final ContextWindowSnapshot? contextWindowSnapshot;
 
+  /// 压缩上下文任务进行中（#156）。
+  ///
+  /// 会话级真相：由 controller 的异步压缩状态机维护（`/compress/start` +
+  /// `/compress/status` 轮询）。指示器 loading、发送守卫、弹窗按钮共读此处，
+  /// 故压缩期间关闭弹窗 / 切走再切回都不会丢失进度。
+  final bool isCompressingContext;
+
   /// done 后需要补拉 transcript（视图据此刷新）。
   final bool responseCompletionNeedsTranscriptRefresh;
 
@@ -537,6 +545,7 @@ class ChatState {
     ChatStreamState? stream,
     ChatPendingActionState? pendingAction,
     ContextWindowSnapshot? contextWindowSnapshot,
+    bool? isCompressingContext,
     bool clearContextWindowSnapshot = false,
     bool? responseCompletionNeedsTranscriptRefresh,
     int? streamingScrollTrigger,
@@ -601,6 +610,8 @@ class ChatState {
       contextWindowSnapshot: clearContextWindowSnapshot
           ? null
           : (contextWindowSnapshot ?? this.contextWindowSnapshot),
+      isCompressingContext:
+          isCompressingContext ?? this.isCompressingContext,
       responseCompletionNeedsTranscriptRefresh:
           responseCompletionNeedsTranscriptRefresh ??
           this.responseCompletionNeedsTranscriptRefresh,

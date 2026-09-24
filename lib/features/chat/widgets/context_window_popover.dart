@@ -542,6 +542,13 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final workspace = ref.watch(
       chatControllerProvider(widget.sessionId).select((s) => s.workspace),
     );
+    // #156：压缩状态取自 controller（会话级真相）而非弹窗局部 —— 弹窗关掉、
+    // 重开、甚至切走再回来，这里读到的都是同一个真实进度。
+    final isCompressing = ref.watch(
+      chatControllerProvider(
+        widget.sessionId,
+      ).select((s) => s.isCompressingContext),
+    );
     final settingsState = ref.watch(settingsControllerProvider).valueOrNull;
     final supportsReasoning =
         (settingsState?.supportsReasoningEffort ?? false) &&
@@ -601,21 +608,23 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                   key: const ValueKey('context-popover-compress'),
                   isHigh: isHigh,
                   isMid: isMid,
-                  compressing: _compressing,
+                  compressing: _compressing || isCompressing,
                   enabled: pctInt != null && pctInt > 0,
-                  onPressed: _compressing
+                  onPressed: (_compressing || isCompressing)
                       ? null
                       : () async {
                           setState(() => _compressing = true);
                           try {
-                            final ok = await ref
+                            // #156：异步启动（立刻返回），随后由 controller 轮询，
+                            // 进度落到会话状态里 —— 所以可以放心关掉弹窗。
+                            final started = await ref
                                 .read(
                                   chatControllerProvider(widget.sessionId)
                                       .notifier,
                                 )
-                                .compressSession();
+                                .startCompression();
                             if (!mounted) return;
-                            if (ok) widget.onClose();
+                            if (started) widget.onClose();
                           } finally {
                             if (mounted) {
                               setState(() => _compressing = false);

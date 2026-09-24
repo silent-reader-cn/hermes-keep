@@ -168,6 +168,33 @@ extension ApiClientSessions on ApiClient {
     return SessionCompressResponse.fromJson(_asMap(json));
   }
 
+  /// POST /api/session/compress/start {session_id, focus_topic?}（#156 异步压缩）。
+  ///
+  /// 立刻返回（后台线程执行）；若该会话已有 running job 则**幂等复用**并原样
+  /// 返回其状态。可能被拒：会话仍在流式（409）、agent runtime 过期（409，
+  /// 响应带 `type: agent_runtime_stale` 且 `retryable: true`）。
+  Future<SessionCompressStatusResponse> startSessionCompression({
+    required String sessionId,
+    String? focusTopic,
+  }) async {
+    final json = await sendJson(
+      Endpoint.startSessionCompression,
+      method: 'POST',
+      body: {'session_id': sessionId, 'focus_topic': ?focusTopic},
+    );
+    return SessionCompressStatusResponse.fromJson(_asMap(json));
+  }
+
+  /// GET /api/session/compress/status?session_id= → SessionCompressStatusResponse。
+  ///
+  /// 无 job 时服务端返回 `{ok: true, status: "idle"}`（**不是 404**）。
+  Future<SessionCompressStatusResponse> compressionStatus(
+    String sessionId,
+  ) async {
+    final json = await sendJson(Endpoint.sessionCompressionStatus(sessionId));
+    return SessionCompressStatusResponse.fromJson(_asMap(json));
+  }
+
   Future<SessionUndoResponse> undoSession(String sessionId) async {
     final json = await sendJson(
       Endpoint.undoSession,

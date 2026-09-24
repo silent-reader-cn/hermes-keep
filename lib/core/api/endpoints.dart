@@ -171,6 +171,23 @@ class Endpoint {
   static const archiveSession = Endpoint('/api/session/archive');
   static const branchSession = Endpoint('/api/session/branch');
   static const compressSession = Endpoint('/api/session/compress');
+
+  /// POST /api/session/compress/start（#156 异步压缩：立刻返回，后台线程执行；
+  /// 重复调用幂等复用同一 running job）。
+  ///
+  /// 同步版 [compressSession] 会在反向代理（frp 等）下超时 —— 服务端官方
+  /// 为此提供 start + status 两件套，官方前端也已全面改走异步版。
+  static const startSessionCompression = Endpoint(
+    '/api/session/compress/start',
+  );
+
+  /// GET /api/session/compress/status?session_id=（#156 轮询异步压缩进度）。
+  static Endpoint sessionCompressionStatus(String sessionId) {
+    return Endpoint(
+      '/api/session/compress/status',
+      query: [QueryParam('session_id', sessionId)],
+    );
+  }
   static const undoSession = Endpoint('/api/session/undo');
   static const retrySession = Endpoint('/api/session/retry');
   static const truncateSession = Endpoint('/api/session/truncate');

@@ -18,15 +18,25 @@ import '../../../l10n/app_localizations.dart';
 /// - track 白 0.12 / 黑 0.12（WebUI dark 0.12），对齐静止轨迹透明度。
 /// - 可点击性 snapshot!=null 即可弹出（百分比为 null 时显示 · 且展示 Unavailable）。
 /// - a11y label/value、命中 44、深浅色适配；Semantics enabled 与 onPressed 同步。
+///
+/// #156 压缩上下文进行中（[isCompressing]）：整个记号换成 iOS 原生
+/// [CupertinoActivityIndicator]（**同槽位 22px、同命中区**，不产生跳位），环与
+/// 百分比让位 —— 此刻的百分比表达的是压缩前的旧用量，留着反而误导用户以为
+/// 「压缩有进度」。选原生指示器的另一个理由：它天然受 `TickerMode` 管控
+/// （失焦自动停帧，见 #141 焦点门控），无需自建 AnimationController。
 class ContextWindowIndicator extends StatelessWidget {
   const ContextWindowIndicator({
     super.key,
     required this.snapshot,
     required this.onTap,
+    this.isCompressing = false,
   });
 
   final ContextWindowSnapshot? snapshot;
   final VoidCallback? onTap;
+
+  /// 压缩上下文进行中（#156）：渲染为 loading 记号。
+  final bool isCompressing;
 
   static const double ringSize = 22;
   static const double tapTargetSize = 44;
@@ -82,47 +92,59 @@ class ContextWindowIndicator extends StatelessWidget {
           );
     final l10n = AppLocalizations.of(context);
 
-    final ring = SizedBox(
-      width: ringSize,
-      height: ringSize,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(
-            size: const Size(ringSize, ringSize),
-            painter: _RingPainter(
-              percentage: percentage?.clamp(0.0, 1.0),
-              trackColor: trackColor,
-              progressColor: progressColor,
+    // #156 压缩中：换成 loading 记号（同尺寸、同命中区，切换不跳位）。
+    final Widget glyph;
+    if (isCompressing) {
+      glyph = const SizedBox(
+        width: ringSize,
+        height: ringSize,
+        child: Center(child: CupertinoActivityIndicator(radius: 10)),
+      );
+    } else {
+      glyph = SizedBox(
+        width: ringSize,
+        height: ringSize,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            CustomPaint(
+              size: const Size(ringSize, ringSize),
+              painter: _RingPainter(
+                percentage: percentage?.clamp(0.0, 1.0),
+                trackColor: trackColor,
+                progressColor: progressColor,
+              ),
             ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 7,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-              decoration: TextDecoration.none,
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 7,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+                decoration: TextDecoration.none,
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    }
 
     final hit = SizedBox(
       width: tapTargetSize,
       height: tapTargetSize,
-      child: Center(child: ring),
+      child: Center(child: RepaintBoundary(child: glyph)),
     );
 
     return Semantics(
       button: true,
       enabled: isInteractive,
-      label: isInteractive
-          ? l10n.contextWindowUsage
-          : l10n.contextWindowUsageLoading,
-      value: hasPct ? '$pct percent' : '',
+      label: isCompressing
+          ? l10n.compressing
+          : (isInteractive
+                ? l10n.contextWindowUsage
+                : l10n.contextWindowUsageLoading),
+      value: isCompressing ? '' : (hasPct ? '$pct percent' : ''),
       child: CupertinoButton(
         key: const ValueKey('chat-context-indicator-button'),
         padding: EdgeInsets.zero,
