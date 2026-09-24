@@ -105,7 +105,10 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                 // 搜索框，会临时占掉一整行高度、把会话列表往下推）。
                 child: _searchOpen
                     ? SizedBox(
-                        height: 26.0,
+                        // #157：原来硬限 26px —— 15px 字号 + CupertinoSearchTextField
+                        // 内置内边距装不下，placeholder 底部被裁掉几像素（主人实测）。
+                        // 放宽到 32px，并让文字行高走默认（不再压缩）。
+                        height: 32.0,
                         child: CupertinoSearchTextField(
                           key: const ValueKey('sidebar-brand-search-field'),
                           controller: _searchController,
