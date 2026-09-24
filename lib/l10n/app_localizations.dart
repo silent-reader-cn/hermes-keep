@@ -1091,13 +1091,20 @@ class AppLocalizations {
   // #154：侧栏导航入口的「位置 + 顺序」设置组。
   String get sidebarNavOrderSection =>
       isEnglish ? 'Sidebar Navigation' : '侧栏导航入口';
+  // #159：会话列表分组方式（自动 / 按时间 / 按工作区）。
+  String get sessionGroupingSection =>
+      isEnglish ? 'Session Grouping' : '会话分组方式';
+  String get sessionGroupingDescription => isEnglish
+      ? 'Narrow screens default to time (Today / Yesterday / Earlier); wide screens to workspace.'
+      : '窄屏默认按时间（今天/昨天/更早），桌面默认按工作区。';
+  String get sessionGroupingAuto => isEnglish ? 'By screen' : '跟随屏幕';
+  String get sessionGroupingTime => isEnglish ? 'By time' : '按时间';
+  String get sessionGroupingWorkspace => isEnglish ? 'By workspace' : '按工作区';
   String get sidebarNavOrderSectionFooter => isEnglish
       ? 'Choose where each entry appears in the wide-screen sidebar and reorder it.'
       : '宽屏侧栏中，各入口显示的位置与顺序。';
-  String get sidebarNavOrderTopLabel =>
-      isEnglish ? 'At the top' : '侧栏最上方';
-  String get sidebarNavOrderBottomLabel =>
-      isEnglish ? 'Bottom right' : '侧栏右下角';
+  String get sidebarNavOrderTopLabel => isEnglish ? 'At the top' : '侧栏最上方';
+  String get sidebarNavOrderBottomLabel => isEnglish ? 'Bottom right' : '侧栏右下角';
   String get sidebarNavOrderReset => isEnglish ? 'Restore defaults' : '恢复默认';
   String get sidebarNavOrderMoveToTop =>
       isEnglish ? 'Move to top area' : '移到上方';
@@ -2062,4 +2069,3 @@ extension AppLocalizationsWorkspaceGroup146 on AppLocalizations {
   /// 会话列表未绑定工作区的「其他」分组标题。
   String get otherSection => isEnglish ? 'Other' : '其他';
 }
-

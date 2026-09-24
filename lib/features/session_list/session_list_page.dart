@@ -544,6 +544,20 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     // 不能引用 build 的局部变量，故按 context 与 widget 自行判定。
     final isCompactSidebar =
         MediaQuery.sizeOf(context).width >= 900 && !widget.showUtilityRows;
+    // #159：分组方式的屏宽兜底（用户没显式设置时生效）。首帧后写入，避免
+    // 在 build 期间改 provider 状态；窄屏 = 时间分组（置顶/今天/昨天/更早），
+    // 桌面 = 工作区分组（#146 起的形态）。
+    final widthForGrouping = MediaQuery.sizeOf(context).width;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(sessionGroupingModeFallbackProvider.notifier)
+          .setMode(
+            widthForGrouping >= 900
+                ? SessionGroupingMode.workspace
+                : SessionGroupingMode.time,
+          );
+    });
     if (state == null) {
       if (async.isLoading) {
         return const [
