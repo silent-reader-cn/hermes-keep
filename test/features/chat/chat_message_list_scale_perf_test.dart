@@ -6,6 +6,7 @@ import 'package:hermes_ui/core/cache/cache_providers.dart';
 import 'package:hermes_ui/core/cache/cache_service.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/widgets/chat_message_list.dart';
 import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
 
 import '../../helpers/fake_chat_api.dart';
@@ -312,4 +313,85 @@ void main() {
       }
     });
   });
+
+  testWidgets(
+    '分页累积路径：每次向上加载更早消息后的帧耗时（滑动卡顿的直接度量）',
+    timeout: const Timeout(Duration(minutes: 5)),
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      const total = 1000;
+      const pageSize = 50;
+      final all = _buildMessages(total);
+
+      final api = FakeChatApi();
+      // 按 messageBefore 逐页返回（与生产 msg_before/msg_limit 分页语义一致）。
+      api.sessionResultBuilder = (messageBefore) {
+        final end = messageBefore ?? total;
+        final start = (end - pageSize).clamp(0, total);
+        return {
+          'session': {
+            'session_id': 's-page',
+            'title': '分页累积压测',
+            'messages': all.sublist(start, end),
+            'message_count': total,
+            'messages_offset': start,
+            'messages_truncated': start > 0,
+          },
+        };
+      };
+
+      final db = AppDatabase.memory();
+      addTearDown(() => db.close());
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatApiProvider.overrideWithValue(api),
+            appDatabaseProvider.overrideWithValue(db),
+            cacheServiceProvider.overrideWithValue(_NoopCacheService(db)),
+          ],
+          child: const CupertinoApp(home: ChatPage(sessionId: 's-page')),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatPage)),
+      );
+
+      final sw = Stopwatch();
+      // ignore: avoid_print
+      print('[paging] ===== 分页累积（每次上滑触发加载更早 50 条）=====');
+      for (var round = 1; round <= 60; round++) {
+        sw.reset();
+        sw.start();
+        await tester.drag(
+          find.byType(ListView).first,
+          const Offset(0, 3000),
+          warnIfMissed: false,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        sw.stop();
+        final loaded = container
+            .read(chatControllerProvider('s-page'))
+            .messages
+            .length;
+        final bubbles = tester.allWidgets.whereType<ChatMessageBubble>().length;
+        // ignore: avoid_print
+        print(
+          '[paging] 第$round次上滑 已加载=$loaded条 存活气泡=$bubbles '
+          '帧耗时=${(sw.elapsedMicroseconds / 1000).toStringAsFixed(1)}ms',
+        );
+      }
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
 }
