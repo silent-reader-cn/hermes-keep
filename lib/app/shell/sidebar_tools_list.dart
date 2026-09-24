@@ -10,6 +10,7 @@ import '../../features/settings/settings_providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
+import 'sidebar_nav_order.dart';
 import 'sidebar_utility_item.dart';
 
 /// 宽屏侧栏顶部「常用功能」纵向列表（#147 案 A，参考 Codex 的顶部功能区）。
@@ -31,13 +32,8 @@ class SidebarToolsList extends ConsumerWidget {
   /// 当前激活的路由路径（用于选中高亮）。
   final String currentLocation;
 
-  /// 顶部常用项（顺序即展示顺序）。`new_session` 是动作项，不在 [sidebarUtilityItems] 中。
-  static const List<String> _topIds = <String>[
-    'new_session',
-    'tasks',
-    'kanban',
-    'skills',
-  ];
+  // #154：「顶部常用项」不再硬编码 —— 改由 sidebarNavOrderProvider 提供
+  // （设置页「侧栏导航入口」可调位置与顺序）。默认值与旧常量一致。
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,8 +58,9 @@ class SidebarToolsList extends ConsumerWidget {
       dark: CupertinoColors.separator,
     );
 
+    final navOrder = ref.watch(sidebarNavOrderProvider);
     final rows = <Widget>[];
-    for (final id in _topIds) {
+    for (final id in navOrder.top) {
       if (id == 'new_session') {
         rows.add(
           _ToolRow(

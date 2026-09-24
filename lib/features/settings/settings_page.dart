@@ -652,6 +652,25 @@ class _AdvancedSettingsSection extends StatelessWidget {
               ),
             ),
           ),
+          // #154：侧栏导航入口（位置 + 顺序）。
+          CupertinoListTile(
+            key: const ValueKey('settings-entry-sidebar-nav-order'),
+            title: Text(l10n.sidebarNavOrderSection),
+            trailing: Icon(
+              CupertinoIcons.chevron_right,
+              size: 18,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
+            ),
+            onTap: () => Navigator.of(context).push(
+              HermesPageRoute<void>(
+                builder: (_) => const SidebarNavOrderPage(),
+              ),
+            ),
+          ),
           CupertinoListTile(
             key: const ValueKey('settings-entry-session-row-subtitle'),
             title: Text(l10n.sessionRowSubtitleSection),

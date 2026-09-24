@@ -1088,6 +1088,26 @@ class AppLocalizations {
   String get appearance => isEnglish ? 'Appearance' : '外观';
   String get sessionListEntriesSection =>
       isEnglish ? 'Session List Entries' : '会话列表入口';
+  // #154：侧栏导航入口的「位置 + 顺序」设置组。
+  String get sidebarNavOrderSection =>
+      isEnglish ? 'Sidebar Navigation' : '侧栏导航入口';
+  String get sidebarNavOrderSectionFooter => isEnglish
+      ? 'Choose where each entry appears in the wide-screen sidebar and reorder it.'
+      : '宽屏侧栏中，各入口显示的位置与顺序。';
+  String get sidebarNavOrderTopLabel =>
+      isEnglish ? 'At the top' : '侧栏最上方';
+  String get sidebarNavOrderBottomLabel =>
+      isEnglish ? 'Bottom right' : '侧栏右下角';
+  String get sidebarNavOrderReset => isEnglish ? 'Restore defaults' : '恢复默认';
+  String get sidebarNavOrderMoveToTop =>
+      isEnglish ? 'Move to top area' : '移到上方';
+  String get sidebarNavOrderMoveToBottom =>
+      isEnglish ? 'Move to bottom area' : '移到右下';
+  String get sidebarNavOrderMoveUp => isEnglish ? 'Move up' : '上移';
+  String get sidebarNavOrderMoveDown => isEnglish ? 'Move down' : '下移';
+  String get sidebarNavOrderEmptyHint => isEnglish
+      ? 'No entries here — move some down from the top area.'
+      : '此区暂无入口，可从上方移一些过来。';
   String get sessionListEntries =>
       isEnglish ? 'Session List Entries' : '会话列表入口';
   String get sessionRowSubtitleSection =>

@@ -12,6 +12,7 @@ import 'auxiliary_models_section.dart';
 import 'extensions_section.dart';
 import 'mcp_section.dart';
 import 'settings_surfaces.dart';
+import 'sidebar_nav_order_settings.dart';
 import 'webui_sidecar_section.dart';
 
 /// 返回按钮：显式 [CupertinoNavigationBarBackButton.onPressed]，
@@ -494,6 +495,31 @@ class DesktopSection extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// #154. 侧栏导航入口（位置 + 顺序）二级页
+// ---------------------------------------------------------------------------
+
+class SidebarNavOrderPage extends StatelessWidget {
+  const SidebarNavOrderPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SettingsSurfaces.page(
+      context,
+      CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          border: SettingsSurfaces.navigationBorder(context),
+          leading: const PopBackButton(),
+          middle: Text(l10n.sidebarNavOrderSection),
+        ),
+        child: ListView(children: const [SidebarNavOrderSection()]),
       ),
     );
   }

@@ -8,6 +8,9 @@ import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
+import '../../features/session_list/session_list_providers.dart';
+import '../../features/settings/settings_providers.dart';
+import 'sidebar_nav_order.dart';
 import 'sidebar_utility_item.dart';
 
 /// 宽屏侧栏底部「次级功能」图标组（#149 案 A）。
@@ -27,14 +30,17 @@ class SidebarSecondaryTools extends ConsumerWidget {
   /// 当前激活的路由路径（选中高亮）。
   final String currentLocation;
 
-  /// 底部次级项（顺序即展示顺序）。
-  static const List<String> _ids = <String>[
-    'workspaces',
-    'insights',
-    'memory',
-    'downloads',
-    'settings',
-  ];
+  // #154：底部次级项不再硬编码 —— 改由 sidebarNavOrderProvider 提供
+  // （设置页「侧栏导航入口」可调位置与顺序）。默认值与旧常量一致。
+
+  /// `new_session` 是**动作项**（无路由），若用户把它排到右下角，用这个合成条目
+  /// 承载其图标与标题；点击走新建会话而不是 `context.push`。
+  static final SidebarUtilityItem _newSessionItem = SidebarUtilityItem(
+    id: SidebarNavOrder.newSessionId,
+    path: '',
+    icon: CupertinoIcons.add,
+    getTitle: (l10n) => l10n.newSession,
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -54,8 +60,14 @@ class SidebarSecondaryTools extends ConsumerWidget {
         ? LightSurfaces.selection
         : activeFg.withValues(alpha: 0.12);
 
+    // #154：顺序与成员来自配置；`new_session`（动作项）也被允许放在右下角。
+    final navOrder = ref.watch(sidebarNavOrderProvider);
     final visible = <SidebarUtilityItem>[];
-    for (final id in _ids) {
+    for (final id in navOrder.bottom) {
+      if (id == SidebarNavOrder.newSessionId) {
+        visible.add(_newSessionItem);
+        continue;
+      }
       if (id == 'settings' || visibility.isVisible(id)) {
         final item = sidebarUtilityItems.firstWhere(
           (it) => it.id == id,
@@ -73,9 +85,13 @@ class SidebarSecondaryTools extends ConsumerWidget {
             (item) => _SecondaryIcon(
               item: item,
               label: item.getTitle(l10n),
-              selected:
-                  currentLocation == item.path ||
-                  currentLocation.startsWith('${item.path}/'),
+              // 动作项（new_session）不参与路由高亮。
+              selected: item.path.isNotEmpty &&
+                  (currentLocation == item.path ||
+                      currentLocation.startsWith('${item.path}/')),
+              onPressed: item.path.isEmpty
+                  ? () => unawaited(_onNewSession(context, ref))
+                  : null,
               activeFg: activeFg,
               inactiveFg: inactiveFg,
               activeBg: activeBg,
@@ -83,6 +99,22 @@ class SidebarSecondaryTools extends ConsumerWidget {
           )
           .toList(growable: false),
     );
+  }
+
+  /// 新建会话并跳转（#154）。
+  ///
+  /// 与 `SidebarToolsList._onNewSession` 及 `SessionListPage._onNewSession`
+  /// 同语义：先落 `createSession`，标记 `recentlyCreatedSessionIdProvider`
+  /// （列表置顶/高亮用），再跳 `/chat/:id`。刻意不依赖页面私有方法。
+  /// 只有当用户把动作项 `new_session` 排到右下角时才会被调用。
+  Future<void> _onNewSession(BuildContext context, WidgetRef ref) async {
+    final targetWorkspace = ref.read(selectedWorkspaceFilterProvider);
+    final controller = ref.read(sessionListControllerProvider.notifier);
+    final id = await controller.createSession(workspace: targetWorkspace);
+    if (!context.mounted || id == null) return;
+    ref.read(recentlyCreatedSessionIdProvider.notifier).markCreated(id);
+    // 本组件只出现在宽屏侧栏（SessionSidebar 仅宽屏渲染），故一律 go。
+    context.go('/chat/$id');
   }
 }
 
@@ -92,6 +124,7 @@ class _SecondaryIcon extends StatelessWidget {
     required this.item,
     required this.label,
     required this.selected,
+    this.onPressed,
     required this.activeFg,
     required this.inactiveFg,
     required this.activeBg,
@@ -100,6 +133,9 @@ class _SecondaryIcon extends StatelessWidget {
   final SidebarUtilityItem item;
   final String label;
   final bool selected;
+
+  /// 覆盖默认行为（动作项用）；null 时走 `context.push(item.path)`。
+  final VoidCallback? onPressed;
   final Color activeFg;
   final Color inactiveFg;
   final Color activeBg;
@@ -118,7 +154,7 @@ class _SecondaryIcon extends StatelessWidget {
         minimumSize: const Size(30.0, 26.0),
         borderRadius: BorderRadius.circular(6.0),
         color: selected ? activeBg : CupertinoColors.transparent,
-        onPressed: () => unawaited(context.push(item.path)),
+        onPressed: onPressed ?? () => unawaited(context.push(item.path)),
         child: Icon(
           item.icon,
           size: 16.0,
