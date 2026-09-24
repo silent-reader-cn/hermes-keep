@@ -1947,6 +1947,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       chatControllerProvider(sessionId).select((s) => s.queuedSlashMessages),
     );
 
+    // 性能探针（--dart-define=perfProbe=true 开启；默认编译期消除）。
+    final perfProbe = const bool.fromEnvironment('perfProbe');
+    final perfSw = perfProbe ? (Stopwatch()..start()) : null;
+
     final entryToolGroups = <String, List<ToolCallGroup>>{};
     final mountedGroupIds = <String>{};
     for (final entry in transcript) {
@@ -1968,6 +1972,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         }
       }
       entryToolGroups[entry.renderId] = matched;
+    }
+    if (perfSw != null) {
+      debugPrint(
+        '[probe] transcript=${transcript.length} toolGroups=${toolGroups.length} '
+        '→ entryToolGroups 派生=${perfSw.elapsedMicroseconds}us',
+      );
+      perfSw.reset();
     }
 
     // 初始定位与搜索定位均以 postFrame 调度，避免 build 期间同步 markNeedsBuild
@@ -2185,6 +2196,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       }
     }
 
+    if (perfSw != null) {
+      debugPrint(
+        '[probe] turns=${turns.length} → 回合分组=${perfSw.elapsedMicroseconds}us',
+      );
+      perfSw.reset();
+    }
+
     final displayItems = <_ChatListItem>[];
     for (var i = 0; i < turns.length; i++) {
       final turn = turns[i];
@@ -2284,6 +2302,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           }
         }
       }
+    }
+
+    if (perfSw != null) {
+      debugPrint(
+        '[probe] displayItems=${displayItems.length} → 列表项构造=${perfSw.elapsedMicroseconds}us',
+      );
+      perfSw.reset();
     }
 
     final showQueuedBanner = queuedMessages.isNotEmpty;
