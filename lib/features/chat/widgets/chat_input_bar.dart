@@ -99,6 +99,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       if (current != null) _consumePrefill(current);
       _restoreDraft();
       _tryAutoOpenContextPopover();
+      // #156：进入会话探测服务端是否仍在压缩（覆盖 App 重启等本地态丢失
+      // 场景；本地已有状态时不重复请求）。
+      unawaited(
+        ref
+            .read(chatControllerProvider(widget.sessionId).notifier)
+            .resumeCompressionIfRunning(),
+      );
     });
   }
 
@@ -227,6 +234,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         _restoreDraft();
         _tryAutoOpenContextPopover();
       });
+      // #156：切会话后同样探测（各会话一份压缩任务）。
+      unawaited(
+        ref
+            .read(chatControllerProvider(widget.sessionId).notifier)
+            .resumeCompressionIfRunning(),
+      );
     }
   }
 
@@ -363,6 +376,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         phase == ChatPhase.recovering;
     final isSending = phase == ChatPhase.sending;
     if (!widget.enabled || isSending || isStreaming) return false;
+    // #156：压缩期间不接受新回合（回车 / Ctrl+Enter 一并拦截）。
+    if (ref.read(chatControllerProvider(widget.sessionId)).isCompressingContext) {
+      return false;
+    }
     final pending = ref.read(pendingSelectionsProvider(widget.sessionId));
     final pendingAttachments = ref.read(
       pendingAttachmentsProvider(widget.sessionId),
@@ -721,6 +738,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final snapshot = ref
         .watch(chatControllerProvider(widget.sessionId))
         .contextWindowSnapshot;
+
+    // #156：压缩状态（会话级真相）。三处用它：指示器 loading、发送按钮/回车
+    // 禁用、输入框提示 —— 压缩会重写 transcript（插摘要锚点 + 裁剪轮次），
+    // 此时发出新回合会与服务端压缩线程互相覆盖（服务端不拦，客户端自守）。
+    final isCompressing = ref.watch(
+      chatControllerProvider(
+        widget.sessionId,
+      ).select((s) => s.isCompressingContext),
+    );
     final sendMode = ref.watch(chatSendShortcutSettingsProvider).mode;
     // 两段式输入栏开关（设置 → 对话；默认关闭=经典单行）。
     final twoPane = ref.watch(composerTwoPaneProvider);
@@ -759,6 +785,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     canSendWithPending,
                     snapshot,
                     sendMode,
+                    isCompressing,
                   )
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -807,6 +834,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                         child: ContextWindowIndicator(
                           snapshot: snapshot,
                           onTap: _showContextPopover,
+                          isCompressing: isCompressing,
                         ),
                       ),
                       Expanded(
@@ -882,9 +910,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                               controller: _textController,
                               placeholder: !interactive
                                   ? l10n.readOnlySessionPlaceholder
-                                  : (isStreaming
-                                        ? l10n.steerPromptPlaceholder
-                                        : l10n.sendMessagePlaceholder),
+                                  : (isCompressing
+                                        ? l10n.compressingContextHint
+                                        : (isStreaming
+                                              ? l10n.steerPromptPlaceholder
+                                              : l10n.sendMessagePlaceholder)),
                               enabled: !isSending && !_uploading && interactive,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -969,7 +999,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                         AccessibleButton(
                           key: const ValueKey('chat-steer-button'),
                           label: l10n.steerPrompt,
-                          onPressed: (interactive && _hasText) ? _submit : null,
+                          onPressed: (interactive && !isCompressing && _hasText)
+                              ? _submit
+                              : null,
                           padding: EdgeInsets.zero,
                           child: const Icon(
                             CupertinoIcons.arrow_right_circle,
@@ -981,8 +1013,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                         AccessibleButton(
                           key: const ValueKey('chat-send-button'),
                           label: l10n.sendMessage,
+                          // #156：压缩期间禁用发送（输入仍可编辑，回车也会被拦）。
                           onPressed:
-                              (interactive && (_hasText || canSendWithPending))
+                              (interactive &&
+                                  !isCompressing &&
+                                  (_hasText || canSendWithPending))
                               ? _submit
                               : null,
                           padding: EdgeInsets.zero,
@@ -1009,6 +1044,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     bool canSendWithPending,
     ContextWindowSnapshot? snapshot,
     ChatSendShortcutMode sendMode,
+    bool isCompressing,
   ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1105,9 +1141,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               controller: _textController,
               placeholder: !interactive
                   ? l10n.readOnlySessionPlaceholder
-                  : (isStreaming
-                        ? l10n.steerPromptPlaceholder
-                        : l10n.sendMessagePlaceholder),
+                  : (isCompressing
+                        ? l10n.compressingContextHint
+                        : (isStreaming
+                              ? l10n.steerPromptPlaceholder
+                              : l10n.sendMessagePlaceholder)),
               enabled: !isSending && !_uploading && interactive,
               minLines: 2,
               maxLines: 8,
@@ -1194,6 +1232,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               child: ContextWindowIndicator(
                 snapshot: snapshot,
                 onTap: _showContextPopover,
+                isCompressing: isCompressing,
               ),
             ),
             const SizedBox(width: 8),
@@ -1211,6 +1250,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               isSending,
               interactive,
               canSendWithPending,
+              isCompressing,
             ),
           ],
         ),
@@ -1225,6 +1265,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     bool isSending,
     bool interactive,
     bool canSendWithPending,
+    bool isCompressing,
   ) {
     return [
       if (isStreaming) ...[
@@ -1242,7 +1283,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         AccessibleButton(
           key: const ValueKey('chat-steer-button'),
           label: l10n.steerPrompt,
-          onPressed: (interactive && _hasText) ? _submit : null,
+          onPressed: (interactive && !isCompressing && _hasText)
+              ? _submit
+              : null,
           padding: EdgeInsets.zero,
           child: const Icon(
             CupertinoIcons.arrow_right_circle,
@@ -1254,7 +1297,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         AccessibleButton(
           key: const ValueKey('chat-send-button'),
           label: l10n.sendMessage,
-          onPressed: (interactive && (_hasText || canSendWithPending))
+          // #156：压缩期间禁用发送（输入仍可编辑，回车也会被拦）。
+          onPressed:
+              (interactive && !isCompressing && (_hasText || canSendWithPending))
               ? _submit
               : null,
           padding: EdgeInsets.zero,

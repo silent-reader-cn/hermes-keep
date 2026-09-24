@@ -343,6 +343,9 @@ class AppLocalizations {
   String get compressHint =>
       isEnglish ? 'Compress when usage is high' : '上下文较高时建议压缩';
   String get compressing => isEnglish ? 'Compressing…' : '压缩中…';
+  /// #156 压缩上下文期间的输入框提示（发送被禁用，输入仍可继续）。
+  String get compressingContextHint =>
+      isEnglish ? 'Compressing context, please wait…' : '正在压缩上下文，请稍候…';
   String get unavailable => isEnglish ? 'Unavailable' : '暂无数据';
   // Context window indicator + popover (contextWindow* prefix)
   String get contextWindowUsage => isEnglish ? 'Context usage' : '上下文使用量';

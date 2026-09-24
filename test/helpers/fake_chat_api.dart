@@ -51,6 +51,18 @@ class FakeChatApi implements ChatServerApi {
   SessionCompressResponse? compressResponse;
   SessionUndoResponse? undoResponse;
 
+  // #156 异步压缩（start + status 轮询）
+  int compressStartCalls = 0;
+  int compressStatusCalls = 0;
+  String? lastCompressFocusTopic;
+  SessionCompressStatusResponse? compressStartResponse;
+  SessionCompressStatusResponse? compressStatusResponse;
+  /// 动态状态序列（#156）：按第 N 次 status 调用（1 起）返回不同状态，
+  /// 优先于 [compressStatusResponse]，用于「running → running → done」场景。
+  SessionCompressStatusResponse Function(int call)? compressStatusBuilder;
+  Object? compressStartError;
+  Object? compressStatusError;
+
   SessionRetryResponse? retryResponse;
   Map<String, Object?>? retryResult;
 
@@ -321,6 +333,38 @@ class FakeChatApi implements ChatServerApi {
     if (mutationThrows != null) throw mutationThrows!;
     if (compressResponse != null) return compressResponse!;
     return SessionCompressResponse(ok: mutationOk, error: mutationError);
+  }
+
+  @override
+  Future<SessionCompressStatusResponse> startSessionCompression({
+    required String sessionId,
+    String? focusTopic,
+  }) async {
+    compressStartCalls++;
+    lastCompressFocusTopic = focusTopic;
+    if (compressStartError != null) throw compressStartError!;
+    if (compressStartResponse != null) return compressStartResponse!;
+    return SessionCompressStatusResponse(
+      ok: true,
+      status: 'running',
+      sessionId: sessionId,
+    );
+  }
+
+  @override
+  Future<SessionCompressStatusResponse> compressionStatus(
+    String sessionId,
+  ) async {
+    compressStatusCalls++;
+    if (compressStatusError != null) throw compressStatusError!;
+    final builder = compressStatusBuilder;
+    if (builder != null) return builder(compressStatusCalls);
+    if (compressStatusResponse != null) return compressStatusResponse!;
+    return SessionCompressStatusResponse(
+      ok: true,
+      status: 'idle',
+      sessionId: sessionId,
+    );
   }
 
   @override

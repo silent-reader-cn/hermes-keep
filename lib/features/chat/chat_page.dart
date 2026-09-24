@@ -737,8 +737,10 @@ Future<void> _compressSession(
     ),
   );
   input.dispose();
+  // #156：改走异步压缩（立刻返回）；进度由会话状态承载，对话框关闭后
+  // 输入栏指示器继续呈现。
   if (focusTopic != null) {
-    await controller.compressSession(focusTopic: focusTopic);
+    await controller.startCompression(focusTopic: focusTopic);
   }
 }
 

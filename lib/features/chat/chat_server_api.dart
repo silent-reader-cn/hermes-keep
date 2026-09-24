@@ -87,6 +87,18 @@ abstract interface class ChatServerApi {
     String? focusTopic,
   });
 
+  /// POST /api/session/compress/start {session_id, focus_topic?} →
+  /// SessionCompressStatusResponse（#156 异步压缩：立刻返回，后台线程执行；
+  /// 已有 running job 时幂等复用）。
+  Future<SessionCompressStatusResponse> startSessionCompression({
+    required String sessionId,
+    String? focusTopic,
+  });
+
+  /// GET /api/session/compress/status?session_id= →
+  /// SessionCompressStatusResponse（#156 轮询进度；无 job 时为 idle）。
+  Future<SessionCompressStatusResponse> compressionStatus(String sessionId);
+
   /// POST /api/session/undo {session_id} → SessionUndoResponse（删最后一轮）。
   Future<SessionUndoResponse> undoSession(String sessionId);
 
@@ -302,6 +314,21 @@ class ChatApiClient implements ChatServerApi {
       focusTopic: focusTopic,
     );
   }
+
+  @override
+  Future<SessionCompressStatusResponse> startSessionCompression({
+    required String sessionId,
+    String? focusTopic,
+  }) {
+    return _client.startSessionCompression(
+      sessionId: sessionId,
+      focusTopic: focusTopic,
+    );
+  }
+
+  @override
+  Future<SessionCompressStatusResponse> compressionStatus(String sessionId) =>
+      _client.compressionStatus(sessionId);
 
   @override
   Future<SessionUndoResponse> undoSession(String sessionId) =>

@@ -407,6 +407,117 @@ class SessionCompressResponse {
   String toString() => 'SessionCompressResponse(ok: $ok)';
 }
 
+/// 异步压缩任务状态（#156）。
+///
+/// `POST /api/session/compress/start` 与 `GET /api/session/compress/status`
+/// 共用同一载荷（服务端 `_manual_compression_status_payload`）：
+/// `status` ∈ `idle` | `running` | `done` | `error` | `cancelled`。
+///
+/// `done` 时服务端把同步压缩的完整响应（`ok` / `session` / `summary` /
+/// `compressed_messages_count` …）**原样展开在同一层**，故 [result] 直接复用
+/// [SessionCompressResponse] 解析 —— 压缩结果无需第二套模型。
+///
+/// 无 job 时 status 返回 `idle`（不是 404），故 [isRunning] 为 false 即代表
+/// 「本地不该继续转圈」。
+class SessionCompressStatusResponse {
+  const SessionCompressStatusResponse({
+    this.ok,
+    this.status,
+    this.sessionId,
+    this.focusTopic,
+    this.startedAt,
+    this.updatedAt,
+    this.error,
+    this.errorStatus,
+    this.retryable,
+    this.result,
+  });
+
+  factory SessionCompressStatusResponse.fromJson(Map<String, Object?> json) {
+    // done 的载荷与同步响应同构（含 session / summary）；无这两键时说明是
+    // running / idle / error 态，不构造 result。
+    final hasResult =
+        json.containsKey('session') || json.containsKey('summary');
+    return SessionCompressStatusResponse(
+      ok: lossyBool(json, 'ok'),
+      status: lossyString(json, 'status'),
+      sessionId: lossyString(json, 'session_id'),
+      focusTopic: lossyString(json, 'focus_topic'),
+      startedAt: lossyDouble(json, 'started_at'),
+      updatedAt: lossyDouble(json, 'updated_at'),
+      error: lossyString(json, 'error'),
+      errorStatus: lossyInt(json, 'error_status'),
+      retryable: lossyBool(json, 'retryable'),
+      result: hasResult ? SessionCompressResponse.fromJson(json) : null,
+    );
+  }
+
+  final bool? ok;
+
+  /// `idle` | `running` | `done` | `error` | `cancelled`。
+  final String? status;
+  final String? sessionId;
+  final String? focusTopic;
+  final double? startedAt;
+  final double? updatedAt;
+
+  /// 失败原因（`error` / `cancelled` 态）。
+  final String? error;
+
+  /// 失败对应的 HTTP 语义码（如 409 = agent runtime 过期）。
+  final int? errorStatus;
+
+  /// 服务端提示可重试（如 `agent_runtime_stale`）。
+  final bool? retryable;
+
+  /// `done` 态的压缩结果（复用同步响应模型）。
+  final SessionCompressResponse? result;
+
+  /// 后台仍在压缩（唯一「应继续转圈」的态）。
+  bool get isRunning => status == 'running';
+
+  /// 压缩已完成（结果在 [result]，可能为 null 表示无可解析载荷）。
+  bool get isDone => status == 'done';
+
+  /// 压缩失败或被取消。
+  bool get isFailed => status == 'error' || status == 'cancelled';
+
+  /// 服务端没有该会话的压缩任务（未开始 / 已过期 / 服务重启）。
+  bool get isIdle => status == 'idle' || status == null;
+
+  @override
+  bool operator ==(Object other) {
+    return other is SessionCompressStatusResponse &&
+        other.ok == ok &&
+        other.status == status &&
+        other.sessionId == sessionId &&
+        other.focusTopic == focusTopic &&
+        other.startedAt == startedAt &&
+        other.updatedAt == updatedAt &&
+        other.error == error &&
+        other.errorStatus == errorStatus &&
+        other.retryable == retryable &&
+        other.result == result;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    ok,
+    status,
+    sessionId,
+    focusTopic,
+    startedAt,
+    updatedAt,
+    error,
+    errorStatus,
+    retryable,
+    result,
+  );
+
+  @override
+  String toString() => 'SessionCompressStatusResponse(status: $status)';
+}
+
 /// 会话压缩摘要（Swift: SessionCompressionSummary）。
 class SessionCompressionSummary {
   const SessionCompressionSummary({

@@ -120,6 +120,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// 标记是否有上下文轮询请求正在途中，防并发重复请求。
   bool _isContextPolling = false;
 
+  // #156 压缩上下文（异步 start + status 轮询）。
+  Timer? _compressPollTimer;
+  int _compressPollAttempt = 0;
+  int _compressPollErrors = 0;
+  bool _compressPollInFlight = false;
+  bool _compressResumeChecked = false;
+
   /// status 轮询冷却截止。
   DateTime? _statusCheckCooldownUntil;
 
@@ -238,6 +245,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _lastContextPollTime = null;
     _isContextPolling = false;
     _startWatchdog();
+    _cancelCompressionPolling();
+    _compressPollAttempt = 0;
+    _compressPollErrors = 0;
+    _compressResumeChecked = false;
     ref.onDispose(_dispose);
     // #144 标题跟进闸：标题是岛的最大字号位主文案，凡其变化（SSE title 事件 /
     // 会话详情加载 / 改名 / 收尾补拉）都立刻按当前活动补报一次，不等下一个活动
@@ -342,6 +353,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _lastContextPollTime = null;
     _isContextPolling = false;
     _stopClarifyChannel();
+    // #156：压缩轮询随控制器销毁一并停止。
+    _cancelCompressionPolling();
     _stopApprovalChannel();
     _stopSessionContentChannel();
     _api?.stopStream();
@@ -363,6 +376,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final current = state;
     if (current.isViewingCachedData) {
       _setSendError('Reconnect to the server to send a message.');
+      return false;
+    }
+    // #156：压缩上下文会重写 transcript（插摘要锚点 + 裁剪轮次），此时发出
+    // 新回合会与服务端压缩线程互相覆盖 —— 服务端不拦，故客户端自守。
+    if (current.isCompressingContext) {
+      _setSendError('正在压缩上下文，请稍候再发送。');
       return false;
     }
     _cancelReconnectTimer();
@@ -538,47 +557,219 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     return branchSession(keepCount: messageIndex + 1);
   }
 
-  /// 压缩当前会话（可带聚焦主题）；成功后刷新消息列表并轻提示。
-  Future<bool> compressSession({String? focusTopic}) async {
+  // ---------------------------------------------------------------------------
+  // #156 压缩上下文（异步 start + 轮询 status）
+  // ---------------------------------------------------------------------------
+  //
+  // 不再走同步 `POST /api/session/compress`：该接口在大上下文 / 反向代理（frp）
+  // 下会超时 —— 客户端 60s 判失败并复位状态，而服务端仍在压缩，于是「状态撒谎
+  // + 用户重复触发」。服务端为此提供 start + status 两件套（官方 WebUI 已全面
+  // 改走异步版，见 webui CHANGELOG PR #2128）。
+  //
+  // 压缩状态挂在 ChatState（isCompressingContext）而非 UI 局部：弹窗关掉、
+  // 页面切走都仍在会话状态里，指示器据此持续转圈（主人 #156 诉求）。
+
+  /// 轮询节奏对齐官方 WebUI（commands.js `_pollManualCompressionResult`）：
+  /// 初始 700ms，每次 +300ms，上限 2000ms。
+  static const int _compressPollInitialMs = 700;
+  static const int _compressPollStepMs = 300;
+  static const int _compressPollMaxMs = 2000;
+
+  /// 轮询次数兜底（按平均 1.6s ≈ 24 分钟）：正常压缩远早于此收敛，此上限只为
+  /// 防止异常情况下（服务端 job 长期 running）留下永不停止的轮询。
+  static const int _compressPollMaxAttempts = 900;
+
+  /// 连续轮询失败上限：容忍网络抖动，超过即收敛并显式报错，绝不静默挂死。
+  static const int _compressPollMaxErrors = 5;
+
+  /// 启动异步压缩；返回是否已进入压缩态（立刻返回，不等压缩完成）。
+  ///
+  /// 幂等：本地已在压缩中直接返回 true；服务端对重复 start 也幂等复用
+  /// 同一 running job。
+  Future<bool> startCompression({String? focusTopic}) async {
     if (state.sessionId.isEmpty || state.isReadOnly) return false;
-    final trimmedTopic = focusTopic?.trim();
+    if (state.isViewingCachedData) {
+      _setSendError('Reconnect to the server to compress.');
+      return false;
+    }
+    if (state.isCompressingContext) return true;
+    if (state.stream.activeStreamId != null) {
+      _setSendError('回合进行中，请等本回合结束后再压缩。');
+      return false;
+    }
+    final api = _api;
+    if (api == null) return false;
+    final sid = state.sessionId;
+    final trimmed = focusTopic?.trim();
     try {
-      final response = await _api!.compressSession(
-        sessionId: state.sessionId,
-        focusTopic: (trimmedTopic == null || trimmedTopic.isEmpty)
-            ? null
-            : trimmedTopic,
+      final started = await api.startSessionCompression(
+        sessionId: sid,
+        focusTopic: (trimmed == null || trimmed.isEmpty) ? null : trimmed,
       );
-      if (response.ok == false) {
-        _setSendError(response.error ?? '压缩会话失败。');
+      if (_disposed) return false;
+      if (started.isFailed) {
+        _setSendError(started.error ?? '压缩会话失败。');
         return false;
       }
-      setNotice('会话已压缩');
-      await loadMessages();
-      // 对齐 Swift：用压缩摘要的 token 估算覆盖 snapshot 的 lastPromptTokens
-      final estimate = response.summary?.compressedTokenEstimate;
-      if (estimate != null && estimate > 0) {
-        final prev = state.contextWindowSnapshot;
-        if (prev != null) {
-          state = state.copyWith(
-            contextWindowSnapshot: prev.replacingTokensUsed(estimate),
-          );
-        } else {
-          state = state.copyWith(
-            contextWindowSnapshot: ContextWindowSnapshot(
-              lastPromptTokens: estimate,
-              contextLength: prev?.contextLength,
-              thresholdTokens: prev?.thresholdTokens,
-            ),
-          );
-        }
+      if (started.isDone) {
+        // 罕见：job 在本次请求内就跑完（done 载荷即完整压缩结果）。
+        await _applyCompressionResult(started.result);
+        return false;
       }
+      if (!started.isRunning) {
+        _setSendError(started.error ?? '压缩会话失败。');
+        return false;
+      }
+      state = state.copyWith(isCompressingContext: true);
+      _startCompressionPolling();
       return true;
     } on ApiException catch (error) {
+      if (_disposed) return false;
       _setSendError(error.message);
       return false;
     }
   }
+
+  /// 进入 / 切回会话时探测服务端是否仍在压缩（#156 恢复链）。
+  ///
+  /// controller 常驻，本地态在切换会话期间本就保真，故此处只为覆盖**本地态
+  /// 丢失**的场景（App 重启、轮询达上限收敛、job 早于本地状态存在）：服务端
+  /// running 则接管轮询、重新点亮指示器。
+  ///
+  /// done / idle 一律静默 —— 压缩结果早已落库，避免每次进入会话都触发一次
+  /// 多余刷新与提示。
+  Future<void> resumeCompressionIfRunning() async {
+    final sid = state.sessionId;
+    if (sid.isEmpty || _disposed) return;
+    if (state.isCompressingContext || _compressResumeChecked) return;
+    _compressResumeChecked = true;
+    try {
+      final api = _api;
+      if (api == null) return;
+      final status = await api.compressionStatus(sid);
+      if (_disposed) return;
+      if (!status.isRunning) return;
+      state = state.copyWith(isCompressingContext: true);
+      _startCompressionPolling();
+    } on ApiException {
+      // 探测失败静默（不影响正常使用）；下次进入会话再探。
+      _compressResumeChecked = false;
+    }
+  }
+
+  void _startCompressionPolling() {
+    _cancelCompressionPolling();
+    _compressPollAttempt = 0;
+    _compressPollErrors = 0;
+    _scheduleCompressionPoll();
+  }
+
+  void _scheduleCompressionPoll() {
+    final delayMs =
+        (_compressPollInitialMs + _compressPollAttempt * _compressPollStepMs)
+            .clamp(_compressPollInitialMs, _compressPollMaxMs);
+    _compressPollTimer?.cancel();
+    _compressPollTimer = Timer(Duration(milliseconds: delayMs), () {
+      unawaited(_pollCompressionStatus());
+    });
+  }
+
+  Future<void> _pollCompressionStatus() async {
+    if (_disposed || !state.isCompressingContext) return;
+    final sid = state.sessionId;
+    if (sid.isEmpty || _compressPollInFlight) return;
+    final api = _api;
+    if (api == null) {
+      _finishCompressionWithError('连接不可用，已停止跟踪压缩。');
+      return;
+    }
+    _compressPollInFlight = true;
+    try {
+      final status = await api.compressionStatus(sid);
+      if (_disposed) return;
+      _compressPollAttempt++;
+      _compressPollErrors = 0;
+      if (status.isRunning) {
+        if (_compressPollAttempt >= _compressPollMaxAttempts) {
+          _finishCompressionWithError('压缩任务长时间未完成，已停止跟踪。');
+          return;
+        }
+        _scheduleCompressionPoll();
+        return;
+      }
+      if (status.isDone) {
+        await _applyCompressionResult(status.result);
+        return;
+      }
+      if (status.isFailed) {
+        _finishCompressionWithError(status.error ?? '压缩会话失败。');
+        return;
+      }
+      // idle：服务端已无该会话的压缩任务（结果过期 / 服务重启 / 从未启动）——
+      // 收敛本地态，避免永久转圈。
+      _cancelCompressionPolling();
+      state = state.copyWith(isCompressingContext: false);
+    } on ApiException catch (error) {
+      if (_disposed) return;
+      _compressPollErrors++;
+      if (_compressPollErrors >= _compressPollMaxErrors) {
+        _finishCompressionWithError(error.message);
+        return;
+      }
+      // 单次抖动：继续按退避重试。
+      _compressPollAttempt++;
+      _scheduleCompressionPoll();
+    } finally {
+      _compressPollInFlight = false;
+    }
+  }
+
+  /// 压缩成功收尾：复位状态 + 刷新 transcript + 轻提示。
+  ///
+  /// 语义对齐原同步路径（`setNotice('会话已压缩')` → `loadMessages()` →
+  /// 用摘要 token 估算覆盖 snapshot）。
+  Future<void> _applyCompressionResult(SessionCompressResponse? result) async {
+    _cancelCompressionPolling();
+    if (_disposed) return;
+    state = state.copyWith(isCompressingContext: false);
+    if (result == null) return;
+    if (state.sessionId.isEmpty) return;
+    setNotice('会话已压缩');
+    await loadMessages();
+    if (_disposed) return;
+    // 对齐 Swift：用压缩摘要的 token 估算覆盖 snapshot 的 lastPromptTokens
+    final estimate = result.summary?.compressedTokenEstimate;
+    if (estimate != null && estimate > 0) {
+      final prev = state.contextWindowSnapshot;
+      if (prev != null) {
+        state = state.copyWith(
+          contextWindowSnapshot: prev.replacingTokensUsed(estimate),
+        );
+      } else {
+        state = state.copyWith(
+          contextWindowSnapshot: ContextWindowSnapshot(
+            lastPromptTokens: estimate,
+            contextLength: prev?.contextLength,
+            thresholdTokens: prev?.thresholdTokens,
+          ),
+        );
+      }
+    }
+  }
+
+  void _finishCompressionWithError(String message) {
+    _cancelCompressionPolling();
+    if (_disposed) return;
+    state = state.copyWith(isCompressingContext: false);
+    _setSendError(message);
+  }
+
+  void _cancelCompressionPolling() {
+    _compressPollTimer?.cancel();
+    _compressPollTimer = null;
+    _compressPollInFlight = false;
+  }
+
 
   /// 从此处截断：保留 [messageIndex] 及其之前的全部消息，删除其后所有。
   ///
