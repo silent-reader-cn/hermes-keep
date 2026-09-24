@@ -83,37 +83,80 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
           padding: const EdgeInsets.fromLTRB(10.0, 8.0, 6.0, 6.0),
           child: Row(
             children: [
-              // 品牌记号：沿用侧栏既有视觉语言（深色圆角方块）而非新插图，
-              // 避免在 19px 尺寸上引入难辨认的细节。
-              Container(
+              // #153：改用真实品牌图标。原先是个纯渐变的深色方块 —— 在暗色主题
+              // 下与背景几乎同色，看起来就是「一个空框」（主人实机反馈）。
+              ClipRRect(
                 key: const ValueKey('sidebar-brand-logo'),
-                width: 19.0,
-                height: 19.0,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(5.0),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF3A3A3C), Color(0xFF1C1C1E)],
-                  ),
+                borderRadius: BorderRadius.circular(5.0),
+                child: Image.asset(
+                  'assets/branding/hermes-agent-icon-1024.png',
+                  width: 21.0,
+                  height: 21.0,
+                  filterQuality: FilterQuality.medium,
                 ),
               ),
               const SizedBox(width: 7.0),
               Expanded(
-                child: Text(
-                  'Hermes',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: LightSurfaces.resolve(
-                      context,
-                      const Color(0xFF1C1C1E),
-                      dark: CupertinoColors.label,
-                    ),
-                  ),
-                ),
+                // #153：搜索改为**在本行内横向展开**（原实现是在下方另起一行
+                // 搜索框，会临时占掉一整行高度、把会话列表往下推）。
+                child: _searchOpen
+                    ? SizedBox(
+                        height: 26.0,
+                        child: CupertinoSearchTextField(
+                          key: const ValueKey('sidebar-brand-search-field'),
+                          controller: _searchController,
+                          placeholder: l10n.searchSessions,
+                          autofocus: true,
+                          style: const TextStyle(fontSize: 15.0),
+                          decoration: isLight
+                              ? BoxDecoration(
+                                  color: LightSurfaces.card,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: LightSurfaces.cardBorder,
+                                    width: 0.5,
+                                  ),
+                                )
+                              : BoxDecoration(
+                                  color: CupertinoColors.tertiarySystemFill
+                                      .resolveFrom(context),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                          // #153：placeholder 配色沿用列表页搜索框的口径
+                          // （浅色用 LightSurfaces.placeholder、暗色用系统次要色）。
+                          // 漏了它会让可读性审计拿不到颜色（曾导致一条测试报空）。
+                          placeholderStyle: isLight
+                              ? const TextStyle(
+                                  color: LightSurfaces.placeholder,
+                                )
+                              : TextStyle(
+                                  fontSize: 15.0,
+                                  color: CupertinoColors.placeholderText
+                                      .resolveFrom(context),
+                                  decoration: TextDecoration.none,
+                                ),
+                          onChanged: (value) => unawaited(
+                            ref
+                                .read(sessionListControllerProvider.notifier)
+                                .search(value),
+                          ),
+                        ),
+                      )
+                    : Text(
+                        'Hermes',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        // #153：字号对齐 markdown 正文基准（15），原 12.5 偏小。
+                        style: TextStyle(
+                          fontSize: 15.0,
+                          fontWeight: FontWeight.w600,
+                          color: LightSurfaces.resolve(
+                            context,
+                            const Color(0xFF1C1C1E),
+                            dark: CupertinoColors.label,
+                          ),
+                        ),
+                      ),
               ),
               _BrandIconButton(
                 buttonKey: 'sidebar-brand-search',
@@ -156,33 +199,6 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
             ],
           ),
         ),
-        if (_searchOpen)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10.0, 0.0, 10.0, 8.0),
-            child: CupertinoSearchTextField(
-              key: const ValueKey('sidebar-brand-search-field'),
-              controller: _searchController,
-              placeholder: l10n.searchSessions,
-              autofocus: true,
-              decoration: isLight
-                  ? BoxDecoration(
-                      color: LightSurfaces.card,
-                      borderRadius: BorderRadius.circular(9),
-                      border: Border.all(
-                        color: LightSurfaces.cardBorder,
-                        width: 0.5,
-                      ),
-                    )
-                  : null,
-              placeholderStyle: isLight
-                  ? const TextStyle(color: LightSurfaces.placeholder)
-                  : null,
-              itemColor: inactiveFg,
-              onChanged: (value) => unawaited(
-                ref.read(sessionListControllerProvider.notifier).search(value),
-              ),
-            ),
-          ),
         Container(height: 0.5, color: divider),
       ],
     );

@@ -7,6 +7,7 @@ import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/light_surfaces.dart';
+import 'sidebar_hover_tip.dart';
 
 /// 底部状态条连接状态枚举。
 enum SidebarConnectionStatus {
@@ -101,49 +102,20 @@ class SidebarStatusBar extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(12.0, 7.0, 12.0, 9.0),
       child: Row(
         children: [
-          _buildStatusPill(context, l10n, effectiveStatus),
+          // #153：端口与服务类型不再各占一个 chip（最窄侧栏时会挤到截断），
+          // 改为「已连接」的 hover 提示承载（主人要求）。
+          // 注意：不能用 Material 的 Tooltip（本项目禁 Material 混入业务 UI），
+          // 故用本仓自绘的 Cupertino 风格 hover 提示。
+          SidebarHoverTip(
+            tipKey: const ValueKey('sidebar-status-tip'),
+            message: [?portText, ?serviceTypeText].join(' · '),
+            child: _buildStatusPill(context, l10n, effectiveStatus),
+          ),
           if (effectiveStatus == SidebarConnectionStatus.offline) ...[
             const SizedBox(width: 6.0),
             _buildRetryButton(context, ref, l10n, active),
           ],
           const Spacer(),
-          // 端口/服务信息可伸缩：#149 把次级功能图标并进本行后，296px（最窄
-          // 侧栏）下「状态 + 端口 + 服务 + 5 图标」会超出 → 让这两个 pill 在
-          // 空间不足时收缩省略，图标与状态始终完整可见。
-          if (portText != null || serviceTypeText != null)
-            Flexible(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (portText != null) ...[
-                    Flexible(
-                      child: _buildPill(
-                        context,
-                        key: const ValueKey('sidebar-status-port'),
-                        child: Text(
-                          portText,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4.0),
-                  ],
-                  if (serviceTypeText != null)
-                    Flexible(
-                      child: _buildPill(
-                        context,
-                        key: const ValueKey('sidebar-status-service-type'),
-                        child: Text(
-                          serviceTypeText,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
           if (trailing != null) ...[
             const SizedBox(width: 6.0),
             trailing!,

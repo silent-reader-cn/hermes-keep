@@ -1112,3 +1112,39 @@ Dart 的 `try/catch` 完全兜不住。**Windows 早在同类 abort 上复现过
 
 ---
 
+
+### #153 侧栏视觉细化（①-⑤ 已交付）+ #154 导航入口位置与排序（⑥ 待开工）
+
+**主人六条反馈**（2026-09-24 实机）：
+
+#### ①-⑤ 已交付（视觉细化）
+
+| # | 问题 | 修法 |
+|---|---|---|
+| ① | 左上角 Hermes 图标是「空的」 | 原实现是 `Container` + 深色渐变方块（无图形），暗色下与背景同色 = 看起来空白 ⇒ 改用真实品牌图 `assets/branding/hermes-agent-icon-1024.png`（21px 圆角裁剪） |
+| ② | 底部「外部服务器 / 端口」两 chip 移除 | 不再各占一个 chip（最窄侧栏会挤到截断）⇒ 收进「已连接」的 **hover 提示** 承载 |
+| ③ | 搜索应向左展开为搜索框（不占高度） | 原实现点搜索在**下方另起一行**（临时占满一行、把列表下推）⇒ 改为品牌行内 `Expanded` 区**同位置横向替换**（标题 ⇄ 搜索框） |
+| ④ | 侧栏字体偏小 | 统一到 **15px** = `kMarkdownBodyFontSize`（markdown 正文基准）：品牌行 12.5→15、工具项 12.5→15、会话项 12.5→15、组头 11.5→13、计数 10.5→11.5、时间 10→11.5 |
+| ⑤ | hover 出三点/加号未垂直对齐 + hover 后行高变化 | 行内容包 `ConstrainedBox(minHeight: 34)` **锁死行高**（hover 时「时间 ⇄ ⋯」尺寸不同会导致浮动）；行内距统一 7/7 |
+
+**关键坑**：`Tooltip` 属于 **material** 库，本项目禁 Material 混入业务 UI，而 `Semantics(tooltip:)` 桌面悬停**无视觉提示** ⇒ 新建自绘组件 `lib/app/shell/sidebar_hover_tip.dart`（`OverlayPortal` + `SingleChildLayoutDelegate` 定位，不参与父布局、不改行高、带越界回收）。
+
+**连带修复**：重写内联搜索框时漏了 `placeholderStyle`（旧块里有），导致 `session_list_light_surfaces_test` 的可读性审计取空报错 —— 已补（浅色 `LightSurfaces.placeholder` / 暗色系统次要色）。**教训：重写一段 UI 时，逐项核对旧实现里设过的每个属性**。
+
+#### ⑥ 侧栏导航入口「位置 + 排序」可配置（#154 · 待开工）
+
+**需求**：设置中新增设置项，可调宽屏模式下哪些导航入口显示在**侧栏最上方**、哪些在**右下角**，**并且能排序**。
+
+**现状盘点**：
+- 入口统一定义在 `lib/app/shell/sidebar_utility_item.dart`（`sidebarUtilityItems`，9 项：sessions / tasks / kanban / workspaces / skills / insights / memory / downloads / settings）+ 动作项 `new_session`；
+- 当前分配：**顶部** = `new_session, tasks, kanban, skills`（`sidebar_tools_list.dart` 的 `_topIds` 常量）；**右下角** = 其余；
+- **显隐已有**：`SessionEntryVisibility`（7 项开关）+ 设置页「会话列表入口」组 ⇒ **本任务只管位置与顺序，不重复造显隐**。
+
+**方案（已定）**：
+1. **数据层**：新增 `lib/app/shell/sidebar_nav_order.dart` —— `SidebarNavOrder{ List<String> top; List<String> bottom; }`，`defaults = 现状顺序`，走 `shared_preferences`（JSON 单键）；脏数据/未知 id 一律回退默认（绝不抛）。
+2. **设置页**：新增分组「侧栏导航入口」= 两个分区，各自 `ReorderableListView`（**拖拽排序**）+ 每项「移到另一区」按钮 + 「恢复默认」。
+3. **侧栏接线**：`SidebarToolsList` / `SidebarSecondaryTools` 改读该 provider 渲染（替换 `_topIds` 常量）；未配置时逐像素等同现状。
+4. `new_session` 作为**动作项**一并纳入可排序（对齐 Codex 侧栏做法）—— 已向主人说明，无异议即按此做。
+
+---
+

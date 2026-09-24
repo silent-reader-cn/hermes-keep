@@ -190,7 +190,8 @@ class _ToolRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12.5,
+                        // #153：对齐 markdown 正文基准（15），原 12.5 偏小。
+                        fontSize: 15.0,
                         color: selected
                             ? activeFg
                             : LightSurfaces.resolve(

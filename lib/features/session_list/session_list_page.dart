@@ -693,7 +693,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               Text(
                 _sectionTitle(context, section.title),
                 style: TextStyle(
-                  fontSize: 11.5,
+                  // #153：随正文基准一起上调（11.5 → 13）。
+                  fontSize: 13.0,
                   fontWeight: FontWeight.bold,
                   color: secondaryColor,
                 ),
@@ -711,7 +712,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 child: Text(
                   '${section.sessions.length}',
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: secondaryColor,
                   ),
@@ -1690,16 +1691,25 @@ class _SessionRowState extends State<_SessionRow> {
     final compactTrailingLabel = widget.compact
         ? _compactTrailingLabel(widget.session)
         : null;
-    final rowContent = Padding(
+    final rowContent = ConstrainedBox(
+      // #153：锁死行高 —— 悬停时右侧由「时间」换成「⋯」按钮，两者尺寸不同，
+      // 原先会让行高浮动（主人反馈 hover 后行高变化）。固定最小高度后，
+      // 两种状态的行在视觉上完全等高。
+      constraints: BoxConstraints(
+        minHeight: widget.compact ? 34.0 : 0.0,
+      ),
+      child: Padding(
       // #151/#152：紧凑模式会话项与「工作区名」左对齐（主人要求）。
       // 几何：组头文字 x = 组头 Padding.start(20) + chevron(11) + gap(4) = 35；
       //       会话项文字 x = 列表内缩(8) + 本 padding.start ⇒ 8 + 27 = 35 ✔
-      // 右侧保持 8 让时间贴边；手机保持原 16/8。
+      // #153：改为「固定行高」—— 悬停时右侧由时间换成「⋯」按钮（原实现会
+      // 撑高一行，主人反馈 hover 后行高变化）。左右内距固定，行高由
+      // _compactRowHeight 常量锁定；手机保持原 16/8。
       padding: EdgeInsetsDirectional.only(
         start: widget.compact ? 27 : 16,
         end: widget.compact ? 8 : 16,
-        top: widget.compact ? 6 : 8,
-        bottom: widget.compact ? 6 : 8,
+        top: widget.compact ? 7 : 8,
+        bottom: widget.compact ? 7 : 8,
       ),
       child: Row(
         children: [
@@ -1737,7 +1747,8 @@ class _SessionRowState extends State<_SessionRow> {
                         child: _highlightedSpan(
                           context,
                           _displayTitle(context, widget.session),
-                          style: const TextStyle(fontSize: 12.5),
+                          // #153：对齐 markdown 正文基准（kMarkdownBodyFontSize=15）。
+                          style: const TextStyle(fontSize: 15.0),
                         ),
                       )
                     else
@@ -1775,7 +1786,7 @@ class _SessionRowState extends State<_SessionRow> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 11.5,
                           color: secondaryColor,
                         ),
                       ),
@@ -1855,6 +1866,7 @@ class _SessionRowState extends State<_SessionRow> {
               ),
             ),
         ],
+      ),
       ),
     );
     // #150：紧凑模式（侧栏）去掉行尾「⋯」后，长按与右键都打开同一套操作菜单
