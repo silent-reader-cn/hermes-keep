@@ -180,7 +180,7 @@ void main() {
       expect(state.initialPositioned, isTrue);
       expect(state.nearBottom, isTrue);
       expect(state.userHasScrolled, isFalse);
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
       final extentBefore = pos.maxScrollExtent;
 
       imageCompleter.complete(tallPngFile);
@@ -203,7 +203,7 @@ void main() {
       expect(state.nearBottom, isTrue);
       expect(
         pos.pixels,
-        closeTo(pos.maxScrollExtent, 1.0),
+        closeTo(0.0, 1.0),
         reason:
             'extent 撑高后必须补跳贴底（pixels=${pos.pixels}, max=${pos.maxScrollExtent}）',
       );
@@ -240,7 +240,7 @@ void main() {
       await pumpImageDecodeFrames(tester);
       expect(state.nearBottom, isTrue);
       expect(state.userHasScrolled, isFalse);
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
 
       final extentMid = pos.maxScrollExtent;
       completer2.complete(tallPngFile);
@@ -248,7 +248,7 @@ void main() {
       expect(pos.maxScrollExtent, greaterThan(extentMid + 100));
       expect(state.nearBottom, isTrue);
       expect(state.userHasScrolled, isFalse);
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
     });
 
     testWidgets('3. 用户手势离底阅读时大图撑高：阅读位置不被拽动', (tester) async {
@@ -345,7 +345,7 @@ void main() {
 
       expect(state.userHasScrolled, isFalse);
       expect(state.nearBottom, isTrue);
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
     });
 
     testWidgets('5. 大纲跳转主动离底后：大图撑高不拉回底部', (tester) async {

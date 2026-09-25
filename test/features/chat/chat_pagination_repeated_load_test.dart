@@ -111,7 +111,10 @@ Future<TestGesture> _dragIntoTopBand(WidgetTester tester) async {
   );
   await tester.pump();
   var guard = 0;
-  while (_positionOf(tester).pixels > 80 && guard < 200) {
+  // A 重构（reverse）：更早消息在列表末尾侧 —— 手势方向不变（手指上/下移
+  // 的视觉语义不变），但终止判据要按「距最旧端」计算。
+  while ((_positionOf(tester).maxScrollExtent - _positionOf(tester).pixels) > 80 &&
+      guard < 200) {
     await gesture.moveBy(const Offset(0, 400));
     await tester.pump(const Duration(milliseconds: 16));
     guard++;
@@ -208,11 +211,14 @@ void main() {
       await _settleRestore(tester);
 
       final pos = _positionOf(tester);
+      // A 重构（reverse）：分页触发带在**最旧端**（distToOldest <= 200），
+      // 故「离开触发带」⇔ 距最旧端 > 200（正向为 pixels > 200）。
+      final distToOldest = pos.maxScrollExtent - pos.pixels;
       expect(
-        pos.pixels,
+        distToOldest,
         greaterThan(200),
         reason:
-            '加载一页后视口必须被补偿到顶部带之外（滞回上沿 200）。'
+            '加载一页后视口必须离开分页触发带（reverse：距最旧端 > 200）。'
             '补偿失败（前插一页把锚点条目推出 lazy 列表构建范围 → 收敛链'
             '空转、从不 jumpTo）会让像素停在 0 附近，用户随后任何轻微上滚'
             '都再次命中触发条件，表现为「一次上滚触发多次加载」＋'

@@ -814,7 +814,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             '${m.role}:${m.timestamp}:${m.content}',
           );
         }).toList();
-        final allMessages = [...fresh, ...state.messages];
+        // A 重构（reverse）：列表 index 0 = 最新（视觉底部），因此**更早消息**
+        // 应位于索引大侧（视觉上方）。原正向实现把 fresh 拼在头部（视觉上方），
+        // 反向基准下那样会把历史插到视觉**下方**、推动当前视口。
+        final allMessages = [...state.messages, ...fresh];
         final fallbackOffset = state.messagesOffset - loaded.length;
         final newOffset =
             detail.messagesOffset ?? (fallbackOffset < 0 ? 0 : fallbackOffset);

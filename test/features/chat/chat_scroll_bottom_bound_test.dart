@@ -15,12 +15,13 @@ import '../../helpers/fake_chat_api.dart';
 
 /// #23 发送消息后滚动区「下拉拉超又弹回」回弹守卫（像素轨迹探针）。
 ///
-/// 「回弹」的像素级实证特征：`pixels` 轨迹先超过 `maxScrollExtent`（拉超），
-/// 再被 ClampingScrollPhysics 拉回（弹回）——即轨迹「凸起 + 回落」。
-/// 探针断言：
-/// 1. 任何样本 `pixels <= maxScrollExtent + 1.0`（全程不越界，容差 ±1px）；
-/// 2. 轨迹单调不减（无「先涨后跌」的拉回回落）；
-/// 3. 最终 `pixels == maxScrollExtent`（容差 1px，停在真实底部）。
+/// A 重构后列表为 **reverse**（`offset 0 = 底部 = 最新消息`），坐标基准随之改变：
+/// 「回弹」的像素级实证特征变为 `pixels` 先**负向拉超**（< 0，越出列表起点），
+/// 再被 ClampingScrollPhysics 拉回（弹回）——即轨迹「下探 + 回弹」。
+/// 探针断言（reverse 口径）：
+/// 1. 任何样本 `-1.0 <= pixels <= maxScrollExtent + 1.0`（双向不越界，容差 ±1px）；
+/// 2. 轨迹不出现显著回升（`pixels` 不得远离 0 后再回来，即无弹簧回弹）；
+/// 3. 最终 `pixels ≈ 0`（容差 1px，停在真实底部）。
 void main() {
   group('#23 发送消息后滚底不越界/不回弹', () {
     setUp(() async {
@@ -50,6 +51,11 @@ void main() {
     ({List<double> pixels, List<double> maxes}) capture(ScrollPosition pos) {
       final pixels = <double>[];
       final maxes = <double>[];
+      // A 重构（reverse）：列表初始即在底部，贴底/跟底可能**全程零跳转**
+      // （零 pixels 变化正是目标状态）。先记录一次当前快照，使轨迹恒有样本，
+      // 既避免空列表取值异常，又保留「无跳转」的可观测性。
+      pixels.add(pos.pixels);
+      maxes.add(pos.maxScrollExtent);
       pos.addListener(() {
         pixels.add(pos.pixels);
         maxes.add(pos.maxScrollExtent);
@@ -62,30 +68,28 @@ void main() {
       List<double> maxes, {
       required String label,
     }) {
-      expect(pixels.length, greaterThan(0), reason: '$label：应有轨迹样本');
       expect(pixels.length, maxes.length);
+      // A 重构（reverse）：列表初始即在底部（offset 0），贴底/跟底都无需跳转，
+      // 因此「轨迹为空」是**目标状态**而非失败——它正说明 O(n) 跳转已被消除。
       for (var i = 0; i < pixels.length; i++) {
         expect(
-          pixels[i] <= maxes[i] + 1.0,
+          pixels[i] >= -1.0 && pixels[i] <= maxes[i] + 1.0,
           isTrue,
           reason:
               '$label：样本[$i] 越界（拉超凸起）pixels=${pixels[i]} '
-              'max=${maxes[i]}',
+              'max=${maxes[i]}（reverse：起点外为负）',
         );
       }
+      // A 重构（reverse）：跳底目标恒为 offset 0，正常轨迹是「向 0 收敛或恒为 0」。
+      // 回弹的特征是 pixels 先负向拉超、再回升到 0——即出现显著「回升」。
       for (var i = 1; i < pixels.length; i++) {
         final pixelDelta = pixels[i] - pixels[i - 1];
-        final maxDelta = maxes[i] - maxes[i - 1];
-        // 像素只能贴着 extent 走：max 未回落时 pixels 不得回落——那是弹簧
-        // 拉回的特征（overshoot 后 ClampingScrollPhysics 弹回，肉眼回弹）；
-        // max 回落时 pixels 允许同幅跟随（内容收缩的重新锚定，非回弹）。
         expect(
-          pixelDelta >= maxDelta - 1.0,
+          pixelDelta <= 1.0,
           isTrue,
           reason:
-              '$label：样本[$i] 像素回落超过 extent 回落（被弹簧拉回·弹回）'
-              '[${pixels[i - 1]} -> ${pixels[i]}], max '
-              '[${maxes[i - 1]} -> ${maxes[i]}]'
+              '$label：样本[$i] 像素出现回升（被弹簧拉回·弹回特征）'
+              '[${pixels[i - 1]} -> ${pixels[i]}]'
               '\n完整轨迹 pixels=$pixels\nmaxes=$maxes',
         );
       }
@@ -130,13 +134,13 @@ void main() {
 
       final pos = positionOf(tester);
       expect(
-        pos.pixels <= pos.maxScrollExtent + 1.0,
+        pos.pixels >= -1.0 && pos.pixels <= pos.maxScrollExtent + 1.0,
         isTrue,
-        reason: '初始定位不得越界',
+        reason: '初始定位不得越界（reverse：起点外为负）',
       );
       expect(
         pos.pixels,
-        closeTo(pos.maxScrollExtent, 1.0),
+        closeTo(0.0, 1.0),
         reason: '600 条懒加载长会话应收敛到真实底部',
       );
     });
@@ -209,8 +213,8 @@ void main() {
 
       assertNoBounce(traj.pixels, traj.maxes, label: '发送+流式');
       expect(
-        traj.pixels.last,
-        closeTo(traj.maxes.last, 1.0),
+        traj.pixels.isEmpty ? pos.pixels : traj.pixels.last,
+        closeTo(0.0, 1.0),
         reason:
             '最终应收敛到真实底部（max=${traj.maxes.last}, '
             'pixels=${traj.pixels.last}）',
@@ -268,8 +272,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
       }
       expect(
-        traj.pixels.last,
-        closeTo(traj.maxes.last, 1.0),
+        traj.pixels.isEmpty ? pos.pixels : traj.pixels.last,
+        closeTo(0.0, 1.0),
         reason:
             '发送后第一步应收敛到当前底部'
             '（max=${traj.maxes.last}, pixels=${traj.pixels.last}）',
@@ -284,8 +288,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16)); // 再一帧稳定
 
       expect(
-        traj.pixels.last,
-        closeTo(traj.maxes.last, 1.0),
+        traj.pixels.isEmpty ? pos.pixels : traj.pixels.last,
+        closeTo(0.0, 1.0),
         reason:
             'extent 增长后复核应停在真实底部'
             '（max=${traj.maxes.last}, pixels=${traj.pixels.last}）',
@@ -300,8 +304,8 @@ void main() {
 
       assertNoBounce(traj.pixels, traj.maxes, label: '发送+extent增长复核');
       expect(
-        traj.pixels.last,
-        closeTo(traj.maxes.last, 1.0),
+        traj.pixels.isEmpty ? pos.pixels : traj.pixels.last,
+        closeTo(0.0, 1.0),
         reason: '流式持续增长期间应始终贴底',
       );
     });
@@ -363,8 +367,8 @@ void main() {
       );
       assertNoBounce(traj.pixels, traj.maxes, label: '流式跟随');
       expect(
-        traj.pixels.last,
-        closeTo(traj.maxes.last, 1.0),
+        traj.pixels.isEmpty ? pos.pixels : traj.pixels.last,
+        closeTo(0.0, 1.0),
         reason: '流式增量更新应始终保持粘底',
       );
     });

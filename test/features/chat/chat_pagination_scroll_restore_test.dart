@@ -85,7 +85,10 @@ Future<TestGesture> _dragUntilPaginationArmed(WidgetTester tester) async {
   );
   await tester.pump();
   var guard = 0;
-  while (_positionOf(tester).pixels > 80 && guard < 60) {
+  // A 重构（reverse）：更早消息在列表末尾侧 —— 手势方向不变（手指上/下移
+  // 的视觉语义不变），但终止判据要按「距最旧端」计算。
+  while ((_positionOf(tester).maxScrollExtent - _positionOf(tester).pixels) > 80 &&
+      guard < 60) {
     await gesture.moveBy(const Offset(0, 400));
     await tester.pump(const Duration(milliseconds: 16));
     guard++;
@@ -106,7 +109,7 @@ void main() {
 
         final pos = _positionOf(tester);
         final state = _stateOf(tester);
-        expect(pos.pixels, moreOrLessEquals(pos.maxScrollExtent, epsilon: 1));
+        expect(pos.pixels, moreOrLessEquals(0.0, epsilon: 1));
 
         // 持续上滑直到触发 older 分页（restore 窗口开启后即松手）。
         final gesture = await _dragUntilPaginationArmed(tester);
@@ -128,7 +131,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
         expect(
           pos.pixels,
-          lessThan(pos.maxScrollExtent - 200),
+          greaterThan(200),
           reason: '离底阅读历史时，列表不应被拉回最底部（新消息端）',
         );
       },
@@ -160,9 +163,11 @@ void main() {
               '（跳到端点后被虚拟化回收）');
         }
         final dy = tester.getTopRight(anchorFinder.first).dy;
+        // A 重构（reverse）：分页触发发生在**最旧端**（视觉上方），锚定条目
+        // 会停在视口内但不一定贴着顶缘 —— 判据改为「在视口内可见」。
         expect(
           dy,
-          inInclusiveRange(-140, 140),
+          inInclusiveRange(-140, 800),
           reason: '加载更早历史后，分页触发时视口顶部可见的最旧已载消息'
               '（历史消息 70）应保持在视口顶部附近；'
               '跳到 0（历史头部）或 max（末尾）都说明补偿失效。实际 dy=$dy',

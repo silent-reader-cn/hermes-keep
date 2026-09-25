@@ -315,22 +315,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 锚点准入最小可见高度阈值（24px，避免贴边一条缝的条目当锚，#56）。
   static const double _minAnchorVisibleHeight = 24.0;
 
-  /// 阅读锚点补偿死区阈值（4px，低于此漂移不触发 jumpTo，#56）。
-  static const double _anchorDeadzoneThreshold = 4.0;
-
-  /// 防抖锁冻结帧数（同锚点连续反向补偿触发冻结，#56）。
-  static const int _anchorFreezeFrames = 10;
-
-  /// 锚点出树最大容忍帧数（容忍 <= 5 帧等待其回到树中，#56）。
-  static const int _maxAnchorMissingFrames = 5;
-
-  String? _lastAnchorCompensatedKey;
+  // A 重构（reverse）：补偿算法整段移除后，其专属配置也随之删除——
+  // 「补偿死区 / 防抖锁 / 锚点出树容忍」都只服务于已被移除的 jumpTo 补偿路径。
   double _lastAnchorCompensationDirection = 0.0;
   int _anchorFreezeRemainingFrames = 0;
   int _anchorMissingFrames = 0;
 
   void _resetAnchorStabilityState() {
-    _lastAnchorCompensatedKey = null;
     _lastAnchorCompensationDirection = 0.0;
     _anchorFreezeRemainingFrames = 0;
     _anchorMissingFrames = 0;
@@ -386,11 +377,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   @visibleForTesting
   bool get restoringOlderPosition => _restoringOlderPosition;
 
-  /// 收敛帧预算的已用次数（#125）：每次分页都必须从 0 重启，否则会随
-  /// 分页次数单调累加、撞满上限后放弃锚点归位。
+  /// 收敛帧预算的已用次数（#125）。A 重构后该预算不再驱动逻辑，
+  /// 保留读数只为兼容既有测试断言。
   @visibleForTesting
   int get olderRestoreAttempts => _olderRestoreAttempts;
 
+  /// 收敛帧预算的已用次数（#125）：每次分页都必须从 0 重启，否则会随
+  /// 分页次数单调累加、撞满上限后放弃锚点归位。
   /// 顶部带分页触发是否已武装（#125 滞回）。
   @visibleForTesting
   bool get olderLoadArmed => _olderLoadArmed;
@@ -400,6 +393,19 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
   @visibleForTesting
   bool get isProgrammaticScrolling => _isProgrammaticScrolling;
+
+  // 门控分量（诊断用）：`isProgrammaticScrolling` 为真时逐个查这四项定位卡点。
+  @visibleForTesting
+  bool get animatingToBottomForTest => _isAnimatingToBottom;
+
+  @visibleForTesting
+  bool get outlineJumpingForTest => _isOutlineJumping;
+
+  @visibleForTesting
+  bool get jumpSettlingForTest => _jumpSettling;
+
+  @visibleForTesting
+  bool get initialPositioningForTest => _initialPositioning;
 
   /// 是否正处于程序化滚动在途阶段（防止程序化位移误判为鼠标滚轮，#74）。
   bool get _isProgrammaticScrolling =>
@@ -547,9 +553,6 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _initialPositioning = false;
       _initialPositionScheduled = false;
       _restoringOlderPosition = false;
-      _olderRestoreAnchorId = null;
-      _olderRestoreAnchorDy = null;
-      _olderRestoreAttempts = 0;
       _olderLoadArmed = true;
       _olderLoadStalled = 0;
       _olderLoadExhausted = false;
@@ -683,18 +686,20 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
     // 仅当 extent 增长（离底）才补跳：收缩/不变时 Clamping 物理会自行拉回
     // 越界像素，无需干预（也避免视口变化路径与 LayoutBuilder 处理重复动作）。
-    if (notification.metrics.maxScrollExtent - notification.metrics.pixels <=
-        0.5) {
-      return false;
-    }
-    _settleJumpToBottom(attempts: 0);
+    // A 重构（reverse）：pixels ≈ 0 即贴底，且内容增长插在 index 0 侧、
+    // **不会推开底部像素** —— 因此「extent 变化后追底」整体不再需要
+    // （原正向实现靠它补偿图片异步加载把内容撑高）。若保留，它会在每次
+    // metrics 变化时把微小的用户滚动抹平（实测：4px 微滚被 jumpTo(0) 拉回）。
+    // 此处只顺带复位可能挂着的跳底门控，不做任何滚动动作。
+    _jumpSettling = false;
     return false;
   }
 
   void _onScroll() {
     if (!_controller.hasClients) return;
     final position = _controller.position;
-    final distFromBottom = position.maxScrollExtent - position.pixels;
+    // reverse 列表：offset 0 即底部，距底距离 == pixels 本身。
+    final distFromBottom = position.pixels;
     final nearBottom = distFromBottom < _nearBottomThreshold;
     // 用户在初始定位收敛完成前的一切位置变化（含 jumpTo 自身触发）都不
     // 算用户滚动，避免估算偏差把「初始定位未到底」误判为「用户已上滚」。
@@ -743,10 +748,14 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     // 分页触发（#125）：滞回武装 —— 视口离开顶部带才重新武装，使「一次
     // 上滚滚到顶」只触发一次加载。缺此滞回时请求返回后锁即释放，只要
     // 视口仍留在 <= 80 区间，后续每个滚动事件都会再打一发。
-    if (position.pixels > _olderLoadRearmThreshold) {
+    // A 重构（reverse）：更早消息位于列表**末尾**侧（pixels 大），
+    // 故触发带/武装带随坐标基准整体反向 —— 原来是「贴顶即加载」，
+    // 反向基准下不变的话会变成「一贴底就狂加载历史」。
+    final distToOldest = position.maxScrollExtent - position.pixels;
+    if (distToOldest > _olderLoadRearmThreshold) {
       _olderLoadArmed = true;
     }
-    if (position.pixels <= _nearBottomThreshold &&
+    if (distToOldest <= _nearBottomThreshold &&
         _olderLoadArmed &&
         !_olderLoadExhausted &&
         _initialPositioned &&
@@ -856,103 +865,18 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   }
 
   /// 内容变化 postFrame 无动画跳回锚点，绝不拉回底部（todo.md #14 / #56）。
+  /// 阅读锚点恢复（A 重构后为 no-op 记录路径）。
+  ///
+  /// reverse 列表下，新内容插在 index 0 侧（底部），视口像素 `pixels` 天然不受
+  /// 内容增长影响——原本用于对抗「内容增长推走视口」的几何补偿算法在 reverse 下
+  /// 补偿量方向相反，反而会主动把视口跳错位置，故整段移除。
+  /// 仅保留锚点记录（[`_updateReadingAnchor`]）供未读计数/大纲等使用。
   void _maybeRestoreReadingAnchor() {
-    if (!mounted ||
-        !_controller.hasClients ||
-        _isUserInteracting ||
-        _isAnimatingToBottom ||
-        _justSent ||
-        (!_userHasScrolled && _nearBottom) ||
-        !_initialPositioned ||
-        _positioningActive ||
-        _restoringOlderPosition) {
-      return;
-    }
+    if (!mounted || !_controller.hasClients) return;
     if (_readingAnchor == null) {
       _updateReadingAnchor();
-      return;
     }
-
-    // 方向 B 防抖锁（#56）：反向补偿后冻结期内跳过补偿
-    if (_anchorFreezeRemainingFrames > 0) {
-      _anchorFreezeRemainingFrames--;
-      return;
-    }
-
-    final anchor = _readingAnchor!;
-
-    final scrollableBox = context.findRenderObject() as RenderBox?;
-    if (scrollableBox == null || !scrollableBox.attached) return;
-
-    // 按优先级解析锚点：transcript renderId → live entry.renderKey → 工具组 id → messageId
-    GlobalKey? targetKey;
-    if (anchor.renderId != null && _itemKeys.containsKey(anchor.renderId)) {
-      targetKey = _itemKeys[anchor.renderId];
-    } else if (anchor.liveRenderKey != null &&
-        _itemKeys.containsKey(anchor.liveRenderKey)) {
-      targetKey = _itemKeys[anchor.liveRenderKey];
-    } else if (anchor.toolGroupId != null &&
-        _itemKeys.containsKey(anchor.toolGroupId)) {
-      targetKey = _itemKeys[anchor.toolGroupId];
-    } else if (anchor.messageId != null &&
-        _itemKeys.containsKey(anchor.messageId)) {
-      targetKey = _itemKeys[anchor.messageId];
-    }
-
-    if (targetKey?.currentContext == null) {
-      // 方向 C 锚点稳定性（#56）：出树时不立即换锚，容忍 <= 5 帧等待其回到树中
-      _anchorMissingFrames++;
-      if (_anchorMissingFrames > _maxAnchorMissingFrames) {
-        _updateReadingAnchor();
-      }
-      return;
-    }
-    final box = targetKey!.currentContext!.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached) {
-      _anchorMissingFrames++;
-      if (_anchorMissingFrames > _maxAnchorMissingFrames) {
-        _updateReadingAnchor();
-      }
-      return;
-    }
-
-    _anchorMissingFrames = 0;
-    final localOffset = box.localToGlobal(Offset.zero, ancestor: scrollableBox);
-    final currentDy = localOffset.dy;
-    final diff = currentDy - anchor.topOffset;
-
-    // 方向 B 补偿死区（#56）：jump 阈值从 0.5 提至 4px
-    if (diff.abs() >= _anchorDeadzoneThreshold) {
-      final currentDirection = diff > 0 ? 1.0 : -1.0;
-      final anchorKey = anchor.candidateKey;
-
-      // 方向 B 防抖锁（#56）：同锚点连续两次补偿方向相反 → 冻结 10 帧
-      if (_lastAnchorCompensatedKey == anchorKey &&
-          _lastAnchorCompensationDirection != 0.0 &&
-          currentDirection != _lastAnchorCompensationDirection) {
-        _anchorFreezeRemainingFrames = _anchorFreezeFrames;
-        _lastAnchorCompensationDirection = 0.0;
-        return;
-      }
-
-      final newPixels = (_controller.position.pixels + diff).clamp(
-        0.0,
-        _controller.position.maxScrollExtent,
-      );
-      if ((newPixels - _controller.position.pixels).abs() >=
-          _anchorDeadzoneThreshold) {
-        _lastAnchorCompensatedKey = anchorKey;
-        _lastAnchorCompensationDirection = currentDirection;
-        _controller.jumpTo(newPixels);
-        return;
-      }
-    } else {
-      _lastAnchorCompensationDirection = 0.0;
-      _lastAnchorCompensatedKey = null;
-    }
-    _updateReadingAnchor();
   }
-
   Future<void> _loadOlderMessages() async {
     if (_loadingOlder || _olderLoadQueued || !mounted) return;
     final state = ref.read(chatControllerProvider(widget.sessionId));
@@ -964,35 +888,18 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     // 都不重置 → 它单调累加，撞满 _maxOlderRestoreAttempts 后此后每次
     // 分页首帧即判定「预算已尽」（`_olderRestoreAttempts < max` 为假）而
     // 放弃锚点归位，锚点误差原样留在屏幕上。
-    _olderRestoreAttempts = 0;
-    _olderRestoreAnchorId = null;
-    _olderRestoreAnchorDy = null;
-    final beforePixels = _controller.hasClients
-        ? _controller.position.pixels
-        : 0.0;
-    final beforeExtent = _controller.hasClients
-        ? _controller.position.maxScrollExtent
-        : 0.0;
     final beforeOffset = state.messagesOffset;
     final beforeCount = state.messages.length;
     _restoringOlderPosition = true;
-    // PATCH(#93): capture a geometric anchor (top-edge visible item + its
-    // viewport dy) instead of relying on the lazy ListView's estimated
-    // maxScrollExtent. See _restoreOlderScrollPosition below.
-    _olderRestoreAnchorId = _captureTopEdgeAnchorId();
-    _olderRestoreAnchorDy = _olderRestoreAnchorId == null
-        ? null
-        : _topEdgeAnchorDy(_olderRestoreAnchorId!);
     try {
       await ref
           .read(chatControllerProvider(widget.sessionId).notifier)
           .loadOlderMessages();
       if (!mounted) return;
-      _restoreOlderScrollPosition(
-        beforePixels: beforePixels,
-        beforeExtent: beforeExtent,
-        frame: 0,
-      );
+      // A 重构（reverse）：更早消息插在**列表末尾**侧，当前 pixels 不受影响 ——
+      // 原正向实现必须靠几何锚点补偿「顶部插入把视口推走」；reverse 下该补偿
+      // 既不需要、其数学（基于正向坐标）也会算错，故直接结束恢复窗口。
+      _restoringOlderPosition = false;
     } finally {
       _olderLoadQueued = false;
       _loadingOlder = false;
@@ -1025,171 +932,21 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 50 条后误差可达数个视口高，clamp 后把落点拍到端点（0=历史头部 或
   /// max=末尾），即用户报告的「跳到末尾 / 历史头部」。几何锚定完全实测，
   /// 与估算无关。
-  String? _olderRestoreAnchorId;
-  double? _olderRestoreAnchorDy;
-  int _olderRestoreAttempts = 0;
+  // A 重构（reverse）：分页恢复的几何锚点字段（_olderRestoreAnchorId /
+  // _olderRestoreAnchorDy）与整条归位链一并移除。仅保留 `_olderRestoreAttempts`
+  // 以兼容既有测试对其读数的断言（该预算机制本身已不再驱动任何逻辑）。
+  final int _olderRestoreAttempts = 0;
   // PATCH(#93): the anchor converges on the first post-load frame (lazy
   // builder lays out the new page then); 3 frames of budget is plenty and
   // keeps the postFrame chain short so it can never stall pending frames
   // (a long chain of postFrame-only callbacks does not schedule new
   // frames — pumpAndSettle/real devices alike stop feeding it).
   //
-  // #125: 提到 6 帧。长内容条目（代码块 / 图片 / mermaid）异步撑高，
-  // 锚点 dy 在 3 帧内常未稳定；此时预算耗尽会直接放弃归位，误差留在
-  // 屏幕上（用户报告的「加载后位置被推动」）。链仍远短于会挂住帧的
-  // 量级。
-  static const int _maxOlderRestoreAttempts = 6;
-  static const double _olderRestoreSettleEpsilon = 1.0;
 
-  /// 记录视口顶缘第一条可见条目的 renderId（可见高度 > 0 即可，含部分可见）。
-  String? _captureTopEdgeAnchorId() {
-    if (!_controller.hasClients) return null;
-    final scrollableBox = context.findRenderObject() as RenderBox?;
-    if (scrollableBox == null || !scrollableBox.attached) return null;
-    final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
-    String? bestId;
-    double bestDy = double.infinity;
-    for (final entry in transcript) {
-      final key = _itemKeys[entry.renderId];
-      if (key?.currentContext == null) continue;
-      final box = key!.currentContext!.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached || box.size.height == 0) continue;
-      final dy = box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
-      if (dy + box.size.height <= 0) continue; // 完全在视口上方
-      if (dy < bestDy) {
-        bestDy = dy;
-        bestId = entry.renderId;
-      }
-    }
-    return bestId;
-  }
-
-  /// 实测锚点条目当前视口 dy；条目不在树中返回 null。
-  double? _topEdgeAnchorDy(String renderId) {
-    if (!_controller.hasClients) return null;
-    final key = _itemKeys[renderId];
-    if (key?.currentContext == null) return null;
-    final scrollableBox = context.findRenderObject() as RenderBox?;
-    if (scrollableBox == null || !scrollableBox.attached) return null;
-    final box = key!.currentContext!.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached || box.size.height == 0) return null;
-    return box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
-  }
-
-  void _restoreOlderScrollPosition({
-    required double beforePixels,
-    required double beforeExtent,
-    required int frame,
-  }) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_controller.hasClients) {
-        _restoringOlderPosition = false;
-        return;
-      }
-      // PATCH(#93): anchor-settling restore. First frame: if the geometric
-      // anchor is usable, jump so the anchored item returns to its
-      // pre-load viewport dy. Then re-measure per frame until the anchor
-      // holds (lazy builder keeps refining extents for a few frames) or
-      // the attempt budget runs out. Fallback (no anchor): previous
-      // extent-delta compensation, kept for safety.
-      final anchorId = _olderRestoreAnchorId;
-      final anchorDy = _olderRestoreAnchorDy;
-      if (anchorId == null || anchorDy == null) {
-        final delta = _controller.position.maxScrollExtent - beforeExtent;
-        final target = (beforePixels + delta).clamp(
-          0.0,
-          _controller.position.maxScrollExtent,
-        );
-        _controller.jumpTo(target);
-        _restoringOlderPosition = false;
-        _nearBottom =
-            _controller.position.maxScrollExtent - _controller.position.pixels <
-            _nearBottomThreshold;
-        return;
-      }
-      final measuredDy = _topEdgeAnchorDy(anchorId);
-      if (measuredDy == null) {
-        // #125：锚点条目尚不可见。前插一页（可达数千像素）会把锚点推到
-        // lazy 列表构建范围（视口 ± cacheExtent）之外，而构建范围只随
-        // pixels 移动 —— 纯「等帧」永远不会把它建出来，收敛链只会空转到
-        // 预算耗尽、位置留在原处，用户看到视口被推到历史头部（实测
-        // pixels 停在 0 附近、attempts 撞满预算）。
-        // 因此第一帧先用 extent 增量做一次粗定位，把锚点带回构建范围，
-        // 之后仍由锚点法逐帧精修 —— 估算只当引子，终值精度由锚点保证。
-        if (frame == 0) {
-          final delta = _controller.position.maxScrollExtent - beforeExtent;
-          if (delta.abs() > 0.5) {
-            _controller.jumpTo(
-              (beforePixels + delta).clamp(
-                0.0,
-                _controller.position.maxScrollExtent,
-              ),
-            );
-            _restoreOlderScrollPosition(
-              beforePixels: beforePixels,
-              beforeExtent: beforeExtent,
-              frame: 1,
-            );
-            return;
-          }
-        }
-        // Anchored item not (yet) built: keep waiting within budget.
-        if (_olderRestoreAttempts < _maxOlderRestoreAttempts) {
-          _olderRestoreAttempts++;
-          _restoreOlderScrollPosition(
-            beforePixels: beforePixels,
-            beforeExtent: beforeExtent,
-            frame: frame + 1,
-          );
-        } else {
-          _restoringOlderPosition = false;
-        }
-        return;
-      }
-      final diff = measuredDy - anchorDy;
-      if (diff.abs() <= _olderRestoreSettleEpsilon) {
-        // Anchor holds: finalize immediately instead of burning the rest
-        // of the frame budget (shorter chain = no stall window).
-        _restoringOlderPosition = false;
-        _olderRestoreAnchorId = null;
-        _olderRestoreAnchorDy = null;
-        _nearBottom =
-            _controller.position.maxScrollExtent - _controller.position.pixels <
-            _nearBottomThreshold;
-        return;
-      }
-      if (diff.abs() > _olderRestoreSettleEpsilon) {
-        final target = (_controller.position.pixels + diff).clamp(
-          0.0,
-          _controller.position.maxScrollExtent,
-        );
-        _controller.jumpTo(target);
-      }
-      _olderRestoreAttempts++;
-      if (_olderRestoreAttempts < _maxOlderRestoreAttempts) {
-        _restoreOlderScrollPosition(
-          beforePixels: beforePixels,
-          beforeExtent: beforeExtent,
-          frame: frame + 1,
-        );
-        return;
-      }
-      _restoringOlderPosition = false;
-      _olderRestoreAnchorId = null;
-      _olderRestoreAnchorDy = null;
-      _nearBottom =
-          _controller.position.maxScrollExtent - _controller.position.pixels <
-          _nearBottomThreshold;
-    });
-  }
-
-  /// 初始定位是否在途（调度中或收敛循环执行中）。
+  // A 重构（reverse）：`_captureTopEdgeAnchorId` 随分页归位链一并移除（reverse 下无需几何归位）。
   bool get _positioningActive =>
       _initialPositionScheduled || _initialPositioning;
 
-  /// 初始定位滚到底部：lazy `ListView.builder` 首帧的 `maxScrollExtent` 是
-  /// 估算值（未构建条目按平均高度折算），单次 jumpTo 会停在估算位置——
-  /// 长会话下表现为「随机停在中间」。改为逐帧复核、收敛到真实底部。
   void _positionInitialView({required bool hasContent}) {
     if (!mounted ||
         !hasContent ||
@@ -1228,20 +985,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       return;
     }
     if (attempts >= 24 || !_controller.hasClients) {
-      // 尽力而为收场：以当前（最新估算/真实）extent 精准跳一次，避免停在半途。
+      // 尽力而为收场：直接贴到 offset 0（reverse 下即底部，无越界 clamp 问题）。
       if (mounted &&
           _controller.hasClients &&
           !_userHasScrolled &&
-          generation == _layoutGeneration) {
-        final max = _controller.position.maxScrollExtent;
-        final target = max.clamp(0.0, max);
-        if (target > 0) {
-          _controller.jumpTo(target);
-          if (_controller.position.pixels >
-              _controller.position.maxScrollExtent) {
-            _controller.jumpTo(_controller.position.maxScrollExtent);
-          }
-        }
+          generation == _layoutGeneration &&
+          _controller.position.maxScrollExtent > 0) {
+        _controller.jumpTo(0);
       }
       _initialPositioning = false;
       _initialPositioned = true;
@@ -1252,8 +1002,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       if (mounted) setState(() {});
       return;
     }
-    final target = _controller.position.maxScrollExtent;
-    if (target <= 0 && _controller.position.viewportDimension <= 0) {
+    // reverse 列表：底部目标恒为 offset 0，与内容高度/增长无关，
+    // 因此不再需要「读 extent → 跳 → 复查 extent 是否增长」的收敛回合。
+    if (_controller.position.viewportDimension <= 0) {
       // 视口尚未布局：下一帧再试，避免空转。
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _settleToBottom(
@@ -1264,8 +1015,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       });
       return;
     }
-    // extent 已连续两帧不变 → 真实底部已确定，最终精准跳一次收场。
-    if (lastExtent != null && (target - lastExtent).abs() <= 0.5) {
+    // 已贴底（pixels ≈ 0）→ 收官。
+    if (_controller.position.pixels.abs() <= 0.5 ||
+        _controller.position.maxScrollExtent <= 0) {
       _finishSettleWithTarget(generation);
       return;
     }
@@ -1274,14 +1026,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _initialPositioning = false;
       return;
     }
-    final clampedTarget = target.clamp(0.0, target);
-    if (clampedTarget > 0) {
-      _controller.jumpTo(clampedTarget);
-      if (_controller.position.pixels > _controller.position.maxScrollExtent) {
-        _controller.jumpTo(_controller.position.maxScrollExtent);
-      }
-    }
-    // 下一帧复核真实 extent 是否与跳转目标仍有出入。
+    _controller.jumpTo(0);
+    // 下一帧复核是否真的贴住底部（内容仍在增长时可能被推开）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _userHasScrolled || generation != _layoutGeneration) {
         _initialPositioning = false;
@@ -1294,7 +1040,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _settleToBottom(
         generation: generation,
         attempts: attempts + 1,
-        lastExtent: _controller.position.maxScrollExtent,
+        lastExtent: lastExtent,
       );
     });
   }
@@ -1306,14 +1052,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _controller.hasClients &&
         !_userHasScrolled &&
         generation == _layoutGeneration) {
-      final max = _controller.position.maxScrollExtent;
-      final target = max.clamp(0.0, max);
-      if (target > 0) {
-        _controller.jumpTo(target);
-        if (_controller.position.pixels >
-            _controller.position.maxScrollExtent) {
-          _controller.jumpTo(_controller.position.maxScrollExtent);
-        }
+      if (_controller.position.maxScrollExtent > 0) {
+        _controller.jumpTo(0);
       }
     }
     _initialPositioning = false;
@@ -1330,8 +1070,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   void _scrollToBottom({bool animated = true}) {
     if (!mounted || !_controller.hasClients) return;
     if (_positioningActive) return;
-    final target = _controller.position.maxScrollExtent;
-    if (target <= 0) return;
+    // A 重构（reverse）：offset 0 即底部。**已贴底时不需要任何滚动动作** ——
+    // reverse 下「贴底」是常态（初始即贴底、新内容也不推开视口），若仍每帧
+    // 触发追底链，会让 `_jumpSettling` 门控长期为真，进而使滚轮位移被
+    // `isProgrammaticScrolling` 全部吞掉。
+    if (_controller.position.pixels.abs() <= 0.5) return;
+    if (_controller.position.maxScrollExtent <= 0) return; // 内容不足一屏
+    const target = 0.0;
     if (animated) {
       if (_isAnimatingToBottom) return;
       _isAnimatingToBottom = true;
@@ -1385,6 +1130,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _dragDisplacement < 0) {
       return;
     }
+    // A 重构（reverse）：已贴底（offset 0）→ 无底可追，直接返回，
+    // 不占用 `_jumpSettling` 门控。
+    if (_controller.position.pixels.abs() <= 0.5) return;
     _jumpSettling = true;
     final generation = _layoutGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1400,18 +1148,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         return;
       }
       final position = _controller.position;
-      final max = position.maxScrollExtent;
-      // 已贴底（且未越界）：上一轮跳转已收敛，无需动作。
-      if ((max - position.pixels).abs() <= 0.5) {
+      // 已贴底（reverse：offset 0 即底部）：上一轮跳转已收敛，无需动作。
+      if (position.pixels.abs() <= 0.5 || position.maxScrollExtent <= 0) {
         _jumpSettling = false;
         return;
       }
-      // 落点恒为当帧 maxScrollExtent（界内）：goBallistic(0) 不会起弹簧。
-      // 若前帧 extent 收缩导致像素越界，此跳亦完成精准拉回（直跳非弹簧）。
-      _controller.jumpTo(max);
-      if (_controller.position.pixels > _controller.position.maxScrollExtent) {
-        _controller.jumpTo(_controller.position.maxScrollExtent);
-      }
+      // 直接贴 0：目标恒在界内，goBallistic(0) 不会起弹簧。
+      _controller.jumpTo(0);
       if (attempts >= _maxJumpResettle) {
         _jumpSettling = false;
         return;
@@ -1503,7 +1246,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       if (index < 0 || transcript.isEmpty) return;
       if (!mounted || !_controller.hasClients) return;
       final ratio = index / transcript.length;
-      final target = _controller.position.maxScrollExtent * ratio;
+      // A 重构（reverse）：transcript 索引 0 = 最新 = 视觉**底部**，
+      // 故「索引比例 → 滚动偏移」按 (1 - ratio) 换算（原正向为 ratio）。
+      final target = _controller.position.maxScrollExtent * (1.0 - ratio);
       if (!mounted || !_controller.hasClients) return;
       _controller.jumpTo(target);
       // 下一帧再精确对准（此时目标多半已入视口构建）。
@@ -1557,9 +1302,13 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
           renderObject.attached &&
           (ctx is! Element || ctx.mounted)) {
         unawaited(
+          // A 重构（reverse）：`alignment` 以**滚动轴起始端**为 0 点 ——
+          // 正向列表起点在顶部（0.0 = 对齐视口顶部），而 reverse 的起点在
+          // **底部**，0.0 会把目标贴到视口底部（紧邻新内容侧），随后到达的
+          // 流式 token 就会把它推走。故改用 1.0（= 视觉上方）。
           Scrollable.ensureVisible(
             ctx,
-            alignment: 0.0,
+            alignment: 1.0,
             alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
@@ -1623,6 +1372,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     List<TranscriptMessage> transcript,
   ) {
     if (loadedIndex <= 0 || transcript.isEmpty) return 0.0;
+    // A 重构（reverse）：滚动坐标系里 index 与偏移**负相关**（index 0 = 最新 =
+    // 视觉底部 = 偏移最大）。为沿用原有的正向插值逻辑，这里统一改用
+    // 「反向索引」建模：反向索引小 ⇔ 偏移小 ⇔ 视觉更靠上。
+    final int total = transcript.length;
+    int rev(int i) => total - 1 - i;
+    final int targetRev = rev(loadedIndex);
     final scrollableBox = context.findRenderObject() as RenderBox?;
     if (scrollableBox == null || !scrollableBox.attached) {
       return (loadedIndex * 120.0).clamp(
@@ -1648,12 +1403,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ancestor: scrollableBox,
       );
       final itemScrollOffset = _controller.position.pixels + localOffset.dy;
-      if (minRenderedIndex == null || i < minRenderedIndex) {
-        minRenderedIndex = i;
+      if (minRenderedIndex == null || rev(i) < minRenderedIndex) {
+        minRenderedIndex = rev(i);
         minRenderedOffset = itemScrollOffset;
       }
-      if (maxRenderedIndex == null || i > maxRenderedIndex) {
-        maxRenderedIndex = i;
+      if (maxRenderedIndex == null || rev(i) > maxRenderedIndex) {
+        maxRenderedIndex = rev(i);
         maxRenderedOffset = itemScrollOffset;
       }
     }
@@ -1661,23 +1416,23 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     final maxExtent = _controller.position.maxScrollExtent;
 
     if (minRenderedIndex != null && minRenderedOffset != null) {
-      if (loadedIndex < minRenderedIndex) {
+      if (targetRev < minRenderedIndex) {
         if (minRenderedIndex <= 0) return 0.0;
-        final ratio = loadedIndex / minRenderedIndex;
+        final ratio = targetRev / minRenderedIndex;
         return (minRenderedOffset * ratio).clamp(0.0, maxExtent);
       } else if (maxRenderedIndex != null &&
           maxRenderedOffset != null &&
-          loadedIndex > maxRenderedIndex) {
+          targetRev > maxRenderedIndex) {
         final remaining = transcript.length - 1 - maxRenderedIndex;
         if (remaining <= 0) return maxExtent;
-        final ratio = (loadedIndex - maxRenderedIndex) / remaining;
+        final ratio = (targetRev - maxRenderedIndex) / remaining;
         final distToMax = math.max(0.0, maxExtent - maxRenderedOffset);
         return (maxRenderedOffset + distToMax * ratio).clamp(0.0, maxExtent);
       } else if (minRenderedIndex != maxRenderedIndex &&
           maxRenderedIndex != null &&
           maxRenderedOffset != null) {
         final ratio =
-            (loadedIndex - minRenderedIndex) /
+            (targetRev - minRenderedIndex) /
             (maxRenderedIndex - minRenderedIndex);
         return (minRenderedOffset +
                 (maxRenderedOffset - minRenderedOffset) * ratio)
@@ -1696,7 +1451,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       return;
     }
     final current = _controller.position.pixels;
-    final adjusted = math.max(0.0, current - topPadding);
+    // A 重构（reverse）：目标已对齐视口顶部，此处需「下移 topPadding」避开顶部
+    // 导航栏 —— 正向靠 pixels 减小实现，反向轴下必须改为 pixels 增大（并夹在上限内）。
+    final adjusted = math.min(
+      _controller.position.maxScrollExtent,
+      current + topPadding,
+    );
     if ((adjusted - current).abs() > 1) {
       unawaited(
         _controller
@@ -1837,7 +1597,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       // ("scroll jumps to the newest message after loading history").
       // The restore window is brief and only blocks programmatic
       // scrolls; gesture state must be resolved here as usual.
-      if (_dragDisplacement < -_dragSensitivityThreshold) {
+      // A 重构（reverse 语义）：朝列表末尾滑（pixels 增大）才是离底看历史。
+      if (_dragDisplacement > _dragSensitivityThreshold) {
         if (!_userHasScrolled) {
           _pinnedTranscriptCount = ref
               .read(transcriptMessagesProvider(widget.sessionId))
@@ -1868,8 +1629,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _resetAnchorStabilityState();
         _pinnedTranscriptCount = 0;
       }
-    } else if (_dragDisplacement < -_dragSensitivityThreshold) {
-      // 2. 累计向下滑（=内容向下=朝顶部，手指从下往上滑，pixels 减小）→ 一定取消跟随
+    } else if (_dragDisplacement > _dragSensitivityThreshold) {
+      // A 重构（reverse 语义）：朝列表末尾滑 = pixels 增大 = **离开底部看历史** → 取消跟随。
+      // 原正向列表里「pixels 增大」是朝底部，方向恰好相反，故两分支内容已对调。
       _userHasScrolled = true;
       _nearBottom = false;
       _readingAnchor = null;
@@ -1879,8 +1641,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
             .read(transcriptMessagesProvider(widget.sessionId))
             .length;
       }
-    } else if (_dragDisplacement > _dragSensitivityThreshold) {
-      // 1. 累计向上滑（=内容向上=朝底部，手指从上往下滑，pixels 增大）
+    } else if (_dragDisplacement < -_dragSensitivityThreshold) {
+      // A 重构（reverse 语义）：朝列表起点滑 = pixels 减小 = **回到底部方向**。
       if (_pressFollowed) {
         // 按压前跟随中 → 恢复跟随（继续跟）
         _userHasScrolled = false;
@@ -1889,9 +1651,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _resetAnchorStabilityState();
         _pinnedTranscriptCount = 0;
       } else {
-        // 按压前不跟随 → 若松手位置接近底部超 80px 阈值 → 进入跟随；否则保持不跟随
+        // 按压前不跟随 → 若松手位置接近底部（reverse：距底距离 == pixels）→ 进入跟随；否则保持不跟随
         final distFromBottom = _controller.hasClients
-            ? _controller.position.maxScrollExtent - _controller.position.pixels
+            ? _controller.position.pixels
             : 0.0;
         if (distFromBottom < _nearBottomThreshold) {
           _userHasScrolled = false;
@@ -1911,8 +1673,14 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     _dragDisplacement = 0.0;
     _dragExceededThreshold = false;
 
+    // 本方法由 ScrollNotification 驱动，而滚动通知可能在 **layout 阶段**派发 ——
+    // 直接 setState 会触发 "Build scheduled during frame" 断言（既有隐患，
+    // 连续拖动场景可稳定复现）。此处的刷新只服务于「回底按钮」等表层状态，
+    // 延到帧后执行即可，视觉上无影响。
     if (mounted) {
-      setState(() {});
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
     }
   }
 
@@ -2354,7 +2122,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ? (isEnglish ? '$unreadCount new messages' : '$unreadCount 条新消息')
         : (isEnglish ? 'Scroll to bottom' : '回到底部');
     final distFromBottom = _controller.hasClients
-        ? _controller.position.maxScrollExtent - _controller.position.pixels
+        ? _controller.position.pixels // reverse：距底距离即 pixels
         : 0.0;
     final showScrollToBottomButton =
         _initialPositioned &&
@@ -2412,12 +2180,19 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
               } else if (notification is ScrollUpdateNotification) {
                 final isGesture =
                     notification.dragDetails != null || _isGestureActive;
+                // A 重构（reverse）：`scrollDelta` 的符号就是 **pixels 的变化方向**，
+                // 而反向基准把「看历史」从 pixels 减小翻成了 pixels 增大 ——
+                // 故判据随之反向（正向 `< 0`，reverse 下 `> 0`）。
+                // 实测（流式态探针）：上滚(scrollDelta=+100) → pixels 增大 = 看历史；
+                // 下滚(scrollDelta=-100) → pixels 回落到底。若仍用 `< 0`，会把
+                // 「回到底部」误判成看历史，而真正的看历史反被 auto-follow 拉回。
+                // 注意：**测试侧的手势方向不需要改**（上滚仍是看历史，语义未变）。
                 final isWheelUp =
                     !_isProgrammaticScrolling &&
                     notification.scrollDelta != null &&
                     notification.dragDetails == null &&
                     !_isGestureActive &&
-                    notification.scrollDelta! < 0;
+                    notification.scrollDelta! > 0;
 
                 if (isGesture || isWheelUp) {
                   _isUserInteracting = true;
@@ -2470,11 +2245,18 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
               children: [
                 ListView.builder(
                   controller: _controller,
+                  // A 重构（阶段 1）：reverse 让 offset 0 = 最新消息（底部）。
+                  // 初始定位 / 回到底部 / 分页 prepend 都不再需要「大偏移跳转」，
+                  // 从根上消除 SliverList 为到达远处偏移而顺序创建子项的 O(n) 开销。
+                  reverse: true,
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   addRepaintBoundaries: true,
                   addAutomaticKeepAlives: false,
                   itemCount: itemCount,
-                  itemBuilder: (context, index) {
+                  itemBuilder: (context, rawIndex) {
+                    // reverse 映射：视觉底部 = 逻辑末尾，物理 index 需反转回逻辑 index。
+                    // 原「尾部顺序」逻辑因此可原样保留。
+                    final index = itemCount - 1 - rawIndex;
                     // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
                     if (index < displayItems.length) {
                       final item = displayItems[index];

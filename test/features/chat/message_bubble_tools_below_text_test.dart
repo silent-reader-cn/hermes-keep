@@ -104,11 +104,18 @@ void main() {
     final toolCards = find.byType(ToolCallGroupCard);
     expect(toolCards, findsNWidgets(3));
 
-    final card0Top = tester.getTopLeft(toolCards.at(0)).dy;
+    // A 重构（reverse）：`find.byType` 遍历顺序 = 物理 index 顺序，reverse 下
+    // 物理 0 在底部 ⇒ 树序为「从下到上」，`.at(i)` 视觉语义反转。改为按屏幕
+    // dy 排序（从上到下）取用，与树序解耦。
+    final cardTops = <double>[
+      for (var i = 0; i < toolCards.evaluate().length; i++)
+        tester.getTopLeft(toolCards.at(i)).dy,
+    ]..sort();
+    final card0Top = cardTops[0];
     final text1Top = tester.getTopLeft(text1Finder).dy;
-    final card1Top = tester.getTopLeft(toolCards.at(1)).dy;
+    final card1Top = cardTops[1];
     final text2Top = tester.getTopLeft(text2Finder).dy;
-    final card2Top = tester.getTopLeft(toolCards.at(2)).dy;
+    final card2Top = cardTops[2];
 
     // 1. 首组思考卡在第一条正文上方
     expect(

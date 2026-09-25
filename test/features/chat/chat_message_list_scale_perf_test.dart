@@ -6,7 +6,6 @@ import 'package:hermes_ui/core/cache/cache_providers.dart';
 import 'package:hermes_ui/core/cache/cache_service.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
-import 'package:hermes_ui/features/chat/widgets/chat_message_list.dart';
 import 'package:hermes_ui/features/chat/widgets/message_bubble.dart';
 
 import '../../helpers/fake_chat_api.dart';

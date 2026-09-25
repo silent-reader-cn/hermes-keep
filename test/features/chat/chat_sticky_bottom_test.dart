@@ -84,7 +84,7 @@ void main() {
       expect(drivenCount, 0, reason: 'Live 增量 token 不应产生 animateTo 动画活动');
       expect(
         pos.pixels,
-        closeTo(pos.maxScrollExtent, 1.0),
+        closeTo(0.0, 1.0),
         reason: 'Live 增量更新应始终保持粘底',
       );
     });
@@ -138,13 +138,20 @@ void main() {
       );
 
       await tester.pump();
-      expect(pos.activity, isA<DrivenScrollActivity>(), reason: '阶段切换到 sending 应触发 200ms 平滑动画');
+      // A 重构（reverse）：贴底时滚底目标恒为 offset 0，且当前已在 0 ——
+      // 无位移即无动画活动（不产生 DrivenScrollActivity 是正确结果）。
+      // 原断言「必须有平滑动画」是正向实现（需从 max 位置跳转）的产物。
+      expect(
+        pos.pixels,
+        closeTo(0.0, 1.0),
+        reason: '阶段切到 sending 后仍应贴底（reverse：底部 = offset 0）',
+      );
 
       // 推进多帧让 200ms 动画收敛完成
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
     });
 
     testWidgets('全平台（Android+iOS）软键盘弹出/收起触发 postFrame 无动画 jump 回底', (tester) async {
@@ -193,7 +200,7 @@ void main() {
           await tester.pumpAndSettle();
 
           final pos = positionOf(tester);
-          expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+          expect(pos.pixels, closeTo(0.0, 1.0));
 
           // 模拟键盘弹出 (bottom viewInset = 300)
           await tester.pumpWidget(
@@ -219,7 +226,7 @@ void main() {
           final posAfterKeyboard = positionOf(tester);
           expect(
             posAfterKeyboard.pixels,
-            closeTo(posAfterKeyboard.maxScrollExtent, 1.0),
+            closeTo(0.0, 1.0),
             reason: '键盘弹出后在 $platform 上应 postFrame jump 回底',
           );
 
@@ -247,7 +254,7 @@ void main() {
           final posAfterDismiss = positionOf(tester);
           expect(
             posAfterDismiss.pixels,
-            closeTo(posAfterDismiss.maxScrollExtent, 1.0),
+            closeTo(0.0, 1.0),
             reason: '键盘收起后在 $platform 上应 postFrame jump 回底',
           );
         } finally {
@@ -389,7 +396,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final pos = positionOf(tester);
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
       expect(stateOf(tester).userHasScrolled, isFalse);
       expect(stateOf(tester).nearBottom, isTrue);
 
@@ -423,7 +430,7 @@ void main() {
       final posAfterExpand = positionOf(tester);
       expect(
         posAfterExpand.pixels,
-        closeTo(posAfterExpand.maxScrollExtent, 1.0),
+        closeTo(0.0, 1.0),
         reason: '输入栏增高挤压后应 postFrame jump 保持贴底',
       );
       expect(stateOf(tester).userHasScrolled, isFalse);
@@ -569,7 +576,7 @@ void main() {
       expect(state.pinnedTranscriptCount, 0, reason: '收敛后 _pinnedTranscriptCount 应为 0');
       expect(state.hasReadingAnchor, isFalse, reason: '收敛后 _readingAnchor 应为 null');
       expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsNothing, reason: '回底按钮不显');
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0), reason: '初始应精准贴底');
+      expect(pos.pixels, closeTo(0.0, 1.0), reason: '初始应精准贴底');
 
       // 无手势流式后新 token 自动贴底
       for (var i = 0; i < 5; i++) {
@@ -581,11 +588,11 @@ void main() {
 
       final posAfterTokens = positionOf(tester);
       expect(
-        posAfterTokens.maxScrollExtent - posAfterTokens.pixels,
+        posAfterTokens.pixels,
         lessThan(80.0),
         reason: '新 token 到达后应自动贴底跟随',
       );
-      expect(posAfterTokens.pixels, closeTo(posAfterTokens.maxScrollExtent, 1.0));
+      expect(posAfterTokens.pixels, closeTo(0.0, 1.0));
       expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsNothing);
     });
 
@@ -639,7 +646,7 @@ void main() {
 
       await tester.pumpAndSettle();
       var pos = positionOf(tester);
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
       expect(stateOf(tester).nearBottom, isTrue);
       expect(stateOf(tester).userHasScrolled, isFalse);
 
@@ -670,7 +677,7 @@ void main() {
 
       await tester.pumpAndSettle();
       pos = positionOf(tester);
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
       expect(stateOf(tester).nearBottom, isTrue);
       expect(stateOf(tester).userHasScrolled, isFalse);
 
@@ -701,7 +708,7 @@ void main() {
 
       await tester.pumpAndSettle();
       pos = positionOf(tester);
-      expect(pos.pixels, closeTo(pos.maxScrollExtent, 1.0));
+      expect(pos.pixels, closeTo(0.0, 1.0));
       expect(stateOf(tester).nearBottom, isTrue);
       expect(stateOf(tester).userHasScrolled, isFalse);
     });

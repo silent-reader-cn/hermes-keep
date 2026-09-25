@@ -74,9 +74,11 @@ void main() {
       await tester.pumpAndSettle();
       final afterPos = positionOf(tester);
 
-      // 贴底状态下视口应随内容生长自动向下滚动
-      expect(afterPos.pixels, greaterThan(initialPixels));
-      expect(afterPos.maxScrollExtent - afterPos.pixels, lessThan(5.0));
+      // A 重构（reverse）：新内容插在 index 0 侧（底部），贴底时 pixels 天然
+      // 保持 0 —— 不再需要「随内容生长自动向下滚动」的像素位移。
+      // （原 greaterThan(initialPixels) 断言属于正向实现的口径。）
+      expect(initialPixels, lessThan(5.0));
+      expect(afterPos.pixels, lessThan(5.0));
       // 贴底时不显示悬浮回底按钮
       expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsNothing);
     });
@@ -124,7 +126,7 @@ void main() {
 
       final pos = positionOf(tester);
       final readingPixels = pos.pixels;
-      expect(pos.maxScrollExtent - pos.pixels, greaterThan(80));
+      expect(pos.pixels, greaterThan(80));
 
       // 应出现悬浮回底按钮
       final buttonFinder = find.byKey(const ValueKey('chat-scroll-to-bottom-button'));
@@ -203,7 +205,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final endPos = positionOf(tester);
-      expect(endPos.maxScrollExtent - endPos.pixels, lessThan(2.0));
+      expect(endPos.pixels, lessThan(2.0));
       expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsNothing);
     });
 
@@ -320,7 +322,7 @@ void main() {
 
       final endPos = positionOf(tester);
       expect(
-        endPos.pixels >= endPos.maxScrollExtent - 2.0,
+        endPos.pixels <= 2.0,
         isTrue,
         reason: '用户发送新消息后应立即平滑滚底并展示新消息',
       );

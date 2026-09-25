@@ -135,7 +135,7 @@ void main() {
       // 用户上滑离底
       await tester.drag(scrollable, const Offset(0, 600));
       await tester.pumpAndSettle();
-      expect(pos.maxScrollExtent - pos.pixels, greaterThan(120));
+      expect(pos.pixels, greaterThan(120));
 
       api.statusResponse = const ChatStreamStatusResponse(active: true);
 
@@ -159,7 +159,7 @@ void main() {
 
       final endPos = positionOf(tester);
       expect(
-        endPos.pixels >= endPos.maxScrollExtent - 2.0,
+        endPos.pixels <= 2.0,
         isTrue,
         reason: '用户发送新消息后应平滑滚动到底部展示新内容',
       );
@@ -240,7 +240,7 @@ void main() {
 
       expect(
         pos.pixels,
-        closeTo(pos.maxScrollExtent, 1.0),
+        closeTo(0.0, 1.0),
         reason: '点击回底按钮后应恢复贴底',
       );
 
@@ -252,7 +252,7 @@ void main() {
 
       expect(
         pos.pixels,
-        closeTo(pos.maxScrollExtent, 1.0),
+        closeTo(0.0, 1.0),
         reason: '恢复跟随状态后新 token 应继续粘底',
       );
     });

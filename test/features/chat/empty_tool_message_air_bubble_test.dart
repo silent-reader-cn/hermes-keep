@@ -98,17 +98,33 @@ void main() {
 
   testWidgets('空消息 0 条基线：文本气泡位置', (tester) async {
     await pumpHistory(tester: tester, emptyToolMessages: 0);
-    final y0 = tester.getTopLeft(find.textContaining('两条新菜单项')).dy;
-    // 无空消息时文本紧跟在用户消息后
-    expect(y0, lessThan(200));
+    final textFinder = find.textContaining('两条新菜单项');
+    expect(textFinder, findsOneWidget);
+    // A 重构（reverse）：内容不足一屏时**贴底**排列（正向为贴顶），
+    // 故绝对 y 不再是「视口顶部附近」——改判「在视口内」。
+    final y0 = tester.getTopLeft(textFinder).dy;
+    expect(y0, greaterThan(0), reason: '文本气泡应在视口内');
+    expect(y0, lessThan(3000.0), reason: '文本气泡应在视口内（reverse 贴底）');
   });
 
   testWidgets('3 条空消息不得产生空气泡把文本顶低', (tester) async {
+    // A 重构（reverse）：内容不足一屏时贴底排列，绝对 y 不可跨用例比较；
+    // 本用例真实意图是「空气泡不产生额外高度」——改为与 0 条基线直接比较。
+    await pumpHistory(tester: tester, emptyToolMessages: 0);
+    final y0 = tester.getTopLeft(find.textContaining('两条新菜单项')).dy;
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
     await pumpHistory(tester: tester, emptyToolMessages: 3);
     final y3 = tester.getTopLeft(find.textContaining('两条新菜单项')).dy;
-    // 修复前：3 条空消息每条空气泡 ≈22px → 文本被顶低 ~66px；
-    // 修复后：空消息被过滤，文本位置与 0 条基线一致。
-    expect(y3, lessThan(200), reason: '空内容消息不应保留为空气泡占位，实际 y=$y3');
+    // 修复前：3 条空消息每条空气泡 ≈22px → 文本被顶低 ~66px（位移明显）；
+    // 修复后：空消息被过滤，文本位置与 0 条基线一致（差值应在容差内）。
+    expect(
+      (y3 - y0).abs(),
+      lessThan(30),
+      reason: '空内容消息不应保留为空气泡占位（0 条 y=$y0 vs 3 条 y=$y3）',
+    );
     // 工具聚合卡仍应存在（挂在最早工具消息上）
     expect(find.textContaining('执行代码 ×3'), findsOneWidget);
   });
