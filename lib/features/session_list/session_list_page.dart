@@ -679,8 +679,33 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                               : BorderSide.none,
                         ),
                       ),
-                      sliver: SliverList.builder(
+                      // #160：窄屏（卡片形态）**保留项与项之间的分隔线** ——
+                      // #151「去分隔线」只适用于桌面侧栏的朴素行；当时一刀切把
+                      // 宽窄都去掉了（主人反馈「窄屏不该隐蔽分割线」）。
+                      // 顺带恢复 separated 专有的 findItemIndexCallback（滚动锚点反查）。
+                      sliver: SliverList.separated(
                         itemCount: section.sessions.length,
+                        findItemIndexCallback: (Key key) {
+                          if (key is ValueKey<String>) {
+                            final value = key.value;
+                            if (value.startsWith('session-row-')) {
+                              final id = value.substring('session-row-'.length);
+                              final index = section.sessions.indexWhere(
+                                (s) => (s.sessionId ?? s.id) == id,
+                              );
+                              return index >= 0 ? index : null;
+                            }
+                          }
+                          return null;
+                        },
+                        separatorBuilder: (context, index) => Container(
+                          color: LightSurfaces.resolve(
+                            context,
+                            LightSurfaces.divider,
+                            dark: CupertinoColors.separator,
+                          ),
+                          height: 1.0 / MediaQuery.devicePixelRatioOf(context),
+                        ),
                         itemBuilder: (context, index) {
                           final session = section.sessions[index];
                           return _SessionRow(
