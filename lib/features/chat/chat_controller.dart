@@ -814,10 +814,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             '${m.role}:${m.timestamp}:${m.content}',
           );
         }).toList();
-        // A 重构（reverse）：列表 index 0 = 最新（视觉底部），因此**更早消息**
-        // 应位于索引大侧（视觉上方）。原正向实现把 fresh 拼在头部（视觉上方），
-        // 反向基准下那样会把历史插到视觉**下方**、推动当前视口。
-        final allMessages = [...state.messages, ...fresh];
+        // reverse 列表下更早的消息必须拼在**数组开头**：
+        // `chat_message_list.dart` 的 itemBuilder 做了 `index = itemCount - 1 - rawIndex`
+        // 反转映射，因此逻辑数组仍是「旧 → 新」，displayItems[0]（最旧）渲染在
+        // 视觉**顶部**、数组末尾渲染在视觉**底部**。
+        //
+        // 【回归教训】A 重构时这行曾被误改成 [...messages, ...fresh]，理由写的是
+        // 「index 0 = 最新（视觉底部）」—— 该前提只考虑了 reverse 滚动方向、漏了
+        // itemBuilder 的索引反转，导致更早的历史被拼到数组尾部、渲染到视觉**下方**
+        // （用户拉到最顶加载出来的记录出现在屏幕下面）。
+        final allMessages = [...fresh, ...state.messages];
         final fallbackOffset = state.messagesOffset - loaded.length;
         final newOffset =
             detail.messagesOffset ?? (fallbackOffset < 0 ? 0 : fallbackOffset);

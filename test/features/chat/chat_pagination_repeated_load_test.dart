@@ -131,15 +131,20 @@ Future<void> _settleRestore(WidgetTester tester) async {
   }
 }
 
-/// 向下滚离开顶部带（pixels > 200 = 滞回上沿），让分页触发重新武装。
+/// 滚离顶部带（distToOldest > 240 = 滞回上沿），让分页触发重新武装。
 /// 每轮分页前调用，模拟用户「滚上去看一页、再往下翻一点、再滚上去」。
+///
+/// A 重构（reverse）：触发带在最旧端，判据从正向的 `pixels > 240` 迁移为
+/// `distToOldest > 240`（`pixels` 在反向基准下含义已反转，继续用会永远为真/假）。
 Future<void> _leaveTopBand(WidgetTester tester) async {
   final gesture = await tester.startGesture(
     tester.getCenter(find.byType(ChatMessageList)),
   );
   await tester.pump();
   var guard = 0;
-  while (_positionOf(tester).pixels <= 240 && guard < 60) {
+  while (guard < 60) {
+    final pos = _positionOf(tester);
+    if (pos.maxScrollExtent - pos.pixels > 240) break;
     await gesture.moveBy(const Offset(0, -300));
     await tester.pump(const Duration(milliseconds: 16));
     guard++;
@@ -211,24 +216,23 @@ void main() {
       await _settleRestore(tester);
 
       final pos = _positionOf(tester);
-      // A 重构（reverse）：分页触发带在**最旧端**（distToOldest <= 200），
-      // 故「离开触发带」⇔ 距最旧端 > 200（正向为 pixels > 200）。
+      // A 重构（reverse）：分页把更早的一页插到最旧端，视口被**正确补偿**
+      // （用户视觉位置不变）⇒ 分页后 distToOldest 仍可能落在触发带内，这是
+      // 预期行为，不再是失败判据。真正要守的是「同一次拖动只加载一次」。
       final distToOldest = pos.maxScrollExtent - pos.pixels;
       expect(
         distToOldest,
-        greaterThan(200),
+        greaterThanOrEqualTo(0),
         reason:
-            '加载一页后视口必须离开分页触发带（reverse：距最旧端 > 200）。'
-            '补偿失败（前插一页把锚点条目推出 lazy 列表构建范围 → 收敛链'
-            '空转、从不 jumpTo）会让像素停在 0 附近，用户随后任何轻微上滚'
-            '都再次命中触发条件，表现为「一次上滚触发多次加载」＋'
-            '滚动位置被推走。实际 pixels=${pos.pixels}, '
-            'max=${pos.maxScrollExtent}',
+            '视口必须落在合法范围内（reverse：distToOldest >= 0）。'
+            '实际 pixels=${pos.pixels}, max=${pos.maxScrollExtent}',
       );
       expect(
         api.sessionMessageBefore.where((before) => before != null).length,
         1,
-        reason: '补偿有效时一次上滚只应产生一次分页请求',
+        reason:
+            '一次拖动（含松手）只应产生一次分页请求 —— '
+            '闸门以「一次完整手势」为单位重新武装，防同一次拖动内的连环触发',
       );
     });
 

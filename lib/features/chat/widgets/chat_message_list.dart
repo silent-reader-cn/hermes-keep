@@ -127,6 +127,13 @@ sealed class _ChatListItem {
   const _ChatListItem();
 }
 
+/// 分页加载指示项：位于逻辑索引 0（= reverse 列表的视觉**顶部**，即最旧端）。
+///
+/// 用户上翻长会话触发加载历史时显示，提供必要的交互反馈。
+class _OlderLoadingListItem extends _ChatListItem {
+  const _OlderLoadingListItem();
+}
+
 class _CapsuleListItem extends _ChatListItem {
   const _CapsuleListItem({
     required this.turn,
@@ -298,12 +305,6 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 贴底判定阈值（收紧至 80px，既保障平滑跟随又防止向上轻扫被拽回）。
   static const double _nearBottomThreshold = 80.0;
 
-  /// 分页触发的滞回上沿（#125）：视口离开顶部带（pixels > 200）后重新
-  /// 武装分页触发。缺了这道滞回时，一次上滚把视口留在 <= 80 区间，请求
-  /// 返回后「在途锁」立即释放（`_loadOlderMessages` 的 finally），下一个
-  /// 滚动事件又命中触发条件 → 单次上滚产生多轮加载。
-  static const double _olderLoadRearmThreshold = 200.0;
-
   /// 连续「零推进」分页上限（#125）：分页返回后既无新增消息、游标也未
   /// 推进（服务端已无更早历史，或请求失败），连续达到该次数即封顶停手，
   /// 避免滚动事件把请求打成风暴。
@@ -330,7 +331,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
-  /// 顶部带分页触发是否已武装（#125 滞回，见 [_olderLoadRearmThreshold]）。
+  /// 顶部带分页触发是否已武装（#125 滞回）。
+  ///
+  /// 触发后置 false，**在下一次手势结束时**重新置 true（见 `_handleGestureEnd`）
+  /// ⇒ 一次拖动至多加载一页；松手再拖可继续加载。
   bool _olderLoadArmed = true;
   /// 连续零推进的分页次数（#125）。
   int _olderLoadStalled = 0;
@@ -752,9 +756,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     // 故触发带/武装带随坐标基准整体反向 —— 原来是「贴顶即加载」，
     // 反向基准下不变的话会变成「一贴底就狂加载历史」。
     final distToOldest = position.maxScrollExtent - position.pixels;
-    if (distToOldest > _olderLoadRearmThreshold) {
-      _olderLoadArmed = true;
-    }
+    // 【#125 回归补充】这里**不再**重新武装，只在手势结束时判（见
+    // `_handleGestureEnd`）：分页把更早的一页插到最旧端后，`maxScrollExtent`
+    // 先增长、`pixels` 的视口补偿滞后一帧，那一瞬 `distToOldest` 会虚假地
+    // > 200；而用户此刻通常仍按着手指持续拖，若据此武装就会在同一位置
+    // 反复触发（实测一次拖动触发 15 次加载）。语义上「离开顶部带」必须以
+    // 一次完整手势为单位判定。
     if (distToOldest <= _nearBottomThreshold &&
         _olderLoadArmed &&
         !_olderLoadExhausted &&
@@ -1584,6 +1591,18 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     _isGestureActive = false;
     _isUserInteracting = false;
 
+    // 【#125 回归补充】分页触发闸门的重新武装 = **一次手势结束即恢复**。
+    //
+    // 不按「视口是否离开顶部带」判定：反向列表下分页把更早的一页插到最旧端时，
+    // 视口会被正确补偿（用户视觉位置保持不变），因此分页后 distToOldest 往往
+    // 仍在触发带内（实测 29.5）——若据此拒绝武装，用户就再也拉不出下一页。
+    //
+    // 真正要防的是「同一次拖动里反复触发」：滚动回调中的判定会撞上插入引起的
+    // 帧间瞬态（maxScrollExtent 先增、pixels 补偿滞后一帧，那一瞬 distToOldest
+    // 虚假 > 200），实测一次拖动触发 15 次加载。以「一次完整手势」为单位武装，
+    // 既根治连环触发，又保留「松手再拖继续加载」的正常语义。
+    _olderLoadArmed = true;
+
     if (!_initialPositioned || _initialPositioning) {
       _dragDisplacement = 0.0;
       _dragExceededThreshold = false;
@@ -2108,6 +2127,15 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         : (renderLiveTimeline?.length ?? 1);
 
     var itemCount = displayItems.length + liveItemCount;
+
+    // 分页加载指示：正在拉取更早历史时，在**最旧端**（逻辑索引 0 = 视觉顶部）
+    // 插一个加载项。没有它的话，用户上翻长会话时界面毫无反馈，会以为卡住
+    // （主人真机反馈）。
+    final showOlderLoader = _loadingOlder;
+    if (showOlderLoader) {
+      displayItems.insert(0, const _OlderLoadingListItem());
+      itemCount += 1;
+    }
     if (showStatusLine) itemCount++;
     if (showQueuedBanner) itemCount++;
     if (needFallback) itemCount++;
@@ -2260,6 +2288,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                     // 统一尾部顺序：transcript | queued | steer | streaming | sending | fallback
                     if (index < displayItems.length) {
                       final item = displayItems[index];
+                      if (item is _OlderLoadingListItem) {
+                        return const _OlderLoadingIndicator();
+                      }
                       if (item is _CapsuleListItem) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(
@@ -2992,6 +3023,24 @@ class _FallbackToolReasoningCards extends StatelessWidget {
             if (group != toolGroups.last) const SizedBox(height: 8),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// 分页加载指示器（列表最旧端 / 视觉顶部）。
+///
+/// 用户上翻长会话时给出即时反馈；不放文案以避免引入新的 l10n key，
+/// 视觉上用与全站一致的 [CupertinoActivityIndicator]。
+class _OlderLoadingIndicator extends StatelessWidget {
+  const _OlderLoadingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: CupertinoActivityIndicator(radius: 8),
       ),
     );
   }
