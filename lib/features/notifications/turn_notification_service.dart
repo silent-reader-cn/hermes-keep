@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../app/locale/locale_resolver.dart';
+import '../../core/utils/injection_markers.dart';
 import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
@@ -770,7 +771,10 @@ class LocalNotificationsTurnNotificationService
 
   /// preview 单行化 + 截断（通知栏正文展示用）。
   static String formatPreview(String preview) {
-    final oneLine = preview.replaceAll(RegExp(r'\s+'), ' ').trim();
+    // 通知预览先剥服务端注入标记（[Workspace::v1] / [Attached files] / 行级占位符），
+    // 否则这些内部标记会被用户看到。
+    final cleaned = stripInjectionMarkers(preview);
+    final oneLine = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (oneLine.length <= maxPreviewLength) return oneLine;
     return '${oneLine.substring(0, maxPreviewLength)}…';
   }

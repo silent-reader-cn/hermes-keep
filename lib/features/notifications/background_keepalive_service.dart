@@ -1058,7 +1058,12 @@ class ProductionBackgroundKeepaliveService
                         if (m is Map &&
                             m['role'] == 'assistant' &&
                             m['content'] is String &&
-                            (m['content'] as String).trim().isNotEmpty) {
+                            (m['content'] as String).trim().isNotEmpty &&
+                            // 结构化内容（\x00json: 前缀）不放通知预览：其负载可能是
+                            // 内嵌 base64 的 content blocks，压平截断后仍是一串乱码。
+                            // 跳过它继续找上一条可读的 assistant 消息。
+                            !(m['content'] as String)
+                                .startsWith('\u0000json:')) {
                           preview = LocalNotificationsTurnNotificationService
                               .formatPreview(m['content'] as String);
                           break;
@@ -1163,7 +1168,12 @@ class ProductionBackgroundKeepaliveService
                   if (m is Map &&
                       m['role'] == 'assistant' &&
                       m['content'] is String &&
-                      (m['content'] as String).trim().isNotEmpty) {
+                      (m['content'] as String).trim().isNotEmpty &&
+                      // 结构化内容（\x00json: 前缀）不放通知预览：其负载可能是
+                      // 内嵌 base64 的 content blocks，压平截断后仍是一串乱码。
+                      // 跳过它继续找上一条可读的 assistant 消息。
+                      !(m['content'] as String)
+                          .startsWith('\u0000json:')) {
                     preview = LocalNotificationsTurnNotificationService
                         .formatPreview(m['content'] as String);
                     break;
