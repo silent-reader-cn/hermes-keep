@@ -1,4 +1,5 @@
 import '../../core/models/chat_message.dart';
+import '../../core/utils/injection_markers.dart';
 
 /// 对比本地消息列表与服务端消息列表，执行 diff-merge（类 VDOM 调和）。
 ///
@@ -268,36 +269,11 @@ bool isMessageMatch(ChatMessage local, ChatMessage server) {
   return false;
 }
 
-/// 剥离服务端注入标记（[Workspace::v1: ...]、[Attached files: ...]、行级占位符），
-/// 归一化展示与比对文本。
-String _normalizeUserContent(String raw) {
-  var text = raw;
-  // 1. 剥离 ^[Workspace::v1: ...] 行（可能带前导换行，容忍转义反斜杠路径与任意后缀）
-  text = text.replaceAll(
-    RegExp(
-      r'^[^\S\r\n]*\[Workspace::v1:[ \t]*[^\]]*\][^\S\r\n]*(?:\r?\n|$)',
-      multiLine: true,
-      caseSensitive: false,
-    ),
-    '',
-  );
-  // 2. 剥离 [Attached files: ...] 段
-  text = text.replaceAll(
-    RegExp(r'\[Attached files:[ \t]*[^\]]*\]', caseSensitive: false),
-    '',
-  );
-  // 3. 剥离行级占位符 [screenshot]、[image]、[attachment]（整行精确匹配才删，防误伤正文）
-  text = text.replaceAll(
-    RegExp(
-      r'^[^\S\r\n]*\[(screenshot|image|attachment)\][^\S\r\n]*(?:\r?\n|$)',
-      multiLine: true,
-      caseSensitive: false,
-    ),
-    '',
-  );
-  // 4. 归一化后 trim 首尾空白
-  return text.trim();
-}
+/// 剥离服务端注入标记（[Workspace::v1: ...]、[Attached files: ...]、行级占位符、
+/// 结构化内容前缀），归一化展示与比对文本。
+///
+/// 实现统一在 [stripInjectionMarkers]（与会话标题净化共用一份正则，防漂移）。
+String _normalizeUserContent(String raw) => stripInjectionMarkers(raw);
 
 bool _isTempId(String? id) {
   if (id == null || id.isEmpty) return true;

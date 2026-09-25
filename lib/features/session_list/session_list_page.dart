@@ -14,6 +14,7 @@ import '../../core/models/session.dart';
 import '../../core/models/workspace.dart';
 import '../../core/providers/catalog_providers.dart';
 import '../../core/utils/accessibility.dart';
+import '../../core/utils/injection_markers.dart';
 import '../../core/utils/safe_clipboard.dart';
 import '../../app/shell/adaptive_shell.dart';
 import '../../app/theme/light_surfaces.dart';
@@ -2113,12 +2114,18 @@ class _SessionRowState extends State<_SessionRow> {
   }
 }
 
+/// 会话标题显示：净化注入标记 + 空标题兜底。
+///
+/// 服务端标题取自首条消息，可能把 `[Attached files: …]` 也当作标题词
+/// （实测「bug 1000 Attached files」），故显示前必须剥离。
 String _displayTitle(BuildContext context, SessionSummary session) {
+  final l10n = AppLocalizations.of(context);
   final title = session.title?.trim();
   if (title == null || title.isEmpty) {
-    return AppLocalizations.of(context).untitledSession;
+    return l10n.untitledSession;
   }
-  return title;
+  final sanitized = sanitizeSessionTitle(title);
+  return sanitized.isEmpty ? l10n.untitledSession : sanitized;
 }
 
 /// 由 [projectsProvider] 构建 projectId → 名称 映射（会话行副标题「项目名」

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../utils/equality.dart';
 import '../utils/lossy_json.dart';
 import 'json_value.dart';
@@ -5,6 +7,14 @@ import 'message_attachment.dart';
 
 /// 聊天消息（Swift: ChatMessage.swift）。
 class ChatMessage {
+  /// Hermes agent 的内部结构化内容前缀（对应 `hermes_state.py`
+  /// `SessionMessagesMixin._CONTENT_JSON_PREFIX`）：带附件的多模态消息会把
+  /// content blocks 序列化成 `\x00json:[{type:text},{type:image,…}]` 存进
+  /// transcript，NUL 前缀用于避免与正文冲突。
+  ///
+  /// webui 的 transcript 接口**原样透传**该字符串，客户端若不识别就会把
+  /// 内嵌的 base64 图片数据当正文渲染（实测可达 1MB）。故解码层必须剥离。
+  static const String structuredContentPrefix = '\u0000json:';
   const ChatMessage({
     this.role,
     this.content,
@@ -141,7 +151,13 @@ class ChatMessage {
     Map<String, Object?> json,
   ) {
     final asString = lossyString(json, 'content');
-    if (asString != null) return (text: asString, parts: null);
+    if (asString != null) {
+      // Hermes agent 结构化内容（\x00json:[...]）：先解出文本与 parts，
+      // 否则内嵌的 base64 图片数据会当正文渲染（见 structuredContentPrefix）。
+      final structured = _decodeStructuredContent(asString);
+      if (structured != null) return structured;
+      return (text: asString, parts: null);
+    }
 
     final value = JsonValue.fromJson(json['content']);
     if (value is JsonArray) {
@@ -151,6 +167,32 @@ class ChatMessage {
       return (text: null, parts: null);
     }
     return (text: value.compactJsonString, parts: null);
+  }
+
+  /// 解码 Hermes agent 的结构化内容字符串（`\x00json:<json array>`）。
+  ///
+  /// 命中前缀且能解出非空数组时返回（纯文本, parts）；**任何异常/非数组/空数组
+  /// 一律返回 null 交回调用方按普通字符串处理** —— 该前缀是服务端内部格式，
+  /// 客户端只做「尽力剥离」，绝不因为畸形负载把消息读崩。
+  ///
+  /// 返回的 parts 保留原始 blocks（图片块仍在），供附件/媒体渲染复用；
+  /// 文本只取 `type == text` 的块，base64 图片数据不进正文。
+  static ({String? text, List<JsonValue>? parts})? _decodeStructuredContent(
+    String raw,
+  ) {
+    if (!raw.startsWith(structuredContentPrefix)) return null;
+    final payload = raw.substring(structuredContentPrefix.length);
+    if (payload.isEmpty) return null;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(payload);
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! List || decoded.isEmpty) return null;
+    final value = JsonValue.fromJson(decoded);
+    if (value is! JsonArray || value.value.isEmpty) return null;
+    return (text: _textContentFromParts(value.value), parts: value.value);
   }
 
   static String? _textContentFromParts(List<JsonValue> parts) {
