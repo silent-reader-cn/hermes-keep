@@ -294,7 +294,15 @@ class DownloadController extends Notifier<DownloadState> {
     );
     _updateTask(cancelledTask);
     await _repository.saveRecord(cancelledTask);
-    _syncProgressNotification(cancelledTask);
+
+    // #159：取消后不再把已取消任务当「进行中」上报（否则终态窗口一过，岛与 1401
+    // 会显示幽灵进度「正在下载 <已取消的文件> · 0%」）；队列里还有别的下载时，
+    // 由那条任务自己的进度回调续报。
+    if (!state.tasks.any((t) => t.status == DownloadStatus.downloading)) {
+      unawaited(
+        _notificationService.clearDownloadProgress().catchError((Object _) {}),
+      );
+    }
 
     DiagnosticsService.instance.log(
       level: DiagnosticsLogLevel.info,
@@ -937,8 +945,15 @@ class DownloadController extends Notifier<DownloadState> {
     );
   }
 
+  /// 任务写入的唯一运行期入口（初始化装载走 `state.copyWith`，不经此处）。
+  ///
+  /// #159 终态边沿上报：失败/取消散落在 worker 的 5 处取消分支与重试耗尽分支，
+  /// 逐点接线上岛必漏 —— 改在唯一写入口做**状态边沿检测**（上一状态 ≠ 终态即
+  /// 上报一次），未来新增写入点自动覆盖。完成态仍由两条完成路径显式上报
+  /// （#158：那里还要 await 序与字节数），二者互不影响。
   void _updateTask(DownloadTask task) {
     final index = state.tasks.indexWhere((t) => t.id == task.id);
+    final previous = index != -1 ? state.tasks[index] : null;
     if (index != -1) {
       final newTasks = List<DownloadTask>.from(state.tasks);
       newTasks[index] = task;
@@ -946,5 +961,23 @@ class DownloadController extends Notifier<DownloadState> {
     } else {
       state = state.copyWith(tasks: [task, ...state.tasks]);
     }
+
+    if (previous == null || previous.status == task.status) return;
+    if (task.status == DownloadStatus.failed) {
+      _reportDownloadSettled(task, cancelled: false);
+      return;
+    }
+    if (task.status == DownloadStatus.cancelled) {
+      _reportDownloadSettled(task, cancelled: true);
+    }
+  }
+
+  /// #159 下载失败/取消上岛（fire-and-forget：通知服务内部吞异常，仅安卓 16+ 生效）。
+  void _reportDownloadSettled(DownloadTask task, {required bool cancelled}) {
+    unawaited(
+      _notificationService
+          .notifyDownloadFailed(task.id, task.fileName, cancelled: cancelled)
+          .catchError((Object _) {}),
+    );
   }
 }

@@ -1944,6 +1944,21 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
   String liveUpdateDownloadQueuedSuffix(int count) =>
       isEnglish ? ' · +$count queued' : ' · 还有 $count 个';
 
+  /// 活动正文：下载完成（#158，岛上的终态）。
+  ///
+  /// 与回合完成态的「回合已完成」区分开：下载是全局动作、不属于回合，故文案
+  /// 以文件名为焦点，让用户一眼知道**下完了哪个文件**。
+  String liveUpdateActivityDownloadCompleted(String fileName) =>
+      isEnglish ? '$fileName downloaded' : '$fileName 下载完成';
+
+  /// 活动正文：下载失败（#159，岛上的中断态）。
+  String liveUpdateActivityDownloadFailed(String fileName) =>
+      isEnglish ? '$fileName failed' : '$fileName 下载失败';
+
+  /// 活动正文：下载被用户取消（#159，岛上的中断态）。
+  String liveUpdateActivityDownloadCancelled(String fileName) =>
+      isEnglish ? '$fileName cancelled' : '$fileName 已取消';
+
   /// 实况通知次级信息（subText）：另有 N 个会话（B 案，2026-09-19）。
   ///
   /// 只放**系统不会替我们显示**的信息：真机取证显示小米超级岛会自行在头部显示

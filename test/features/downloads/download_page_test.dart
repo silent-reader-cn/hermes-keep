@@ -26,6 +26,14 @@ class _FakeNotificationService implements TurnNotificationService {
     String fileName,
     int byteSize,
   ) async {}
+
+  @override
+  Future<void> notifyDownloadFailed(
+    String downloadId,
+    String fileName, {
+    required bool cancelled,
+  }) async {}
+
   @override
   Future<void> updateDownloadProgress({
     required String fileName,

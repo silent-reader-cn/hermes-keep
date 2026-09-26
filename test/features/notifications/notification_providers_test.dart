@@ -789,6 +789,7 @@ class _FakeTurnNotificationService implements TurnNotificationService {
   final List<(String, String)> clarifyCalls = [];
   final List<(String, String, String)> errorCalls = [];
   final List<(String, String, int)> downloadCalls = [];
+  final List<(String, String, bool)> downloadFailedCalls = [];
   int clearAllCalls = 0;
   int permissionRequests = 0;
   String? launchSessionId;
@@ -826,6 +827,15 @@ class _FakeTurnNotificationService implements TurnNotificationService {
     int byteSize,
   ) async {
     downloadCalls.add((downloadId, fileName, byteSize));
+  }
+
+  @override
+  Future<void> notifyDownloadFailed(
+    String downloadId,
+    String fileName, {
+    required bool cancelled,
+  }) async {
+    downloadFailedCalls.add((downloadId, fileName, cancelled));
   }
   @override
   Future<void> updateDownloadProgress({
