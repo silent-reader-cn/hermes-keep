@@ -1849,7 +1849,9 @@ class _SessionRowState extends State<_SessionRow> {
       // #153：锁死行高 —— 悬停时右侧由「时间」换成「⋯」按钮，两者尺寸不同，
       // 原先会让行高浮动（主人反馈 hover 后行高变化）。固定最小高度后，
       // 两种状态的行在视觉上完全等高。
-      constraints: BoxConstraints(minHeight: widget.compact ? 34.0 : 0.0),
+      // #161：行高 34 → 28（主人从四档方案图里选 B：更紧凑但仍舒展，
+      // 一屏约 29 → 35 条）。窄屏（非 compact）不受影响。
+      constraints: BoxConstraints(minHeight: widget.compact ? 28.0 : 0.0),
       child: Padding(
         // #151/#152：紧凑模式会话项与「工作区名」左对齐（主人要求）。
         // 几何：组头文字 x = 组头 Padding.start(20) + chevron(11) + gap(4) = 35；
@@ -1860,8 +1862,9 @@ class _SessionRowState extends State<_SessionRow> {
         padding: EdgeInsetsDirectional.only(
           start: widget.compact ? 27 : 16,
           end: widget.compact ? 8 : 16,
-          top: widget.compact ? 7 : 8,
-          bottom: widget.compact ? 7 : 8,
+          // #161：随行高一起收（7 → 4），窄屏保持 8。
+          top: widget.compact ? 4 : 8,
+          bottom: widget.compact ? 4 : 8,
         ),
         child: Row(
           children: [
