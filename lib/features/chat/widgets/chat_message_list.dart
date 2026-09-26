@@ -191,7 +191,20 @@ bool _isTurnCollapsible({
   return intermediateTexts > 0 || hasThinking || toolCount > 0;
 }
 
+/// 流式文本走 Markdown 的**长度阈值**：超过它才退回轻量 `Text`。
+///
+/// b6a1bb7 当年把「流式中一律纯文本」当性能优化（跳过 MarkdownBody 全量重解析），
+/// 代价是**生成时看不见 markdown** —— 过程文本里的列表/强调/代码块全按字面量显示。
+/// 但解析成本随文本长度线性增长，只有**超长**流式正文（数十 KB 级）逐帧全量解析
+/// 才会掉帧；过程文本通常只有几百字符，远在阈值内。
+///
+/// 故策略：生成时正常渲染 markdown，仅超过本阈值才退回轻量 `Text`（保底不卡）。
+const int kLiveMarkdownMaxChars = 32768;
+
 /// 安全 Markdown 渲染组件（增量流式解析异常兜底为纯文本，防止大灰屏，todo.md #8）。
+///
+/// **生成时也走 Markdown**（2026-09-26 主人拍板：过程文本要 markdown 渲染）：流式
+/// 途中唯一被降级的是**超长**文本（[kLiveMarkdownMaxChars]），其余一律真渲染。
 class _SafeMarkdownBody extends StatelessWidget {
   const _SafeMarkdownBody({
     required this.data,
@@ -216,7 +229,9 @@ class _SafeMarkdownBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isStreaming) {
+    // 只有**超长**流式文本才退回轻量 Text（保底不卡）；其余一律真渲染 markdown，
+    // 使生成时的过程文本与收尾后形态一致。
+    if (isStreaming && data.length > kLiveMarkdownMaxChars) {
       return Text(
         data,
         style: TextStyle(
@@ -356,13 +371,16 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   bool _nearBottom = true;
   bool _loadingOlder = false;
   bool _olderLoadQueued = false;
+
   /// 顶部带分页触发是否已武装（#125 滞回）。
   ///
   /// 触发后置 false，**在下一次手势结束时**重新置 true（见 `_handleGestureEnd`）
   /// ⇒ 一次拖动至多加载一页；松手再拖可继续加载。
   bool _olderLoadArmed = true;
+
   /// 连续零推进的分页次数（#125）。
   int _olderLoadStalled = 0;
+
   /// 零推进达到上限后的封顶标志（#125）。
   bool _olderLoadExhausted = false;
   bool _initialPositioned = false;
@@ -1073,6 +1091,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (box == null || !box.attached || box.size.height == 0) return null;
     return box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
   }
+
   Future<void> _loadOlderMessages() async {
     if (_loadingOlder || _olderLoadQueued || !mounted) return;
     final state = ref.read(chatControllerProvider(widget.sessionId));
@@ -2372,7 +2391,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         ? (isEnglish ? '$unreadCount new messages' : '$unreadCount 条新消息')
         : (isEnglish ? 'Scroll to bottom' : '回到底部');
     final distFromBottom = _controller.hasClients
-        ? _controller.position.pixels // reverse：距底距离即 pixels
+        ? _controller
+              .position
+              .pixels // reverse：距底距离即 pixels
         : 0.0;
     final showScrollToBottomButton =
         _initialPositioned &&
@@ -2614,7 +2635,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                                   onToggleInjected: () {
                                     if (!mounted) return;
                                     setState(() {
-                                      if (_expandedNoticeIds.contains(noticeId)) {
+                                      if (_expandedNoticeIds.contains(
+                                        noticeId,
+                                      )) {
                                         _expandedNoticeIds.remove(noticeId);
                                       } else {
                                         _expandedNoticeIds.add(noticeId);
@@ -2623,7 +2646,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                                   },
                                   onTextSelectionChanged: (t) {
                                     if (t == null) {
-                                      _selectionByRenderId.remove(entry.renderId);
+                                      _selectionByRenderId.remove(
+                                        entry.renderId,
+                                      );
                                     } else {
                                       _selectionByRenderId[entry.renderId] = t;
                                     }
@@ -3261,9 +3286,7 @@ class _OlderLoadingIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: 16),
-      child: Center(
-        child: CupertinoActivityIndicator(radius: 8),
-      ),
+      child: Center(child: CupertinoActivityIndicator(radius: 8)),
     );
   }
 }

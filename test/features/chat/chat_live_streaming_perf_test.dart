@@ -14,6 +14,7 @@ import 'package:hermes_ui/core/connections/connection_store.dart';
 import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/chat/widgets/chat_message_list.dart';
 
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
@@ -36,7 +37,7 @@ void main() {
 
   group('Phase B: 流式增量渲染与整表去重建测试', () {
     testWidgets(
-      '流式 tick 期间不构建 MarkdownBody（走轻量 Text），done 后转正构建 MarkdownBody',
+      '生成时即构建 MarkdownBody（过程文本走 markdown），done 后转 transcript 仍是 MarkdownBody',
       (tester) async {
         final api = FakeChatApi()
           ..statusResponse = const ChatStreamStatusResponse(active: true);
@@ -76,11 +77,18 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump();
 
-        // 验证：在流式过程中，流式气泡走轻量文本渲染，不构建 MarkdownBody
-        expect(find.byType(MarkdownBody), findsNothing);
+        // 契约（2026-09-26 改钉）：**生成时就**走 markdown —— 主人要的正是
+        // 「过程文本要 markdown 渲染」。旧契约（b6a1bb7）钉的是「流式 tick 不建
+        // MarkdownBody」，代价就是生成时看不见 markdown，故此处反转。
+        expect(find.byType(MarkdownBody), findsOneWidget);
+        // 且确实解析过：字面量标记不该出现在渲染结果里（纯文本路径会原样显示 **）。
         expect(
-          find.textContaining('**Bold Story** with `code snippet`'),
-          findsOneWidget,
+          find.textContaining('**Bold Story**', findRichText: true),
+          findsNothing,
+        );
+        expect(
+          find.textContaining('Bold Story', findRichText: true),
+          findsWidgets,
         );
 
         // 继续推送更多 token
@@ -89,10 +97,10 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump();
 
-        expect(find.byType(MarkdownBody), findsNothing);
+        expect(find.byType(MarkdownBody), findsOneWidget);
         expect(
-          find.textContaining('Second line of the story.'),
-          findsOneWidget,
+          find.textContaining('Second line of the story.', findRichText: true),
+          findsWidgets,
         );
 
         // 发送 done 事件，结束流
@@ -119,10 +127,52 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // 验证：done 收尾后转入 transcript，完整构建 MarkdownBody 呈现富文本
+        // 验证：done 收尾后转入 transcript，仍是 MarkdownBody 呈现富文本
         expect(find.byType(MarkdownBody), findsOneWidget);
       },
     );
+
+    testWidgets('超长流式文本退回轻量 Text（性能保底阀）', (tester) async {
+      final api = FakeChatApi()
+        ..statusResponse = const ChatStreamStatusResponse(active: true);
+
+      api.sessionResult = {
+        'session': {
+          'session_id': 's-perf-huge',
+          'active_stream_id': 'stream-perf-2',
+          'messages': [
+            {'role': 'user', 'content': 'long one', 'message_id': 'u1'},
+          ],
+          'message_count': 1,
+        },
+      };
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [chatApiProvider.overrideWithValue(api)],
+          child: const CupertinoApp(home: ChatPage(sessionId: 's-perf-huge')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 单条超阈值 token（不含 MEDIA 标记 ⇒ 走流式分支）
+      api.emit(TokenSseEvent('铺' * (kLiveMarkdownMaxChars + 512)));
+      await tester.pump(const Duration(milliseconds: 16));
+      // 大步推进时钟让 reveal 排空（1s 排空窗口），避免逐帧重解析超大文本拖慢测试
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+
+      expect(
+        find.byType(MarkdownBody),
+        findsNothing,
+        reason: '超过 kLiveMarkdownMaxChars 的流式文本应退回轻量 Text（保底不卡）',
+      );
+      expect(
+        find.textContaining('铺', findRichText: true),
+        findsWidgets,
+        reason: '退回轻量 Text 后内容仍须可见',
+      );
+    });
 
     test('流式 token reveal 期间 transcriptMessagesProvider 保持列表实例引用不变', () {
       fakeAsync((async) {
