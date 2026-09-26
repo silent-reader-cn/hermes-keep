@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../../app/theme/cupertino_theme.dart' show kAppFontFamily;
+import '../../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../settings/settings_providers.dart';
@@ -30,6 +31,34 @@ import 'mermaid_block.dart';
 /// 会话列表/聊天通用：15pt body 基线（MiSans Regular 400）。
 const double kMarkdownBodyFontSize = 15.0;
 
+/// 宽屏正文基准：13.5pt。
+///
+/// 依据（主人 2026-09-26 反馈 + 实测）：宽屏右侧正文在 12.5pt 侧栏旁边
+/// 显得偏大，且宽屏行长更长；窄屏（手机）保持 15pt 阅读基准不动。
+const double kWideMarkdownBodyFontSize = 13.5;
+
+/// 正文行高：窄屏 1.4（原有口径）。
+const double kMarkdownBodyLineHeight = 1.4;
+
+/// 宽屏正文行高：1.5 —— 行长更长时给更松的呼吸。
+const double kWideMarkdownBodyLineHeight = 1.5;
+
+/// 当前上下文是否宽屏阅读（阈值与 AdaptiveShell 同一处 [kAdaptiveBreakpoint]）。
+bool isWideReadingContext(BuildContext context) =>
+    MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+
+/// 正文基准字号：宽屏自动缩一档，窄屏保持 [kMarkdownBodyFontSize]。
+double markdownBodyFontSizeFor(BuildContext context) =>
+    isWideReadingContext(context)
+    ? kWideMarkdownBodyFontSize
+    : kMarkdownBodyFontSize;
+
+/// 正文行高：宽屏自动放宽，窄屏保持 [kMarkdownBodyLineHeight]。
+double markdownBodyLineHeightFor(BuildContext context) =>
+    isWideReadingContext(context)
+    ? kWideMarkdownBodyLineHeight
+    : kMarkdownBodyLineHeight;
+
 /// 加粗字重：MiSans Medium（500/600 均映射 Medium 字形，不触发伪粗体）。
 const FontWeight kMarkdownStrongWeight = FontWeight.w600;
 
@@ -45,13 +74,14 @@ const EdgeInsetsGeometry kInlineCodePadding = EdgeInsets.symmetric(
 TextStyle _body({
   required Color color,
   double size = kMarkdownBodyFontSize,
+  double height = kMarkdownBodyLineHeight,
   FontWeight? weight,
   FontStyle? style,
   TextDecoration? decoration,
 }) {
   return TextStyle(
     fontSize: size,
-    height: 1.4,
+    height: height,
     color: color,
     fontWeight: weight,
     fontStyle: style,
@@ -64,20 +94,29 @@ TextStyle _body({
   );
 }
 
-/// 标题字号阶梯（气泡内收敛：h1=20 → h6=15，全部 w600）。
-double _headingSize(int level) => switch (level) {
-  1 => 20.0,
-  2 => 18.0,
-  3 => 16.0,
-  _ => kMarkdownBodyFontSize,
+/// 标题字号阶梯（气泡内收敛：h1=body+5 → h6=body，全部 w600）。
+/// 相对正文递进，故正文宽屏缩档时标题同步收敛。
+double _headingSize(int level, double body) => switch (level) {
+  1 => body + 5.0,
+  2 => body + 3.0,
+  3 => body + 1.0,
+  _ => body,
 };
 
 /// assistant 气泡（浅/深色均可）：正文 label 色，标题/加粗同色同基准。
+///
+/// [bodyFontSize] / [bodyLineHeight] 未传时按当前屏宽取（宽屏缩一档，见
+/// [markdownBodyFontSizeFor]）—— 调用方无需关心屏宽，传 false/默认即可。
 MarkdownStyleSheet buildAssistantMarkdownStyleSheet(
   BuildContext context, {
   bool useLightSurfaces = false,
+  double? bodyFontSize,
+  double? bodyLineHeight,
 }) {
   final theme = CupertinoTheme.of(context);
+  // 宽屏正文缩一档（窄屏逐像素不变）。
+  final body = bodyFontSize ?? markdownBodyFontSizeFor(context);
+  final line = bodyLineHeight ?? markdownBodyLineHeightFor(context);
   final label = CupertinoColors.label.resolveFrom(context);
   // This opt-in is chat-only; memory and file preview keep their current style.
   final isLight =
@@ -98,28 +137,44 @@ MarkdownStyleSheet buildAssistantMarkdownStyleSheet(
 
   TextStyle heading(int level) => _body(
     color: label,
-    size: _headingSize(level),
+    size: _headingSize(level, body),
+    height: line,
     weight: kMarkdownStrongWeight,
   );
 
   return MarkdownStyleSheet.fromCupertinoTheme(theme).copyWith(
-    a: _body(color: link, decoration: TextDecoration.underline),
-    p: _body(color: label),
+    a: _body(
+      color: link,
+      size: body,
+      height: line,
+      decoration: TextDecoration.underline,
+    ),
+    p: _body(color: label, size: body, height: line),
     pPadding: EdgeInsets.zero,
-    listBullet: _body(color: label),
+    listBullet: _body(color: label, size: body, height: line),
     h1: heading(1),
     h2: heading(2),
     h3: heading(3),
     h4: heading(4),
     h5: heading(5),
     h6: heading(6),
-    em: _body(color: label, style: FontStyle.italic),
-    strong: _body(color: label, weight: kMarkdownStrongWeight),
-    del: _body(color: label, decoration: TextDecoration.lineThrough),
-    blockquote: _body(color: label),
+    em: _body(color: label, size: body, height: line, style: FontStyle.italic),
+    strong: _body(
+      color: label,
+      size: body,
+      height: line,
+      weight: kMarkdownStrongWeight,
+    ),
+    del: _body(
+      color: label,
+      size: body,
+      height: line,
+      decoration: TextDecoration.lineThrough,
+    ),
+    blockquote: _body(color: label, size: body, height: line),
     code: TextStyle(
       fontSize: 13,
-      height: 1.4,
+      height: line,
       fontFamily: 'monospace',
       fontFamilyFallback: const [kAppFontFamily],
       color: label,
@@ -137,18 +192,32 @@ MarkdownStyleSheet buildAssistantMarkdownStyleSheet(
       borderRadius: BorderRadius.circular(6),
     ),
     blockquotePadding: const EdgeInsets.all(8),
-    tableHead: _body(color: label, weight: kMarkdownStrongWeight),
-    tableBody: _body(color: label, size: 14),
+    tableHead: _body(
+      color: label,
+      size: body,
+      height: line,
+      weight: kMarkdownStrongWeight,
+    ),
+    tableBody: _body(color: label, size: body - 1.0, height: line),
     tableBorder: TableBorder.all(color: separator, width: 0.5),
     checkbox: _body(
       color: isLight ? statusBlueText.resolveFrom(context) : theme.primaryColor,
+      size: body,
+      height: line,
     ),
   );
 }
 
 /// User text stays white; light code/links use an opaque local blue surface.
-MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
+MarkdownStyleSheet buildUserMarkdownStyleSheet(
+  BuildContext context, {
+  double? bodyFontSize,
+  double? bodyLineHeight,
+}) {
   final theme = CupertinoTheme.of(context);
+  // 与 assistant 同口径：宽屏正文缩一档，窄屏不变。
+  final body = bodyFontSize ?? markdownBodyFontSizeFor(context);
+  final line = bodyLineHeight ?? markdownBodyLineHeightFor(context);
   const white = CupertinoColors.white;
   final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
   // White on the main #007AFF bubble remains the approved 4.016976:1 exception.
@@ -156,31 +225,44 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
 
   TextStyle heading(int level) => _body(
     color: white,
-    size: _headingSize(level),
+    size: _headingSize(level, body),
+    height: line,
     weight: kMarkdownStrongWeight,
   );
 
   return MarkdownStyleSheet.fromCupertinoTheme(theme).copyWith(
     a: _body(
       color: white,
+      size: body,
+      height: line,
       decoration: TextDecoration.underline,
     ).copyWith(backgroundColor: isLight ? LightSurfaces.userDetail : null),
-    p: _body(color: white),
+    p: _body(color: white, size: body, height: line),
     pPadding: EdgeInsets.zero,
-    listBullet: _body(color: white),
+    listBullet: _body(color: white, size: body, height: line),
     h1: heading(1),
     h2: heading(2),
     h3: heading(3),
     h4: heading(4),
     h5: heading(5),
     h6: heading(6),
-    em: _body(color: white, style: FontStyle.italic),
-    strong: _body(color: white, weight: kMarkdownStrongWeight),
-    del: _body(color: white, decoration: TextDecoration.lineThrough),
-    blockquote: _body(color: white),
+    em: _body(color: white, size: body, height: line, style: FontStyle.italic),
+    strong: _body(
+      color: white,
+      size: body,
+      height: line,
+      weight: kMarkdownStrongWeight,
+    ),
+    del: _body(
+      color: white,
+      size: body,
+      height: line,
+      decoration: TextDecoration.lineThrough,
+    ),
+    blockquote: _body(color: white, size: body, height: line),
     code: TextStyle(
       fontSize: 13,
-      height: 1.4,
+      height: line,
       fontFamily: 'monospace',
       color: white,
       backgroundColor: LightSurfaces.resolve(
@@ -207,13 +289,18 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(BuildContext context) {
       borderRadius: BorderRadius.circular(6),
     ),
     blockquotePadding: const EdgeInsets.all(8),
-    tableHead: _body(color: white, weight: kMarkdownStrongWeight),
-    tableBody: _body(color: white, size: 14),
+    tableHead: _body(
+      color: white,
+      size: body,
+      height: line,
+      weight: kMarkdownStrongWeight,
+    ),
+    tableBody: _body(color: white, size: body - 1.0, height: line),
     tableBorder: TableBorder.all(
       color: white.withValues(alpha: 0.4),
       width: 0.5,
     ),
-    checkbox: _body(color: white),
+    checkbox: _body(color: white, size: body, height: line),
   );
 }
 

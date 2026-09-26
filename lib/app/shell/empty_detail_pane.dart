@@ -31,30 +31,34 @@ class EmptyDetailPane extends ConsumerWidget {
             children: [
               Icon(
                 CupertinoIcons.chat_bubble_2,
-                size: 64.0,
+                // #163 方案 B：图标 64 → 52（宽屏右侧比侧栏大一档即可，
+                // 不做大体量插画式留白）。
+                size: 52.0,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
                   dark: CupertinoColors.tertiaryLabel,
                 ),
               ),
-              const SizedBox(height: 16.0),
+              const SizedBox(height: 14.0),
               Text(
                 l10n.isEnglish ? 'Select a Chat' : '选择会话',
                 style: TextStyle(
-                  fontSize: 20.0,
+                  // #163 方案 B：20 → 17（＝导航栏标题同号）。
+                  fontSize: 17.0,
                   fontWeight: FontWeight.w600,
                   color: CupertinoColors.label.resolveFrom(context),
                 ),
               ),
-              const SizedBox(height: 8.0),
+              const SizedBox(height: 6.0),
               Text(
                 l10n.isEnglish
                     ? 'Choose a session from the sidebar or start a new chat.'
                     : '从左侧选择会话或新建聊天',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 14.0,
+                  // #163 方案 B：14 → 13（＝侧栏元数据同号）。
+                  fontSize: 13.0,
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
@@ -62,14 +66,15 @@ class EmptyDetailPane extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 24.0),
+              const SizedBox(height: 20.0),
               CupertinoButton.filled(
                 color: isLight ? statusBlueText.resolveFrom(context) : null,
                 key: const ValueKey('empty-detail-new-chat-button'),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20.0,
-                  vertical: 10.0,
+                  horizontal: 18.0,
+                  vertical: 9.0,
                 ),
+                borderRadius: BorderRadius.circular(10.0),
                 onPressed: () async {
                   final controller = ref.read(
                     sessionListControllerProvider.notifier,
@@ -85,9 +90,13 @@ class EmptyDetailPane extends ConsumerWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(CupertinoIcons.plus, size: 18.0),
+                    const Icon(CupertinoIcons.plus, size: 17.0),
                     const SizedBox(width: 6.0),
-                    Text(l10n.newSession),
+                    Text(
+                      l10n.newSession,
+                      // #163 方案 B：按钮文字 15（＝工具行与正文同族的层级）。
+                      style: const TextStyle(fontSize: 15.0),
+                    ),
                   ],
                 ),
               ),

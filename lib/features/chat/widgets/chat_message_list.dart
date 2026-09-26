@@ -235,8 +235,8 @@ class _SafeMarkdownBody extends StatelessWidget {
       return Text(
         data,
         style: TextStyle(
-          fontSize: kMarkdownBodyFontSize,
-          height: 1.4,
+          fontSize: markdownBodyFontSizeFor(context),
+          height: markdownBodyLineHeightFor(context),
           color: CupertinoColors.label.resolveFrom(context),
         ),
       );
@@ -270,8 +270,8 @@ class _SafeMarkdownBody extends StatelessWidget {
       return Text(
         data,
         style: TextStyle(
-          fontSize: kMarkdownBodyFontSize,
-          height: 1.4,
+          fontSize: markdownBodyFontSizeFor(context),
+          height: markdownBodyLineHeightFor(context),
           color: CupertinoColors.label.resolveFrom(context),
         ),
       );

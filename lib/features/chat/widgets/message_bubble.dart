@@ -268,10 +268,10 @@ class _UserContent extends StatelessWidget {
               contextMenuBuilder: chatMessageTextContextMenu,
               onSelectionChanged: (text, selection, cause) =>
                   _dispatchTextSelectionChanged(
-                text,
-                selection,
-                onTextSelectionChanged,
-              ),
+                    text,
+                    selection,
+                    onTextSelectionChanged,
+                  ),
               styleSheet: buildUserMarkdownStyleSheet(context),
               // #91 图片块级化：imageBuilder 同源注入 builders（img 独立成块）。
               builders: createUserMarkdownBuilders(
@@ -309,9 +309,9 @@ class _UserContent extends StatelessWidget {
           else
             Text(
               parsedDisplay,
-              style: const TextStyle(
-                fontSize: 15,
-                height: 1.4,
+              style: TextStyle(
+                fontSize: markdownBodyFontSizeFor(context),
+                height: markdownBodyLineHeightFor(context),
                 color: CupertinoColors.white,
               ),
             ),
@@ -398,8 +398,8 @@ class _AssistantContent extends StatelessWidget {
           Text(
             parsedContent,
             style: TextStyle(
-              fontSize: kMarkdownBodyFontSize,
-              height: 1.4,
+              fontSize: markdownBodyFontSizeFor(context),
+              height: markdownBodyLineHeightFor(context),
               color: CupertinoColors.label.resolveFrom(context),
               fontFamily: kAppFontFamily,
             ),
@@ -414,10 +414,10 @@ class _AssistantContent extends StatelessWidget {
             contextMenuBuilder: chatMessageTextContextMenu,
             onSelectionChanged: (text, selection, cause) =>
                 _dispatchTextSelectionChanged(
-              text,
-              selection,
-              onTextSelectionChanged,
-            ),
+                  text,
+                  selection,
+                  onTextSelectionChanged,
+                ),
             styleSheet: buildAssistantMarkdownStyleSheet(
               context,
               useLightSurfaces: true,

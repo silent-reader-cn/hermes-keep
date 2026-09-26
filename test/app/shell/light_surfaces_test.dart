@@ -102,17 +102,26 @@ void main() {
                 matching: find.byType(CupertinoPageScaffold),
               ),
             );
-            final subtitle = tester
-                .widgetList<Text>(
-                  find.descendant(
-                    of: find.byType(EmptyDetailPane),
-                    matching: find.byType(Text),
-                  ),
-                )
-                .singleWhere((text) => text.style?.fontSize == 14);
+            final paneTexts = tester.widgetList<Text>(
+              find.descendant(
+                of: find.byType(EmptyDetailPane),
+                matching: find.byType(Text),
+              ),
+            );
+            // #163 空态引导页字号档位（方案 B）：标题 17（＝导航栏同号）/
+            // 正文 13（＝侧栏元数据同号）/ 按钮 15。改档先改这里。
+            expect(
+              paneTexts.map((text) => text.style?.fontSize).toSet(),
+              containsAll(<double>[17.0, 13.0, 15.0]),
+            );
+            final subtitle = paneTexts.singleWhere(
+              (text) => text.style?.fontSize == 13,
+            );
             final emptyIcon = tester.widget<Icon>(
               find.byIcon(CupertinoIcons.chat_bubble_2),
             );
+            // #163 图标档位：64 → 52。
+            expect(emptyIcon.size, 52.0);
             final createButton = tester.widget<CupertinoButton>(
               find.byKey(const ValueKey('empty-detail-new-chat-button')),
             );
