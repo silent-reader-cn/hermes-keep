@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/models/session.dart';
 import '../../features/session_list/session_list_providers.dart';
 import '../../features/session_list/session_list_shell_requests.dart';
+import '../../features/desktop/window_title_service.dart';
 import '../../features/desktop/desktop_settings.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/light_surfaces.dart';
@@ -48,15 +50,15 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
     if (!willOpen && _searchController.text.isNotEmpty) {
       _searchController.clear();
       // 收起时清空查询 → 列表回到非搜索态（与列表页搜索框行为一致）。
-      unawaited(
-        ref.read(sessionListControllerProvider.notifier).search(''),
-      );
+      unawaited(ref.read(sessionListControllerProvider.notifier).search(''));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // #161：品牌行副标题（当前工作区 · 会话数）。取自已加载的列表，零新增请求。
+    final brandSubtitle = _resolveBrandSubtitle(ref, l10n);
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     // 刷新中判据沿用列表页同一 provider（避免自己拼状态字段）。
     final refreshing = ref.watch(sessionListRefreshingProvider);
@@ -87,18 +89,18 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
               // 内联搜索框只有「侧栏宽 − logo − 三图标」的宽度，CupertinoSearchTextField
               // 自带放大镜与清除按钮，窄侧栏下会把文字挤到只剩一半。
               if (!_searchOpen)
-              // #153：改用真实品牌图标。原先是个纯渐变的深色方块 —— 在暗色主题
-              // 下与背景几乎同色，看起来就是「一个空框」（主人实机反馈）。
-              ClipRRect(
-                key: const ValueKey('sidebar-brand-logo'),
-                borderRadius: BorderRadius.circular(5.0),
-                child: Image.asset(
-                  'assets/branding/hermes-agent-icon-1024.png',
-                  width: 21.0,
-                  height: 21.0,
-                  filterQuality: FilterQuality.medium,
+                // #153：改用真实品牌图标。原先是个纯渐变的深色方块 —— 在暗色主题
+                // 下与背景几乎同色，看起来就是「一个空框」（主人实机反馈）。
+                ClipRRect(
+                  key: const ValueKey('sidebar-brand-logo'),
+                  borderRadius: BorderRadius.circular(5.0),
+                  child: Image.asset(
+                    'assets/branding/hermes-agent-icon-1024.png',
+                    width: 21.0,
+                    height: 21.0,
+                    filterQuality: FilterQuality.medium,
+                  ),
                 ),
-              ),
               if (!_searchOpen) const SizedBox(width: 7.0),
               Expanded(
                 // #153：搜索改为**在本行内横向展开**（原实现是在下方另起一行
@@ -149,74 +151,97 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                           ),
                         ),
                       )
-                    : Text(
-                        'Hermes',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        // #153：字号对齐 markdown 正文基准（15），原 12.5 偏小。
-                        style: TextStyle(
-                          fontSize: 15.0,
-                          fontWeight: FontWeight.w600,
-                          color: LightSurfaces.resolve(
-                            context,
-                            const Color(0xFF1C1C1E),
-                            dark: CupertinoColors.label,
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hermes',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            // #153：字号对齐 markdown 正文基准（15），原 12.5 偏小。
+                            style: TextStyle(
+                              fontSize: 15.0,
+                              fontWeight: FontWeight.w600,
+                              color: LightSurfaces.resolve(
+                                context,
+                                const Color(0xFF1C1C1E),
+                                dark: CupertinoColors.label,
+                              ),
+                            ),
                           ),
-                        ),
+                          // #161：副标题 —— 当前工作区 + 会话数（利用常驻信息位）。
+                          // 数据全部取自已加载的会话列表（无新增网络请求）。
+                          if (brandSubtitle != null)
+                            Text(
+                              brandSubtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                height: 1.25,
+                                color: LightSurfaces.resolve(
+                                  context,
+                                  const Color(0xFF8E8E93),
+                                  dark: CupertinoColors.placeholderText,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
               ),
               if (!_searchOpen) ...[
-              _BrandIconButton(
-                buttonKey: 'sidebar-brand-search',
-                icon: CupertinoIcons.search,
-                label: l10n.searchSessions,
-                selected: _searchOpen,
-                activeFg: activeFg,
-                inactiveFg: inactiveFg,
-                onPressed: _toggleSearch,
-              ),
-              // 刷新保持「桌面平台专属」语义（与列表页 showDesktopRefresh
-              // = isDesktop && isWide 一致）——安卓平板宽屏不凭空多出刷新按钮。
-              if (isDesktopPlatform())
                 _BrandIconButton(
-                  buttonKey: 'sidebar-brand-refresh',
-                  icon: CupertinoIcons.arrow_clockwise,
-                  label: l10n.refreshInsights,
+                  buttonKey: 'sidebar-brand-search',
+                  icon: CupertinoIcons.search,
+                  label: l10n.searchSessions,
+                  selected: _searchOpen,
+                  activeFg: activeFg,
+                  inactiveFg: inactiveFg,
+                  onPressed: _toggleSearch,
+                ),
+                // 刷新保持「桌面平台专属」语义（与列表页 showDesktopRefresh
+                // = isDesktop && isWide 一致）——安卓平板宽屏不凭空多出刷新按钮。
+                if (isDesktopPlatform())
+                  _BrandIconButton(
+                    buttonKey: 'sidebar-brand-refresh',
+                    icon: CupertinoIcons.arrow_clockwise,
+                    label: l10n.refreshInsights,
+                    selected: false,
+                    activeFg: activeFg,
+                    inactiveFg: inactiveFg,
+                    onPressed: refreshing
+                        ? null
+                        : () => unawaited(
+                            ref
+                                .read(sessionListControllerProvider.notifier)
+                                .refresh(),
+                          ),
+                  ),
+                _BrandIconButton(
+                  buttonKey: 'sidebar-brand-filter',
+                  icon: CupertinoIcons.line_horizontal_3_decrease,
+                  label: l10n.filterSessions,
                   selected: false,
                   activeFg: activeFg,
                   inactiveFg: inactiveFg,
-                  onPressed: refreshing
-                      ? null
-                      : () => unawaited(
-                          ref
-                              .read(sessionListControllerProvider.notifier)
-                              .refresh(),
-                        ),
+                  onPressed: () => ref
+                      .read(sessionListFilterRequestProvider.notifier)
+                      .bump(),
                 ),
-              _BrandIconButton(
-                buttonKey: 'sidebar-brand-filter',
-                icon: CupertinoIcons.line_horizontal_3_decrease,
-                label: l10n.filterSessions,
-                selected: false,
-                activeFg: activeFg,
-                inactiveFg: inactiveFg,
-                onPressed: () => ref
-                    .read(sessionListFilterRequestProvider.notifier)
-                    .bump(),
-              ),
               ] else ...[
-              // #156：搜索态末尾只留「取消」（iOS 惯例：搜索时导航栏整条让位），
-              // 保证搜索框有充足宽度，文字与图标不再挤在一起。
-              CupertinoButton(
-                key: const ValueKey('sidebar-brand-search-cancel'),
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                minimumSize: const Size(0, 26.0),
-                onPressed: _toggleSearch,
-                child: Text(
-                  l10n.cancel,
-                  style: TextStyle(fontSize: 15.0, color: activeFg),
+                // #156：搜索态末尾只留「取消」（iOS 惯例：搜索时导航栏整条让位），
+                // 保证搜索框有充足宽度，文字与图标不再挤在一起。
+                CupertinoButton(
+                  key: const ValueKey('sidebar-brand-search-cancel'),
+                  padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                  minimumSize: const Size(0, 26.0),
+                  onPressed: _toggleSearch,
+                  child: Text(
+                    l10n.cancel,
+                    style: TextStyle(fontSize: 15.0, color: activeFg),
+                  ),
                 ),
-              ),
               ],
             ],
           ),
@@ -225,7 +250,9 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
       ],
     );
 
-    return isLight ? ColoredBox(color: LightSurfaces.page, child: content) : content;
+    return isLight
+        ? ColoredBox(color: LightSurfaces.page, child: content)
+        : content;
   }
 }
 
@@ -263,12 +290,38 @@ class _BrandIconButton extends StatelessWidget {
         minimumSize: const Size(26.0, 26.0),
         borderRadius: BorderRadius.circular(6.0),
         onPressed: onPressed,
-        child: Icon(
-          icon,
-          size: 17.0,
-          color: selected ? activeFg : inactiveFg,
-        ),
+        child: Icon(icon, size: 17.0, color: selected ? activeFg : inactiveFg),
       ),
     );
   }
+}
+
+/// #161：品牌行副标题 =「当前工作区末段 · N 个会话」。
+///
+/// - 工作区优先取**当前正在查看的会话**的 `workspace`；没有则退回列表首个；
+///   全部无 `workspace` 时只显示会话数。
+/// - 数据源是已加载的会话列表（`sessionListVisibleSessionsProvider`），
+///   **不引入任何新的网络请求** —— 避免 #146 那类「provider watch 出 timer」
+///   的坑（挂载即发 Dio 请求，测试里表现为 !timersPending）。
+String? _resolveBrandSubtitle(WidgetRef ref, AppLocalizations l10n) {
+  final sessions = ref.watch(sessionListVisibleSessionsProvider);
+  if (sessions.isEmpty) return null;
+
+  final currentId = ref.watch(activeChatSessionIdProvider);
+  SessionSummary? anchor;
+  for (final session in sessions) {
+    if ((session.sessionId ?? session.id) == currentId) {
+      anchor = session;
+      break;
+    }
+  }
+  anchor ??= sessions.first;
+
+  final parts = <String>[];
+  final workspace = anchor.workspace?.trim();
+  if (workspace != null && workspace.isNotEmpty) {
+    parts.add(extractWorkspaceLastPathComponent(workspace));
+  }
+  parts.add(l10n.sessionsCountLabel(sessions.length));
+  return parts.join(' · ');
 }

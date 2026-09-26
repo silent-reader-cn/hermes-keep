@@ -1,15 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/core/models/cron.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/features/notifications/notification_providers.dart';
+import 'package:hermes_ui/features/tasks/tasks_providers.dart';
 import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
 import 'package:hermes_ui/features/session_list/session_auto_refresh.dart';
@@ -17,12 +20,28 @@ import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_session_list_api.dart';
+
 import 'package:hermes_ui/app/shell/session_sidebar.dart';
+
+/// #161：侧栏「定时任务」行带待办计数徽标 ⇒ `SidebarToolsList` 会 watch
+/// `tasksJobCountProvider`（build 会真发 `fetchJobs`）。这些用例不关心任务数据，
+/// 注入空任务避免真实请求留下 Dio 超时 timer（表现为 `!timersPending`）。
+class _EmptyTasksController extends TasksController {
+  @override
+  Future<TasksState> build() async {
+    ref.watch(tasksApiFactoryProvider);
+    return const TasksState(jobs: <CronJob>[]);
+  }
+}
 
 double sec(DateTime d) => d.millisecondsSinceEpoch / 1000;
 
-SessionSummary buildSession(String id, String title,
-    {bool pinned = false, DateTime? at}) {
+SessionSummary buildSession(
+  String id,
+  String title, {
+  bool pinned = false,
+  DateTime? at,
+}) {
   return SessionSummary(
     sessionId: id,
     title: title,
@@ -38,6 +57,7 @@ ProviderContainer makeContainer(
 }) {
   final container = ProviderContainer(
     overrides: [
+      tasksControllerProvider.overrideWith(_EmptyTasksController.new),
       apiClientProvider.overrideWithValue(
         ApiClient(baseUrl: 'http://test.local:30002'),
       ),
@@ -59,13 +79,16 @@ class _StubProjectApi implements ProjectApi {
   Future<ProjectsResponse> fetchProjects() async =>
       const ProjectsResponse(projects: []);
   @override
-  Future<ProjectMutationResponse> createProject(
-          {required String name, String? color}) async =>
-      const ProjectMutationResponse(ok: true);
+  Future<ProjectMutationResponse> createProject({
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
   @override
-  Future<ProjectMutationResponse> renameProject(
-          {required String projectId, required String name, String? color}) async =>
-      const ProjectMutationResponse(ok: true);
+  Future<ProjectMutationResponse> renameProject({
+    required String projectId,
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
   @override
   Future<ProjectMutationResponse> deleteProject(String projectId) async =>
       const ProjectMutationResponse(ok: true);
@@ -101,24 +124,32 @@ void main() {
 
   group('SessionListController.nextAutoRefreshDelay 指数退避', () {
     test('0→30s,1→60s,2→120s,3→capped120s', () {
-      expect(SessionListController.nextAutoRefreshDelay(0),
-          const Duration(seconds: 30));
-      expect(SessionListController.nextAutoRefreshDelay(1),
-          const Duration(seconds: 60));
-      expect(SessionListController.nextAutoRefreshDelay(2),
-          const Duration(seconds: 120));
-      expect(SessionListController.nextAutoRefreshDelay(3),
-          const Duration(seconds: 120));
-      expect(SessionListController.nextAutoRefreshDelay(10),
-          const Duration(seconds: 120));
+      expect(
+        SessionListController.nextAutoRefreshDelay(0),
+        const Duration(seconds: 30),
+      );
+      expect(
+        SessionListController.nextAutoRefreshDelay(1),
+        const Duration(seconds: 60),
+      );
+      expect(
+        SessionListController.nextAutoRefreshDelay(2),
+        const Duration(seconds: 120),
+      );
+      expect(
+        SessionListController.nextAutoRefreshDelay(3),
+        const Duration(seconds: 120),
+      );
+      expect(
+        SessionListController.nextAutoRefreshDelay(10),
+        const Duration(seconds: 120),
+      );
     });
   });
 
   group('refresh 成功/失败语义', () {
     test('refresh 成功写 lastRefreshAt/clear failures', () async {
-      final api = FakeSessionListApi(
-        sessions: [buildSession('s1', 'A')],
-      );
+      final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       final c = makeContainer(api);
       await c.read(sessionListControllerProvider.future);
       await c.read(sessionListControllerProvider.notifier).refresh();
@@ -131,9 +162,7 @@ void main() {
     });
 
     test('有数据时 refresh 失败→保留数据+failures+1不进AsyncError', () async {
-      final api = FakeSessionListApi(
-        sessions: [buildSession('s1', 'A')],
-      );
+      final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       final c = makeContainer(api);
       await c.read(sessionListControllerProvider.future);
       api.fetchError = NetworkException(NetworkExceptionKind.cannotConnect);
@@ -147,20 +176,27 @@ void main() {
     });
 
     test('连续失败退避计数递增，成功清零', () async {
-      final api = FakeSessionListApi(
-        sessions: [buildSession('s1', 'A')],
-      );
+      final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       final c = makeContainer(api);
       await c.read(sessionListControllerProvider.future);
       final notifier = c.read(sessionListControllerProvider.notifier);
       api.fetchError = NetworkException(NetworkExceptionKind.timedOut);
       await notifier.refresh();
-      expect(c.read(sessionListControllerProvider).valueOrNull!.consecutiveFailures, 1);
+      expect(
+        c.read(sessionListControllerProvider).valueOrNull!.consecutiveFailures,
+        1,
+      );
       await notifier.refresh();
-      expect(c.read(sessionListControllerProvider).valueOrNull!.consecutiveFailures, 2);
+      expect(
+        c.read(sessionListControllerProvider).valueOrNull!.consecutiveFailures,
+        2,
+      );
       api.fetchError = null;
       await notifier.refresh();
-      expect(c.read(sessionListControllerProvider).valueOrNull!.consecutiveFailures, 0);
+      expect(
+        c.read(sessionListControllerProvider).valueOrNull!.consecutiveFailures,
+        0,
+      );
     });
   });
 
@@ -171,7 +207,10 @@ void main() {
       await c.read(sessionListControllerProvider.future);
       final n = c.read(sessionListControllerProvider.notifier);
       await n.refresh();
-      expect(c.read(sessionListControllerProvider).valueOrNull!.lastRefreshAt, isNotNull);
+      expect(
+        c.read(sessionListControllerProvider).valueOrNull!.lastRefreshAt,
+        isNotNull,
+      );
       final before = api.fetchCount;
       await n.refreshIfStale();
       expect(api.fetchCount, before);
@@ -243,16 +282,26 @@ void main() {
       final router = GoRouter(
         initialLocation: '/',
         routes: [
-          GoRoute(path: '/', builder: (_, _) => const SessionSidebar(currentLocation: '/')),
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const SessionSidebar(currentLocation: '/'),
+          ),
         ],
       );
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
             sessionListApiFactoryProvider.overrideWithValue((_) => api),
-            projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
-            onboardingApiFactoryProvider.overrideWithValue((_, second) => FakeOnboardingLoginApi()),
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _StubProjectApi(),
+            ),
+            onboardingApiFactoryProvider.overrideWithValue(
+              (_, second) => FakeOnboardingLoginApi(),
+            ),
             // 关键：测试的 appLifecycle/windowFocused 需覆盖 observer 的读取
           ],
           child: MediaQuery(
@@ -273,7 +322,10 @@ void main() {
       // 该行为由 app 级外壳测试覆盖。
       final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       await pump(tester, api, const Size(1200, 800), TargetPlatform.windows);
-      expect(find.byKey(const ValueKey('sidebar-brand-refresh')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('sidebar-brand-refresh')),
+        findsOneWidget,
+      );
       debugDefaultTargetPlatformOverride = null;
 
       final api3 = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
@@ -294,7 +346,9 @@ void main() {
   });
 
   group('#89 会话列表活跃流变化与常驻保活同步联动', () {
-    testWidgets('列表出现正在生成的流式会话 → 触发 sessionStreamingSyncCallbackProvider', (tester) async {
+    testWidgets('列表出现正在生成的流式会话 → 触发 sessionStreamingSyncCallbackProvider', (
+      tester,
+    ) async {
       final syncCalls = <(int, List<String>)>[];
       const streamingSession = SessionSummary(
         sessionId: 's-stream-1',
@@ -306,18 +360,26 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
             sessionListApiFactoryProvider.overrideWithValue((_) => api),
-            projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
-            onboardingApiFactoryProvider.overrideWithValue((_, _) => FakeOnboardingLoginApi()),
-            sessionStreamingSyncCallbackProvider.overrideWithValue((count, titles) {
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _StubProjectApi(),
+            ),
+            onboardingApiFactoryProvider.overrideWithValue(
+              (_, _) => FakeOnboardingLoginApi(),
+            ),
+            sessionStreamingSyncCallbackProvider.overrideWithValue((
+              count,
+              titles,
+            ) {
               syncCalls.add((count, titles));
             }),
           ],
           child: const CupertinoApp(
-            home: SessionAutoRefreshObserver(
-              child: SizedBox(),
-            ),
+            home: SessionAutoRefreshObserver(child: SizedBox()),
           ),
         ),
       );
@@ -342,11 +404,21 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            apiClientProvider.overrideWithValue(ApiClient(baseUrl: 'http://test.local:30002')),
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
+            apiClientProvider.overrideWithValue(
+              ApiClient(baseUrl: 'http://test.local:30002'),
+            ),
             sessionListApiFactoryProvider.overrideWithValue((_) => api),
-            projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
-            onboardingApiFactoryProvider.overrideWithValue((_, _) => FakeOnboardingLoginApi()),
-            sessionStreamingSyncCallbackProvider.overrideWithValue((count, titles) {
+            projectApiFactoryProvider.overrideWithValue(
+              (_) => _StubProjectApi(),
+            ),
+            onboardingApiFactoryProvider.overrideWithValue(
+              (_, _) => FakeOnboardingLoginApi(),
+            ),
+            sessionStreamingSyncCallbackProvider.overrideWithValue((
+              count,
+              titles,
+            ) {
               syncCalls.add((count, titles));
             }),
           ],
@@ -369,7 +441,9 @@ void main() {
       expect(syncCalls.first.$1, 1);
 
       // 刷新列表，但 s1 仍在生成中（集合相同：{'s1'}）
-      await refHolder.read(sessionListControllerProvider.notifier).refreshIfStale(force: true);
+      await refHolder
+          .read(sessionListControllerProvider.notifier)
+          .refreshIfStale(force: true);
       await tester.pump();
       await tester.pump();
 
@@ -383,7 +457,9 @@ void main() {
         isStreaming: true,
       );
       api.sessions = [s1, s2];
-      await refHolder.read(sessionListControllerProvider.notifier).refreshIfStale(force: true);
+      await refHolder
+          .read(sessionListControllerProvider.notifier)
+          .refreshIfStale(force: true);
       await tester.pump();
       await tester.pump();
 

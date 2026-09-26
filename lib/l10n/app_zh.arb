@@ -28,6 +28,7 @@
   "liveUpdateChipReply": "请回复",
   "liveUpdateChipApproval": "请批准",
   "liveUpdateChipDone": "已完成",
+  "ungroupedSection": "未分组",
   "liveUpdateChipStopped": "已中断",
   "liveUpdateSubTextExtraSessions": "另有 {count} 个会话",
   "bgWorkManagerStatusNotApplicable": "不适用（仅限 Android）",
