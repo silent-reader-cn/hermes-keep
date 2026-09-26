@@ -491,6 +491,19 @@ class LocalNotificationsTurnNotificationService
     int byteSize,
   ) async {
     if (downloadId.isEmpty) return;
+    // #158 先上岛（灵动岛实况通知）：此前下载完成只发本条常规通知，岛则被
+    // clearDownloadProgress 撤销，主人看不到「下完了」。岛是增强路径，异常
+    // 自吞且平台/开关/资格由 LiveUpdateService 内部静默降级，绝不影响常规通知。
+    try {
+      await LiveUpdateService.instance.notifyDownloadCompleted(
+        fileName: fileName,
+      );
+    } on Object catch (e) {
+      developer.log(
+        'LiveUpdateService.notifyDownloadCompleted 异常: $e',
+        name: 'notifications',
+      );
+    }
     await _ensureInitialized();
     final sizeText = formatDownloadByteSize(byteSize);
     final body = sizeText.isNotEmpty ? '$fileName ($sizeText)' : fileName;

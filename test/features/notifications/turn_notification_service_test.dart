@@ -765,6 +765,87 @@ void main() {
         // 岛的 clearDownloadProgress 被触发（无其他活动时 cancel）
         expect(fakeCalls.where((c) => c.method == 'cancel'), hasLength(1));
       });
+
+      test(
+        '#158 下载完成：既上岛（完成态）又发 1301 常规通知，两条并存',
+        () async {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(fakeChannel, (call) async {
+                fakeCalls.add(call);
+                if (call.method == 'isSupported') return true;
+                if (call.method == 'show') return true;
+                if (call.method == 'cancel') return true;
+                return null;
+              });
+
+          LiveUpdateService.instance = LiveUpdateService(
+            channel: fakeChannel,
+            androidPlatformOverride: true,
+          );
+
+          final androidService = LocalNotificationsTurnNotificationService(
+            plugin: plugin,
+            androidPlatformOverride: true,
+          );
+
+          await androidService.notifyDownloadCompleted(
+            'dl-1',
+            'app-release.apk',
+            1024,
+          );
+
+          // ① 岛：完成态（此前这条路根本没有 show —— 主人报「下载完成没有岛提示」）
+          final showArgs =
+              fakeCalls.firstWhere((c) => c.method == 'show').arguments
+                  as Map<Object?, Object?>;
+          expect(showArgs['text'], 'app-release.apk 下载完成');
+          expect(showArgs['shortCriticalText'], '已完成');
+          expect(showArgs['trackerIcon'], 'completed');
+          expect(showArgs['indeterminate'], isFalse);
+          expect(showArgs['progressPercent'], 100);
+
+          // ② 1301 常规通知照常（带 download:<id> payload，点击可跳下载页；
+          //    与回合完成「岛 + 1001」并存的口径一致）。
+          verify(
+            () => plugin.show(
+              id: 1301,
+              title: any(named: 'title'),
+              body: any(named: 'body'),
+              notificationDetails: any(named: 'notificationDetails'),
+              payload: 'download:dl-1',
+            ),
+          ).called(1);
+        },
+      );
+
+      test('#158 岛通道不可用：异常自吞，1301 常规通知不受影响', () async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(fakeChannel, (call) async {
+              throw MissingPluginException('no native handler');
+            });
+
+        LiveUpdateService.instance = LiveUpdateService(
+          channel: fakeChannel,
+          androidPlatformOverride: true,
+        );
+
+        final androidService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: true,
+        );
+
+        await androidService.notifyDownloadCompleted('dl-2', 'x.apk', 10);
+
+        verify(
+          () => plugin.show(
+            id: 1301,
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            notificationDetails: any(named: 'notificationDetails'),
+            payload: 'download:dl-2',
+          ),
+        ).called(1);
+      });
     });
 
     group('requestPermission / getLaunchSessionId', () {

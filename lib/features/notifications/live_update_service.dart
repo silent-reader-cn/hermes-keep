@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
@@ -70,10 +71,13 @@ class LiveUpdateService {
     MethodChannel? channel,
     bool? androidPlatformOverride,
     DateTime Function()? now,
+    Duration? downloadCompletedDwell,
   }) : _channel = channel ?? kLiveUpdateChannel,
        // ignore: prefer_initializing_formals
        _androidPlatformOverride = androidPlatformOverride,
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _downloadCompletedDwell =
+           downloadCompletedDwell ?? kDownloadCompletedDwell;
 
   /// 单例实例访问（对齐 BackgroundKeepaliveService.instance 风格；测试可替换）。
   static LiveUpdateService instance = LiveUpdateService();
@@ -92,6 +96,12 @@ class LiveUpdateService {
 
   /// 设置开关 prefs key（默认开启：渐进增强、低版本自动无感）。
   static const String prefsKeyLiveUpdateEnabled = 'bg_live_update_enabled';
+
+  /// #158 下载完成态在岛上的停留时长。
+  ///
+  /// 对齐 chat 侧回合完成态的 [ChatController.liveActivityDwell]（主人拍板 15s）：
+  /// 完成是离散事件，无停留则岛会「闪一下就没」，用户来不及看见。
+  static const Duration kDownloadCompletedDwell = Duration(seconds: 15);
 
   final MethodChannel _channel;
 
@@ -149,6 +159,20 @@ class LiveUpdateService {
   /// 下载通知节流：上次实际推送时间与百分比（防 notify 风暴，首次调用不受限）。
   DateTime? _lastDownloadNotifyTime;
   int? _lastDownloadNotifiedPercent;
+
+  /// #158 下载完成态：文件名 + 展示起点。
+  ///
+  /// 与「进行中」字段分开存放，使 `clearDownloadProgress()`（下载完成/失败/取消
+  /// 都会调）清场时**不会误伤**刚上岛的完成态 —— 此前完成态根本没有表达，
+  /// 下载一结束岛就被撤销（主人报「下载完成没有灵动岛提示」）。
+  String? _downloadCompletedFileName;
+  DateTime? _downloadCompletedAt;
+
+  /// 完成态到期撤岛的定时器（新完成事件重置；`cancelAll` 一并取消）。
+  Timer? _downloadCompletedDismissTimer;
+
+  /// 完成态停留时长（测试可注入缩短，避免真等 15s）。
+  final Duration _downloadCompletedDwell;
 
   bool get _isAndroid =>
       _androidPlatformOverride ??
@@ -280,7 +304,11 @@ class LiveUpdateService {
     return true;
   }
 
-  /// 清除下载进度态并刷新实况通知（自然回落回合活动 / 撤销 / 列表总览）。
+  /// 清除下载**进行中**进度态并刷新实况通知（自然回落回合活动 / 撤销 / 列表总览）。
+  ///
+  /// 只清进行中字段：完成态（#158）由 [notifyDownloadCompleted] 自己按停留窗口
+  /// 到期撤销，否则「完成 → clearDownloadProgress」这条既有调用序会把刚上岛的
+  /// 完成提示立刻抹掉（下载链路两条路径都在完成通知后紧跟本方法）。
   Future<void> clearDownloadProgress() async {
     if (!_isAndroid) return;
     _downloadFileName = null;
@@ -291,6 +319,52 @@ class LiveUpdateService {
     _lastDownloadNotifyTime = null;
     _lastDownloadNotifiedPercent = null;
     await _flush();
+  }
+
+  /// 下载完成态上岛（#158）：正文「{文件名} 下载完成」+ chip「已完成」+ 确定进度条
+  /// 100%（与回合完成态同款满载表达），停留 [kDownloadCompletedDwell] 后自动撤岛。
+  ///
+  /// 优先级见 [_compose]：等待态 > 下载完成（窗口内） > 下载进行中 > 回合活动 >
+  /// 列表总览。完成态与进行态可同时存在（队列里还有任务在跑）——窗口内让位给
+  /// 「完成了什么」，窗口过后自然回落到下一个任务的进度条。
+  ///
+  /// LIVE 是增强功能：非 Android / 低版本由 [_flush] 内部静默降级，调用方无感。
+  Future<void> notifyDownloadCompleted({required String fileName}) async {
+    if (!_isAndroid) return;
+    final name = fileName.trim();
+    if (name.isEmpty) return;
+    _downloadCompletedFileName = name;
+    _downloadCompletedAt = _now();
+    _scheduleDownloadCompletedDismiss();
+    await _flush();
+  }
+
+  /// #158 完成态到期撤岛：清字段并刷新（无其他活动时由 [_flush] 落到 cancelAll）。
+  void _scheduleDownloadCompletedDismiss() {
+    _downloadCompletedDismissTimer?.cancel();
+    _downloadCompletedDismissTimer = Timer(_downloadCompletedDwell, () {
+      _downloadCompletedDismissTimer = null;
+      if (_downloadCompletedAt == null) return;
+      _clearDownloadCompleted();
+      unawaited(_flush());
+    });
+  }
+
+  /// 清理完成态字段与定时器（到期 / 撤回 / 撤销时调用）。
+  void _clearDownloadCompleted() {
+    _downloadCompletedDismissTimer?.cancel();
+    _downloadCompletedDismissTimer = null;
+    _downloadCompletedFileName = null;
+    _downloadCompletedAt = null;
+  }
+
+  /// 惰性过期：进程被冻结 / 定时器未按时触发时，下次刷新照样能把过期完成态清掉，
+  /// 避免岛永久停在「已完成」。
+  void _expireDownloadCompletedIfStale() {
+    final startedAt = _downloadCompletedAt;
+    if (startedAt == null) return;
+    if (_now().difference(startedAt) < _downloadCompletedDwell) return;
+    _clearDownloadCompleted();
   }
 
   /// 会话列表链路上报（既有入口）：活跃会话数 + 标题列表。
@@ -344,7 +418,8 @@ class LiveUpdateService {
 
   /// 合成当前应展示的 (title, text, chip, trackerIcon, subText, indeterminate, progressPercent)；null = 应撤销。
   ///
-  /// 优先级：等待态（抢占一切） > 下载进行中 > 回合其他活动 > 列表总览 > 撤销。
+  /// 优先级：等待态（抢占一切） > 下载完成（#158，停留窗口内） > 下载进行中 >
+  /// 回合其他活动 > 列表总览 > 撤销。
   /// **B 案「身份优先」（2026-09-19，主人拍板）**：最大字号位（title）恒定承载
   /// 会话身份 —— 有实时活动用活动会话标题，否则回落列表链路首个会话标题，都没有
   /// 才退回通用文案。真机取证显示小米超级岛会自行在头部显示 App 名与计时器，故
@@ -376,7 +451,24 @@ class LiveUpdateService {
       );
     }
 
-    // 2. 下载进行中（#123）。
+    // 2. 下载完成态（#158，窗口内）：比进行中进度优先 —— 完成是离散事件，
+    //    队列连续下载时若被下一个任务的进度条压住，用户就看不到「刚下完了什么」。
+    final downloadCompletedName = _downloadCompletedFileName;
+    if (downloadCompletedName != null &&
+        downloadCompletedName.trim().isNotEmpty) {
+      return (
+        title,
+        l10n.liveUpdateActivityDownloadCompleted(downloadCompletedName),
+        // chip 复用 #48 定稿五态的「已完成」（≤6 字符，英文 Done）。
+        l10n.liveUpdateChipDone,
+        'completed',
+        subText,
+        false,
+        100,
+      );
+    }
+
+    // 3. 下载进行中（#123）。
     final downloadFileName = _downloadFileName;
     if (downloadFileName != null && downloadFileName.trim().isNotEmpty) {
       final hasTotal = _downloadExpected > 0;
@@ -398,7 +490,7 @@ class LiveUpdateService {
       );
     }
 
-    // 3. 回合其他活动（thinking / tool / output / completed / interrupted）。
+    // 4. 回合其他活动（thinking / tool / output / completed / interrupted）。
     if (activityText != null && activityText.trim().isNotEmpty) {
       // #129：已完成态用**确定进度条 100%**（满载=完成、停止动画）；
       // 其余活动保持 indeterminate —— B 案起条只表达「在跑」，不再叠工具落点。
@@ -414,7 +506,7 @@ class LiveUpdateService {
       );
     }
 
-    // 4. 会话列表总览。
+    // 5. 会话列表总览。
     if (count > 0) {
       return (
         title,
@@ -427,13 +519,16 @@ class LiveUpdateService {
       );
     }
 
-    // 5. 撤销。
+    // 6. 撤销。
     return null;
   }
 
   /// 单一出口：读开关 → 合成 → 幂等比较 → 资格判定 → show / cancel。
   Future<void> _flush() async {
     if (!_isAndroid) return;
+    // #158 完成态窗口过期先清场，使「已完成 → 回落进行中进度 / 列表总览 / 撤销」
+    // 在任意刷新入口下都成立（定时器与惰性过期双保险）。
+    _expireDownloadCompletedIfStale();
     try {
       final prefs = await SharedPreferences.getInstance();
       final enabled = prefs.getBool(prefsKeyLiveUpdateEnabled) ?? true;
@@ -502,6 +597,8 @@ class LiveUpdateService {
     _activityChip = null;
     _activityTitle = null;
     _trackerIconKey = 'thinking';
+    // #158：完成态与到期定时器一并清（避免撤岛后残留窗口把岛又拉起来）。
+    _clearDownloadCompleted();
     try {
       await _channel.invokeMethod<void>('cancel', {
         'id': kLiveUpdateNotificationId,

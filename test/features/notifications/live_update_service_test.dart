@@ -1140,4 +1140,162 @@ void main() {
       expect(lastArgs['shortCriticalText'], 'Save');
     });
   });
+
+  group('LiveUpdateService #158 下载完成态上岛', () {
+    /// 轮询等待（窗口到期由 Timer 回调异步刷新，避免用例对固定 sleep 敏感）。
+    Future<void> waitFor(bool Function() condition) async {
+      for (var i = 0; i < 60; i++) {
+        if (condition()) return;
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+
+    Map<Object?, Object?> lastShowArgs() =>
+        calls.where((c) => c.method == 'show').last.arguments
+            as Map<Object?, Object?>;
+
+    int showCount() => calls.where((c) => c.method == 'show').length;
+
+    int cancelCount() => calls.where((c) => c.method == 'cancel').length;
+
+    test(
+      '1. 完成上岛参数：notifyDownloadCompleted → 「{文件名} 下载完成」+ chip 已完成 + 确定进度条 100%',
+      () async {
+        installMock();
+        final service = LiveUpdateService();
+
+        await service.notifyDownloadCompleted(fileName: 'hermes-0.1.57.apk');
+
+        final args = lastShowArgs();
+        expect(args['text'], 'hermes-0.1.57.apk 下载完成');
+        expect(args['shortCriticalText'], '已完成');
+        expect(args['trackerIcon'], 'completed');
+        expect(args['indeterminate'], isFalse);
+        expect(args['progressPercent'], 100);
+        await service.cancelAll();
+      },
+    );
+
+    test('2. 英文模式：text「{fileName} downloaded」+ chip Done（≤6 字符）', () async {
+      installMock();
+      LocaleResolver.updateMode(AppLocaleMode.en);
+      final service = LiveUpdateService();
+
+      await service.notifyDownloadCompleted(fileName: 'english.pdf');
+
+      final args = lastShowArgs();
+      expect(args['text'], 'english.pdf downloaded');
+      expect(args['shortCriticalText'], 'Done');
+      expect(
+        args['shortCriticalText'].toString().length,
+        lessThanOrEqualTo(6),
+        reason: '状态栏 chip 硬限 6 字符（#48 定稿）',
+      );
+      await service.cancelAll();
+    });
+
+    test(
+      '3. 完成态压过进行中进度，且下载链路既有的 clearDownloadProgress 不抹掉完成提示',
+      () async {
+        installMock();
+        final service = LiveUpdateService();
+
+        await service.notifyDownloadProgress(
+          fileName: 'big.apk',
+          receivedBytes: 50,
+          expectedBytes: 100,
+        );
+        expect(lastShowArgs()['text'], '正在下载 big.apk · 50%');
+
+        await service.notifyDownloadCompleted(fileName: 'big.apk');
+        expect(lastShowArgs()['text'], 'big.apk 下载完成');
+
+        // 下载链路（download_controller 两条完成路径）既有调用序：
+        // notifyDownloadCompleted 紧跟 clearDownloadProgress —— 后者只清「进行中」，
+        // 完成提示必须活着（这正是此前「下载完成没有岛提示」的根因）。
+        await service.clearDownloadProgress();
+        expect(lastShowArgs()['text'], 'big.apk 下载完成');
+        expect(cancelCount(), 0);
+        await service.cancelAll();
+      },
+    );
+
+    test('4. 停留窗口到期：无其他活动 → 原生 cancel 撤岛', () async {
+      installMock();
+      final service = LiveUpdateService(
+        downloadCompletedDwell: const Duration(milliseconds: 30),
+      );
+
+      await service.notifyDownloadCompleted(fileName: 'done.apk');
+      expect(showCount(), 1);
+      expect(cancelCount(), 0);
+
+      await waitFor(() => cancelCount() == 1);
+      expect(cancelCount(), 1, reason: '窗口到期须撤岛，不能永久停在「已完成」');
+      await service.cancelAll();
+    });
+
+    test('5. 停留窗口到期：有回合活动在跑 → 自然回落回合文案而非撤岛', () async {
+      installMock();
+      final service = LiveUpdateService(
+        downloadCompletedDwell: const Duration(milliseconds: 30),
+      );
+
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '会话',
+        activity: LiveUpdateActivity.tool,
+        detail: 'read_file',
+      );
+      await service.notifyDownloadCompleted(fileName: 'done.apk');
+      expect(lastShowArgs()['text'], 'done.apk 下载完成');
+
+      await waitFor(() => lastShowArgs()['text'] != 'done.apk 下载完成');
+      expect(lastShowArgs()['text'], contains('读取文件'));
+      expect(cancelCount(), 0, reason: '仍有回合活动时不应撤岛');
+      await service.cancelAll();
+    });
+
+    test('6. 等待态抢占：完成提示停留期间 waitingApproval 上位', () async {
+      installMock();
+      final service = LiveUpdateService();
+
+      await service.notifyDownloadCompleted(fileName: 'a.apk');
+      await service.notifyActivity(
+        sessionId: 's1',
+        title: '会话',
+        activity: LiveUpdateActivity.waitingApproval,
+      );
+
+      final args = lastShowArgs();
+      expect(args['text'], '等待你的批准');
+      expect(args['shortCriticalText'], '请批准');
+      await service.cancelAll();
+    });
+
+    test('7. cancelAll 一并清完成态与到期定时器（撤岛后不会被窗口重新拉起）', () async {
+      installMock();
+      final service = LiveUpdateService(
+        downloadCompletedDwell: const Duration(milliseconds: 30),
+      );
+
+      await service.notifyDownloadCompleted(fileName: 'a.apk');
+      await service.cancelAll();
+      final cancelsAfterCancel = cancelCount();
+      final showsAfterCancel = showCount();
+
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(showCount(), showsAfterCancel, reason: '撤岛后窗口不得再拉起岛');
+      expect(cancelCount(), cancelsAfterCancel);
+    });
+
+    test('8. 非 Android 平台：完成态不上岛、零平台通道调用', () async {
+      installMock();
+      final service = LiveUpdateService(androidPlatformOverride: false);
+
+      await service.notifyDownloadCompleted(fileName: 'a.apk');
+
+      expect(calls, isEmpty);
+    });
+  });
 }
