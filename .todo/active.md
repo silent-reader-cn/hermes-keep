@@ -1273,3 +1273,154 @@ Future<void> resumeCompressionIfRunning();
 
 **已知取舍**：client 层同步 `compressSession` 保留（协议能力，有既有测试覆盖），生产 UI 路径已全部改走异步版；controller 层原同步方法移除。
 
+## #156 压缩上下文：关弹窗后进度不可观测 + 压缩期间可发消息（改用服务端异步 start/status）
+
+**分类**：问题（可观测性缺口 + 并发风险）+ 方向（接口路径对齐官方蓝本）　**状态**：代码已交付（待主人真机复验）　**发现**：2026-09-24（主人报告 + 建议）　**基线**：`main @adc4693`（独立 worktree）
+
+### 主人诉求（原话）
+1. 「点击压缩上下文以后，如果关掉弹窗，就无法查看现在还是不是正在压缩上下文，有没有压缩完了。我建议点击压缩上下文以后，上下文指示器变成 loading 图标。等压缩完以后再恢复。」
+2. 「压缩的时候是不是不应该让用户发消息啊？」
+3. 拍板：**禁用发送**（输入框仍可打字 / 发送按钮禁用 / 回车被拦 / 明确提示「正在压缩上下文，请稍候」）+ **改用异步接口（start/status 轮询）**
+
+### 现状（源码行号 · 已取证）
+| # | 现状 | 位置 |
+|---|---|---|
+| 1 | 压缩状态 `_compressing` 是**弹窗局部字段**，关弹窗即随 State 销毁；全应用无第二处可知压缩在跑 | `context_window_popover.dart:45` 声明 / `:609` 置 true / `:618` 成功后 `onClose()` / `:621` 复位 |
+| 2 | controller 层**无压缩状态**，只有 Future 返回值 | `chat_controller.dart:542 compressSession()` |
+| 3 | 指示器为纯展示组件（22px 环 + 中心百分比，`_RingPainter`），**无 loading 形态** | `context_window_indicator.dart:21` |
+| 4 | 发送守卫只认 `isStreaming/isSending/isViewingCachedData`，**不认压缩** | `chat_input_bar.dart:300 _submit()` / `:356 _canSendByShortcut()` / `chat_controller.dart:358 send()` |
+| 5 | 走**同步** `POST /api/session/compress`，未传 timeout → 吃默认 **60s** | `api_client_sessions.dart:159`；默认值 `api_client.dart:64` |
+
+### 关键事实（服务端实测取证，非推断）
+- 运行中服务 **PID 23388**（CWD `D:\hermes-webui`、Python `server.py`、HEAD `c67fd2dd`）**已带异步接口**：
+  - `POST /api/session/compress/start`（`routes.py:15110` → `_handle_session_compress_start:24040`）：起 daemon 线程 `manual-compress-<sid>`，job 存 `_MANUAL_COMPRESSION_JOBS[sid]`；重复 start **幂等复用** running job（`:24067/:24092`）；前置 `ensure_agent_runtime_current()` 可能 409 `agent_runtime_stale`（retryable）；`active_stream_id` 非空时 409
+  - `GET /api/session/compress/status`（`:12459` → `_handle_session_compress_status:24126`）：返回 `_manual_compression_status_payload(job)`（`:23939`）= `{ok, status: idle|running|done|error|cancelled, session_id, focus_topic, started_at, updated_at}`；**done 时 `payload.update(result)` 把同步版完整响应原样附带** ⇒ **可复用现有 `SessionCompressResponse.fromJson`**；结果保留 **10 分钟 TTL**、多端轮询结果不丢（`:24136` 注释）。**无 job 时返回 `{ok:true, status:"idle"}`，不是 404**
+- **服务端不拦「压缩期间发消息」**：`chat/start` 路径无任何压缩互斥检查（`_MANUAL_COMPRESSION_JOBS` 全仓 7 处引用均属压缩自身）⇒ 并发风险由客户端自律
+- **官方 CHANGELOG PR #2128**：同步 `/compress` 会在**反向代理超时**（主人正是 frp 部署）；官方前端已弃用同步版（`tests/test_sprint46.py:717` 断言 `api('/api/session/compress'` 不得出现），改 start+status，并配 `_setCompressionSessionLock`（会话锁）+ `resumeManualCompressionForSession`（切回会话按 status 恢复 UI）
+- 官方轮询参数（`static/commands.js:841`）：初始 **700ms** → 每次 **+300ms** → 上限 **2000ms**；`done` 返回 / `error` 抛错（带 error_status）/ `idle` 抛「job no longer available」；启动前先做会话 preflight（`:961`）
+
+### 根因
+1. **可观测性**：压缩状态挂在弹窗 State 上而非会话状态上 ⇒ 弹窗一关即失去唯一观测点；且指示器无 loading 形态，即便有状态也无处呈现。
+2. **并发风险**：压缩线程会**重写 transcript**（插摘要锚点 + 裁剪轮次），而客户端此刻允许发新回合、服务端不拦 ⇒ 内容交错互相覆盖。
+3. **隐藏缺陷（主人未提，同类体检发现）**：同步请求 60s 超时后客户端判失败并复位，服务端仍在压缩 ⇒ 状态撒谎 + 用户重复触发（第二次撞 409 或重复压缩）。
+
+### 方案
+**数据层**：新增 `start`/`status` 两个端点与模型；status 的 `done` payload 复用既有 `SessionCompressResponse` 解析。
+**状态机**：压缩状态提升到 `ChatState`（`isCompressingContext`）—— 会话级真相，弹窗/指示器/输入栏/发送守卫共读同一处；轮询按官方退避参数；新增**恢复探测**（进入/切回会话时查 status，running 则接管轮询）。
+**UI**：指示器增 loading 形态（保留 22px 环与尺寸、弧改旋转 indeterminate、中心百分比让位，**不跳动**）；输入栏发送按钮禁用 + 回车被拦 + 明确提示；弹窗改用新链路（关窗不再中断，重开可见 running）。
+**发送守卫**：`chat_controller.send()` + 输入栏按钮 + `_canSendByShortcut()` 三处统一读压缩状态。
+
+### 验收标准
+- [ ] `C:/tmp/f.bat analyze` 零告警（含 info）
+- [ ] 压缩中点发送：按钮禁用、回车被拦、有明确提示；压缩结束后恢复可发
+- [ ] 关弹窗后指示器持续 loading；压缩完成自动恢复并刷新 transcript + 轻提示
+- [ ] 切走再切回会话 / 重开弹窗：若服务端仍在压缩（status=running）则恢复 loading 态并继续轮询；已完成为 done 则收敛
+- [ ] status=idle（job 过期/服务重启）时本地态收敛，不永久卡在 loading
+- [ ] status=error / start 409 有明确错误提示，状态复位
+- [ ] 失败与降级路径必须 RED 校验（禁空转测试）
+- [ ] 全量 `C:/tmp/f.bat test` 无回归；样式变更出金照
+- [ ] 窄屏/宽屏行为一致；无 Material 组件混入（Cupertino-only）
+- [ ] 子代理**禁止 commit**，Leader 统一提交
+- [ ] 主人真机复验：关弹窗后仍能看到压缩进度；压缩期间发不出消息
+
+### 分区（1 任务 1 worktree，文件级零重叠）
+| 路 | 范围 | 交付 |
+|---|---|---|
+| W1（Leader） | `lib/core/api/*` + `lib/core/models/session.dart` + `lib/features/chat/{chat_state,chat_controller,chat_providers}.dart` | 端点/模型 + 状态机 + 轮询 + 恢复 + 发送守卫 |
+| W2（agy worktree） | `lib/features/chat/widgets/{context_window_indicator,chat_input_bar,context_window_popover}.dart` + `lib/l10n/app_localizations.dart` | 指示器 loading 态 + 发送禁用与提示 + 弹窗接线 |
+
+### 冻结契约（两路共用，勿改签名）
+```dart
+// core/models/session.dart
+class SessionCompressStatusResponse {
+  final bool? ok; final String? status;   // idle|running|done|error|cancelled
+  final String? sessionId; final String? focusTopic;
+  final double? startedAt; final double? updatedAt;
+  final String? error; final int? errorStatus; final bool? retryable;
+  final SessionCompressResponse? result;  // done 时复用既有解析
+  bool get isRunning; bool get isDone; bool get isFailed;
+}
+
+// core/api/api_client_sessions.dart（+ chat_server_api.dart 抽象）
+Future<SessionCompressStatusResponse> startSessionCompression({required String sessionId, String? focusTopic});
+Future<SessionCompressStatusResponse> compressionStatus(String sessionId);
+
+// ChatState（新增字段）
+final bool isCompressingContext;
+
+// ChatController（UI 只读 state；弹窗改调这两个）
+Future<bool> startCompression({String? focusTopic});
+Future<void> resumeCompressionIfRunning();
+```
+
+---
+
+
+### #155 组头「悬停出 +」把行高撑高（主人实测回归 · 已修）
+
+**现象**：主人反馈「悬停会话项已修好，但悬停工作区折叠 header 右侧出现 + 时，仍存在高度变化」。
+
+**根因**：上一轮（#153）只把**会话行**的高度锁了 `ConstrainedBox(minHeight: 34)`，
+**漏了组头** —— 组头右侧的「+」按钮命中区是 22px，比组头文字行（约 17px）高，
+一 hover 就把整条组头撑起来。**同类问题的第二处**（教训：修"悬停改变布局"类缺陷时，
+要一次性把**所有会因悬停增删元素的容器**都过一遍，不能只修用户点名的那一处）。
+
+**修法（两层）**：
+1. **始终占位**：`+` 固定占 `22×20` 槽位，悬停只切换 `Opacity`（0 ↔ 1），
+   不可见时 `IgnorePointer` 屏蔽点击 —— 布局恒定，**高度在数学上不可能变**。
+   （对比原写法 `if (hovering) 渲染`：命中区一进布局就会撑高。）
+2. **双保险**：组头内容行再加 `SizedBox(height: 20)` 锁高。
+
+**配套测试（新文件 `test/features/session_list/session_row_hover_height_test.dart`，3 例）**：
+- 未悬停时「+」**已存在于布局**（`findsOneWidget`，只是 opacity=0）—— 钉住「占位」这个设计决策；
+- ★ **悬停前后组头尺寸逐像素相同**（`moreOrLessEquals(epsilon: 0.01)`）—— 真正的防回归闸门；
+- 会话行悬停同样不改行高（#153 的成果一并守住）。
+- **RED 校验已做**：把实现临时改回 `if (hovering)` 条件插入 → 第一例精确变红（还原即绿）。
+
+**踩坑**：新测试挂 `SessionSidebar` 时漏了 `apiClientProvider.overrideWithValue(...)`
+→ 列表读不到连接态，显示「未配置服务器连接」而不是会话，两个用例都找不到组头/会话行。
+**写侧栏级测试必须同时 override `apiClientProvider`（+ `sessionListApiFactoryProvider`）**。
+
+---
+
+### #156 交付记录（2026-09-24）
+
+**提交**：`b20d54b`（分支 `feat/sep24-compress-core`，基线 `main @adc4693`，未合 main）
+
+**验收（实测）**：
+- [x] `analyze`：**No issues found!**
+- [x] 全量 `flutter test`：**4914 通过 / 8 skipped / 0 失败**
+- [x] 新增 14 例（10 controller 状态机 + 4 UI）
+- [x] **6 条 RED 校验逐条真跑**：回退 send 守卫 → 红 1；回退 idle 收敛 → 红 2；回退恢复接管 → 红 1；回退指示器 loading → 红 2；回退输入栏发送禁用 → 红 1；回退 placeholder 提示 → 红 1；还原后 14 例全绿（护栏非空转）。
+
+**过程中被全量回归抓出的自身缺陷**：输入栏挂载即探测压缩状态，而探测用 `_api!` 空断言 —— 未连接场景（含 14 个未注入 api 的既有用例）直接崩 `Null check operator used on a null value`。修法：三个入口（start / 轮询 / 探测）统一补 `_api` 空守卫并安全降级。
+
+**同类体检**：压缩入口**共两处**（上下文弹层 + 会话菜单里带聚焦主题输入的对话框），主人只提了弹窗那处，两处已一并改走异步链路。
+
+**待主人真机复验**：① 点压缩后关掉弹窗，输入栏指示器持续转圈、压缩完成自动恢复并刷新 transcript；② 压缩期间发送按钮禁用、回车被拦、输入框提示「正在压缩上下文，请稍候…」；③ 切走再切回会话仍能看到转圈（服务端 running 时）。
+
+**已知取舍**：client 层同步 `compressSession` 保留（协议能力，有既有测试覆盖），生产 UI 路径已全部改走异步版；controller 层原同步方法移除。
+
+
+### #158 / #160 窄屏被误伤两次（同类错误 · 已修 · 教训入档）
+
+**现象（主人实测）**：
+1. **#158**：窄屏会话项的**白卡底色与边框全没了**；
+2. **#160**：窄屏会话项之间的**分隔线没了**。
+
+**同一根因、同一类错误**：我把「某一屏形态的视觉要求」当成**全局改动**执行 ——
+- #150「去掉圆角卡片」是**桌面侧栏**的要求 ⇒ 我却全局删掉 `DecoratedSliver`；
+- #151「项与项之间不要分隔线」也是**桌面侧栏**的要求 ⇒ 我却把 `separatorBuilder` 整块删除。
+
+**两次修法一致**：按屏宽分流（`isCompactSidebar = width >= 900 && !showUtilityRows`）
+- 桌面侧栏：朴素行 + 无卡片 + 无分隔线（内缩 8、行高 34 锁死、悬停时间⇄⋯）；
+- 窄屏：**白卡 + 圆角 + 0.5px 边框 + 分隔线 + 内缩 20**，两行标题/副标题，
+  行尾「⋯」常在，长按 = 多选（与改动前逐像素一致）。
+并在 #160 顺带恢复 `SliverList.separated` 专有的 `findItemIndexCallback`（滚动锚点反查）。
+
+**教训（写进 checklist）**：凡涉及「某一屏（宽屏/窄屏）的视觉或交互改动」，
+实施前先自问一句：**这个改动在另一屏该不该生效？** 默认应为「不该」，
+必须显式按屏宽分流；并且修完后**两侧都要看渲染图**（不只看改动的那一侧）。
+
+---
+

@@ -123,13 +123,13 @@ void main() {
       await tester.drag(scrollable, const Offset(0, 400));
       await tester.pumpAndSettle();
       expect(state.userHasScrolled, isTrue);
-      expect(pos.maxScrollExtent - pos.pixels, greaterThan(150.0));
+      expect(pos.pixels, greaterThan(150.0));
 
       // 不跟随中向上滑动一段距离（手指从下往上滑 Offset(0, -50)），但仍离底 > 100px
       await tester.drag(scrollable, const Offset(0, -50));
       await tester.pumpAndSettle();
       expect(
-        pos.maxScrollExtent - pos.pixels,
+        pos.pixels,
         greaterThan(80.0),
         reason: '仍未达到贴底阈值',
       );
@@ -142,7 +142,7 @@ void main() {
       // 向上滑动足够距离接近底部（< 80px）
       await tester.drag(scrollable, const Offset(0, -350));
       await tester.pumpAndSettle();
-      expect(pos.maxScrollExtent - pos.pixels, lessThan(80.0));
+      expect(pos.pixels, lessThan(80.0));
       expect(
         state.userHasScrolled,
         isFalse,

@@ -92,7 +92,7 @@ void main() {
         expect(listState.userHasScrolled, isFalse);
 
         final pos = positionOf(tester);
-        expect(pos.maxScrollExtent - pos.pixels, lessThan(5.0));
+        expect(pos.pixels, lessThan(5.0));
 
         // 滚轮向上滚动 100px（scrollDelta.dy = -100 < 0，累计超 8px 敏感阈值且离底 > 80px）
         await sendWheelScroll(tester, scrollDelta: const Offset(0, -100));
@@ -166,14 +166,16 @@ void main() {
       await tester.pumpAndSettle();
       final listState = listStateOf(tester);
 
-      // 第 1 次微滚：-4px（小于 8px 敏感阈值，排除轻微触碰误判）
+      // 第 1 次微滚：上滚 4px（小于 8px 敏感阈值，排除轻微触碰误判）
+      // A 重构（reverse）：`dragDisplacement` 累积的是 scrollDelta，而 scrollDelta
+      // 就是 pixels 变化方向 —— 反向基准下「看历史（上滚）」翻成正值。
       await sendWheelScroll(tester, scrollDelta: const Offset(0, -4));
       await tester.pump();
       expect(listState.userHasScrolled, isFalse, reason: '单次 4px 不应取消跟随');
-      expect(listState.dragDisplacement, equals(-4.0));
+      expect(listState.dragDisplacement, equals(4.0));
       expect(listState.nearBottom, isTrue);
 
-      // 第 2 次微滚：再 -5px（累计 -9px，已达到并超过 8px 敏感阈值）
+      // 第 2 次微滚：再上滚 5px（累计 9px，已达到并超过 8px 敏感阈值）
       await sendWheelScroll(tester, scrollDelta: const Offset(0, -5));
       await tester.pump();
       expect(listState.userHasScrolled, isTrue, reason: '连续累计 9px 应取消跟随');
@@ -233,7 +235,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final pos = positionOf(tester);
-      expect(pos.maxScrollExtent - pos.pixels, lessThanOrEqualTo(1.0));
+      expect(pos.pixels, lessThanOrEqualTo(1.0));
       expect(listState.userHasScrolled, isFalse, reason: '滚回底部应恢复跟随');
       expect(listState.nearBottom, isTrue);
       expect(buttonFinder, findsNothing, reason: '恢复跟随按钮应隐藏');
@@ -250,8 +252,11 @@ void main() {
 
       await tester.pumpAndSettle();
       final afterTokenPixels = pos.pixels;
-      expect(afterTokenPixels, greaterThan(beforeTokenPixels));
-      expect(pos.maxScrollExtent - pos.pixels, lessThan(5.0));
+      // A 重构（reverse）：反向基准下贴底时新内容天然**不推动**视口像素
+      // （原正向实现靠 pixels 递增追底，故此断言原为 greaterThan）。
+      expect(afterTokenPixels, lessThan(5.0));
+      expect(afterTokenPixels, closeTo(beforeTokenPixels, 5.0));
+      expect(pos.pixels, lessThan(5.0));
     });
 
     testWidgets('4. 悬浮回底按钮点击恢复跟随', (tester) async {
@@ -352,7 +357,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final pos = positionOf(tester);
-      expect(pos.maxScrollExtent - pos.pixels, greaterThan(80));
+      expect(pos.pixels, greaterThan(80));
 
       final buttonFinder = find.byKey(
         const ValueKey('chat-scroll-to-bottom-button'),

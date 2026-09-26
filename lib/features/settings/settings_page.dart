@@ -122,6 +122,10 @@ class _AppearanceSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final mode = ref.watch(themeModeProvider);
     final localeMode = ref.watch(localeModeProvider);
+
+    // #159：显式值（null = 自动）。
+
+    final groupingMode = ref.watch(sessionGroupingModeProvider);
     return SettingsSurfaces.section(
       context,
       CupertinoListSection(
@@ -179,6 +183,56 @@ class _AppearanceSection extends ConsumerWidget {
                       AppLocaleMode.system: Text(l10n.languageAuto),
                       AppLocaleMode.zh: Text(l10n.languageZh),
                       AppLocaleMode.en: Text(l10n.languageEn),
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // #159：会话列表分组方式（自动 / 按时间 / 按工作区）。
+          CupertinoListTile(
+            key: const ValueKey('settings-session-grouping'),
+            title: Text(l10n.sessionGroupingSection),
+            subtitle: Text(l10n.sessionGroupingDescription),
+            trailing: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 200),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SettingsSurfaces.segmented(
+                  context,
+                  CupertinoSlidingSegmentedControl<_GroupingChoice>(
+                    key: const ValueKey('settings-grouping-mode'),
+                    groupValue: switch (groupingMode) {
+                      null => _GroupingChoice.auto,
+                      SessionGroupingMode.time => _GroupingChoice.time,
+                      SessionGroupingMode.workspace =>
+                        _GroupingChoice.workspace,
+                    },
+                    onValueChanged: (value) {
+                      if (value == null) return;
+                      final controller = ref.read(
+                        sessionGroupingModeProvider.notifier,
+                      );
+                      switch (value) {
+                        case _GroupingChoice.auto:
+                          // 「自动」→ 清除显式值，回到按屏宽（窄屏时间/桌面工作区）。
+                          unawaited(controller.clearMode());
+                        case _GroupingChoice.time:
+                          unawaited(
+                            controller.setMode(SessionGroupingMode.time),
+                          );
+                        case _GroupingChoice.workspace:
+                          unawaited(
+                            controller.setMode(SessionGroupingMode.workspace),
+                          );
+                      }
+                    },
+                    children: {
+                      _GroupingChoice.auto: Text(l10n.sessionGroupingAuto),
+                      _GroupingChoice.time: Text(l10n.sessionGroupingTime),
+                      _GroupingChoice.workspace: Text(
+                        l10n.sessionGroupingWorkspace,
+                      ),
                     },
                   ),
                 ),
@@ -843,7 +897,6 @@ class _CronSection extends ConsumerWidget {
             ),
           ),
         ],
-
       ),
     );
   }
@@ -2336,3 +2389,7 @@ String _describeError(BuildContext context, Object error) {
   if (error is ApiException) return error.message;
   return AppLocalizations.of(context).loadFailedRetry;
 }
+
+/// #159：分段控件的取值 —— `CupertinoSlidingSegmentedControl` 的 T 不能为
+/// nullable，故用哨兵 [auto] 表示「未显式设置（按屏宽）」。
+enum _GroupingChoice { auto, time, workspace }

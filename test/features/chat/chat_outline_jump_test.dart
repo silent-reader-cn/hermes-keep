@@ -167,9 +167,9 @@ void main() {
       );
       final pos = positionOf(tester);
 
-      // 确认初始处于底部附近
-      expect(pos.pixels, greaterThan(3000));
-      expect(pos.maxScrollExtent - pos.pixels, lessThan(80));
+      // 确认初始处于底部附近（A 重构 reverse：贴底 ⇔ pixels ≈ 0；
+      // 原正向为 pixels ≈ maxScrollExtent，两条断言其一被批量替换误改，此处归一）。
+      expect(pos.pixels, lessThan(80));
 
       // 模拟点击标题栏展开大纲，并跳转到视口外较靠前的第 2 轮用户气泡（u-2，loadedIndex=4）
       final outlineTargetKey = 'u-2';
@@ -186,7 +186,7 @@ void main() {
       );
 
       // 验证没有跳到底部且未进入跟随态
-      final distFromBottom = pos.maxScrollExtent - pos.pixels;
+      final distFromBottom = pos.pixels;
       expect(
         distFromBottom,
         greaterThan(100.0),
@@ -280,7 +280,7 @@ void main() {
 
       // 验证恢复贴底
       expect(
-        pos.maxScrollExtent - pos.pixels,
+        pos.pixels,
         lessThan(5.0),
         reason: '点击回底按钮后恢复平滑滚底跟随',
       );

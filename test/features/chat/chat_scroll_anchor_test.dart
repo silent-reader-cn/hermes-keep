@@ -64,7 +64,7 @@ void main() {
     final position = positionOf(tester);
     expect(
       position.pixels,
-      closeTo(position.maxScrollExtent, 1.0),
+      closeTo(0.0, 1.0),
       reason: '初始定位应收敛到真实底部（max=${position.maxScrollExtent}',
     );
   });
@@ -76,7 +76,7 @@ void main() {
     final position = positionOf(tester);
     expect(
       position.pixels,
-      closeTo(position.maxScrollExtent, 1.0),
+      closeTo(0.0, 1.0),
       reason: '初始定位应收敛到真实底部（max=${position.maxScrollExtent}',
     );
   });
@@ -158,7 +158,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 48));
       final p = positionOf(tester);
       expect(
-        p.pixels <= p.maxScrollExtent + 0.5,
+        p.pixels >= -0.5 && p.pixels <= p.maxScrollExtent + 0.5,
         isTrue,
         reason: '初始定位期间不得越界/反弹',
       );
@@ -171,7 +171,7 @@ void main() {
     final settled = positionOf(tester);
     expect(
       settled.pixels,
-      closeTo(settled.maxScrollExtent, 1.0),
+      closeTo(0.0, 1.0),
       reason: '定位与流式跟随最终应收敛到底部',
     );
   });

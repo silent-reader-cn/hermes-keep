@@ -136,8 +136,12 @@ abstract interface class ChatServerApi {
     required void Function() onClosed,
   });
 
-  /// 主动断开当前 SSE 连接（静默，不触发 onTransportError）。
-  void stopStream();
+  /// 主动断开**指定 stream** 的 SSE 连接（静默，不触发 onTransportError）。
+  ///
+  /// 必须按 streamId 精确断开：多会话并行时每个会话各持一条独立连接，
+  /// 无差别断开会误杀其它会话的流 → 对方静默无传输活动 → 看门狗判
+  /// transport silence → 强制重连风暴（见 [ChatApiClient] 的 per-stream 池）。
+  void stopStream(String streamId);
 
   /// 建立 Clarify SSE 独立流连接（`/api/clarify/stream?session_id=`）。
   Future<void> startClarifyStream(
@@ -170,14 +174,19 @@ abstract interface class ChatServerApi {
 
 /// [ChatServerApi] 的生产实现（包 [ApiClient]，SSE 复用其 dio 继承 header/cookie）。
 class ChatApiClient implements ChatServerApi {
-  ChatApiClient(this._client)
-      : _sseClient = SseClient(
-          dio: _client.dio,
-          baseUrl: _client.baseUrl,
-        );
+  ChatApiClient(this._client);
 
   final ApiClient _client;
-  final SseClient _sseClient;
+
+  /// per-stream SSE 连接池（key = streamId；池空 = 当前无活跃会话流）。
+  ///
+  /// 每个 streamId 各持**独立** [SseClient]（独立 CancelToken）：会话 B 开流
+  /// 不会取消会话 A 的流，[stopStream] 也只断指定流。流自然结束 / 出错后由
+  /// [startStream] 的 finally 回收，避免池泄漏。
+  ///
+  /// 反面教材：曾共用同一个 [SseClient] 实例，而它的 `start()` 会先 cancel
+  /// 旧 token —— 多会话并行时互相踩断连接，制造 transport silence 重连风暴。
+  final Map<String, SseClient> _streamClients = <String, SseClient>{};
 
   /// 底层 [ApiClient] 实例（供伴随通道复用其 dio 与 baseUrl）。
   ApiClient get client => _client;
@@ -377,17 +386,27 @@ class ChatApiClient implements ChatServerApi {
       streamId,
       replayAfterSeq: replayAfterSeq,
     );
-    await _sseClient.start(
-      url,
-      onEvent: onEvent,
-      onEventId: onEventId,
-      onTransportError: onTransportError,
-      onClosed: onClosed,
-    );
+    // 同一 streamId 的重连：替换并取消**自己的**旧连接；其它 streamId 不受影响。
+    _streamClients.remove(streamId)?.stop();
+    final sse = SseClient(dio: _client.dio, baseUrl: _client.baseUrl);
+    _streamClients[streamId] = sse;
+    try {
+      await sse.start(
+        url,
+        onEvent: onEvent,
+        onEventId: onEventId,
+        onTransportError: onTransportError,
+        onClosed: onClosed,
+      );
+    } finally {
+      if (identical(_streamClients[streamId], sse)) {
+        _streamClients.remove(streamId);
+      }
+    }
   }
 
   @override
-  void stopStream() => _sseClient.stop();
+  void stopStream(String streamId) => _streamClients.remove(streamId)?.stop();
 
   SseClient? _clarifySseClient;
 

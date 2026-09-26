@@ -188,6 +188,15 @@ class SessionListSection {
 /// 会话列表筛选模式：全部 / 已归档 / 来源标签 / 项目 / 工作区。
 enum SessionListFilterMode { all, archived, source, project, workspace }
 
+/// 会话列表分组方式（#159）。
+///
+/// - [time]：置顶 / 今天 / 昨天 / 更早（#146 之前的旧形态）；
+/// - [workspace]：置顶 / 各工作区 / 其他（#146 起的形态）。
+///
+/// 设置项默认 **自动**（不落盘显式值时按屏宽决定：窄屏 = 时间，桌面 = 工作区），
+/// 用户也可显式指定。屏宽兜底放在列表页（provider 拿不到 MediaQuery）。
+enum SessionGroupingMode { time, workspace }
+
 /// 会话列表状态（AsyncNotifier 的 AsyncData 载荷）。
 ///
 /// 分页说明：服务端 `GET /api/sessions` 一次全量返回（无 offset/limit 参数，
@@ -542,9 +551,8 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       if (_staleVerifyInFlight.contains(id)) continue;
       _staleVerifyInFlight.add(id);
       unawaited(
-        _verifySessionStatus(id).whenComplete(
-          () => _staleVerifyInFlight.remove(id),
-        ),
+        _verifySessionStatus(id)
+            .whenComplete(() => _staleVerifyInFlight.remove(id)),
       );
     }
     return result;
@@ -969,9 +977,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     if (current.visibleCount >= maxCount) return;
     final next = current.visibleCount + pageSize;
     state = AsyncData(
-      current.copyWith(
-        visibleCount: next < maxCount ? next : maxCount,
-      ),
+      current.copyWith(visibleCount: next < maxCount ? next : maxCount),
     );
   }
 
@@ -1615,8 +1621,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   void applyExternalPinned(String id, bool pinned) {
     final current = state.valueOrNull;
     if (current == null || id.isEmpty) return;
-    SessionSummary replacer(SessionSummary s) =>
-        _replaced(s, pinned: pinned);
+    SessionSummary replacer(SessionSummary s) => _replaced(s, pinned: pinned);
     _syncLocalSession(id, replacer);
   }
 
@@ -1630,8 +1635,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     if (archived) {
       state = AsyncData(
         current.copyWith(
-          sessions:
-              current.sessions.where((s) => s.sessionId != id).toList(),
+          sessions: current.sessions.where((s) => s.sessionId != id).toList(),
           searchResults: current.searchResults == null
               ? null
               : () => current.searchResults!
@@ -1646,8 +1650,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       unawaited(_adjustArchivedCount(1));
       return;
     }
-    SessionSummary replacer(SessionSummary s) =>
-        _replaced(s, archived: false);
+    SessionSummary replacer(SessionSummary s) => _replaced(s, archived: false);
     _syncLocalSession(id, replacer);
     unawaited(_removeArchived(id));
     unawaited(_adjustArchivedCount(-1));
@@ -1685,8 +1688,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     if (id == null || id.isEmpty) return;
     if (current.sessions.any((s) => s.sessionId == id)) return;
     final now = DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0;
-    var withStamp =
-        session.createdAt == null ? session.copyWith(createdAt: now) : session;
+    var withStamp = session.createdAt == null
+        ? session.copyWith(createdAt: now)
+        : session;
     if (_streamingSessions.containsKey(id)) {
       withStamp = withStamp.withStreaming(
         isStreaming: true,
@@ -1910,16 +1914,16 @@ class SelectedWorkspaceFilterController extends Notifier<String?> {
 
   /// 选中指定工作区路径（null 或空 = 全部工作区）。
   void selectWorkspace(String? path) {
-    final normalized =
-        (path == null || path.trim().isEmpty) ? null : path.trim();
+    final normalized = (path == null || path.trim().isEmpty)
+        ? null
+        : path.trim();
     if (normalized == null) {
       clearFilter();
     } else {
       unawaited(
-        ref.read(sessionListControllerProvider.notifier).setFilter(
-          SessionListFilterMode.workspace,
-          value: normalized,
-        ),
+        ref
+            .read(sessionListControllerProvider.notifier)
+            .setFilter(SessionListFilterMode.workspace, value: normalized),
       );
     }
   }
@@ -1927,10 +1931,9 @@ class SelectedWorkspaceFilterController extends Notifier<String?> {
   /// 清除工作区筛选，恢复显示全部工作区。
   void clearFilter() {
     unawaited(
-      ref.read(sessionListControllerProvider.notifier).setFilter(
-        SessionListFilterMode.all,
-        value: null,
-      ),
+      ref
+          .read(sessionListControllerProvider.notifier)
+          .setFilter(SessionListFilterMode.all, value: null),
     );
   }
 }
@@ -1984,13 +1987,104 @@ final sessionListSectionsProvider = Provider<List<SessionListSection>>((ref) {
   // timer，撞 `!timersPending`）。组名一律用 workspace 路径末段；
   // buildSessionSections 仍保留 workspaceRoots 参数以支持「名字优先」的纯函数用法。
   const roots = <WorkspaceRoot>[];
+  // #159：分组方式 —— 用户显式选择优先；否则用 UI 层按屏宽写入的兜底值。
+  final explicit = ref.watch(sessionGroupingModeProvider);
+  final SessionGroupingMode mode =
+      explicit ?? ref.watch(sessionGroupingModeFallbackProvider);
   return buildSessionSections(
     visible,
     showCron: showCron,
     workspaceRoots: roots,
     now: ref.watch(sessionListNowProvider)(),
+    mode: mode,
   );
 });
+
+/// 会话列表分组方式的「用户显式选择」（#159，持久化）。
+///
+/// `null` = 尚未确定（首次运行）——此时由 UI 层按屏宽写入一次默认：
+/// **窄屏 → 时间**（置顶/今天/昨天/更早，即 #146 之前的形态），
+/// **桌面 → 工作区**。之后用户在设置里改过就以显式值为准。
+///
+/// 之所以让 UI 层来定默认：provider 拿不到 MediaQuery（无 context）。
+final sessionGroupingModeProvider =
+    NotifierProvider<SessionGroupingModeController, SessionGroupingMode?>(
+      SessionGroupingModeController.new,
+    );
+
+class SessionGroupingModeController extends Notifier<SessionGroupingMode?> {
+  /// 持久化 key。
+  static const String storageKey = 'session_grouping_mode';
+
+  @override
+  SessionGroupingMode? build() {
+    unawaited(_load());
+    return null;
+  }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = _decode(prefs.getString(storageKey));
+    } catch (_) {
+      // 平台通道缺失（单测等）→ 保持 null（由 UI 层兜底）。
+    }
+  }
+
+  static SessionGroupingMode? _decode(String? raw) => switch (raw) {
+    'time' => SessionGroupingMode.time,
+    'workspace' => SessionGroupingMode.workspace,
+    _ => null,
+  };
+
+  /// 写入显式选择并持久化。
+  Future<void> setMode(SessionGroupingMode mode) async {
+    state = mode;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(storageKey, mode.name);
+    } catch (_) {
+      // 写失败只影响持久化。
+    }
+  }
+
+  /// 清除显式选择 → 回到「自动」（按屏宽）。
+  Future<void> clearMode() async {
+    state = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(storageKey);
+    } catch (_) {
+      // 忽略。
+    }
+  }
+
+  /// 首次按屏宽确定默认（仅当尚无显式值时生效）。
+  Future<void> ensureDefault(SessionGroupingMode mode) async {
+    if (state != null) return;
+    await setMode(mode);
+  }
+}
+
+/// 「按屏宽决定的分组方式」—— 由 UI 层在首帧写入（供 sections 计算兜底用）。
+final sessionGroupingModeFallbackProvider =
+    NotifierProvider<
+      SessionGroupingModeFallbackController,
+      SessionGroupingMode
+    >(SessionGroupingModeFallbackController.new);
+
+/// 仅存内存的兜底值（默认时间 = 窄屏形态，最快的安全默认）。
+class SessionGroupingModeFallbackController
+    extends Notifier<SessionGroupingMode> {
+  @override
+  SessionGroupingMode build() => SessionGroupingMode.time;
+
+  /// UI 层按屏宽设置（不落盘）。
+  void setMode(SessionGroupingMode mode) {
+    if (state == mode) return;
+    state = mode;
+  }
+}
 
 /// 会话列表分区折叠态（仅存内存、不落盘；「其他」默认折叠）。
 final sessionListCollapsedSectionsProvider =
@@ -2039,10 +2133,7 @@ final sessionListNowProvider = Provider<DateTime Function()>(
 
 /// 内部辅助：工作区构建项。
 class _WorkspaceSectionBuilder {
-  _WorkspaceSectionBuilder({
-    required this.workspacePath,
-    required this.title,
-  });
+  _WorkspaceSectionBuilder({required this.workspacePath, required this.title});
 
   final String workspacePath;
   final String title;
@@ -2064,12 +2155,19 @@ class _WorkspaceSectionBuilder {
 /// 3. 「其他」组：仅收纳 `workspace` 为空的会话，固定最后、默认折叠。
 ///    - workspace 有值但不在 [workspaceRoots] 列表里的（任意目录跑的）→ 按路径最后一段独立成组，不要塞进「其他」。
 /// 4. 定时会话：当 [showCron] 为 false 时直接过滤忽略；当 [showCron] 为 true 时融流参与分组。
+/// 按 [mode] 分组：时间（置顶/今天/昨天/更早）或工作区（置顶/各工作区/其他）。
+///
+/// 时间分组的边界按自然日（跨天即换组），[now] 仅供测试注入固定参考时间。
 List<SessionListSection> buildSessionSections(
   List<SessionSummary> sessions, {
   bool showCron = false,
   List<WorkspaceRoot> workspaceRoots = const [],
   DateTime? now,
+  SessionGroupingMode mode = SessionGroupingMode.workspace,
 }) {
+  if (mode == SessionGroupingMode.time) {
+    return buildTimeSessionSections(sessions, showCron: showCron, now: now);
+  }
   final sorted = [...sessions]
     ..sort((a, b) => _sortTimestamp(b).compareTo(_sortTimestamp(a)));
 
@@ -2129,11 +2227,7 @@ List<SessionListSection> buildSessionSections(
 
   return [
     if (pinned.isNotEmpty)
-      SessionListSection(
-        title: '置顶',
-        sessions: pinned,
-        isPinned: true,
-      ),
+      SessionListSection(title: '置顶', sessions: pinned, isPinned: true),
     for (final g in groups)
       if (g.sessions.isNotEmpty)
         SessionListSection(
@@ -2142,11 +2236,62 @@ List<SessionListSection> buildSessionSections(
           workspacePath: g.workspacePath,
         ),
     if (other.isNotEmpty)
-      SessionListSection(
-        title: '其他',
-        sessions: other,
-        isOther: true,
-      ),
+      SessionListSection(title: '其他', sessions: other, isOther: true),
+  ];
+}
+
+/// 按时间分组：置顶 / 今天 / 昨天 / 更早，组内时间倒序；空组剔除（#159 从 #146
+/// 之前的实现原样恢复）。
+///
+/// 规则：
+/// 1. 定时会话：[showCron] 为 false 时直接过滤；为 true 时融流按时间归入
+///    「今天」/「昨天」/「更早」（即使 pinned 也按时间归入）；
+/// 2. 置顶：非 cron 且 `pinned == true` 进入「置顶」；
+/// 3. 其余按时间戳落「今天」/「昨天」/「更早」；时间戳缺失归「更早」。
+List<SessionListSection> buildTimeSessionSections(
+  List<SessionSummary> sessions, {
+  bool showCron = false,
+  DateTime? now,
+}) {
+  final reference = now ?? DateTime.now();
+  final sorted = [...sessions]
+    ..sort((a, b) => _sortTimestamp(b).compareTo(_sortTimestamp(a)));
+  final pinned = <SessionSummary>[];
+  final today = <SessionSummary>[];
+  final yesterday = <SessionSummary>[];
+  final earlier = <SessionSummary>[];
+
+  for (final session in sorted) {
+    if (session.isCronSession && !showCron) {
+      continue;
+    }
+    if (session.pinned == true && !session.isCronSession) {
+      pinned.add(session);
+      continue;
+    }
+    final timestamp = _timestamp(session);
+    if (timestamp == null) {
+      earlier.add(session);
+      continue;
+    }
+    final date = DateTime.fromMillisecondsSinceEpoch(
+      (timestamp * 1000).round(),
+    );
+    if (_isSameDay(date, reference)) {
+      today.add(session);
+    } else if (_isSameDay(date, reference.subtract(const Duration(days: 1)))) {
+      yesterday.add(session);
+    } else {
+      earlier.add(session);
+    }
+  }
+
+  return [
+    if (pinned.isNotEmpty) SessionListSection(title: '置顶', sessions: pinned),
+    if (today.isNotEmpty) SessionListSection(title: '今天', sessions: today),
+    if (yesterday.isNotEmpty)
+      SessionListSection(title: '昨天', sessions: yesterday),
+    if (earlier.isNotEmpty) SessionListSection(title: '更早', sessions: earlier),
   ];
 }
 
@@ -2156,6 +2301,9 @@ double? _timestamp(SessionSummary session) =>
 
 /// 排序用时间戳：缺失按 0（最旧）处理。
 double _sortTimestamp(SessionSummary session) => _timestamp(session) ?? 0;
+
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
 /// 工作区最近使用频率排序与截断。
 ///

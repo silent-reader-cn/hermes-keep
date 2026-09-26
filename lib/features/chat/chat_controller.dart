@@ -192,6 +192,12 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// SSE 连接当前是否存活（409 恢复路径判断是否需要重连）。
   bool _streamConnected = false;
 
+  /// 本控制器已建立 SSE 连接所属的 streamId（精确停止用）。
+  ///
+  /// 收尾 / 销毁路径上 `state.stream.activeStreamId` 可能已被清空，仅靠它会
+  /// 漏停旧连接；而共享 API 客户端下无差别停止又会误杀其它会话的流。故留档。
+  String? _ownedStreamId;
+
   /// loadYoloState 一次性守卫（页面每次 build 都会触发，仅首次真正拉取）。
   bool _yoloLoaded = false;
 
@@ -357,7 +363,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _cancelCompressionPolling();
     _stopApprovalChannel();
     _stopSessionContentChannel();
-    _api?.stopStream();
+    _stopOwnedStream();
   }
 
   // -------------------------------------------------------------------------
@@ -999,6 +1005,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             '${m.role}:${m.timestamp}:${m.content}',
           );
         }).toList();
+        // reverse 列表下更早的消息必须拼在**数组开头**：
+        // `chat_message_list.dart` 的 itemBuilder 做了 `index = itemCount - 1 - rawIndex`
+        // 反转映射，因此逻辑数组仍是「旧 → 新」，displayItems[0]（最旧）渲染在
+        // 视觉**顶部**、数组末尾渲染在视觉**底部**。
+        //
+        // 【回归教训】A 重构时这行曾被误改成 [...messages, ...fresh]，理由写的是
+        // 「index 0 = 最新（视觉底部）」—— 该前提只考虑了 reverse 滚动方向、漏了
+        // itemBuilder 的索引反转，导致更早的历史被拼到数组尾部、渲染到视觉**下方**
+        // （用户拉到最顶加载出来的记录出现在屏幕下面）。
         final allMessages = [...fresh, ...state.messages];
         final fallbackOffset = state.messagesOffset - loaded.length;
         final newOffset =
@@ -1628,6 +1643,20 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _recordTransportActivity();
   }
 
+  /// 精确停止本控制器拥有的那条 SSE 连接（**绝不影响其它会话的流**）。
+  ///
+  /// 收尾 / 销毁路径上 `state.stream.activeStreamId` 可能已被清空，仅靠它会
+  /// 漏停旧连接；而共享 API 客户端下无差别停止又会误杀其它会话的流（多会话
+  /// 并行时表现为 transport silence 重连风暴）。故以 [_ownedStreamId] 为准、
+  /// state 为兜底。
+  void _stopOwnedStream() {
+    final api = _api;
+    if (api == null) return;
+    final streamId = _ownedStreamId ?? state.stream.activeStreamId;
+    if (streamId == null) return;
+    api.stopStream(streamId);
+  }
+
   /// 建立 SSE 连接。replayAfterSeq → `?replay=1&after_seq=N`（保留 lastEventID）；
   /// [fullReconnect] → 不带 replay 参数但从 0 重放（靠 §6.4 去重）。
   void _connectStream(
@@ -1638,7 +1667,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     final api = _api;
     if (api == null) return;
     if (_streamConnected || replayAfterSeq != null || fullReconnect) {
-      api.stopStream();
+      api.stopStream(streamId);
       _streamConnected = false;
     }
     final useReplay = replayAfterSeq != null || fullReconnect;
@@ -1663,6 +1692,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     // 工具断点依赖 _appendToolCall 正常路径，此处旗标只约束 text/think 补点。
     _replayRebuildTimeline = useReplay && state.liveTimelinePoints.isEmpty;
     _streamConnected = true;
+    _ownedStreamId = streamId;
     unawaited(
       api.startStream(
         streamId,
@@ -3295,7 +3325,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     required bool needsTranscriptRefresh,
     String? completedStreamId,
   }) {
-    _api?.stopStream();
+    _stopOwnedStream();
     _syncSessionStreaming(state.sessionId, false);
     _prefillSince = null;
     // 幽灵行退役（先于归档/重锚）：live 身份随收尾失效，客户端临时行若正文已被
@@ -3660,7 +3690,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         replayAfterSeq: 0,
       ),
     );
-    _api?.stopStream();
+    _stopOwnedStream();
     _cancelStreamTimers();
     _markProgress();
     try {
@@ -3986,7 +4016,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           'Malformed done frame handled as turn end (streak: $_malformedDoneStreak, '
           'breaker: $breaker, streamId: $streamId, session: ${state.sessionId}): $message',
     );
-    _api?.stopStream();
+    _stopOwnedStream();
     _cancelReconnectTimer();
     _cancelJitterTimers();
     _cancelRecoverySentinel();
@@ -4111,7 +4141,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         recovery: ActiveStreamRecoveryState.checking,
       ),
     );
-    _api?.stopStream();
+    _stopOwnedStream();
     _cancelJitterTimers();
 
     final maxAttempts = _watchdogConfig.effectiveMaxReconnectAttempts;
@@ -4311,7 +4341,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         recovery: ActiveStreamRecoveryState.reconnecting,
       ),
     );
-    _api?.stopStream();
+    _stopOwnedStream();
     if (afterSeq > 0) {
       _connectStream(streamId, replayAfterSeq: afterSeq);
     } else {

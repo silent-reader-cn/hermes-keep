@@ -83,6 +83,10 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
           padding: const EdgeInsets.fromLTRB(10.0, 8.0, 6.0, 6.0),
           child: Row(
             children: [
+              // #156：进入搜索态时 logo 让位（见下方 Row 末尾的「取消」）——
+              // 内联搜索框只有「侧栏宽 − logo − 三图标」的宽度，CupertinoSearchTextField
+              // 自带放大镜与清除按钮，窄侧栏下会把文字挤到只剩一半。
+              if (!_searchOpen)
               // #153：改用真实品牌图标。原先是个纯渐变的深色方块 —— 在暗色主题
               // 下与背景几乎同色，看起来就是「一个空框」（主人实机反馈）。
               ClipRRect(
@@ -95,13 +99,16 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                   filterQuality: FilterQuality.medium,
                 ),
               ),
-              const SizedBox(width: 7.0),
+              if (!_searchOpen) const SizedBox(width: 7.0),
               Expanded(
                 // #153：搜索改为**在本行内横向展开**（原实现是在下方另起一行
                 // 搜索框，会临时占掉一整行高度、把会话列表往下推）。
                 child: _searchOpen
                     ? SizedBox(
-                        height: 26.0,
+                        // #157：原来硬限 26px —— 15px 字号 + CupertinoSearchTextField
+                        // 内置内边距装不下，placeholder 底部被裁掉几像素（主人实测）。
+                        // 放宽到 32px，并让文字行高走默认（不再压缩）。
+                        height: 32.0,
                         child: CupertinoSearchTextField(
                           key: const ValueKey('sidebar-brand-search-field'),
                           controller: _searchController,
@@ -158,6 +165,7 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                         ),
                       ),
               ),
+              if (!_searchOpen) ...[
               _BrandIconButton(
                 buttonKey: 'sidebar-brand-search',
                 icon: CupertinoIcons.search,
@@ -196,6 +204,20 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                     .read(sessionListFilterRequestProvider.notifier)
                     .bump(),
               ),
+              ] else ...[
+              // #156：搜索态末尾只留「取消」（iOS 惯例：搜索时导航栏整条让位），
+              // 保证搜索框有充足宽度，文字与图标不再挤在一起。
+              CupertinoButton(
+                key: const ValueKey('sidebar-brand-search-cancel'),
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                minimumSize: const Size(0, 26.0),
+                onPressed: _toggleSearch,
+                child: Text(
+                  l10n.cancel,
+                  style: TextStyle(fontSize: 15.0, color: activeFg),
+                ),
+              ),
+              ],
             ],
           ),
         ),

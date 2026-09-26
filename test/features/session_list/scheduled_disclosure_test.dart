@@ -14,6 +14,7 @@ import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_session_list_api.dart';
+
 import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 /// 秒级时间戳辅助（会话模型时间字段为 epoch 秒）。
@@ -83,20 +84,14 @@ void main() {
   });
 
   group('ScheduledSessionDisclosure 独立组件测试（已废弃组件向下兼容）', () {
-    testWidgets('默认状态收起：展示标题、数量与折叠 chevron，不展示子项', (
-      tester,
-    ) async {
+    testWidgets('默认状态收起：展示标题、数量与折叠 chevron，不展示子项', (tester) async {
       await tester.pumpWidget(
         const CupertinoApp(
           home: CupertinoPageScaffold(
             child: ScheduledSessionDisclosure(
               title: '定时',
               count: 3,
-              children: [
-                Text('会话 1'),
-                Text('会话 2'),
-                Text('会话 3'),
-              ],
+              children: [Text('会话 1'), Text('会话 2'), Text('会话 3')],
             ),
           ),
         ),
@@ -144,10 +139,7 @@ void main() {
               title: '定时',
               count: 2,
               onExpansionChanged: expansionEvents.add,
-              children: const [
-                Text('会话 A'),
-                Text('会话 B'),
-              ],
+              children: const [Text('会话 A'), Text('会话 B')],
             ),
           ),
         ),
@@ -217,9 +209,7 @@ void main() {
             child: ScheduledSessionDisclosure(
               title: '定时',
               initialExpanded: true,
-              children: [
-                Text('直接可见会话'),
-              ],
+              children: [Text('直接可见会话')],
             ),
           ),
         ),
@@ -253,9 +243,8 @@ void main() {
           ),
           GoRoute(
             path: '/chat/:sessionId',
-            builder: (_, state) => _ChatStub(
-              sessionId: state.pathParameters['sessionId'] ?? '',
-            ),
+            builder: (_, state) =>
+                _ChatStub(sessionId: state.pathParameters['sessionId'] ?? ''),
           ),
         ],
       );
@@ -266,9 +255,7 @@ void main() {
             ApiClient(baseUrl: 'http://test.local:30002'),
           ),
           sessionListApiFactoryProvider.overrideWithValue((_) => api),
-          projectApiFactoryProvider.overrideWithValue(
-            (_) => _StubProjectApi(),
-          ),
+          projectApiFactoryProvider.overrideWithValue((_) => _StubProjectApi()),
         ],
       );
 
@@ -327,9 +314,7 @@ void main() {
       expect(find.byType(ScheduledSessionDisclosure), findsNothing);
     });
 
-    testWidgets('开启 showCron=true：定时会话融流进时间分区，不再有独立「定时」折叠面板', (
-      tester,
-    ) async {
+    testWidgets('开启 showCron=true：定时会话融流进时间分区，不再有独立「定时」折叠面板', (tester) async {
       final now = DateTime.now();
       final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
@@ -366,9 +351,7 @@ void main() {
       final now = DateTime.now();
       final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
-        sessions: [
-          buildSession('cron_1', '每日自动同步', at: noon),
-        ],
+        sessions: [buildSession('cron_1', '每日自动同步', at: noon)],
       );
 
       await pumpSessionListPage(tester, api, showCron: true);
@@ -385,24 +368,20 @@ void main() {
       final now = DateTime.now();
       final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
-        sessions: [
-          buildSession('cron_1', '每日自动同步', at: noon),
-        ],
+        sessions: [buildSession('cron_1', '每日自动同步', at: noon)],
       );
 
       await pumpSessionListPage(tester, api, showCron: true);
 
-      // #150：行尾「⋯」按钮已按设计稿移除（主人要求改长按/右键）⇒ 长按行
-      // 打开同一套操作菜单（紧凑模式下长按 = 行操作，非多选）。
-      await tester.longPress(find.text('每日自动同步'));
+      // #158：会话项分「桌面侧栏朴素行（无 ⋯，靠长按/右键）/ 窄屏白卡（保留 ⋯）」
+      // 两种形态。本用例的视口是默认窄屏 ⇒ 走卡片形态，行尾「⋯」依然存在，
+      // 故仍用点击 ⋯ 的方式打开操作菜单。
+      await tester.tap(find.byKey(const ValueKey('session-actions-cron_1')));
       await tester.pumpAndSettle();
 
       // 确认弹出了 CupertinoActionSheet
       expect(find.byType(CupertinoActionSheet), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('session-action-pin')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('session-action-pin')), findsOneWidget);
     });
 
     testWidgets('搜索模式下定时会话直接进入「搜索结果」，无独立定时折叠分区', (tester) async {
