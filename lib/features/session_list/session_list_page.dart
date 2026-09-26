@@ -22,6 +22,7 @@ import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/narrow_navigation_dropdown.dart';
 import '../../l10n/app_localizations.dart';
+import '../desktop/window_title_service.dart';
 import '../desktop/desktop_settings.dart';
 import '../projects/project_picker_sheet.dart';
 import '../projects/project_providers.dart';
@@ -583,6 +584,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
     final hasMore = ref.watch(sessionListHasMoreProvider);
     final collapsedSections = ref.watch(sessionListCollapsedSectionsProvider);
+    // #161：当前正在查看的会话（由 /chat 路由写入，见 window_title_service）。
+    // 仅用于**宽屏侧栏紧凑行**的高亮；窄屏不参与渲染（见 _SessionRow.isCurrent）。
+    final currentSessionId = isCompactSidebar
+        ? ref.watch(activeChatSessionIdProvider)
+        : null;
     return [
       for (final section in sections)
         if (section.sessions.isNotEmpty) ...[
@@ -624,6 +630,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                           session: session,
                           // #150：侧栏（宽屏）用紧凑单行；窄屏单栈保持原两行。
                           compact: !widget.showUtilityRows,
+                          // #161：宽屏侧栏高亮「当前正在看的会话」。
+                          isCurrent:
+                              currentSessionId != null &&
+                              currentSessionId ==
+                                  (session.sessionId ?? session.id),
                           subtitleSettings: subtitleSettings,
                           projectNames: projectNames,
                           highlightQuery: isSearchMode
@@ -815,8 +826,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 Text(
                   _sectionTitle(context, section.title),
                   style: TextStyle(
-                    // #153：随正文基准一起上调（11.5 → 13）。
-                    fontSize: 13.0,
+                    // #161：回到设计稿口径（11）。#153 曾上调到 13。
+                    fontSize: 11.0,
                     fontWeight: FontWeight.bold,
                     color: secondaryColor,
                   ),
@@ -834,7 +845,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   child: Text(
                     '${section.sessions.length}',
                     style: TextStyle(
-                      fontSize: 11.5,
+                      // #161：随侧栏整体回调（设计稿 .grp-h .ct = 10）。
+                      fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                       color: secondaryColor,
                     ),
@@ -1631,8 +1643,9 @@ String _sectionTitle(BuildContext context, String rawTitle) {
       return l10n.earlierSection;
     case '搜索结果':
       return l10n.searchResultsSection;
+    // #161：'其他' 收纳的是「无工作区」的会话 —— 原名语义模糊，改「未分组」。
     case '其他':
-      return l10n.otherSection;
+      return l10n.ungroupedSection;
     default:
       return rawTitle;
   }
@@ -1652,6 +1665,7 @@ class _SessionRow extends StatefulWidget {
     this.selected = false,
     this.highlightQuery,
     this.compact = false,
+    this.isCurrent = false,
   });
 
   /// 紧凑单行（#150 档 B）：侧栏（宽屏）为提升信息密度而启用 ——
@@ -1659,6 +1673,11 @@ class _SessionRow extends StatefulWidget {
   /// 「同行右侧极简相对时间」，行高约 59→30px（一屏 10 → 17 条）。
   /// 窄屏单栈（手机）保持原两行布局，逐像素不变。
   final bool compact;
+
+  /// #161：是否为「当前正在查看的会话」—— **仅宽屏侧栏紧凑行**用于高亮
+  /// （底色 + 左侧 2px 蓝条）。窄屏恒为 false（SessionListPage 只在
+  /// isCompactSidebar 时下传），故手机端视觉逐像素不变。
+  final bool isCurrent;
 
   final SessionSummary session;
   final VoidCallback onTap;
@@ -1830,7 +1849,9 @@ class _SessionRowState extends State<_SessionRow> {
       // #153：锁死行高 —— 悬停时右侧由「时间」换成「⋯」按钮，两者尺寸不同，
       // 原先会让行高浮动（主人反馈 hover 后行高变化）。固定最小高度后，
       // 两种状态的行在视觉上完全等高。
-      constraints: BoxConstraints(minHeight: widget.compact ? 34.0 : 0.0),
+      // #161：行高 34 → 28（主人从四档方案图里选 B：更紧凑但仍舒展，
+      // 一屏约 29 → 35 条）。窄屏（非 compact）不受影响。
+      constraints: BoxConstraints(minHeight: widget.compact ? 28.0 : 0.0),
       child: Padding(
         // #151/#152：紧凑模式会话项与「工作区名」左对齐（主人要求）。
         // 几何：组头文字 x = 组头 Padding.start(20) + chevron(11) + gap(4) = 35；
@@ -1841,8 +1862,9 @@ class _SessionRowState extends State<_SessionRow> {
         padding: EdgeInsetsDirectional.only(
           start: widget.compact ? 27 : 16,
           end: widget.compact ? 8 : 16,
-          top: widget.compact ? 7 : 8,
-          bottom: widget.compact ? 7 : 8,
+          // #161：随行高一起收（7 → 4），窄屏保持 8。
+          top: widget.compact ? 4 : 8,
+          bottom: widget.compact ? 4 : 8,
         ),
         child: Row(
           children: [
@@ -1880,8 +1902,10 @@ class _SessionRowState extends State<_SessionRow> {
                           child: _highlightedSpan(
                             context,
                             _displayTitle(context, widget.session),
-                            // #153：对齐 markdown 正文基准（kMarkdownBodyFontSize=15）。
-                            style: const TextStyle(fontSize: 15.0),
+                            // #161：回到设计稿口径（12.5）。#153 曾把侧栏统一抬到
+                            // 15（对齐正文基准），主人实测「比设计稿大一圈」⇒ 回调；
+                            // 窄屏分支（下方 17）保持不动。
+                            style: const TextStyle(fontSize: 12.5),
                           ),
                         )
                       else
@@ -1919,7 +1943,7 @@ class _SessionRowState extends State<_SessionRow> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: 10.5,
                             color: secondaryColor,
                           ),
                         ),
@@ -2007,6 +2031,41 @@ class _SessionRowState extends State<_SessionRow> {
     final compactActions = widget.compact && widget.onActions != null
         ? () => widget.onActions!(_rowAnchorKey)
         : null;
+    // #161：宽屏侧栏「当前正在查看的会话」高亮 —— 底色 + 左侧 2px 蓝条。
+    // 窄屏恒为 false（SessionListPage 只在 isCompactSidebar 时下传），
+    // 故手机端视觉逐像素不变。
+    final highlighted = widget.selected || widget.isCurrent;
+    final highlightBg = highlighted
+        ? LightSurfaces.resolve(
+            context,
+            LightSurfaces.selection,
+            // 暗色下 selected 原本没有底色（旧实现仅亮色分支有 DecoratedBox）；
+            // 这里给暗色补一个对应的深色选中底，使两种模式的高亮一致。
+            dark: const Color(0xFF2C2C2E),
+          )
+        : (isLight && _pressed ? LightSurfaces.pressed : null);
+
+    // 左侧指示条：只在「当前会话」出现（多选高亮不加，避免与勾选框语义重复）。
+    final Widget contentWithIndicator = widget.isCurrent && widget.compact
+        ? Stack(
+            children: [
+              rowContent,
+              PositionedDirectional(
+                start: 0.0,
+                top: 9.0,
+                bottom: 9.0,
+                child: Container(
+                  width: 2.0,
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.activeBlue.resolveFrom(context),
+                    borderRadius: BorderRadius.circular(1.0),
+                  ),
+                ),
+              ),
+            ],
+          )
+        : rowContent;
+
     return MouseRegion(
       // #151：桌面悬停 —— 右侧「时间」与「⋯」按钮互换（手机无 hover，不受影响）。
       onEnter: widget.compact ? (_) => setState(() => _hovering = true) : null,
@@ -2020,20 +2079,17 @@ class _SessionRowState extends State<_SessionRow> {
         onTapDown: isLight ? (_) => _setPressed(true) : null,
         onTapUp: isLight ? (_) => _setPressed(false) : null,
         onTapCancel: isLight ? () => _setPressed(false) : null,
-        child: isLight
-            ? DecoratedBox(
-                decoration: ShapeDecoration(
-                  color: widget.selected
-                      ? LightSurfaces.selection
-                      : (_pressed ? LightSurfaces.pressed : null),
-                  shape: const RoundedSuperellipseBorder(
-                    // 设计稿 `.sess{border-radius:7px}`（行自身圆角，不含卡片容器）
-                    borderRadius: BorderRadius.all(Radius.circular(7)),
-                  ),
-                ),
-                child: rowContent,
-              )
-            : rowContent,
+        child: DecoratedBox(
+          decoration: ShapeDecoration(
+            // highlighted 时两模式都有底色；否则亮色 pressed / 暗色 null（零副作用）。
+            color: highlightBg,
+            shape: const RoundedSuperellipseBorder(
+              // 设计稿 `.sess{border-radius:7px}`（行自身圆角，不含卡片容器）
+              borderRadius: BorderRadius.all(Radius.circular(7)),
+            ),
+          ),
+          child: contentWithIndicator,
+        ),
       ),
     );
   }

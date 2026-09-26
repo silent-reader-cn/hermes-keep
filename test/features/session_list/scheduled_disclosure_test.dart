@@ -3,10 +3,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/core/models/cron.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/tasks/tasks_providers.dart';
 import 'package:hermes_ui/features/session_list/scheduled_session_disclosure.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:hermes_ui/features/settings/cron_visibility_settings.dart';
@@ -16,6 +18,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../helpers/fake_session_list_api.dart';
 
 import 'package:hermes_ui/app/shell/session_sidebar.dart';
+
+/// #161：侧栏「定时任务」行带待办计数徽标 ⇒ `SidebarToolsList` 会 watch
+/// `tasksJobCountProvider`（build 会真发 `fetchJobs`）。这些用例不关心任务数据，
+/// 注入空任务避免真实请求留下 Dio 超时 timer（表现为 `!timersPending`）。
+class _EmptyTasksController extends TasksController {
+  @override
+  Future<TasksState> build() async {
+    ref.watch(tasksApiFactoryProvider);
+    return const TasksState(jobs: <CronJob>[]);
+  }
+}
 
 /// 秒级时间戳辅助（会话模型时间字段为 epoch 秒）。
 double sec(DateTime d) => d.millisecondsSinceEpoch / 1000;
@@ -251,6 +264,7 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
+          tasksControllerProvider.overrideWith(_EmptyTasksController.new),
           apiClientProvider.overrideWithValue(
             ApiClient(baseUrl: 'http://test.local:30002'),
           ),

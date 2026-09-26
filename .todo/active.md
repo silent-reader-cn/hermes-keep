@@ -1424,3 +1424,41 @@ Future<void> resumeCompressionIfRunning();
 
 ---
 
+## #161 宽屏侧栏打磨：当前会话高亮 / 未分组 / 品牌行副标题 / 定时任务徽标 / 字号与行高口径
+
+**分类**：功能 + 视觉　**状态**：代码已交付（待主人实机复验）　**发现**：2026-09-25/26（主人逐轮反馈）
+**分支**：`agy/161-sidebar-polish`（worktree `D:\worktrees\hermes-161`，基线 `40416ee`）　**提交**：`d61a346` / `77f77f6` / `20887cf`
+
+### 位置（源码）
+- `lib/features/session_list/session_list_page.dart` —— `isCurrent` 参数、`_sectionTitle` 的 '其他' 分支、组头/会话行/相对时间/组计数字号、行高与行内留白
+- `lib/app/shell/sidebar_brand_bar.dart` —— 品牌行副标题（`_resolveBrandSubtitle` 顶层函数）
+- `lib/app/shell/sidebar_tools_list.dart` —— `_ToolRow.badge` + `tasksJobCountProvider` 接线
+- `lib/l10n/app_localizations.dart` + `app_zh.arb` / `app_en.arb` —— `ungroupedSection` / `sessionsCountLabel`
+- `test/app/sidebar_polish_161_test.dart`（新增 6 例）
+
+### 主人勾选的 5 项与落地结果
+| # | 项 | 结果 |
+|---|---|---|
+| ① | 当前会话高亮 | ✅ 读 `activeChatSessionIdProvider`；底色 + 左侧 2px 蓝条；**仅宽屏**（窄屏恒 false） |
+| ② | 组计数改 pill | ✅ **实测宽屏早已是 pill**（`pillBg` 胶囊），无需改动 |
+| ③ | 「其他」→「未分组」 | ✅ `_sectionTitle` 改走 `l10n.ungroupedSection`，中英 + arb 同步 |
+| ④ | 品牌行副标题 | ✅ 「当前工作区末段 · N 个会话」；数据取自已加载列表，**零新增请求** |
+| ⑤ | 定时任务待办徽标 | ✅ `badge > 0` 才渲染；代价＝侧栏挂载拉一次任务列表 |
+
+### 追加两轮（均为主人实测驱动）
+- **字号回调**（`77f77f6`）：整块侧栏比设计稿大 2~2.5px（根因：更早 `0ceb44c` #153 把侧栏字号统一抬到 15）。
+  回调表：会话行/品牌名/工具行 15→12.5、组头 13→11、相对时间 13→10.5、组计数 11.5→10.5、副标题 10.5→10。
+  **窄屏不动**（那边会话行标题仍是 17）。
+- **行高收紧**（`20887cf`）：34 → **28px**、行内上下留白 7 → **4**（主人从四档方案图 34/30/28/26 里选 B）。
+  一屏可见约 29 → 35 条。
+
+### 验收
+- `flutter analyze` 零告警；相关域（session_list + app + tasks + golden）**618 全绿**；金照与 README 截图已同步。
+- **仅宽屏生效**：所有布局类改动都在 `isCompactSidebar` 分支，窄屏逐像素不变（本轮三次「误伤窄屏」的教训之后，每条改动都按屏宽分流）。
+- 三栏对比图（设计稿 / 改前 / 改后）在 `.shots-arch/`（本地工件，未入库）。
+
+### 过程教训（已回写长期记忆）
+1. **在工作区动手前必须查 `git branch --show-current`** —— 本轮我一度把改动写在**他人的分支工作区**（`fix/structured-content-prefix`）里，事后才迁到独立 worktree 清理干净。HERMES.md §6 坑③ 已经警告过这条。
+2. **`git diff` 只看 hunk 头不足以判断"改动归属"** —— 我据此断言"9 个 hunk 全是我的"，实际该文件依赖了他人已提交的 `injection_markers.dart`，靠编译错误才发现；换 worktree 时基线也一度选旧。
+3. **「和设计稿对齐」不等于实装照抄** —— 主人问「间距要不要调小一点」，我按设计稿的 1px 去"补"成了加大（`a6251b2`，已 reset 撤掉）。
+   ⇒ 纪律：**UI 松紧/间距/字号类反馈先出多档方案图让主人挑，不自作主张落地**。

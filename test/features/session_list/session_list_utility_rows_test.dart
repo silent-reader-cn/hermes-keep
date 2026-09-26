@@ -1,18 +1,32 @@
-﻿import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/core/models/cron.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/tasks/tasks_providers.dart';
 import 'package:hermes_ui/features/session_list/session_entry_visibility.dart';
 import 'package:hermes_ui/features/session_list/session_list_page.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:hermes_ui/features/session_list/session_list_utility_rows.dart';
 
 import '../../helpers/fake_session_list_api.dart';
+
 import 'package:hermes_ui/app/shell/session_sidebar.dart';
+
+/// #161：侧栏「定时任务」行带待办计数徽标 ⇒ `SidebarToolsList` 会 watch
+/// `tasksJobCountProvider`（build 会真发 `fetchJobs`）。这些用例不关心任务数据，
+/// 注入空任务避免真实请求留下 Dio 超时 timer（表现为 `!timersPending`）。
+class _EmptyTasksController extends TasksController {
+  @override
+  Future<TasksState> build() async {
+    ref.watch(tasksApiFactoryProvider);
+    return const TasksState(jobs: <CronJob>[]);
+  }
+}
 
 class _FilteredVisibilityNotifier extends SessionEntryVisibilityController {
   @override
@@ -144,6 +158,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             sessionEntryVisibilityProvider.overrideWith(
               _AllVisibleVisibilityNotifier.new,
             ),
@@ -177,6 +192,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             sessionEntryVisibilityProvider.overrideWith(
               _AllVisibleVisibilityNotifier.new,
             ),
@@ -237,6 +253,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             sessionEntryVisibilityProvider.overrideWith(
               _AllVisibleVisibilityNotifier.new,
             ),
@@ -298,6 +315,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             sessionEntryVisibilityProvider.overrideWith(
               _FilteredVisibilityNotifier.new,
             ),
@@ -342,6 +360,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             sessionEntryVisibilityProvider.overrideWith(
               _AllHiddenVisibilityNotifier.new,
             ),
@@ -454,6 +473,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             apiClientProvider.overrideWithValue(
               ApiClient(baseUrl: 'http://test.local:30002'),
             ),
@@ -491,14 +511,15 @@ void main() {
     testWidgets('点击窄屏下拉按钮展开菜单并跳转 /tasks', (tester) async {
       await pumpSessionListPage(tester);
 
-      await tester.tap(
-        find.byKey(const ValueKey('session-list-narrow-nav')),
-      );
+      await tester.tap(find.byKey(const ValueKey('session-list-narrow-nav')));
       await tester.pumpAndSettle();
 
       // 默认开启的入口项（任务/工作区/技能/统计/记忆，看板默认关闭）
       expect(find.byKey(const ValueKey('narrow-nav-tasks')), findsOneWidget);
-      expect(find.byKey(const ValueKey('narrow-nav-workspaces')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('narrow-nav-workspaces')),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('narrow-nav-skills')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-insights')), findsOneWidget);
       expect(find.byKey(const ValueKey('narrow-nav-memory')), findsOneWidget);
@@ -518,9 +539,7 @@ void main() {
         ),
       );
 
-      await tester.tap(
-        find.byKey(const ValueKey('session-list-narrow-nav')),
-      );
+      await tester.tap(find.byKey(const ValueKey('session-list-narrow-nav')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('narrow-nav-kanban')), findsOneWidget);
@@ -534,9 +553,7 @@ void main() {
     testWidgets('点击技能与统计菜单项 → 跳转 /skills 与 /insights', (tester) async {
       await pumpSessionListPage(tester);
 
-      await tester.tap(
-        find.byKey(const ValueKey('session-list-narrow-nav')),
-      );
+      await tester.tap(find.byKey(const ValueKey('session-list-narrow-nav')));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('narrow-nav-skills')));
@@ -663,6 +680,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             apiClientProvider.overrideWithValue(
               ApiClient(baseUrl: 'http://test.local:30002'),
             ),
@@ -709,7 +727,9 @@ void main() {
       expect(find.text('body-TasksDestination'), findsOneWidget);
     });
 
-    testWidgets('showUtilityRows=false 桌面模式：工具行不渲染，头部无大标题且为单行搜索框', (tester) async {
+    testWidgets('showUtilityRows=false 桌面模式：工具行不渲染，头部无大标题且为单行搜索框', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1024, 768);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -727,6 +747,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             apiClientProvider.overrideWithValue(
               ApiClient(baseUrl: 'http://test.local:30002'),
             ),
@@ -754,10 +775,7 @@ void main() {
         find.byKey(const ValueKey('sidebar-brand-search')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const ValueKey('session-list-search')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('session-list-search')), findsNothing);
     });
   });
 }

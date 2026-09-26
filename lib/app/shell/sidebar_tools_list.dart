@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/session_list/session_entry_visibility.dart';
 import '../../features/session_list/session_list_providers.dart';
+import '../../features/tasks/tasks_providers.dart';
 import '../../features/settings/settings_providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/light_surfaces.dart';
@@ -59,6 +60,11 @@ class SidebarToolsList extends ConsumerWidget {
     );
 
     final navOrder = ref.watch(sidebarNavOrderProvider);
+    // #161：「定时任务」行的待办计数徽标。**在顶部无条件下 watch 一次** ——
+    // Riverpod 禁止在循环/条件分支里 watch（依赖集合会随迭代漂移）。
+    // 注意：该 provider 依赖 tasksControllerProvider（AsyncNotifier），首次 watch
+    // 会拉一次任务列表；这是「显示待办数」的必要代价，量小且只发生在宽屏侧栏挂载时。
+    final tasksCount = ref.watch(tasksJobCountProvider);
     final rows = <Widget>[];
     for (final id in navOrder.top) {
       if (id == 'new_session') {
@@ -89,6 +95,7 @@ class SidebarToolsList extends ConsumerWidget {
           itemId: item.id,
           icon: item.icon,
           label: item.getTitle(l10n),
+          badge: item.id == 'tasks' ? tasksCount : null,
           selected: selected,
           activeFg: activeFg,
           inactiveFg: inactiveFg,
@@ -145,7 +152,11 @@ class _ToolRow extends StatelessWidget {
     required this.inactiveFg,
     required this.activeBg,
     required this.onTap,
+    this.badge,
   });
+
+  /// #161：可选右侧计数徽标（如「定时任务」的任务数）。为 null 或 ≤0 时不渲染。
+  final int? badge;
 
   final String itemId;
   final IconData icon;
@@ -187,8 +198,9 @@ class _ToolRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        // #153：对齐 markdown 正文基准（15），原 12.5 偏小。
-                        fontSize: 15.0,
+                        // #161：回到设计稿口径（12.5）。#153 曾统一抬到 15，
+                        // 主人实测侧栏比设计稿大一圈，此处回调。
+                        fontSize: 12.5,
                         color: selected
                             ? activeFg
                             : LightSurfaces.resolve(
@@ -199,6 +211,31 @@ class _ToolRow extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // #161：右侧计数徽标（与组头 pill 同一视觉语言）。
+                  if (badge != null && badge! > 0)
+                    Container(
+                      key: ValueKey('sidebar-tool-badge-$itemId'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6.0,
+                        vertical: 1.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: LightSurfaces.resolve(
+                          context,
+                          const Color(0xFFE5E5EA),
+                          dark: const Color(0xFF2C2C2E),
+                        ),
+                        borderRadius: BorderRadius.circular(10.0),
+                      ),
+                      child: Text(
+                        '$badge',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: inactiveFg,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -2,18 +2,32 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/core/models/cron.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/core/models/workspace.dart';
 import 'package:hermes_ui/core/providers/catalog_providers.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/tasks/tasks_providers.dart';
 import 'package:hermes_ui/features/session_list/session_list_page.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
 
 import '../../helpers/fake_session_list_api.dart';
+
 import 'package:hermes_ui/app/shell/session_sidebar.dart';
+
+/// #161：侧栏「定时任务」行带待办计数徽标 ⇒ `SidebarToolsList` 会 watch
+/// `tasksJobCountProvider`（build 会真发 `fetchJobs`）。这些用例不关心任务数据，
+/// 注入空任务避免真实请求留下 Dio 超时 timer（表现为 `!timersPending`）。
+class _EmptyTasksController extends TasksController {
+  @override
+  Future<TasksState> build() async {
+    ref.watch(tasksApiFactoryProvider);
+    return const TasksState(jobs: <CronJob>[]);
+  }
+}
 
 double _sec(DateTime d) => d.millisecondsSinceEpoch / 1000;
 
@@ -44,16 +58,14 @@ class _StubProjectApi implements ProjectApi {
   Future<ProjectMutationResponse> createProject({
     required String name,
     String? color,
-  }) async =>
-      const ProjectMutationResponse(ok: true);
+  }) async => const ProjectMutationResponse(ok: true);
 
   @override
   Future<ProjectMutationResponse> renameProject({
     required String projectId,
     required String name,
     String? color,
-  }) async =>
-      const ProjectMutationResponse(ok: true);
+  }) async => const ProjectMutationResponse(ok: true);
 
   @override
   Future<ProjectMutationResponse> deleteProject(String projectId) async =>
@@ -119,6 +131,7 @@ void main() {
       final api = FakeSessionListApi(sessions: [s1, s2, s3, s4]);
       final container = ProviderContainer(
         overrides: [
+          tasksControllerProvider.overrideWith(_EmptyTasksController.new),
           apiClientProvider.overrideWithValue(
             ApiClient(baseUrl: 'http://test.local:30002'),
           ),
@@ -148,6 +161,7 @@ void main() {
       final api = FakeSessionListApi(sessions: [s1, s2, s3, s4]);
       final container = ProviderContainer(
         overrides: [
+          tasksControllerProvider.overrideWith(_EmptyTasksController.new),
           apiClientProvider.overrideWithValue(
             ApiClient(baseUrl: 'http://test.local:30002'),
           ),
@@ -198,10 +212,7 @@ void main() {
         container.read(sessionListControllerProvider).valueOrNull!.filterMode,
         equals(SessionListFilterMode.all),
       );
-      expect(
-        container.read(filteredDisplaySessionsProvider).length,
-        equals(4),
-      );
+      expect(container.read(filteredDisplaySessionsProvider).length, equals(4));
     });
 
     test('工作区筛选下的分页 loadMore 行为', () async {
@@ -219,6 +230,7 @@ void main() {
       );
       final container = ProviderContainer(
         overrides: [
+          tasksControllerProvider.overrideWith(_EmptyTasksController.new),
           apiClientProvider.overrideWithValue(
             ApiClient(baseUrl: 'http://test.local:30002'),
           ),
@@ -233,20 +245,32 @@ void main() {
           .read(selectedWorkspaceFilterProvider.notifier)
           .selectWorkspace('/ws/gamma');
 
-      expect(container.read(filteredDisplaySessionsProvider).length, equals(60));
-      expect(container.read(sessionListVisibleSessionsProvider).length, equals(50));
+      expect(
+        container.read(filteredDisplaySessionsProvider).length,
+        equals(60),
+      );
+      expect(
+        container.read(sessionListVisibleSessionsProvider).length,
+        equals(50),
+      );
       expect(container.read(sessionListHasMoreProvider), isTrue);
 
       // 加载下一页
       await container.read(sessionListControllerProvider.notifier).loadMore();
-      expect(container.read(sessionListVisibleSessionsProvider).length, equals(60));
+      expect(
+        container.read(sessionListVisibleSessionsProvider).length,
+        equals(60),
+      );
       expect(container.read(sessionListHasMoreProvider), isFalse);
 
       // 切换工作区重置 visibleCount 为 pageSize
       container
           .read(selectedWorkspaceFilterProvider.notifier)
           .selectWorkspace('/ws/other');
-      expect(container.read(sessionListVisibleSessionsProvider).length, equals(10));
+      expect(
+        container.read(sessionListVisibleSessionsProvider).length,
+        equals(10),
+      );
       expect(container.read(sessionListHasMoreProvider), isFalse);
     });
   });
@@ -270,6 +294,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            tasksControllerProvider.overrideWith(_EmptyTasksController.new),
             apiClientProvider.overrideWithValue(
               ApiClient(baseUrl: 'http://test.local:30002'),
             ),
@@ -309,10 +334,9 @@ void main() {
           initialFilterValue != null) {
         final element = tester.element(find.byType(SessionListPage));
         final container = ProviderScope.containerOf(element);
-        await container.read(sessionListControllerProvider.notifier).setFilter(
-          initialMode,
-          value: initialFilterValue,
-        );
+        await container
+            .read(sessionListControllerProvider.notifier)
+            .setFilter(initialMode, value: initialFilterValue);
         await tester.pumpAndSettle();
       }
     }
@@ -347,7 +371,9 @@ void main() {
       );
     });
 
-    testWidgets('① 筛选菜单出现工作区维度：展示全部工作区与各项（name 优先、path 兜底），默认态全部勾选', (tester) async {
+    testWidgets('① 筛选菜单出现工作区维度：展示全部工作区与各项（name 优先、path 兜底），默认态全部勾选', (
+      tester,
+    ) async {
       final s1 = _session('s1', 'Alpha 会话', workspace: '/projects/alpha');
       final s2 = _session('s2', 'Beta 会话', workspace: '/projects/beta');
 
@@ -361,9 +387,7 @@ void main() {
       );
 
       // 打开筛选菜单
-      await tester.tap(
-        find.byKey(const ValueKey('sidebar-brand-filter')),
-      );
+      await tester.tap(find.byKey(const ValueKey('sidebar-brand-filter')));
       await tester.pumpAndSettle();
 
       // 出现工作区分组
@@ -400,7 +424,11 @@ void main() {
     });
 
     testWidgets('② 选中工作区后只留该工作区会话', (tester) async {
-      final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
+      final sAlpha = _session(
+        's_alpha',
+        'Alpha 会话',
+        workspace: '/projects/alpha',
+      );
       final sBeta = _session('s_beta', 'Beta 会话', workspace: '/projects/beta');
 
       await pumpSessionList(
@@ -413,9 +441,7 @@ void main() {
       );
 
       // 打开筛选菜单
-      await tester.tap(
-        find.byKey(const ValueKey('sidebar-brand-filter')),
-      );
+      await tester.tap(find.byKey(const ValueKey('sidebar-brand-filter')));
       await tester.pumpAndSettle();
 
       // 点击 Alpha 项目
@@ -430,9 +456,7 @@ void main() {
       expect(find.text('Beta 会话'), findsNothing);
 
       // 再次打开筛选菜单，确认 Alpha 项目项被勾选，「全部工作区」未勾选
-      await tester.tap(
-        find.byKey(const ValueKey('sidebar-brand-filter')),
-      );
+      await tester.tap(find.byKey(const ValueKey('sidebar-brand-filter')));
       await tester.pumpAndSettle();
 
       final alphaCheckmark = find.descendant(
@@ -452,18 +476,16 @@ void main() {
     });
 
     testWidgets('③-a 工作区列表为空时不显示该分组', (tester) async {
-      final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
-
-      await pumpSessionList(
-        tester,
-        sessions: [sAlpha],
-        workspaces: const [],
+      final sAlpha = _session(
+        's_alpha',
+        'Alpha 会话',
+        workspace: '/projects/alpha',
       );
+
+      await pumpSessionList(tester, sessions: [sAlpha], workspaces: const []);
 
       // 打开筛选菜单
-      await tester.tap(
-        find.byKey(const ValueKey('sidebar-brand-filter')),
-      );
+      await tester.tap(find.byKey(const ValueKey('sidebar-brand-filter')));
       await tester.pumpAndSettle();
 
       // 不显示工作区分组
@@ -475,7 +497,11 @@ void main() {
     });
 
     testWidgets('③-b 工作区列表加载失败时不显示该分组（不显示错误态）', (tester) async {
-      final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
+      final sAlpha = _session(
+        's_alpha',
+        'Alpha 会话',
+        workspace: '/projects/alpha',
+      );
 
       await pumpSessionList(
         tester,
@@ -484,9 +510,7 @@ void main() {
       );
 
       // 打开筛选菜单
-      await tester.tap(
-        find.byKey(const ValueKey('sidebar-brand-filter')),
-      );
+      await tester.tap(find.byKey(const ValueKey('sidebar-brand-filter')));
       await tester.pumpAndSettle();
 
       // 不显示工作区分组，且不显示错误态
@@ -499,7 +523,11 @@ void main() {
     });
 
     testWidgets('在筛选菜单中选中「全部工作区」恢复显示全部会话', (tester) async {
-      final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
+      final sAlpha = _session(
+        's_alpha',
+        'Alpha 会话',
+        workspace: '/projects/alpha',
+      );
       final sBeta = _session('s_beta', 'Beta 会话', workspace: '/projects/beta');
 
       await pumpSessionList(
@@ -517,9 +545,7 @@ void main() {
       expect(find.text('Beta 会话'), findsNothing);
 
       // 打开筛选菜单
-      await tester.tap(
-        find.byKey(const ValueKey('sidebar-brand-filter')),
-      );
+      await tester.tap(find.byKey(const ValueKey('sidebar-brand-filter')));
       await tester.pumpAndSettle();
 
       // 点击「全部工作区」
@@ -533,7 +559,11 @@ void main() {
     });
 
     testWidgets('空结果空态 + 「清除筛选」动作恢复会话', (tester) async {
-      final sAlpha = _session('s_alpha', 'Alpha 会话', workspace: '/projects/alpha');
+      final sAlpha = _session(
+        's_alpha',
+        'Alpha 会话',
+        workspace: '/projects/alpha',
+      );
 
       await pumpSessionList(
         tester,

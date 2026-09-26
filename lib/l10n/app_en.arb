@@ -28,6 +28,7 @@
   "liveUpdateChipReply": "Reply",
   "liveUpdateChipApproval": "Allow",
   "liveUpdateChipDone": "Done",
+  "ungroupedSection": "Ungrouped",
   "liveUpdateChipStopped": "Stop",
   "liveUpdateActivityDownloadCompleted": "{fileName} downloaded",
   "liveUpdateActivityDownloadFailed": "{fileName} failed",

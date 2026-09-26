@@ -28,6 +28,7 @@
   "liveUpdateChipReply": "请回复",
   "liveUpdateChipApproval": "请批准",
   "liveUpdateChipDone": "已完成",
+  "ungroupedSection": "未分组",
   "liveUpdateChipStopped": "已中断",
   "liveUpdateActivityDownloadCompleted": "{fileName} 下载完成",
   "liveUpdateActivityDownloadFailed": "{fileName} 下载失败",
