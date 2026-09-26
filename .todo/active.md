@@ -1462,3 +1462,34 @@ Future<void> resumeCompressionIfRunning();
 2. **`git diff` 只看 hunk 头不足以判断"改动归属"** —— 我据此断言"9 个 hunk 全是我的"，实际该文件依赖了他人已提交的 `injection_markers.dart`，靠编译错误才发现；换 worktree 时基线也一度选旧。
 3. **「和设计稿对齐」不等于实装照抄** —— 主人问「间距要不要调小一点」，我按设计稿的 1px 去"补"成了加大（`a6251b2`，已 reset 撤掉）。
    ⇒ 纪律：**UI 松紧/间距/字号类反馈先出多档方案图让主人挑，不自作主张落地**。
+
+---
+
+## #163 下拉刷新指示器全局收敛（已交付）+ 宽屏右侧排版设计案（待主人挑）
+
+**分类**：问题（UI 尺寸）＋方向（设计）　**状态**：代码已交付 `e784b35`；设计案待主人拍板　**发现**：2026-09-26（主人截图报告 + 「可以重新设计一下，出几个设计稿」）
+
+### 位置（源码行号）
+- 新增统管件：`lib/app/widgets/app_refresh_control.dart`
+  （`indicatorRadius = 8` → 直径约 16dp；`indicatorExtent = 48`；`triggerPullDistance = 100` 保持 SDK 默认）
+- 替换落点（全仓 **10 处**默认用法，非侧栏一处）：
+  `session_list_page.dart`（侧栏，主人点名处）、`settings_page.dart`、`skills_page.dart`、`tasks_page.dart`、`memory_page.dart`、`kanban_page.dart`、`workspace_page.dart`、`workspace_manager_page.dart`、`git_page.dart`、`insights_page.dart`
+
+### 现状 vs 预期
+- 现状：`CupertinoSliverRefreshControl` 默认指示器半径是**库内写死**的 14（`_kActivityIndicatorRadius`，直径≈28dp）+ 指示器区 60dp；而宽屏侧栏行文字仅 12.5pt（主人截图实测 DPR≈2.5）⇒ 观感「Loading 图标太大」。
+- 预期：直径 16dp、指示器区 48，与侧栏行内「进行中」小圆点（radius 6）、品牌行刷新按钮（radius 10）同尺寸家族；**拉动距离不动**（只动观感不动手感）。
+
+### 设计案（`sketches/wide-pane-typography-proposal.html`，本地活档）
+现状量化：侧栏行 12.5 / 元数据 10.5 ｜ 右侧空态 标题 20 · 正文 14 · 按钮 17 ｜ 聊天正文 15（`kMarkdownBodyFontSize`）
+⇒ **右侧标题 = 侧栏行文字的 1.6 倍**（「看着大一圈」的出处）。
+
+| 表面 | 现状 | 方案 A | 方案 B（柚子推荐） | 方案 C |
+|---|---|---|---|---|
+| 空态引导页 | 图标 64 / 标题 20 / 正文 14 / 按钮 17 | 44 / 15 / 12.5 / 14（贴合侧栏） | **52 / 17 / 13 / 15**（标题＝导航栏同号、正文＝侧栏元数据同号） | 36 / 15 / 12.5 / 文字链（去蓝色填充块） |
+| 聊天正文 | 15 / 行高 1.4 / 满宽 | 14 / 1.45 | **13.5 / 1.5** | 13 / 1.55 ＋ **列宽 640 居中** |
+| 刷新指示器 | radius 14（28dp） | radius 10（20dp） | **radius 8（16dp，已落码）** | radius 6（12dp，＝行内小圆点同号） |
+
+### 验收
+- 已过：`flutter analyze` 零告警；全量 `flutter test` **5093 通过 / 8 skipped**（口径：11 个文件改动仅换控件 + 单文件新增）。
+- **待主人**：① 空态引导页选档 ② 聊天正文选档（或指出「右侧正文」另有所指）③ 刷新指示器是否换档（12 / 20）④ 真机复验下拉手感与观感。
+- 佐证图（本地工件，未入库）：`.shots/wide-typo-01..05*.png`。
