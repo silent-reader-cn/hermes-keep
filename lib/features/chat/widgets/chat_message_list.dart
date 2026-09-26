@@ -1328,7 +1328,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
 
     // 2. 粗跳估算（基于已构建条目的真实位置插值，避免虚拟化 maxExtent 估算偏底）
-    final coarse = _estimateCoarseJumpOffset(loadedIndex, transcript);
+    final coarse = _estimateCoarseJumpOffset(
+      _resolveTranscriptIndex(renderId, transcript, loadedIndex),
+      transcript,
+    );
     _controller.jumpTo(
       coarse.clamp(
         _controller.position.minScrollExtent,
@@ -1364,8 +1367,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         }
       }
 
-      // 若单次粗跳后目标仍未入视口（极长/长短极端混合），最多重试 2 轮收敛
-      if (retryCount < 2) {
+      // 若单次粗跳后目标仍未入视口（极长/长短极端混合），最多重试 6 轮收敛
+      if (retryCount < 6) {
         outlineJumpTo(renderId, loadedIndex, retryCount: retryCount + 1);
       } else {
         _finishOutlineJump(topPadding);
@@ -1373,24 +1376,55 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     });
   }
 
+  /// 把「messages 下标」归一化为「transcript 列表下标」。
+  ///
+  /// 大纲面板传来的入参是 `TranscriptMessage.loadedIndex`，即该消息在
+  /// `state.messages` 中的下标；而 [_estimateCoarseJumpOffset] 是在 **transcript
+  /// 列表下标**空间里插值的（`total = transcript.length`）。会话里只要存在被
+  /// transcript 跳过的消息（`role == 'tool'`、tool-result-only、流式占位、
+  /// live 层已覆盖的正文），两个下标空间就会错开，且**内容越长错得越多**
+  /// —— 实测 30 轮 ×5 条工具消息的会话中，第 2 轮用户消息的 messages 下标是 7
+  /// 而 transcript 下标只有 2，粗跳据此落在半程、目标永不入视口，点击大纲
+  /// 表现为「没反应」。
+  ///
+  /// renderId（`transcript:${offset + i}`）是条目的权威标识，以它反查为准；
+  /// 查不到时退回调用方入参，保持既有调用方（传 messageId）的语义。
+  int _resolveTranscriptIndex(
+    String renderId,
+    List<TranscriptMessage> transcript,
+    int fallbackIndex,
+  ) {
+    for (var i = 0; i < transcript.length; i++) {
+      if (transcript[i].renderId == renderId) return i;
+    }
+    return fallbackIndex;
+  }
+
   /// 基于已构建条目的实际渲染位置估算未构建目标索引的像素偏移。
+  ///
+  /// [transcriptIndex] 必须是 **transcript 列表下标**（见 [_resolveTranscriptIndex]）。
+  ///
+  /// 反向轴（A 重构）下的坐标直觉是本方法唯一容易写反的地方：
+  /// `transcriptIndex == 0` 是**最早一条**（视觉最上方）⇒ 偏移应为
+  /// `maxScrollExtent`；`pixels == 0` 才是「贴底 = 最新」。旧实现照正向轴返回
+  /// 0.0，于是「点大纲第一行跳到会话最开始」落到贴底位 —— 用户看到的就是
+  /// 「点了条目没反应」。
   double _estimateCoarseJumpOffset(
-    int loadedIndex,
+    int transcriptIndex,
     List<TranscriptMessage> transcript,
   ) {
-    if (loadedIndex <= 0 || transcript.isEmpty) return 0.0;
+    if (transcript.isEmpty) return 0.0;
+    final double maxExtent = _controller.position.maxScrollExtent;
+    if (transcriptIndex <= 0) return maxExtent;
     // A 重构（reverse）：滚动坐标系里 index 与偏移**负相关**（index 0 = 最新 =
-    // 视觉底部 = 偏移最大）。为沿用原有的正向插值逻辑，这里统一改用
-    // 「反向索引」建模：反向索引小 ⇔ 偏移小 ⇔ 视觉更靠上。
+    // 视觉底部 = 偏移最小）。为沿用原有的正向插值逻辑，这里统一改用
+    // 「反向索引」建模：反向索引小 ⇔ 偏移小 ⇔ 视觉更靠下。
     final int total = transcript.length;
     int rev(int i) => total - 1 - i;
-    final int targetRev = rev(loadedIndex);
+    final int targetRev = rev(transcriptIndex);
     final scrollableBox = context.findRenderObject() as RenderBox?;
     if (scrollableBox == null || !scrollableBox.attached) {
-      return (loadedIndex * 120.0).clamp(
-        0.0,
-        _controller.position.maxScrollExtent,
-      );
+      return _reverseRatioOffset(transcriptIndex, total, maxExtent);
     }
 
     int? minRenderedIndex;
@@ -1420,35 +1454,34 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       }
     }
 
-    final maxExtent = _controller.position.maxScrollExtent;
-
-    if (minRenderedIndex != null && minRenderedOffset != null) {
-      if (targetRev < minRenderedIndex) {
-        if (minRenderedIndex <= 0) return 0.0;
-        final ratio = targetRev / minRenderedIndex;
-        return (minRenderedOffset * ratio).clamp(0.0, maxExtent);
-      } else if (maxRenderedIndex != null &&
-          maxRenderedOffset != null &&
-          targetRev > maxRenderedIndex) {
-        final remaining = transcript.length - 1 - maxRenderedIndex;
-        if (remaining <= 0) return maxExtent;
-        final ratio = (targetRev - maxRenderedIndex) / remaining;
-        final distToMax = math.max(0.0, maxExtent - maxRenderedOffset);
-        return (maxRenderedOffset + distToMax * ratio).clamp(0.0, maxExtent);
-      } else if (minRenderedIndex != maxRenderedIndex &&
-          maxRenderedIndex != null &&
-          maxRenderedOffset != null) {
-        final ratio =
-            (targetRev - minRenderedIndex) /
-            (maxRenderedIndex - minRenderedIndex);
-        return (minRenderedOffset +
-                (maxRenderedOffset - minRenderedOffset) * ratio)
+    if (minRenderedIndex != null &&
+        minRenderedOffset != null &&
+        maxRenderedIndex != null &&
+        maxRenderedOffset != null) {
+      // 用视口内已构建样本的**实测像素密度**外推，而不是「按 rev 比例把偏移
+      // 分摊到 0 / maxScrollExtent」：后者隐含「每条目等高」假设，而真实会话里
+      // 问话气泡矮、答复与工具卡长，密度差一个数量级。实测 30 轮（问话 + 4 条
+      // 工具 + 长答复）会话中，按比例分摊算出的落点与当前视口几乎重合
+      // （coarse≈1567 / pixels≈1749），每轮重试都原地打转、目标永不入视口
+      // —— 用户看到的就是「点了大纲条目没反应」。
+      final int revSpan = maxRenderedIndex - minRenderedIndex;
+      final double pxSpan = maxRenderedOffset - minRenderedOffset;
+      if (revSpan > 0 && pxSpan > 0) {
+        final double pxPerRev = pxSpan / revSpan;
+        return (maxRenderedOffset + (targetRev - maxRenderedIndex) * pxPerRev)
             .clamp(0.0, maxExtent);
       }
     }
 
-    // 无构建条目参考时按保守平均高度估算
-    return (loadedIndex * 120.0).clamp(0.0, maxExtent);
+    // 无构建条目参考时的兜底：按**反向**比例落位（旧实现 `index * 120` 沿用了
+    // 正向轴直觉，在 reverse 轴下会把「更早的轮次」推向底部）。
+    return _reverseRatioOffset(transcriptIndex, total, maxExtent);
+  }
+
+  /// 反向轴兜底：没有已构建锚点可参考时，按（反转后的）条目比例落位。
+  double _reverseRatioOffset(int transcriptIndex, int total, double maxExtent) {
+    final double ratio = total <= 1 ? 1.0 : 1.0 - transcriptIndex / (total - 1);
+    return (maxExtent * ratio).clamp(0.0, maxExtent);
   }
 
   /// 完成大纲跳转的导航栏高度补偿与阅读状态锁定。

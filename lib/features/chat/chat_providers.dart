@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/models/tool_call.dart';
+import '../../core/utils/injected_message.dart';
 import '../settings/tool_group_settings.dart';
 import 'chat_controller.dart';
 import 'chat_models.dart';
@@ -694,6 +695,14 @@ class OutlineEntry {
 }
 
 /// 大纲条目列表 Provider（by sessionId，实时响应 transcript 变化）。
+///
+/// 只列**主人自己的提问**：
+/// - 服务端合成消息（后台任务完成 `[IMPORTANT: Background process …]`、定时
+///   任务回执、续跑提示等，role 仍是 `user`）不是一轮提问，既不占行也不参与
+///   轮次编号 —— 判据用 `InjectedMessage` 的窄白名单，故主人手打的
+///   `[IMPORTANT: hello]` 不会被误伤。
+/// - 预览先剥离服务端注入标记（`[Workspace::v1: …]` / `[Attached files: …]`），
+///   否则前 40 字会被工作区路径占满，行内看不到提问内容。
 final chatOutlineEntriesProvider = Provider.family<List<OutlineEntry>, String>((
   ref,
   sessionId,
@@ -703,6 +712,7 @@ final chatOutlineEntriesProvider = Provider.family<List<OutlineEntry>, String>((
   final result = <OutlineEntry>[];
   for (final entry in transcript) {
     if (entry.message.role != 'user') continue;
+    if (InjectedMessage.isInjectedNotice(entry.message)) continue;
     userIndex++;
     final raw = entry.message.content?.trim() ?? '';
     final preview = raw.isEmpty
