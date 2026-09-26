@@ -204,6 +204,13 @@ class _ClearTrackingTurnService implements TurnNotificationService {
   ) async {}
 
   @override
+  Future<void> notifyDownloadFailed(
+    String downloadId,
+    String fileName, {
+    required bool cancelled,
+  }) async {}
+
+  @override
   Future<void> updateDownloadProgress({
     required String fileName,
     required int receivedBytes,

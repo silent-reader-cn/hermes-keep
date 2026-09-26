@@ -30,6 +30,8 @@
   "liveUpdateChipDone": "已完成",
   "liveUpdateChipStopped": "已中断",
   "liveUpdateActivityDownloadCompleted": "{fileName} 下载完成",
+  "liveUpdateActivityDownloadFailed": "{fileName} 下载失败",
+  "liveUpdateActivityDownloadCancelled": "{fileName} 已取消",
   "liveUpdateSubTextExtraSessions": "另有 {count} 个会话",
   "bgWorkManagerStatusNotApplicable": "不适用（仅限 Android）",
   "bgWorkManagerStatusFailed": "未就绪：{reason}",

@@ -846,6 +846,63 @@ void main() {
           ),
         ).called(1);
       });
+
+      test('#159 失败/取消：只上岛（中断态），不发任何常规通知', () async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(fakeChannel, (call) async {
+              fakeCalls.add(call);
+              if (call.method == 'isSupported') return true;
+              if (call.method == 'show') return true;
+              if (call.method == 'cancel') return true;
+              return null;
+            });
+
+        LiveUpdateService.instance = LiveUpdateService(
+          channel: fakeChannel,
+          androidPlatformOverride: true,
+        );
+
+        final androidService = LocalNotificationsTurnNotificationService(
+          plugin: plugin,
+          androidPlatformOverride: true,
+        );
+
+        await androidService.notifyDownloadFailed(
+          'dl-3',
+          'broken.zip',
+          cancelled: false,
+        );
+
+        final failureArgs =
+            fakeCalls.firstWhere((c) => c.method == 'show').arguments
+                as Map<Object?, Object?>;
+        expect(failureArgs['text'], 'broken.zip 下载失败');
+        expect(failureArgs['shortCriticalText'], '已中断');
+        expect(failureArgs['trackerIcon'], 'interrupted');
+        expect(failureArgs['indeterminate'], isTrue);
+
+        await androidService.notifyDownloadFailed(
+          'dl-4',
+          'cancel.zip',
+          cancelled: true,
+        );
+        final cancelArgs =
+            fakeCalls.where((c) => c.method == 'show').last.arguments
+                as Map<Object?, Object?>;
+        expect(cancelArgs['text'], 'cancel.zip 已取消');
+
+        // 失败/取消不发常规通知（既无 1301 也无 1401）—— 与完成态「岛 + 1301
+        // 并存」的口径不同，是刻意取舍。
+        verifyNever(
+          () => plugin.show(
+            id: any(named: 'id'),
+            title: any(named: 'title'),
+            body: any(named: 'body'),
+            notificationDetails: any(named: 'notificationDetails'),
+            payload: any(named: 'payload'),
+          ),
+        );
+      });
     });
 
     group('requestPermission / getLaunchSessionId', () {

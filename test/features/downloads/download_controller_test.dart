@@ -19,6 +19,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _FakeNotificationService implements TurnNotificationService {
   final List<(String id, String fileName, int size)> downloadCompletedCalls =
       [];
+  final List<(String id, String fileName, bool cancelled)> downloadFailedCalls =
+      [];
   final List<(String, String, String)> notifyCalls = [];
   final List<(String, String)> clarifyCalls = [];
   final List<(String, String, String)> errorCalls = [];
@@ -34,6 +36,15 @@ class _FakeNotificationService implements TurnNotificationService {
     int byteSize,
   ) async {
     downloadCompletedCalls.add((downloadId, fileName, byteSize));
+  }
+
+  @override
+  Future<void> notifyDownloadFailed(
+    String downloadId,
+    String fileName, {
+    required bool cancelled,
+  }) async {
+    downloadFailedCalls.add((downloadId, fileName, cancelled));
   }
   @override
   Future<void> updateDownloadProgress({
@@ -360,6 +371,14 @@ void main() {
       await waitUntil(
         () => notificationService.clearProgressCalls >= 1,
         reason: '取消后应清进度通知',
+      );
+      // worker 仍在 400ms 的下载里：#159 起取消会**立即**清进度，上面的条件可能
+      // 早于 worker 退出即满足；再等 worker 的 finally（第二次 clear）落地，否则
+      // 尾随的 saveRecord 会打到已被 tearDown 关闭的内存库上
+      // （表现为「This test failed after it had already completed」）。
+      await waitUntil(
+        () => notificationService.clearProgressCalls >= 2,
+        reason: '取消后 worker 应退出并清进度',
       );
 
       final state = container.read(downloadControllerProvider);
@@ -1258,6 +1277,123 @@ void main() {
       // 等待确认没有再发起新的调用
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(calls, 1);
+    });
+  });
+
+  group('#159 下载失败/取消上岛上报（唯一写入口边沿）', () {
+    test('失败（重试耗尽）→ 上报 cancelled: false，只报一次', () async {
+      final container = createContainer(
+        customDownloader: (url, {onProgress}) async => throw Exception('504 超时'),
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      final id = await controller.enqueue(
+        sourceUrl: 'https://example.com/fail159.zip',
+        fileName: 'fail159.zip',
+      );
+
+      await waitUntil(
+        () =>
+            container.read(downloadControllerProvider).taskById(id)?.status ==
+            DownloadStatus.failed,
+        reason: '任务进入 failed',
+      );
+      await waitUntil(
+        () => notificationService.downloadFailedCalls.isNotEmpty,
+        reason: '失败上岛上报',
+      );
+
+      expect(notificationService.downloadFailedCalls.single, (
+        id,
+        'fail159.zip',
+        false,
+      ));
+    });
+
+    test('用户取消 → 上报 cancelled: true；已是终态再取消不重复上报', () async {
+      final downloadStarted = Completer<void>();
+      final blockFirst = Completer<void>();
+
+      final container = createContainer(
+        customDownloader: (url, {onProgress}) async {
+          if (url.toString().contains('blocked')) {
+            downloadStarted.complete();
+            await blockFirst.future;
+            return Uint8List(10);
+          }
+          return Uint8List(20);
+        },
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(downloadControllerProvider.notifier);
+      await controller.enqueue(
+        sourceUrl: 'https://example.com/blocked159.bin',
+        fileName: 'blocked159.bin',
+      );
+      await downloadStarted.future;
+
+      final id2 = await controller.enqueue(
+        sourceUrl: 'https://example.com/queued159.bin',
+        fileName: 'queued159.bin',
+      );
+      await controller.cancel(id2);
+
+      await waitUntil(
+        () => notificationService.downloadFailedCalls.isNotEmpty,
+        reason: '取消上岛上报',
+      );
+      expect(notificationService.downloadFailedCalls.single, (
+        id2,
+        'queued159.bin',
+        true,
+      ));
+
+      // 边沿幂等：终态任务再取消直接 return，不得重复上报。
+      await controller.cancel(id2);
+      expect(notificationService.downloadFailedCalls, hasLength(1));
+
+      blockFirst.complete();
+      await settleDownloads(container);
+    });
+
+    test('冷启动装载历史终态记录：不重复上报（装载不走 _updateTask）', () async {
+      final containerA = createContainer(
+        customDownloader: (url, {onProgress}) async => throw Exception('504'),
+      );
+      addTearDown(containerA.dispose);
+
+      final controllerA = containerA.read(downloadControllerProvider.notifier);
+      final id = await controllerA.enqueue(
+        sourceUrl: 'https://example.com/history159.zip',
+        fileName: 'history159.zip',
+      );
+      await waitUntil(
+        () => notificationService.downloadFailedCalls.isNotEmpty,
+        reason: '首次失败上报',
+      );
+      containerA.dispose();
+      notificationService.downloadFailedCalls.clear();
+
+      // 同一内存 DB 上重新初始化：历史 failed 记录被装载，但不得再次上岛。
+      final containerB = createContainer();
+      addTearDown(containerB.dispose);
+      containerB.read(downloadControllerProvider.notifier);
+      await waitUntil(
+        () => containerB.read(downloadControllerProvider).isInitialized,
+        reason: 'containerB 初始化完成',
+      );
+
+      expect(
+        containerB.read(downloadControllerProvider).taskById(id)?.status,
+        DownloadStatus.failed,
+      );
+      expect(
+        notificationService.downloadFailedCalls,
+        isEmpty,
+        reason: '冷启动只装载状态，不得把历史失败重刷一遍到岛上',
+      );
     });
   });
 }

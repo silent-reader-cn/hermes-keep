@@ -16,6 +16,8 @@ import 'package:hermes_ui/features/notifications/turn_notification_service.dart'
 class FakeTurnNotificationService implements TurnNotificationService {
   final List<(String id, String fileName, int size)> downloadCompletedCalls =
       [];
+  final List<(String id, String fileName, bool cancelled)> downloadFailedCalls =
+      [];
 
   @override
   Future<void> notifyDownloadCompleted(
@@ -24,6 +26,15 @@ class FakeTurnNotificationService implements TurnNotificationService {
     int byteSize,
   ) async {
     downloadCompletedCalls.add((downloadId, fileName, byteSize));
+  }
+
+  @override
+  Future<void> notifyDownloadFailed(
+    String downloadId,
+    String fileName, {
+    required bool cancelled,
+  }) async {
+    downloadFailedCalls.add((downloadId, fileName, cancelled));
   }
   @override
   Future<void> updateDownloadProgress({

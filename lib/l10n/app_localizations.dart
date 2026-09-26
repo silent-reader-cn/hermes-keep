@@ -1098,13 +1098,6 @@ class AppLocalizations {
       ? 'Narrow screens default to time (Today / Yesterday / Earlier); wide screens to workspace.'
       : '窄屏默认按时间（今天/昨天/更早），桌面默认按工作区。';
   String get sessionGroupingAuto => isEnglish ? 'By screen' : '跟随屏幕';
-
-  /// #161：品牌行副标题里的会话数量（如「hermes-ui · 6 个会话」）。
-  String sessionsCountLabel(int count) =>
-      isEnglish ? '$count sessions' : '$count 个会话';
-
-  /// #161：无工作区会话的收纳分组（原名「其他」语义模糊）。
-  String get ungroupedSection => isEnglish ? 'Ungrouped' : '未分组';
   String get sessionGroupingTime => isEnglish ? 'By time' : '按时间';
   String get sessionGroupingWorkspace => isEnglish ? 'By workspace' : '按工作区';
   String get sidebarNavOrderSectionFooter => isEnglish
@@ -1961,6 +1954,14 @@ extension AppLocalizationsLiveUpdate105 on AppLocalizations {
   /// 以文件名为焦点，让用户一眼知道**下完了哪个文件**。
   String liveUpdateActivityDownloadCompleted(String fileName) =>
       isEnglish ? '$fileName downloaded' : '$fileName 下载完成';
+
+  /// 活动正文：下载失败（#159，岛上的中断态）。
+  String liveUpdateActivityDownloadFailed(String fileName) =>
+      isEnglish ? '$fileName failed' : '$fileName 下载失败';
+
+  /// 活动正文：下载被用户取消（#159，岛上的中断态）。
+  String liveUpdateActivityDownloadCancelled(String fileName) =>
+      isEnglish ? '$fileName cancelled' : '$fileName 已取消';
 
   /// 实况通知次级信息（subText）：另有 N 个会话（B 案，2026-09-19）。
   ///

@@ -57,6 +57,17 @@ abstract interface class TurnNotificationService {
     int byteSize,
   );
 
+  /// 下载失败 / 取消 → 上报岛上的中断态（#159；Android only，其他平台空转）。
+  ///
+  /// 与 [notifyDownloadCompleted] 的区别：**不发常规通知**。失败/取消没有
+  /// 「点击落到哪」的语义，且此前这条路径连日志之外什么都没有 —— 本轮只补
+  /// 实况通知（岛）这一层。[cancelled] 为 true 表示用户主动取消。
+  Future<void> notifyDownloadFailed(
+    String downloadId,
+    String fileName, {
+    required bool cancelled,
+  });
+
   /// 下载进度 → 状态栏常驻进度通知（#93；Android only，其他平台空转）。
   ///
   /// [fileName] 当前下载文件名；[receivedBytes]/[expectedBytes] 已接收/总字节
@@ -546,6 +557,35 @@ class LocalNotificationsTurnNotificationService
         errorKind: error.toString(),
       );
     }
+  }
+
+  @override
+  Future<void> notifyDownloadFailed(
+    String downloadId,
+    String fileName, {
+    required bool cancelled,
+  }) async {
+    if (downloadId.isEmpty) return;
+    // #159 只上岛、不发常规通知：失败/取消没有「点击落到哪」的语义，通知栏
+    // 打扰价值低；由实况通知（安卓 16+）承载状态，其余平台由 LiveUpdateService
+    // 内部静默降级（不再像此前那样什么都不做）。
+    try {
+      await LiveUpdateService.instance.notifyDownloadFailed(
+        fileName: fileName,
+        cancelled: cancelled,
+      );
+    } on Object catch (e) {
+      developer.log(
+        'LiveUpdateService.notifyDownloadFailed 异常: $e',
+        name: 'notifications',
+      );
+    }
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.info,
+      tag: 'notifications',
+      message: cancelled ? '上报下载取消（实况通知）' : '上报下载失败（实况通知）',
+      details: {'downloadId': downloadId, 'fileName': fileName},
+    );
   }
 
   @override
