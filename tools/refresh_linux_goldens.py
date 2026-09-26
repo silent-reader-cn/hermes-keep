@@ -300,6 +300,25 @@ def dump_failure_log(repo: str, run_id: int) -> None:
         print(f"    {line}")
 
 
+def artifact_is_present(repo: str, run_id: int, artifact: str) -> bool:
+    """该运行是否产出了目标 artifact（这才是本通道的真实判据）。"""
+    proc = run(
+        [
+            "gh",
+            "api",
+            f"repos/{repo}/actions/runs/{run_id}/artifacts",
+            "--jq",
+            ".artifacts[].name",
+        ],
+        cwd=repo_root(),
+        check=False,
+    )
+    names = {line.strip() for line in (proc.stdout or "").splitlines()}
+    if names:
+        print(f"[get] 该运行产出 artifact：{sorted(names)}")
+    return artifact in names
+
+
 def download_artifact(repo: str, run_id: int, artifact: str, target: Path) -> None:
     proc = run(
         [
@@ -562,11 +581,21 @@ def main(argv: list[str] | None = None) -> int:
 
         info = wait_for_completion(repo, run_id, args.timeout, args.poll_interval)
         conclusion = (info.get("conclusion") or "").strip()
+        # 判据是 **artifact 是否产出**，不是整轮 success：
+        # 首轮重生成必然整体红 —— 只有 analyze-test 会以 runner 平台重生成，
+        # coverage job 不参与，仍拿仓里那份旧基线比对，于是照旧倒那 6 例。
+        # 真正要验的是「重生成的基线确实被打包上传了」。
         if conclusion != "success":
-            print(f"[fail] 运行 {run_id} conclusion={conclusion or 'unknown'}", file=sys.stderr)
+            print(
+                f"[warn] 运行 {run_id} conclusion={conclusion or 'unknown'}"
+                " —— 若失败的是 coverage/android-debug 等**不参与重生成**的 job，"
+                "属首轮必红，继续按 artifact 判定。"
+            )
+        if not artifact_is_present(repo, run_id, args.artifact):
+            print(f"[fail] 运行 {run_id} 未产出 artifact `{args.artifact}`", file=sys.stderr)
             dump_failure_log(repo, run_id)
             raise RefreshError(
-                f"运行未成功（conclusion={conclusion or 'unknown'}）："
+                f"没有可用的 artifact（conclusion={conclusion or 'unknown'}）："
                 f"{info.get('url') or run_id}。基线未被覆盖。"
             )
 
