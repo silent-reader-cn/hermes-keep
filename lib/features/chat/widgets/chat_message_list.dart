@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -316,6 +317,29 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   /// 锚点准入最小可见高度阈值（24px，避免贴边一条缝的条目当锚，#56）。
   static const double _minAnchorVisibleHeight = 24.0;
 
+  /// 几何补偿的死区（0.5px）：小于它的漂移是帧间亚像素噪声，动了反而抖。
+  static const double _anchorDriftMinPx = 0.5;
+
+  /// 锚点条目连续出树帧数上限：超过即判锚失效并重建（瞬时出树容忍）。
+  static const int _anchorLostToleranceFrames = 3;
+
+  /// 漂移测量探针：视口纵向居中条目的稳定标识 + 其顶边 dy。
+  ///
+  /// 与 `_readingAnchor`（供未读计数/大纲用，取视口顶部第一条）解耦。
+  String? _driftProbeId;
+  double? _driftProbeDy;
+
+  /// 锚点补偿的 jumpTo 是否在途。
+  ///
+  /// 必须并入 `_isProgrammaticScrolling`：否则补偿产生的 ScrollUpdate 会被状态机
+  /// 当成「鼠标滚轮上滚」（`scrollDelta > 0` 且无 dragDetails），紧接着的
+  /// ScrollEndNotification 又会走「用户滚动结束」分支把探针清掉 —— 补偿因此每帧
+  /// 自毁（实测滚轮场景：探针被反复重置、补偿恒为 0）。
+  bool _isAnchorCompensating = false;
+
+  /// 最近一次锚点补偿所在的帧时间戳（同一帧只补一次，见补偿逻辑注释）。
+  Duration? _lastCompensationFrame;
+
   // A 重构（reverse）：补偿算法整段移除后，其专属配置也随之删除——
   // 「补偿死区 / 防抖锁 / 锚点出树容忍」都只服务于已被移除的 jumpTo 补偿路径。
   double _lastAnchorCompensationDirection = 0.0;
@@ -326,6 +350,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     _lastAnchorCompensationDirection = 0.0;
     _anchorFreezeRemainingFrames = 0;
     _anchorMissingFrames = 0;
+    _clearDriftProbe();
   }
 
   bool _nearBottom = true;
@@ -417,13 +442,21 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _isOutlineJumping ||
       _jumpSettling ||
       _restoringOlderPosition ||
-      _initialPositioning;
+      _initialPositioning ||
+      _isAnchorCompensating;
 
   @visibleForTesting
   int get pinnedTranscriptCount => _pinnedTranscriptCount;
 
   @visibleForTesting
   bool get hasReadingAnchor => _readingAnchor != null;
+
+  /// 漂移探针状态（诊断/测试用）。
+  @visibleForTesting
+  String? get driftProbeId => _driftProbeId;
+
+  @visibleForTesting
+  double? get driftProbeDy => _driftProbeDy;
 
   @visibleForTesting
   String? get readingAnchorCandidateKey => _readingAnchor?.candidateKey;
@@ -677,6 +710,23 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     // 气泡内横向滚动器等内层 Scrollable 的 metrics 通知会冒泡到本监听：
     // 只响应纵向（本列表是唯一纵向滚动器）。
     if (notification.metrics.axis != Axis.vertical) return false;
+    // 离底阅读：内容增长同样把视口推走（新内容插在物理 index 0 端），而图片
+    // 异步解码撑高等路径**不触发 rebuild** —— 这条 metrics 通知是它们的唯一
+    // 入口，故在此补一次锚点几何补偿（帧后执行，避免在 layout 阶段滚动）。
+    if (_userHasScrolled &&
+        !_nearBottom &&
+        _initialPositioned &&
+        !_positioningActive &&
+        !_restoringOlderPosition &&
+        !_isUserInteracting &&
+        !_isAnimatingToBottom &&
+        !_isOutlineJumping) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_controller.hasClients) return;
+        _maybeRestoreReadingAnchor();
+      });
+      return false;
+    }
     if (!_nearBottom ||
         _userHasScrolled ||
         _dragDisplacement < 0 ||
@@ -871,18 +921,157 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     }
   }
 
-  /// 内容变化 postFrame 无动画跳回锚点，绝不拉回底部（todo.md #14 / #56）。
-  /// 阅读锚点恢复（A 重构后为 no-op 记录路径）。
+  /// 内容变化后的阅读位置几何补偿（reverse 坐标系，todo.md #14 / #56）。
   ///
-  /// reverse 列表下，新内容插在 index 0 侧（底部），视口像素 `pixels` 天然不受
-  /// 内容增长影响——原本用于对抗「内容增长推走视口」的几何补偿算法在 reverse 下
-  /// 补偿量方向相反，反而会主动把视口跳错位置，故整段移除。
-  /// 仅保留锚点记录（[`_updateReadingAnchor`]）供未读计数/大纲等使用。
+  /// 【反向列表的坐标陷阱】新内容插在**物理 index 0**（`pixels ≈ 0` 那一端 =
+  /// 视觉底部），它把所有已有条目的 sliver 偏移整体推大 `h`，而 `pixels`
+  /// 一动不动 —— 于是「pixels 稳定即视觉稳定」的旧假设放过了真正的位移：
+  /// 用户正在看的历史消息在屏幕上整体**上移 h**，即「生成中的新内容把历史
+  /// 顶上去」。
+  ///
+  /// 【补偿式】内容在 offset 0 端插入 h 后条目 dy 减小 h，要让 dy 复原必须
+  /// **增大** pixels h，故：`pixels += (基准 dy − 当前 dy)`。
+  ///
+  /// 【基准为什么取"视口居中条目"而不是"顶部第一条"】顶部条目贴着视口边沿，
+  /// 且正是 SliverList dead-reckoning 校正所锚定的位置 —— 实测（滚轮场景）它
+  /// 纹丝不动，而用户注视的中部内容已被顶走 21px，拿它当基准会得出「无漂移」
+  /// 的假结论。
+  ///
+  /// 【漂移量为什么用几何实测而不是 maxScrollExtent 增量】lazy 列表的 extent
+  /// 含未构建条目的均值估算，实测会在内容变化那一帧**骤降 800px**，照它补偿
+  /// 会持续过冲甚至反向乱跳。
+  ///
+  /// 【探针丢失为什么必须容忍】index 位移 / 归档重锚会让 element 短暂离开重建
+  /// 队列；立即丢弃重建会把已经发生的漂移追认成新基准（补偿永久失效，滚轮场景
+  /// 实测正是这条路径：探针从 286.5 被追认成 265.5）。
+  ///
+  /// 分页 prepend 插在最旧端（不改已有条目偏移）⇒ 无需补偿，由
+  /// `_restoringOlderPosition` 跳过。
   void _maybeRestoreReadingAnchor() {
     if (!mounted || !_controller.hasClients) return;
-    if (_readingAnchor == null) {
-      _updateReadingAnchor();
+    // 手势在途 / 程序化定位在途时不干预（同 `_onMetricsChanged` 守卫集）。
+    if (_isUserInteracting ||
+        _isGestureActive ||
+        _isAnimatingToBottom ||
+        _isOutlineJumping ||
+        _positioningActive ||
+        _restoringOlderPosition) {
+      return;
     }
+    final probeId = _driftProbeId;
+    if (probeId == null) {
+      _captureDriftProbe();
+      return;
+    }
+    final currentDy = _probeDy(probeId);
+    if (currentDy == null) {
+      // 探针条目暂时出树：容忍若干帧、**保留记录值**等它回来。立即丢弃重建
+      // 会把漂移追认成新基准。
+      if (++_anchorMissingFrames >= _anchorLostToleranceFrames) {
+        _clearDriftProbe();
+      }
+      return;
+    }
+    _anchorMissingFrames = 0;
+    final delta = _driftProbeDy! - currentDy;
+    if (delta.abs() < _anchorDriftMinPx) return;
+    final position = _controller.position;
+    final vh = position.viewportDimension;
+    // 探针条目已离开视口：它的位移不再代表用户注视区域（此后读到的是回收 /
+    // 重建的噪声），据此补偿必然震荡 —— 丢弃重建。
+    if (currentDy < 0 || currentDy > vh) {
+      _clearDriftProbe();
+      return;
+    }
+    // 幅度守卫：单次漂移超过半屏即判探针不可信（条目被换过、分页换 id），
+    // 宁可不修也不乱跳；随后重建基准。
+    if (delta.abs() > vh / 2) {
+      _clearDriftProbe();
+      return;
+    }
+    // 同一帧内只补偿一次：补偿后 pixels 要到**下一帧**才反映到 render tree，
+    // 期间 `_probeDy` 读到的仍是旧值 —— 重复补偿会把同一漂移补多次（实测连续
+    // 补 3 次 ×46px，把视口推飞并引发反号震荡）。
+    final frame = SchedulerBinding.instance.currentFrameTimeStamp;
+    if (_lastCompensationFrame == frame) return;
+    _lastCompensationFrame = frame;
+    final target = (position.pixels + delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if ((target - position.pixels).abs() < _anchorDriftMinPx) return;
+    _lastAnchorCompensationDirection = delta;
+    _isAnchorCompensating = true;
+    try {
+      _controller.jumpTo(target);
+    } finally {
+      _isAnchorCompensating = false;
+    }
+  }
+
+  void _clearDriftProbe() {
+    _driftProbeId = null;
+    _driftProbeDy = null;
+  }
+
+  /// 建立漂移测量探针 = **视口纵向居中**的那条可见条目。
+  void _captureDriftProbe() {
+    if (!mounted || !_controller.hasClients) return;
+    final scrollableBox = context.findRenderObject() as RenderBox?;
+    if (scrollableBox == null || !scrollableBox.attached) return;
+    final vh = _controller.position.viewportDimension;
+    if (vh <= 0) return;
+
+    final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
+
+    String? bestId;
+    double? bestDy;
+    var bestDist = double.infinity;
+    void consider(String id, GlobalKey? key) {
+      final element = key?.currentContext;
+      if (element == null) return;
+      final box = element.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached || box.size.height == 0) return;
+      final dy = box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
+      if (dy < 0 || dy > vh) return; // 必须完整落在视口内
+      final dist = (dy + box.size.height / 2 - vh / 2).abs();
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestId = id;
+        bestDy = dy;
+      }
+    }
+
+    for (final entry in transcript) {
+      // 探针 id 用 messageId（而非 renderId）：renderId 是
+      // `transcript:<offset + i>`，流式归档 / 分页会让 offset 变化，整批
+      // renderId 随之失效 —— 探针被反复丢弃重建，每次追认已发生的漂移。
+      final messageId = entry.message.messageId;
+      final id = (messageId != null && messageId.isNotEmpty)
+          ? messageId
+          : entry.renderId;
+      consider(id, _itemKeys[id]);
+    }
+    // 刻意**不**把 live 时间线条目纳入候选：它自身正在随 token 增长/重排，
+    // 顶边 dy 剧烈跳动（实测 base 恒定 48.7 而 now 在 +109 ~ -139 间乱跳），
+    // 拿它当基准会让补偿每帧反号 —— 观感就是疯狂震荡。
+    // transcript 里已定稿的历史消息高度稳定，才是合格的基准。
+    if (bestId != null && bestDy != null) {
+      _driftProbeId = bestId;
+      _driftProbeDy = bestDy;
+      _anchorMissingFrames = 0;
+    }
+  }
+
+  /// 探针条目当前顶边的视口 dy（相对本列表渲染盒）；出树返回 null。
+  double? _probeDy(String id) {
+    final scrollableBox = context.findRenderObject() as RenderBox?;
+    if (scrollableBox == null || !scrollableBox.attached) return null;
+    final element = _itemKeys[id]?.currentContext;
+    if (element == null) return null;
+    final box = element.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || box.size.height == 0) return null;
+    return box.localToGlobal(Offset.zero, ancestor: scrollableBox).dy;
   }
   Future<void> _loadOlderMessages() async {
     if (_loadingOlder || _olderLoadQueued || !mounted) return;

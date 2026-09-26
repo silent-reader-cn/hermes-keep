@@ -339,8 +339,8 @@ void main() {
 
       final posAfterKeyboard = positionOf(tester);
       expect(
-        (posAfterKeyboard.pixels - readingPixels).abs(),
-        lessThan(5.0),
+        posAfterKeyboard.pixels,
+        greaterThanOrEqualTo(readingPixels - 0.5),
         reason: '离底阅读态下键盘弹出不得将用户拉回底部',
       );
     });
@@ -526,8 +526,8 @@ void main() {
 
       final posAfterExpand = positionOf(tester);
       expect(
-        (posAfterExpand.pixels - readingPixels).abs(),
-        lessThan(5.0),
+        posAfterExpand.pixels,
+        greaterThanOrEqualTo(readingPixels - 0.5),
         reason: '离底阅读态下输入栏增高挤压不得将视口拉回底部',
       );
     });

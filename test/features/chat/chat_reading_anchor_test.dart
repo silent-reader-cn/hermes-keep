@@ -82,10 +82,11 @@ void main() {
         await tester.pump();
       }
 
-      // 验证离底阅读时，像素位置未被拉到最新底部
+      // 验证离底阅读时，视口未被拉回最新底部（pixels 会随内容增长同量前进，
+      // 屏幕坐标的强守卫见 chat_read_anchor_follow_test）
       expect(
-        (pos.pixels - readingPixels).abs(),
-        lessThan(10.0),
+        pos.pixels,
+        greaterThanOrEqualTo(readingPixels - 0.5),
         reason: '流式 token 注入时不应将离底阅读的用户拉回底部',
       );
     });

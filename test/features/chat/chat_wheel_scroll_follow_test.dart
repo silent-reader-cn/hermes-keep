@@ -49,85 +49,112 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets(
-      '1. 滚轮上滚累计 >=8px 取消跟随：_userHasScrolled=true，后续 token 不跳底，回底按钮出现',
-      (tester) async {
-        tester.view.physicalSize = const Size(390, 844);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
+    testWidgets('1. 滚轮上滚累计 >=8px 取消跟随：_userHasScrolled=true，后续 token 不跳底，回底按钮出现', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-        final api = FakeChatApi()
-          ..statusResponse = const ChatStreamStatusResponse(active: true);
-        final messages = List.generate(
-          40,
-          (i) => {
-            'role': i.isEven ? 'user' : 'assistant',
-            'content': '历史消息 $i：这是一段测试长消息内容，用于占满视口产生足够滚动高度。这是一段测试长消息内容。',
-            'message_id': 'm_$i',
-          },
-        );
+      final api = FakeChatApi()
+        ..statusResponse = const ChatStreamStatusResponse(active: true);
+      final messages = List.generate(
+        40,
+        (i) => {
+          'role': i.isEven ? 'user' : 'assistant',
+          'content': '历史消息 $i：这是一段测试长消息内容，用于占满视口产生足够滚动高度。这是一段测试长消息内容。',
+          'message_id': 'm_$i',
+        },
+      );
 
-        api.sessionResult = {
-          'session': {
-            'session_id': 's-wheel-test-1',
-            'active_stream_id': 'stream-wheel-1',
-            'messages': messages,
-            'message_count': 40,
-          },
-        };
+      api.sessionResult = {
+        'session': {
+          'session_id': 's-wheel-test-1',
+          'active_stream_id': 'stream-wheel-1',
+          'messages': messages,
+          'message_count': 40,
+        },
+      };
 
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [chatApiProvider.overrideWithValue(api)],
-            child: const CupertinoApp(
-              home: ChatPage(sessionId: 's-wheel-test-1'),
-            ),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [chatApiProvider.overrideWithValue(api)],
+          child: const CupertinoApp(
+            home: ChatPage(sessionId: 's-wheel-test-1'),
           ),
-        );
+        ),
+      );
 
-        await tester.pumpAndSettle();
-        final listState = listStateOf(tester);
-        expect(listState.initialPositioned, isTrue);
-        expect(listState.nearBottom, isTrue);
-        expect(listState.userHasScrolled, isFalse);
+      await tester.pumpAndSettle();
+      final listState = listStateOf(tester);
+      expect(listState.initialPositioned, isTrue);
+      expect(listState.nearBottom, isTrue);
+      expect(listState.userHasScrolled, isFalse);
 
-        final pos = positionOf(tester);
-        expect(pos.pixels, lessThan(5.0));
+      final pos = positionOf(tester);
+      expect(pos.pixels, lessThan(5.0));
 
-        // 滚轮向上滚动 100px（scrollDelta.dy = -100 < 0，累计超 8px 敏感阈值且离底 > 80px）
-        await sendWheelScroll(tester, scrollDelta: const Offset(0, -100));
-        await tester.pumpAndSettle();
+      // 滚轮向上滚动 100px（scrollDelta.dy = -100 < 0，累计超 8px 敏感阈值且离底 > 80px）
+      await sendWheelScroll(tester, scrollDelta: const Offset(0, -100));
+      await tester.pumpAndSettle();
 
-        expect(listState.userHasScrolled, isTrue);
-        expect(listState.nearBottom, isFalse);
+      expect(listState.userHasScrolled, isTrue);
+      expect(listState.nearBottom, isFalse);
 
-        // 回底按钮应出现
-        final buttonFinder = find.byKey(
-          const ValueKey('chat-scroll-to-bottom-button'),
-        );
-        expect(buttonFinder, findsOneWidget);
-        expect(find.text('回到底部'), findsOneWidget);
+      // 回底按钮应出现
+      final buttonFinder = find.byKey(
+        const ValueKey('chat-scroll-to-bottom-button'),
+      );
+      expect(buttonFinder, findsOneWidget);
+      expect(find.text('回到底部'), findsOneWidget);
 
-        final readingPixels = pos.pixels;
-
-        // 流式推送若干 token，视口不得被拽回底部
-        for (var i = 0; i < 6; i++) {
-          api.emit(TokenSseEvent('新增流式内容 $i\n'));
-          await tester.pump(const Duration(milliseconds: 16));
-          await tester.pump(const Duration(milliseconds: 48));
-          await tester.pump();
+      final readingPixels = pos.pixels;
+      // 固定**同一条**历史消息作为阅读位置锚点（不能用「第一条可见气泡」：
+      // 内容增长会让可视成员位移一位，那样取到的是另一条气泡）。
+      String? anchorText;
+      double? anchorDy() {
+        if (anchorText == null) {
+          for (var i = 24; i < 36; i++) {
+            final f = find.textContaining('历史消息 $i');
+            if (f.evaluate().isEmpty) continue;
+            final dy = tester.getTopLeft(f.first).dy;
+            if (dy > 40 && dy < 500) {
+              anchorText = '历史消息 $i';
+              break;
+            }
+          }
         }
+        final t = anchorText;
+        if (t == null) return null;
+        final f = find.textContaining(t);
+        return f.evaluate().isEmpty ? null : tester.getTopLeft(f.first).dy;
+      }
 
-        await tester.pumpAndSettle();
-        final posAfterTokens = positionOf(tester);
-        expect(
-          (posAfterTokens.pixels - readingPixels).abs(),
-          lessThan(5.0),
-          reason: '鼠标滚轮上滚离底后，流式 token 不得拉扯视口',
-        );
-        expect(buttonFinder, findsOneWidget);
-      },
-    );
+      final readingDy = anchorDy();
+      expect(readingDy, isNotNull, reason: '前置：应能定位视口内的固定锚点消息');
+
+      // 流式推送若干 token，视口不得被拽回底部
+      for (var i = 0; i < 6; i++) {
+        api.emit(TokenSseEvent('新增流式内容 $i\n'));
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.pump(const Duration(milliseconds: 48));
+        await tester.pump();
+      }
+
+      await tester.pumpAndSettle();
+      final posAfterTokens = positionOf(tester);
+      expect(
+        anchorDy(),
+        closeTo(readingDy!, 1.0),
+        reason: '鼠标滚轮上滚离底后，流式新内容不得把正在读的历史顶上去',
+      );
+      expect(
+        posAfterTokens.pixels,
+        greaterThanOrEqualTo(readingPixels - 0.5),
+        reason: '补偿只应单向推进 pixels，视口不得被拽回底部',
+      );
+      expect(buttonFinder, findsOneWidget);
+    });
 
     testWidgets('2. 滚轮慢滚微幅多次连续累计：单次 <8px 不取消，累计 >=8px 触发取消跟随', (tester) async {
       tester.view.physicalSize = const Size(390, 844);

@@ -266,10 +266,11 @@ void main() {
         await tester.pump();
       }
 
-      // 验证新 token 不会拽回底部，视口稳定在阅读位
+      // 新 token 到达时 pixels 会（也必须）同量前进以抵消内容推移；关键是
+      // **不得被拽回底部**（屏幕坐标的强守卫见 chat_read_anchor_follow_test）。
       expect(
-        (pos.pixels - readingPos).abs(),
-        lessThan(10.0),
+        pos.pixels,
+        greaterThanOrEqualTo(readingPos - 0.5),
         reason: '流式中点击大纲进入阅读态，新 token 不得将视口拽回底部',
       );
 

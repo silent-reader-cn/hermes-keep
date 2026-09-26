@@ -282,15 +282,36 @@ void main() {
       expect(state.nearBottom, isFalse);
       final readingPixels = pos.pixels;
       final extentBefore = pos.maxScrollExtent;
+      // 阅读位置的真判据 = 固定**同一条**消息的屏幕 dy。大图撑高发生在列表
+      // index 0 端（视觉底部），会把已有条目整体推上去；只钉 pixels（旧断言）
+      // 恰好放过了这个位移。不能用「第一条可见气泡」——内容增长会让可视成员
+      // 位移一位，那样取到的是另一条气泡。
+      String? anchorText;
+      double? anchorDy() {
+        if (anchorText == null) {
+          for (var i = 18; i < 26; i++) {
+            final f = find.textContaining('测试文本消息第 $i 轮');
+            if (f.evaluate().isEmpty) continue;
+            final dy = tester.getTopLeft(f.first).dy;
+            if (dy > 40 && dy < 500) {
+              anchorText = '测试文本消息第 $i 轮';
+              break;
+            }
+          }
+        }
+        final t = anchorText;
+        if (t == null) return null;
+        final f = find.textContaining(t);
+        return f.evaluate().isEmpty ? null : tester.getTopLeft(f.first).dy;
+      }
+
+      final readingDy = anchorDy();
+      expect(readingDy, isNotNull, reason: '前置：应能定位视口内的固定锚点消息');
 
       imageCompleter.complete(tallPngFile);
       await pumpImageDecodeFrames(tester);
 
-      expect(
-        find.byType(RawImage),
-        findsWidgets,
-        reason: '图须真解码，防退化空转',
-      );
+      expect(find.byType(RawImage), findsWidgets, reason: '图须真解码，防退化空转');
       expect(
         pos.maxScrollExtent,
         greaterThan(extentBefore + 100),
@@ -299,9 +320,14 @@ void main() {
       expect(state.userHasScrolled, isTrue);
       expect(state.nearBottom, isFalse);
       expect(
-        (pos.pixels - readingPixels).abs(),
-        lessThan(5.0),
-        reason: '离底阅读位置不受大图撑高影响',
+        anchorDy(),
+        closeTo(readingDy!, 1.0),
+        reason: '离底阅读位置不受大图撑高影响（屏幕坐标不动）',
+      );
+      expect(
+        pos.pixels,
+        greaterThanOrEqualTo(readingPixels - 0.5),
+        reason: '补偿只应单向推进 pixels，视口不得被拽回底部',
       );
     });
 

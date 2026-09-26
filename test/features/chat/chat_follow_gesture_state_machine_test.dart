@@ -329,8 +329,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       // 验证 steer 请求发出后不打开自动跟随，依然保持在离底阅读位
+      // 离底阅读时 pixels 会（也必须）随新内容同量前进，以抵消视口被推走
+      // （见 chat_read_anchor_follow_test 的屏幕坐标守卫）。这里只钉「不得被
+      // 拽回底部」——旧断言 (pixels).abs() < 5 是缺陷的镜像：pixels 不动恰是
+      // 「新内容把历史顶上去」的成因。
       expect(state.userHasScrolled, isTrue, reason: '离底时发送 steer 不得强制进跟随');
-      expect((pos.pixels - readingPos).abs(), lessThan(5.0));
+      expect(
+        pos.pixels,
+        greaterThanOrEqualTo(readingPos - 0.5),
+        reason: '离底阅读位不得被拽回底部',
+      );
 
       // 2) 恢复跟随态后发出 steer 请求
       await tester.tap(find.text('回到底部'));

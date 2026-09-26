@@ -80,7 +80,10 @@ void main() {
       expect(initialPixels, lessThan(5.0));
       expect(afterPos.pixels, lessThan(5.0));
       // 贴底时不显示悬浮回底按钮
-      expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('chat-scroll-to-bottom-button')),
+        findsNothing,
+      );
     });
 
     testWidgets('2. 用户上滑后暂停跟随，显示悬浮回底按钮，新 token 不拉回底部', (tester) async {
@@ -111,9 +114,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [chatApiProvider.overrideWithValue(api)],
-          child: const CupertinoApp(
-            home: ChatPage(sessionId: 's-unpin-test'),
-          ),
+          child: const CupertinoApp(home: ChatPage(sessionId: 's-unpin-test')),
         ),
       );
 
@@ -128,8 +129,23 @@ void main() {
       final readingPixels = pos.pixels;
       expect(pos.pixels, greaterThan(80));
 
+      // 阅读位置的真判据 = 视口内那条历史消息的**屏幕 dy**。
+      // pixels 静止 ≠ 视觉静止：新内容插在 reverse 列表 index 0 端时，已有
+      // 条目的偏移被整体推大而 pixels 一动不动 —— 那正是「生成中的新内容把
+      // 历史顶上去」。正确行为是 pixels 单向前进、屏幕内容原地不动。
+      double? anchorDy() {
+        final f = find.textContaining('历史消息 30');
+        if (f.evaluate().isEmpty) return null;
+        return tester.getTopLeft(f.first).dy;
+      }
+
+      final readingDy = anchorDy();
+      expect(readingDy, isNotNull, reason: '前置：锚点条目应在视口内');
+
       // 应出现悬浮回底按钮
-      final buttonFinder = find.byKey(const ValueKey('chat-scroll-to-bottom-button'));
+      final buttonFinder = find.byKey(
+        const ValueKey('chat-scroll-to-bottom-button'),
+      );
       expect(buttonFinder, findsOneWidget);
       expect(find.text('回到底部'), findsOneWidget);
 
@@ -144,11 +160,15 @@ void main() {
       await tester.pumpAndSettle();
       final posAfterTokens = positionOf(tester);
 
-      // 视口绝不得被拽回底部
       expect(
-        (posAfterTokens.pixels - readingPixels).abs(),
-        lessThan(5.0),
-        reason: '用户上滑离底后，流式 token 不得拉扯视口',
+        anchorDy(),
+        closeTo(readingDy!, 1.0),
+        reason: '用户上滑离底后，流式 token 不得顶走正在阅读的历史消息',
+      );
+      expect(
+        posAfterTokens.pixels,
+        greaterThanOrEqualTo(readingPixels - 0.5),
+        reason: '补偿只应单向推进 pixels，视口不得被拽回底部',
       );
       expect(buttonFinder, findsOneWidget);
     });
@@ -192,7 +212,9 @@ void main() {
       await tester.drag(scrollable, const Offset(0, 400));
       await tester.pumpAndSettle();
 
-      final buttonFinder = find.byKey(const ValueKey('chat-scroll-to-bottom-button'));
+      final buttonFinder = find.byKey(
+        const ValueKey('chat-scroll-to-bottom-button'),
+      );
       expect(buttonFinder, findsOneWidget);
       expect(find.text('回到底部'), findsOneWidget);
 
@@ -206,7 +228,10 @@ void main() {
 
       final endPos = positionOf(tester);
       expect(endPos.pixels, lessThan(2.0));
-      expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('chat-scroll-to-bottom-button')),
+        findsNothing,
+      );
     });
 
     testWidgets('4. 用户手动下滑至距离底部 < 80px 时自动恢复粘底', (tester) async {
@@ -235,9 +260,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [chatApiProvider.overrideWithValue(api)],
-          child: const CupertinoApp(
-            home: ChatPage(sessionId: 's-scroll-back'),
-          ),
+          child: const CupertinoApp(home: ChatPage(sessionId: 's-scroll-back')),
         ),
       );
 
@@ -247,14 +270,20 @@ void main() {
       // 向上滑动 300px
       await tester.drag(scrollable, const Offset(0, 300));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('chat-scroll-to-bottom-button')),
+        findsOneWidget,
+      );
 
       // 向下滑回到底部附近（-300px）
       await tester.drag(scrollable, const Offset(0, -300));
       await tester.pumpAndSettle();
 
       // 按钮消失，恢复粘底状态
-      expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('chat-scroll-to-bottom-button')),
+        findsNothing,
+      );
     });
 
     testWidgets('5. 用户发送新消息后立即打破离底状态并平滑滚底', (tester) async {
@@ -279,18 +308,13 @@ void main() {
           'message_count': 40,
         },
       };
-      api.startChatResult = {
-        'ok': true,
-        'stream_id': 'stream-send-unpin',
-      };
+      api.startChatResult = {'ok': true, 'stream_id': 'stream-send-unpin'};
       api.statusResponse = const ChatStreamStatusResponse(active: false);
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [chatApiProvider.overrideWithValue(api)],
-          child: const CupertinoApp(
-            home: ChatPage(sessionId: 's-send-unpin'),
-          ),
+          child: const CupertinoApp(home: ChatPage(sessionId: 's-send-unpin')),
         ),
       );
 
@@ -300,7 +324,10 @@ void main() {
       // 用户上滑离底 600px
       await tester.drag(scrollable, const Offset(0, 600));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('chat-scroll-to-bottom-button')),
+        findsOneWidget,
+      );
 
       api.statusResponse = const ChatStreamStatusResponse(active: true);
 
@@ -321,12 +348,11 @@ void main() {
       await tester.pump();
 
       final endPos = positionOf(tester);
+      expect(endPos.pixels <= 2.0, isTrue, reason: '用户发送新消息后应立即平滑滚底并展示新消息');
       expect(
-        endPos.pixels <= 2.0,
-        isTrue,
-        reason: '用户发送新消息后应立即平滑滚底并展示新消息',
+        find.byKey(const ValueKey('chat-scroll-to-bottom-button')),
+        findsNothing,
       );
-      expect(find.byKey(const ValueKey('chat-scroll-to-bottom-button')), findsNothing);
     });
   });
 }
