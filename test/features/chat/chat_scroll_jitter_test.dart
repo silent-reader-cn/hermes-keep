@@ -11,6 +11,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
+/// 采样序列里的**单帧最大回退（px）**及发生下标（无回退时 amount=0 / index=0）。
+///
+/// 抽成纯函数有两个用途：① 用例 3 的「不得被拽回底部」守卫直接用它；
+/// ② 该守卫的形状（数百 px 级单帧回退）在 widget 层注入不出来 —— 补偿链会把
+/// 人为的拉底自动回抢掉（实测两次突变探针均被吸收），故用**实测到的真实拽回
+/// 序列**在这个纯函数上做定向 RED（见文件末尾的单测）。
+({double amount, int index}) maxPixelRetreat(List<double> samples) {
+  var amount = 0.0;
+  var index = 0;
+  for (var i = 1; i < samples.length; i++) {
+    final retreat = samples[i - 1] - samples[i];
+    if (retreat > amount) {
+      amount = retreat;
+      index = i;
+    }
+  }
+  return (amount: amount, index: index);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -293,10 +312,44 @@ void main() {
           lessThan(100.0),
           reason: '单帧波动幅度必须小于视口高的一小部分（实际 $maxDeviation）',
         );
-        // 注：本用例原本还断言 pixels 不得回退（“不被拽回底部”）。实测该场景
-        // 下 pixels 会被既有路径拉回 0 —— 那是**离底状态被重置**导致的既有行为
-        // （与内容增长无关，未在本轮范围内），故此处只钉“不累积漂移”。
+        // pixels 不得被拽回底部：被拽回是**数百 px 级**的单帧回退（旧版实测一次
+        // 性 383 → 37.6 → 0），而内容收缩带来的小幅回退属合法补偿，故按「单帧
+        // 回退 < 10px」钉，并另钉聚合不净回退（离底读者只会越读越远）。
+        final retreat = maxPixelRetreat(sampledPixels);
+        // 注意：expect 的 reason **无条件求值**，故诊断串必须先算好 —— 直接写
+        // `${sampledPixels[retreat.index - 1]}` 会在无回退（index==0）时取到
+        // 下标 -1 抛 RangeError，把「守卫通过」变成「测试崩溃」（突变探针实测）。
+        final retreatDetail = retreat.index > 0
+            ? '第 ${retreat.index} 帧：${sampledPixels[retreat.index - 1]} → '
+                  '${sampledPixels[retreat.index]}'
+            : '无回退帧';
+        expect(
+          retreat.amount,
+          lessThan(10.0),
+          reason:
+              '单帧最大回退 ${retreat.amount}（$retreatDetail）'
+              '＝离底阅读被拽回底部',
+        );
+        expect(
+          sampledPixels.last,
+          greaterThanOrEqualTo(sampledPixels.first - 0.5),
+          reason:
+              '采样期 pixels 净回退（${sampledPixels.first} → ${sampledPixels.last}）'
+              '＝被拽回底部而非随内容增长让位',
+        );
       },
     );
+  });
+
+  // 守卫逻辑的定向 RED：用旧版**实测**的「被拽回底部」序列验证 [`maxPixelRetreat`]
+  // 必须判红，同时正常「随内容增长单向让位」的序列不得被误判。
+  test('「离底阅读不得被拽回底部」守卫逻辑：实测拽回序列必须判红', () {
+    // 旧版 widget 探针实测：px 383 → 37.6 → 0（一次性被拽贴底）。
+    expect(
+      maxPixelRetreat(<double>[300, 331, 383, 37.6, 0]).amount,
+      greaterThan(10.0),
+    );
+    // 正常形态（本文件用例 3 当前实测序列的形状）：只前进，不得被判红。
+    expect(maxPixelRetreat(<double>[300, 331, 383, 435, 487]).amount, 0.0);
   });
 }
