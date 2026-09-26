@@ -13,6 +13,7 @@ import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'insights_providers.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 /// 用量统计页（对齐 Hermex InsightsView 的展示形态）。
 ///
@@ -47,7 +48,7 @@ class InsightsPage extends ConsumerWidget {
               child: const Icon(CupertinoIcons.arrow_clockwise),
             ),
           ),
-          CupertinoSliverRefreshControl(
+          AppRefreshControl(
             onRefresh: () =>
                 ref.read(insightsControllerProvider.notifier).refresh(),
           ),

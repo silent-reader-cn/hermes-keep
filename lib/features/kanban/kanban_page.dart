@@ -13,6 +13,7 @@ import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'kanban_providers.dart';
 import '../../app/widgets/hermes_page_route.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 // Dark-only hierarchy: page #000000 -> column #111113 -> card #1C1C1E.
 // Column/card Michelson contrast is 0.348. Decorative #3A3A3C hairlines
@@ -181,7 +182,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             ),
           ),
           // 刷新指示器必须排在所有 SliverToBoxAdapter 之前（对齐会话列表页）。
-          CupertinoSliverRefreshControl(onRefresh: _onRefresh),
+          AppRefreshControl(onRefresh: _onRefresh),
           ..._buildContentSlivers(async, state),
         ],
       ),

@@ -14,6 +14,7 @@ import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'add_workspace_sheet.dart';
 import 'workspace_manager_providers.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 /// 工作区管理页（路由 `/workspaces`，对齐 Hermes WebUI 工作区注册表面板）。
 ///
@@ -95,7 +96,7 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
               child: const Icon(CupertinoIcons.add),
             ),
           ),
-          CupertinoSliverRefreshControl(
+          AppRefreshControl(
             onRefresh: () =>
                 ref.read(workspaceManagerControllerProvider.notifier).refresh(),
           ),

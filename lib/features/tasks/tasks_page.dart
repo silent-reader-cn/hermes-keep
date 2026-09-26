@@ -15,6 +15,7 @@ import '../../l10n/app_localizations.dart';
 import '../settings/settings_surfaces.dart';
 import '../shared/app_back_button.dart';
 import 'tasks_providers.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 /// 任务状态文案（运行中 / 已暂停 / 已停用 / 出错 / 需关注 / 正常）。
 ///
@@ -120,7 +121,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             ),
           ),
           // 刷新指示器必须排在所有 SliverToBoxAdapter 之前（对齐会话列表页）。
-          CupertinoSliverRefreshControl(onRefresh: _onRefresh),
+          AppRefreshControl(onRefresh: _onRefresh),
           ..._buildContentSlivers(async, state),
         ],
       ),

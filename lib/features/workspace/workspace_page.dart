@@ -17,6 +17,7 @@ import '../shared/app_back_button.dart';
 import '../workspace_manager/file_preview_page.dart';
 import 'workspace_providers.dart';
 import '../../app/widgets/hermes_page_route.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 /// 文件选择结果（平台通道后置：生产环境暂未接入 file picker，测试可注入）。
 class WorkspacePickedFile {
@@ -182,7 +183,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               ],
             ),
           ),
-          CupertinoSliverRefreshControl(
+          AppRefreshControl(
             onRefresh: () => ref.read(provider.notifier).refresh(),
           ),
           _PathHeader(

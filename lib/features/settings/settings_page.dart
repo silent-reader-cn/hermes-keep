@@ -45,6 +45,7 @@ import 'settings_subpages.dart';
 import 'settings_surfaces.dart';
 import 'smooth_streaming_settings.dart';
 import 'tool_group_settings.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 /// 设置页（app_shell_spec.md §3 `/settings`）。
 ///
@@ -1978,7 +1979,7 @@ class _ModelPickerPage extends ConsumerWidget {
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              CupertinoSliverRefreshControl(
+              AppRefreshControl(
                 onRefresh: () => ref
                     .read(settingsControllerProvider.notifier)
                     .refreshModels(),

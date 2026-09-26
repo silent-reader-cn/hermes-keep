@@ -12,6 +12,7 @@ import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'git_branch_tree.dart';
 import 'git_providers.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 /// 会话工作区 Git 面板（对齐 Hermex GitWorkspaceView 的展示形态）。
 ///
@@ -65,7 +66,7 @@ class _GitPageState extends ConsumerState<GitPage> {
             // 操作结果横幅：固定在导航栏底部，任何滚动位置都可见。
             bottom: _buildActionBanner(state),
           ),
-          CupertinoSliverRefreshControl(
+          AppRefreshControl(
             onRefresh: () => ref
                 .read(gitControllerProvider(widget.sessionId).notifier)
                 .refresh(),

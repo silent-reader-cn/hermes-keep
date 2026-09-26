@@ -16,6 +16,7 @@ import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
 import 'memory_api.dart';
 import 'memory_providers.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 enum _MemoryTab { memory, user, soul, projectContext }
 
@@ -135,7 +136,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
               child: const Icon(CupertinoIcons.arrow_clockwise),
             ),
           ),
-          CupertinoSliverRefreshControl(
+          AppRefreshControl(
             onRefresh: () =>
                 ref.read(memoryControllerProvider.notifier).refresh(),
           ),

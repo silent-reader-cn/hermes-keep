@@ -35,6 +35,7 @@ import 'session_list_providers.dart';
 import 'session_list_shell_requests.dart';
 import 'session_list_utility_rows.dart';
 import 'session_row_subtitle_settings.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
 ///
@@ -215,7 +216,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 // 注意：刷新指示器必须排在所有 SliverToBoxAdapter 之前
                 // （视口会把 overscroll 逐级分给前面的 box sliver，导致
                 // 指示器拿不到负 overlap 而无法触发）。
-                CupertinoSliverRefreshControl(onRefresh: _onRefresh),
+                AppRefreshControl(onRefresh: _onRefresh),
                 if (widget.showUtilityRows)
                   SliverToBoxAdapter(child: _buildSearchBar()),
                 if (widget.showUtilityRows && !isSearchMode && isWide)

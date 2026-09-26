@@ -13,6 +13,7 @@ import '../../l10n/app_localizations.dart';
 import '../settings/settings_surfaces.dart';
 import '../shared/app_back_button.dart';
 import 'skills_providers.dart';
+import '../../app/widgets/app_refresh_control.dart';
 
 /// 技能浏览页（对齐 Hermex SkillsView）。
 ///
@@ -74,7 +75,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               child: const Icon(CupertinoIcons.arrow_clockwise),
             ),
           ),
-          CupertinoSliverRefreshControl(
+          AppRefreshControl(
             onRefresh: () =>
                 ref.read(skillsControllerProvider.notifier).refresh(),
           ),
