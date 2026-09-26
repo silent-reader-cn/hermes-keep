@@ -1493,3 +1493,20 @@ Future<void> resumeCompressionIfRunning();
 - 已过：`flutter analyze` 零告警；全量 `flutter test` **5093 通过 / 8 skipped**（口径：11 个文件改动仅换控件 + 单文件新增）。
 - **待主人**：① 空态引导页选档 ② 聊天正文选档（或指出「右侧正文」另有所指）③ 刷新指示器是否换档（12 / 20）④ 真机复验下拉手感与观感。
 - 佐证图（本地工件，未入库）：`.shots/wide-typo-01..05*.png`。
+
+### 追加（2026-09-27 凌晨）：B 档已落码 + B/C 真渲染取证
+
+- **B 档已实现并提交**（`a76b5dd`）：空态引导页 64/20/14/17 → **52/17/13/15**（间距 14/6/20）；
+  聊天正文宽屏 **15 → 13.5pt、行高 1.4 → 1.5**，落在 `markdown_styles.dart` 的
+  `markdownBodyFontSizeFor` / `markdownBodyLineHeightFor`（阈值同 `kAdaptiveBreakpoint=900`），
+  标题阶梯（body+5/+3/+1）与表格字号（body−1）随正文派生 —— **窄屏逐像素不变**。
+  守卫：`test/app/shell/light_surfaces_test.dart` 原把空态字号钉在 14（旧行为），已改钉新档位 + 补图标 52 断言。
+- **真渲染口径**：仓内截图工装 `README_SHOTS=1 README_DARK=1 flutter test test/screenshots/readme_shots_test.dart --update-goldens --plain-name 宽屏`
+  （2560×1600 / DPR 2 = 1280×800 逻辑，MiSans 真字体）。产物直指 `docs/screenshots/`（README 图），
+  故取图后 `git checkout -- docs/screenshots` 还原，**不污染 README 基线**；C 档同理用临时补丁渲染后
+  `git checkout` 三个源码文件还原（渲完工作树回到 B）。
+- 取证件（本地工件，未入库）：`.shots/render-{B,C}-wide-{empty,chat}-dark.png`。
+- **待主人拍板**：① 空态引导页 B / C（C＝36/15/12.5 + 蓝色文字链，无填充块）
+  ② 聊天正文 B / C（C＝13pt/1.55 + **列宽上限 640 居中**，已实测渲染）
+  ③ 刷新指示器 16dp 是否维持（或换 12/20）。
+- 收口前待办：改档定稿后**刷新 README 双语文截图**（`docs/screenshots/wide-*.png` 现为改动前基线）。
