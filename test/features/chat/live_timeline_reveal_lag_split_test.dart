@@ -33,9 +33,19 @@ import '../../helpers/in_memory_secure_storage.dart';
 ///    ⇒ 保住 #62 语义（空白不是分隔符）且让「存在 text 断点 ⇔ 到达过内容性正文」成为不变量；
 /// 2. `chat_models.dart` `buildLiveTimelineEntries`：text 断点**无条件 flush**
 ///    （仅「是否渲染该 text 条目」仍看已 reveal 文本，文字随后填进槽位）。
+///
+/// #162 补充（时机层，不推翻上面两条）：「无条件 flush」保住了**边界真相**，但卡会
+/// 抢跑占位 —— 正文还在打字时后续工具卡已就位，未揭示的正文随后补进卡与卡之间的
+/// 缝隙（凭空插入 + 向下推挤，主人现象）。故新增**正文前沿闸门**：某段正文未吐完
+/// 时，其后的工具/思考条目只挂起**展示**，卡片数量与分组一律不变。
+/// 于是本文件的期望分两层：
+///   · 打字机未追上（冻结中 / 刚到达）→ 未揭示正文之后的卡**尚未**上屏；
+///   · 打字机追上后 → 边界与 #147 完全一致（仍是各自成卡，绝不并成一张大卡）。
+///
+/// 上面第 3 条防回归用例（纯空白 token 不切卡）不受闸门影响：它已先 elapse 到追平。
 void main() {
   group('#147 live 切卡判据与 reveal 解耦', () {
-    test('后台冻结：正文/工具交替到达 → 冻结中即三张卡，正文随后填入不回改边界', () {
+    test('后台冻结：正文/工具交替到达 → 冻结中全挂起，回前台铺全文后三张卡齐现且边界不变', () {
       fakeAsync((async) {
         final session = _LiveSession.start(async);
 
@@ -51,10 +61,12 @@ void main() {
           reason: '冻结期正文应只入 pending（未 reveal）',
         );
         expect(state.liveToolCalls.length, 3);
+        // 冻结中屏幕不可见；闸门挂起正文之后的卡，但边界真相（三张、不并卡）
+        // 会在回前台铺全文后兑现 —— 见下面两步断言。
         expect(
           _shape(session.entries),
-          'T1@2 | T1@4 | T1@6',
-          reason: '冻结中正文一个字都没吐，但卡片边界须按事件真相切好（不得并成一张大卡）',
+          '',
+          reason: '冻结中正文一个字都没吐 ⇒ 前沿闸门挂起其后所有工具卡',
         );
 
         // 回前台：积压一次性铺全文 → 三个正文段填进各自的槽位，卡片边界不变。
@@ -74,7 +86,7 @@ void main() {
       });
     });
 
-    test('前台 reveal 滞后：token 已全到但打字机未吐 → 同样当场三张卡', () {
+    test('前台 reveal 滞后：token 已全到但打字机未吐 → 全书挂起，追平后逐段放行', () {
       fakeAsync((async) {
         final session = _LiveSession.start(async);
 
@@ -83,8 +95,16 @@ void main() {
 
         expect(
           _shape(session.entries),
-          'T1@2 | T1@4 | T1@6',
-          reason: 'reveal 滞后（非后台）同样不得并卡：#147 非后台独有',
+          '',
+          reason: 'token 已全到但打字机未吐 ⇒ 闸门挂起，不再抢跑占位',
+        );
+
+        // 16ms 合并窗关闭后：正文进了 reveal 队列但一个字都没落地，仍应挂起。
+        async.elapse(const Duration(milliseconds: 20));
+        expect(
+          _shape(session.entries),
+          '',
+          reason: '已入队但未揭示 ⇒ 仍挂起（前沿未推进）',
         );
 
         async.elapse(const Duration(seconds: 5));
@@ -132,8 +152,8 @@ void main() {
 
         expect(
           _shape(session.entries),
-          'T1@1 | T1@3',
-          reason: '正文未 reveal 也照切（它是事件真相），只是此刻还没字可渲染',
+          'T1@1',
+          reason: '第一张卡在未揭示正文之前 ⇒ 立即放行；第二张在正文之后 ⇒ 挂起待吐完',
         );
 
         async.elapse(const Duration(seconds: 5));

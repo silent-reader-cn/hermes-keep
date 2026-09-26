@@ -632,6 +632,11 @@ final liveTimelineProvider = Provider.family<List<LiveTimelineEntry>?, String>((
     liveToolCalls: state.liveToolCalls,
     hideReasoning: hideReasoning,
     toolCoalesce: toolCoalesce,
+    // 打字机水位：队列仍有待揭文本（或尚在 16ms 合并窗内）⇒ 末段正文未吐完，
+    // 其后的工具/思考条目挂起（见 buildLiveTimelineEntries「正文前沿闸门」）。
+    hasUnrevealedText:
+        !state.isRevealQueueEmpty ||
+        state.pendingAssistantTokenChunks.isNotEmpty,
   );
 });
 

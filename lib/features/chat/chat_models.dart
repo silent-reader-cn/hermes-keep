@@ -538,6 +538,18 @@ List<LiveTimelineEntry> fallbackLiveTimelineEntries({
 /// （或 diff-merge 吸收后 content 变短被 clamp 成零长）。若把空段从列表里
 /// 丢掉，后续段就会与前一个断点错配 —— 有内容的段被提前 flush，表现为
 /// 「相邻工具卡不该切却切了（变成多张 tools）」+ 正文提前错位渲染。
+///
+/// **正文前沿闸门（打字机水位）**：[hasUnrevealedText] 表示「已到达但尚未被
+/// 打字机揭示」的正文仍存在。只要某段正文还没吐完，它在时间线上**之后**的
+/// 条目（工具/思考）一律挂起不产出 —— 否则卡会抢跑占位，未揭示的正文随后
+/// 才补进卡与卡之间的缝隙，表现为「凭空插入 + 向下推挤」（主人现象：打字机
+/// 还在打 text1，tools2/tools3 已经就位，text2 事后插进两张卡之间）。
+///
+/// 闸门只推迟**展示时机**，绝不改动卡片数量与分组 —— #147 的核心不变量
+/// （边界按事件真相切，不得因 reveal 滞后并成一张大卡）保持原样。
+/// 非末段终点 = 下一个 text 断点起点（精确）；末段终点不可知，由
+/// [hasUnrevealedText] 表达。挂起是单调的：一旦某段未吐完，其后条目必然也在
+/// 未揭示正文之后，故无需回退判断。
 List<LiveTimelineEntry> buildLiveTimelineEntries({
   required String streamingId,
   required String content,
@@ -546,6 +558,7 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
   required List<ToolCall> liveToolCalls,
   required bool hideReasoning,
   required bool toolCoalesce,
+  required bool hasUnrevealedText,
 }) {
   try {
     // 按 kind 分组切片边界。
@@ -656,6 +669,8 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
     var textIndex = 0;
     var thinkIndex = 0;
     var toolIndex = 0;
+    // 正文前沿闸门：true = 打字机还没吐完当前正文段，其后的条目一律挂起。
+    var blocked = false;
 
     void flushBlock() {
       if (pendingCallBlock.isEmpty) return;
@@ -702,6 +717,15 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
               ? content.substring(segStart, segEnd)
               : '';
           final hasVisibleText = segText.trim().isNotEmpty;
+          // 前沿推进：本段是否已被打字机吐完。非末段用下一个 text 断点起点
+          // 精确判定；末段终点不可知，只能由 hasUnrevealedText 表达。
+          final nextRawStart = textIndex + 1 < textStarts.length
+              ? textStarts[textIndex + 1]
+              : null;
+          final rawEnd =
+              nextRawStart ??
+              (hasUnrevealedText ? content.length + 1 : content.length);
+          blocked = content.length < rawEnd;
           if (!toolCoalesce && (point.contentful || hasVisibleText)) {
             flushBlock();
           }
@@ -722,7 +746,7 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
           final thinkText = thinkIndex < thinkSegments.length
               ? thinkSegments[thinkIndex]
               : '';
-          if (!hideReasoning && thinkText.isNotEmpty) {
+          if (!blocked && !hideReasoning && thinkText.isNotEmpty) {
             pendingCallBlock.add((
               seq: point.sequence,
               call: ToolCall.thinking(thinkText),
@@ -730,7 +754,9 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
           }
           thinkIndex++;
         case LiveSegmentKind.tools:
-          if (toolIndex < toolSegments.length) {
+          // 挂起时不累积，但 toolIndex 必须照常推进 —— 段与断点一一对应，
+          // 漏递增会让后续段整段错配（#62 踩过的坑）。
+          if (!blocked && toolIndex < toolSegments.length) {
             for (final call in toolSegments[toolIndex]) {
               pendingCallBlock.add((seq: point.sequence, call: call));
             }
@@ -738,7 +764,8 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
           toolIndex++;
       }
     }
-    flushBlock();
+    // 挂起中不 flush：末尾累积的条目同样位于未揭示正文之后，交下一次重建放行。
+    if (!blocked) flushBlock();
     return entries;
   } catch (_) {
     // 顶层异常兜底：降级为单段呈现，确保不抛出到 Widget build 造成黑屏。

@@ -3736,6 +3736,11 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _revealTimer = null;
     _revealQueue.clear();
     _revealQueueStart = null;
+    // 队列已清空 ⇒ 同步清掉「有待揭正文」标志：渲染层的正文前沿闸门据此判定
+    // 末段是否吐完，留着陈旧 true 会把其后的工具卡永久挂起（收尾/中断路径）。
+    if (!state.isRevealQueueEmpty) {
+      state = state.copyWith(isRevealQueueEmpty: true);
+    }
     _lastContextPollTime = null;
     _isContextPolling = false;
   }

@@ -48,6 +48,8 @@ void main() {
       liveToolCalls: [tool('t1'), tool('t2')],
       hideReasoning: false,
       toolCoalesce: false,
+      // hand-fed 断点：本文件只验段/断点对齐，视为打字机已追平。
+      hasUnrevealedText: false,
     );
 
     final cards = entries
@@ -97,6 +99,8 @@ void main() {
       liveToolCalls: [tool('t1'), tool('t2')],
       hideReasoning: false,
       toolCoalesce: false,
+      // hand-fed 断点：本文件只验段/断点对齐，视为打字机已追平。
+      hasUnrevealedText: false,
     );
 
     expect(
@@ -133,6 +137,8 @@ void main() {
       liveToolCalls: [tool('t1'), tool('t2')],
       hideReasoning: false,
       toolCoalesce: false,
+      // hand-fed 断点：本文件只验段/断点对齐，视为打字机已追平。
+      hasUnrevealedText: false,
     );
 
     expect(entries.where((e) => e.kind == LiveSegmentKind.tools).length, 1);
@@ -171,6 +177,8 @@ void main() {
       liveToolCalls: [tool('t1'), tool('t2')],
       hideReasoning: false,
       toolCoalesce: true,
+      // hand-fed 断点：视为打字机已追平（前沿闸门不参与本用例）。
+      hasUnrevealedText: false,
     );
 
     final cards = entries
