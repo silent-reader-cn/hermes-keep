@@ -2036,6 +2036,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         : _now().difference(lastActivity);
     // 直接铺全文：先入队（queue）的文本在前、pending 在后，保持到达顺序。
     _flushPendingRevealToFullText();
+    // 后台期间 reasoning 只有「进缓冲」没有「落账」：`_scheduleMerge`（:2109）
+    // 被 `_appPaused` 挡下，故 pendingReasoningChunks 一路积压、liveReasoningText
+    // 原地停滞；而时间线断点游标 `_currentReasoningContent()`（:2311）取的是
+    // 「已 flush + 待 flush」全量，断点于是跑到了数据前面。切片器只读
+    // liveReasoningText（chat_providers.dart），越界段被 clamp 成空串、
+    // 「渲染端不产生子行」（chat_models.dart）—— 后台期间新增的思考子卡整段
+    // 静默消失，直到下一个 SSE 事件触发 merge tick 才一次性补回。
+    // 与正文同口径：resumed 即统一铺全文，两侧对称。
+    _flushReasoningChunks();
     _startRevealTimerIfNeeded();
     // 看门狗基线重新校准：锁屏冻结期间的时间差不参与超时判定。
     _lastProgress = _now();
