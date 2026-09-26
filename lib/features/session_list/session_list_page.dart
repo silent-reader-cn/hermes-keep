@@ -826,8 +826,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 Text(
                   _sectionTitle(context, section.title),
                   style: TextStyle(
-                    // #153：随正文基准一起上调（11.5 → 13）。
-                    fontSize: 13.0,
+                    // #161：回到设计稿口径（11）。#153 曾上调到 13。
+                    fontSize: 11.0,
                     fontWeight: FontWeight.bold,
                     color: secondaryColor,
                   ),
@@ -845,7 +845,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   child: Text(
                     '${section.sessions.length}',
                     style: TextStyle(
-                      fontSize: 11.5,
+                      // #161：随侧栏整体回调（设计稿 .grp-h .ct = 10）。
+                      fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                       color: secondaryColor,
                     ),
@@ -1898,8 +1899,10 @@ class _SessionRowState extends State<_SessionRow> {
                           child: _highlightedSpan(
                             context,
                             _displayTitle(context, widget.session),
-                            // #153：对齐 markdown 正文基准（kMarkdownBodyFontSize=15）。
-                            style: const TextStyle(fontSize: 15.0),
+                            // #161：回到设计稿口径（12.5）。#153 曾把侧栏统一抬到
+                            // 15（对齐正文基准），主人实测「比设计稿大一圈」⇒ 回调；
+                            // 窄屏分支（下方 17）保持不动。
+                            style: const TextStyle(fontSize: 12.5),
                           ),
                         )
                       else
@@ -1937,7 +1940,7 @@ class _SessionRowState extends State<_SessionRow> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: 10.5,
                             color: secondaryColor,
                           ),
                         ),

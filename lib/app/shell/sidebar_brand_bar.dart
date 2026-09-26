@@ -160,8 +160,10 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             // #153：字号对齐 markdown 正文基准（15），原 12.5 偏小。
+                            // #161：回到设计稿口径（12.5）—— #153 曾把侧栏字号统一
+                            // 抬到 15，主人实测「比设计稿大一圈」，此处回调。
                             style: TextStyle(
-                              fontSize: 15.0,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                               color: LightSurfaces.resolve(
                                 context,
@@ -178,7 +180,8 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 10.5,
+                                // 设计稿 .brand .sub2 = 10。
+                                fontSize: 10.0,
                                 height: 1.25,
                                 color: LightSurfaces.resolve(
                                   context,

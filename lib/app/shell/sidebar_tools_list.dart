@@ -198,8 +198,9 @@ class _ToolRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        // #153：对齐 markdown 正文基准（15），原 12.5 偏小。
-                        fontSize: 15.0,
+                        // #161：回到设计稿口径（12.5）。#153 曾统一抬到 15，
+                        // 主人实测侧栏比设计稿大一圈，此处回调。
+                        fontSize: 12.5,
                         color: selected
                             ? activeFg
                             : LightSurfaces.resolve(
@@ -229,7 +230,7 @@ class _ToolRow extends StatelessWidget {
                       child: Text(
                         '$badge',
                         style: TextStyle(
-                          fontSize: 11.5,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.w600,
                           color: inactiveFg,
                         ),
