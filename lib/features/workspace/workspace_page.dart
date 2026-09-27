@@ -7,17 +7,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/shell/android_back_interceptor.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/app_scrollbar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import '../workspace_manager/file_preview_page.dart';
 import 'workspace_providers.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../app/widgets/app_refresh_control.dart';
+
+/// 宽屏左栏（文件树）固定宽 340（批 4 设计稿 §P3「左 340 文件树 + 右预览」）。
+///
+/// 与批 3 的左导航栏（220）同族但更宽：文件树每行要放下「名称 + 大小/时间」
+/// 两段，340 是清单里能容纳最长一个仓库文件名的档位；右栏是**工具型**内容
+/// （代码），故铺满、不设上限（G1「工具型铺满」）。
+const double kWideWorkspaceTreeWidth = 340.0;
 
 /// 文件选择结果（平台通道后置：生产环境暂未接入 file picker，测试可注入）。
 class WorkspacePickedFile {
@@ -97,6 +106,37 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   /// 待删除确认的条目（非空 = 删除确认弹窗打开中）。
   WorkspaceEntry? _pendingDelete;
 
+  /// 宽屏右栏当前预览的条目（null = 未选，右栏显示占位）。
+  ///
+  /// 窄屏这条状态不参与渲染（窄屏仍是「文件树 → 整页预览」原样）。
+  WorkspaceEntry? _widePreviewEntry;
+
+  /// 宽屏右栏「刷新」自增令牌：交给 [FilePreviewBody] 触发一次重新加载。
+  int _widePreviewReloadToken = 0;
+
+  /// 宽屏三处常显滚动条（G4）控制器：左树纵向 / 右栏纵向 / 右栏横向。
+  final ScrollController _treeScrollController = ScrollController();
+  final ScrollController _previewVerticalController = ScrollController();
+  final ScrollController _previewHorizontalController = ScrollController();
+
+  /// 条目标识（路径优先，回退名称）：宽屏选中态与预览键都用它。
+  static String _entryIdOf(WorkspaceEntry entry) =>
+      entry.path ?? entry.name ?? '';
+
+  /// 该条目是否正是右栏预览中的文件。
+  bool _isPreviewing(WorkspaceEntry entry) {
+    final current = _widePreviewEntry;
+    if (current == null) return false;
+    final id = _entryIdOf(entry);
+    return id.isNotEmpty && id == _entryIdOf(current);
+  }
+
+  /// 宽屏：把文件送进右栏预览（不离开列表 —— 换下一个文件不必先返回）。
+  void _selectForPreview(WorkspaceEntry entry) {
+    if (_isPreviewing(entry)) return;
+    setState(() => _widePreviewEntry = entry);
+  }
+
   /// Android 系统返回拦截：非根目录时消费返回 = 上一级目录；根目录放行
   /// （交还 shell 走 pop 退出页面）。仅当本页为当前顶层路由（文件预览页 /
   /// 弹窗未覆盖）且列表状态就绪时才消费。
@@ -127,6 +167,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     // 注册的同一引用。
     AndroidBackInterceptorRegistry.unregister(_handleAndroidBack);
     _renameController.dispose();
+    _treeScrollController.dispose();
+    _previewVerticalController.dispose();
+    _previewHorizontalController.dispose();
     super.dispose();
   }
 
@@ -137,6 +180,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     final async = ref.watch(provider);
     final state = async.valueOrNull;
     final crumbs = ref.watch(workspaceBreadcrumbsProvider(widget.sessionId));
+    // 宽屏（≥900）：左 340 文件树 + 右预览（工具型铺满）；窄屏逐像素不变。
+    final isWide = isWideLayout(context);
 
     ref.listen<AsyncValue<WorkspaceState>>(provider, (previous, next) {
       final error = next.valueOrNull?.actionError;
@@ -186,29 +231,14 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           AppRefreshControl(
             onRefresh: () => ref.read(provider.notifier).refresh(),
           ),
-          _PathHeader(
-            crumbs: crumbs,
-            displayPath: state?.displayPath ?? l10n.rootDir,
-            isRefreshing: state?.isRefreshing == true,
-            isFolderDownloading: state?.isFolderDownloading == true,
-            errorMessage:
-                state != null &&
-                    state.actionError != null &&
-                    state.entries.isNotEmpty
-                ? state.actionError
-                : null,
-            onRoot: () =>
-                unawaited(ref.read(provider.notifier).navigateToRoot()),
-            onUp: () => unawaited(ref.read(provider.notifier).navigateUp()),
-            onDownloadFolder: () => unawaited(
-              ref.read(provider.notifier).downloadFolder(context: context),
-            ),
-            onRetry: () =>
-                unawaited(ref.read(provider.notifier).retryLastLoad()),
-            onCrumbTap: (crumb) =>
-                unawaited(ref.read(provider.notifier).navigateTo(crumb.path)),
-          ),
-          ..._buildContentSlivers(async, state),
+          // 宽屏（≥900）：左 340 文件树 + 右预览（铺满 + 可横向滚）。
+          // 窄屏（<900）：路径头 + 文件列表长卷 —— 逐像素不变。
+          if (isWide)
+            _buildWideHostSliver(_buildWideBody(async, state, crumbs))
+          else ...[
+            SliverToBoxAdapter(child: _buildPathHeader(state, crumbs)),
+            ..._buildContentSlivers(async, state),
+          ],
         ],
       ),
     );
@@ -238,87 +268,232 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       return [_buildEmptySliver(state)];
     }
 
-    return [
-      SliverToBoxAdapter(
-        child: CupertinoListSection.insetGrouped(
-          dividerMargin: 0,
-          additionalDividerMargin: 0,
-          decoration: CupertinoTheme.brightnessOf(context) == Brightness.dark
-              ? null
-              : BoxDecoration(
-                  color: LightSurfaces.card,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: LightSurfaces.cardBorder,
-                    width: 0.5,
-                  ),
-                ),
-          separatorColor:
-              CupertinoTheme.brightnessOf(context) == Brightness.dark
-              ? null
-              : LightSurfaces.divider,
-          children: [
-            for (final entry in state.entries)
-              _WorkspaceEntryRow(
-                key: ValueKey('workspace-row-${entry.name ?? entry.path}'),
-                entry: entry,
-                busy: state.isBusy(entry.path ?? ''),
-                onTap: () => _onEntryTap(entry),
-                onActions: (anchorKey) =>
-                    unawaited(_showRowActions(entry, anchorKey)),
-              ),
-          ],
-        ),
-      ),
-    ];
+    return [SliverToBoxAdapter(child: _buildEntryList(state, wide: false))];
   }
 
-  Widget _buildErrorSliver(Object? error) {
+  /// 路径头（面包屑 + 根目录/上一级 + 打包下载 + 加载/错误横幅）。
+  ///
+  /// 窄屏由调用点包一层 [SliverToBoxAdapter]（与改动前同构）；宽屏直接挂在
+  /// 左栏顶部（左栏自己就是可滚列，不再需要 sliver）。
+  Widget _buildPathHeader(
+    WorkspaceState? state,
+    List<WorkspaceBreadcrumb> crumbs,
+  ) {
     final l10n = AppLocalizations.of(context);
-    return SliverFillRemaining(
-      hasScrollBody: false,
+    final provider = workspaceControllerProvider(widget.sessionId);
+    return _PathHeader(
+      crumbs: crumbs,
+      displayPath: state?.displayPath ?? l10n.rootDir,
+      isRefreshing: state?.isRefreshing == true,
+      isFolderDownloading: state?.isFolderDownloading == true,
+      errorMessage:
+          state != null && state.actionError != null && state.entries.isNotEmpty
+          ? state.actionError
+          : null,
+      onRoot: () => unawaited(ref.read(provider.notifier).navigateToRoot()),
+      onUp: () => unawaited(ref.read(provider.notifier).navigateUp()),
+      onDownloadFolder: () => unawaited(
+        ref.read(provider.notifier).downloadFolder(context: context),
+      ),
+      onRetry: () => unawaited(ref.read(provider.notifier).retryLastLoad()),
+      onCrumbTap: (crumb) =>
+          unawaited(ref.read(provider.notifier).navigateTo(crumb.path)),
+    );
+  }
+
+  /// 文件/目录行清单（窄屏整页长卷与宽屏左栏共用同一份行）。
+  ///
+  /// [wide] 只影响两件事：选中态高亮、以及「点文件 = 就地预览」而非弹操作菜单。
+  /// 窄屏（`wide: false`）传下去的选择回调恒为 null / 选中恒为 false ——
+  /// 行结构逐字节不变。
+  Widget _buildEntryList(WorkspaceState state, {required bool wide}) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    return CupertinoListSection.insetGrouped(
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
+      decoration: isDark
+          ? null
+          : BoxDecoration(
+              color: LightSurfaces.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+            ),
+      separatorColor: isDark ? null : LightSurfaces.divider,
+      children: [
+        for (final entry in state.entries)
+          _WorkspaceEntryRow(
+            key: ValueKey('workspace-row-${entry.name ?? entry.path}'),
+            entry: entry,
+            busy: state.isBusy(entry.path ?? ''),
+            selected:
+                wide && !entry.isBrowsableDirectory && _isPreviewing(entry),
+            onSelect: wide && !entry.isBrowsableDirectory
+                ? () => _selectForPreview(entry)
+                : null,
+            onTap: () => _onEntryTap(entry),
+            onActions: (anchorKey) =>
+                unawaited(_showRowActions(entry, anchorKey)),
+          ),
+      ],
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // 宽屏双栏（≥900）：左 340 文件树 + 右预览（工具型铺满 + 可横向滚）
+  // -------------------------------------------------------------------------
+
+  /// 双栏宿主：把「剩余视口高度」算准后交给两栏（两栏各自内部滚动）。
+  ///
+  /// 刻意**不用** `SliverFillRemaining`：`hasScrollBody: false` 会向子级要
+  /// intrinsic 高度（子级里含 viewport 时直接抛 `RenderViewport does not
+  /// support returning intrinsic dimensions`），`hasScrollBody: true` 又把该
+  /// sliver 的 scrollExtent 记成「整幅视口高」，外层白白多出一段可滚动距离。
+  /// 显式按 `remainingPaintExtent` 定高，既拿到确定的剩余高度，又让外层
+  /// maxScrollExtent 恰好为 0（下拉刷新靠 overscroll 仍然可用）。
+  Widget _buildWideHostSliver(Widget child) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        return SliverToBoxAdapter(
+          child: SizedBox(
+            height: constraints.remainingPaintExtent,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  /// 宽屏主体：左栏（路径头 + 文件树，固定 [kWideWorkspaceTreeWidth]）
+  /// ＋ 0.5px 发丝分栏线 ＋ 右栏预览（`Expanded` 铺满，不设内容上限）。
+  Widget _buildWideBody(
+    AsyncValue<WorkspaceState> async,
+    WorkspaceState? state,
+    List<WorkspaceBreadcrumb> crumbs,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          key: const ValueKey('workspace-wide-tree'),
+          width: kWideWorkspaceTreeWidth,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                right: BorderSide(
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.divider,
+                    dark: CupertinoColors.separator,
+                  ),
+                  width: 0.5,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildPathHeader(state, crumbs),
+                Expanded(child: _buildWideTree(async, state)),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          key: const ValueKey('workspace-wide-preview-pane'),
+          child: _buildWidePreviewPane(),
+        ),
+      ],
+    );
+  }
+
+  /// 左栏文件树（宽屏）：常显滚动条 + 原行清单。
+  Widget _buildWideTree(
+    AsyncValue<WorkspaceState> async,
+    WorkspaceState? state,
+  ) {
+    if (state == null) {
+      if (async.isLoading) {
+        return const Center(child: CupertinoActivityIndicator(radius: 14));
+      }
+      return _buildErrorView(async.error);
+    }
+    if (state.entries.isEmpty && !state.isRefreshing) {
+      return _buildEmptyView(state);
+    }
+    return AppScrollbar(
+      key: const ValueKey('workspace-wide-tree-scroll'),
+      controller: _treeScrollController,
+      child: SingleChildScrollView(
+        controller: _treeScrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: _buildEntryList(state, wide: true),
+      ),
+    );
+  }
+
+  /// 右栏预览：标题行（文件名 + 刷新 + 下载）＋ 正文。
+  ///
+  /// 正文本就是**工具型**内容（代码）—— 铺满右栏、不设阅读限宽，长行不换行
+  /// 并允许横向滚动（设计稿 §P3「代码铺满右栏、可横向滚」）。
+  Widget _buildWidePreviewPane() {
+    final l10n = AppLocalizations.of(context);
+    final entry = _widePreviewEntry;
+    if (entry == null) {
+      return _buildPreviewPlaceholder(l10n.preview);
+    }
+    final fileName = entry.name ?? entry.path ?? '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildPreviewHeader(entry, fileName),
+        Expanded(child: _buildPreviewBody(entry, fileName)),
+      ],
+    );
+  }
+
+  Widget _buildPreviewHeader(WorkspaceEntry entry, String fileName) {
+    final l10n = AppLocalizations.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.divider,
+              dark: CupertinoColors.separator,
+            ),
+            width: 0.5,
+          ),
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+        child: Row(
           children: [
-            Icon(
-              CupertinoIcons.exclamationmark_triangle,
-              size: 48,
-              color: LightSurfaces.resolve(
-                context,
-                LightSurfaces.textSecondary,
-                dark: CupertinoColors.systemGrey,
+            Expanded(
+              child: Text(
+                fileName,
+                key: const ValueKey('workspace-wide-preview-title'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            AccessibleButton(
+              key: const ValueKey('workspace-wide-preview-refresh'),
+              label: l10n.refreshPreview,
+              onPressed: () => setState(() => _widePreviewReloadToken++),
+              child: const Icon(CupertinoIcons.arrow_clockwise, size: 18),
             ),
-            const SizedBox(height: 6),
-            Text(
-              _errorMessage(error),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: statusRedText.resolveFrom(context),
-              ),
-            ),
-            const SizedBox(height: 20),
-            CupertinoButton.filled(
-              key: const ValueKey('workspace-retry'),
-              color: CupertinoTheme.brightnessOf(context) == Brightness.light
-                  ? LightSurfaces.userDetail
-                  : null,
-              onPressed: () => unawaited(
-                ref
-                    .read(
-                      workspaceControllerProvider(widget.sessionId).notifier,
-                    )
-                    .refresh(),
-              ),
-              child: Text(l10n.retry),
+            const SizedBox(width: 6),
+            AccessibleButton(
+              key: const ValueKey('workspace-wide-preview-download'),
+              label: l10n.download,
+              onPressed: () => unawaited(_onDownload(entry)),
+              child: const Icon(CupertinoIcons.arrow_down_doc, size: 18),
             ),
           ],
         ),
@@ -326,41 +501,178 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     );
   }
 
-  Widget _buildEmptySliver(WorkspaceState state) {
-    final l10n = AppLocalizations.of(context);
-    return SliverFillRemaining(
-      hasScrollBody: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              CupertinoIcons.folder_open,
-              size: 48,
+  Widget _buildPreviewBody(WorkspaceEntry entry, String fileName) {
+    final kind = workspaceFileKindOf(entry);
+    final body = FilePreviewBody(
+      key: ValueKey('workspace-wide-preview-body-${_entryIdOf(entry)}'),
+      fileName: fileName,
+      sizeBytes: entry.size,
+      source: FilePreviewSource.workspaceFile(
+        widget.sessionId,
+        entry.path ?? '',
+      ),
+      onDownload: () => unawaited(_onDownload(entry)),
+      reloadToken: _widePreviewReloadToken,
+    );
+    // 图片 / PDF 自带内滚与缩放：外层再包滚动会与内部手势打架（同预览页口径）。
+    if (kind == WorkspaceFileKind.image || kind == WorkspaceFileKind.pdf) {
+      return body;
+    }
+    // 文本类：纵向常显滚动条 + 横向常显滚动条（长行不换行、可横滚）。
+    // markdown 是**阅读型**流式排版（表格/段落按容器宽度折行），不平移到
+    // 无限宽，故不套横向滚动 —— 与「代码类工具型才不限宽」是同一套分流。
+    final lower = fileName.toLowerCase();
+    final isMarkdown = lower.endsWith('.md') || lower.endsWith('.markdown');
+    final Widget content = (kind == WorkspaceFileKind.text && !isMarkdown)
+        ? AppScrollbar(
+            key: const ValueKey('workspace-wide-preview-hscroll'),
+            controller: _previewHorizontalController,
+            child: SingleChildScrollView(
+              controller: _previewHorizontalController,
+              scrollDirection: Axis.horizontal,
+              child: body,
+            ),
+          )
+        : body;
+    return AppScrollbar(
+      key: const ValueKey('workspace-wide-preview-scroll'),
+      controller: _previewVerticalController,
+      child: SingleChildScrollView(
+        controller: _previewVerticalController,
+        child: content,
+      ),
+    );
+  }
+
+  /// 右栏未选文件时的占位（居中图标 + 文案）。
+  Widget _buildPreviewPlaceholder(String label) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            CupertinoIcons.doc_text,
+            size: 44,
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: CupertinoColors.systemGrey,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            key: const ValueKey('workspace-wide-preview-empty'),
+            style: TextStyle(
+              fontSize: 15,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
-                dark: CupertinoColors.systemGrey,
+                dark: secondaryText,
               ),
             ),
-            const SizedBox(height: 12),
-            Text(l10n.noFiles, style: const TextStyle(fontSize: 17)),
-            const SizedBox(height: 6),
-            Text(
-              state.displayPath,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: LightSurfaces.resolve(
-                  context,
-                  LightSurfaces.textSecondary,
-                  dark: secondaryText,
-                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorSliver(Object? error) {
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: _buildErrorView(error),
+    );
+  }
+
+  /// 加载失败视图（宽屏左栏与窄屏整页共用同一份内容）。
+  Widget _buildErrorView(Object? error) {
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            CupertinoIcons.exclamationmark_triangle,
+            size: 48,
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: CupertinoColors.systemGrey,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            l10n.loadFailed,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _errorMessage(error),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: statusRedText.resolveFrom(context),
+            ),
+          ),
+          const SizedBox(height: 20),
+          CupertinoButton.filled(
+            key: const ValueKey('workspace-retry'),
+            color: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? LightSurfaces.userDetail
+                : null,
+            onPressed: () => unawaited(
+              ref
+                  .read(workspaceControllerProvider(widget.sessionId).notifier)
+                  .refresh(),
+            ),
+            child: Text(l10n.retry),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptySliver(WorkspaceState state) {
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: _buildEmptyView(state),
+    );
+  }
+
+  /// 空目录视图（宽屏左栏与窄屏整页共用同一份内容）。
+  Widget _buildEmptyView(WorkspaceState state) {
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            CupertinoIcons.folder_open,
+            size: 48,
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: CupertinoColors.systemGrey,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(l10n.noFiles, style: const TextStyle(fontSize: 17)),
+          const SizedBox(height: 6),
+          Text(
+            state.displayPath,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -422,8 +734,15 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         .download(entry, context: context);
   }
 
-  /// 打开文件预览页（文本/图片走 /api/file、/api/file/raw）。
+  /// 打开文件预览。
+  ///
+  /// 窄屏：push 整页预览（原样）。宽屏：预览**就地**进右栏 —— 不再整页覆盖，
+  /// 换下一个文件不必先返回（设计稿 §P3 的核心诉求）。
   void _openPreview(WorkspaceEntry entry) {
+    if (isWideLayout(context)) {
+      _selectForPreview(entry);
+      return;
+    }
     Navigator.of(context).push(
       HermesPageRoute<void>(
         builder: (context) =>
@@ -644,19 +963,193 @@ class _PathHeader extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final isAtRoot = crumbs.length == 1;
-    return SliverToBoxAdapter(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(
+            children: [
+              Text(
+                l10n.locationLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  displayPath,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              CupertinoButton(
+                key: const ValueKey('workspace-root'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                disabledColor: CupertinoColors.quaternaryLabel.resolveFrom(
+                  context,
+                ),
+                onPressed: isAtRoot ? null : onRoot,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.house,
+                      size: 14,
+                      color: isDark
+                          ? null
+                          : (isAtRoot
+                                ? LightSurfaces.textSecondary
+                                : LightSurfaces.userDetail),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      l10n.rootDir,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? null
+                            : (isAtRoot
+                                  ? LightSurfaces.textSecondary
+                                  : LightSurfaces.userDetail),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              CupertinoButton(
+                key: const ValueKey('workspace-up'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                disabledColor: CupertinoColors.quaternaryLabel.resolveFrom(
+                  context,
+                ),
+                onPressed: isAtRoot ? null : onUp,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.arrow_up,
+                      size: 14,
+                      color: isDark
+                          ? null
+                          : (isAtRoot
+                                ? LightSurfaces.textSecondary
+                                : LightSurfaces.userDetail),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      l10n.parentDir,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? null
+                            : (isAtRoot
+                                  ? LightSurfaces.textSecondary
+                                  : LightSurfaces.userDetail),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (isFolderDownloading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: CupertinoActivityIndicator(radius: 9),
+                )
+              else
+                AccessibleButton(
+                  key: const ValueKey('workspace-download-folder'),
+                  label: l10n.downloadFolderZip,
+                  padding: EdgeInsets.zero,
+                  onPressed: onDownloadFolder,
+                  child: const Icon(CupertinoIcons.arrow_down_doc, size: 16),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < crumbs.length; i++) ...[
+                        if (i > 0)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Icon(
+                              CupertinoIcons.chevron_right,
+                              size: 10,
+                              color: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.textSecondary,
+                                dark: CupertinoColors.tertiaryLabel,
+                              ),
+                            ),
+                          ),
+                        CupertinoButton(
+                          key: ValueKey('workspace-crumb-${crumbs[i].path}'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          disabledColor: CupertinoColors.quaternaryLabel
+                              .resolveFrom(context),
+                          onPressed: crumbs[i].path == crumbs.last.path
+                              ? null
+                              : () => onCrumbTap(crumbs[i]),
+                          child: Text(
+                            crumbs[i].title,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? null
+                                  : (crumbs[i].path == crumbs.last.path
+                                        ? LightSurfaces.textSecondary
+                                        : LightSurfaces.userDetail),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (isRefreshing)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                const CupertinoActivityIndicator(radius: 9),
+                const SizedBox(width: 8),
                 Text(
-                  l10n.locationLabel,
+                  l10n.loadingIndicator,
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                     color: LightSurfaces.resolve(
                       context,
                       LightSurfaces.textSecondary,
@@ -664,176 +1157,27 @@ class _PathHeader extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    displayPath,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
               ],
             ),
-          ),
+          )
+        else if (errorMessage != null)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                CupertinoButton(
-                  key: const ValueKey('workspace-root'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  disabledColor: CupertinoColors.quaternaryLabel.resolveFrom(
-                    context,
-                  ),
-                  onPressed: isAtRoot ? null : onRoot,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        CupertinoIcons.house,
-                        size: 14,
-                        color: isDark
-                            ? null
-                            : (isAtRoot
-                                  ? LightSurfaces.textSecondary
-                                  : LightSurfaces.userDetail),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        l10n.rootDir,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? null
-                              : (isAtRoot
-                                    ? LightSurfaces.textSecondary
-                                    : LightSurfaces.userDetail),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                CupertinoButton(
-                  key: const ValueKey('workspace-up'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  disabledColor: CupertinoColors.quaternaryLabel.resolveFrom(
-                    context,
-                  ),
-                  onPressed: isAtRoot ? null : onUp,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        CupertinoIcons.arrow_up,
-                        size: 14,
-                        color: isDark
-                            ? null
-                            : (isAtRoot
-                                  ? LightSurfaces.textSecondary
-                                  : LightSurfaces.userDetail),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        l10n.parentDir,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? null
-                              : (isAtRoot
-                                    ? LightSurfaces.textSecondary
-                                    : LightSurfaces.userDetail),
-                        ),
-                      ),
-                    ],
-                  ),
+                Icon(
+                  CupertinoIcons.exclamationmark_triangle,
+                  size: 14,
+                  color: CupertinoColors.systemRed.resolveFrom(context),
                 ),
                 const SizedBox(width: 6),
-                if (isFolderDownloading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: CupertinoActivityIndicator(radius: 9),
-                  )
-                else
-                  AccessibleButton(
-                    key: const ValueKey('workspace-download-folder'),
-                    label: l10n.downloadFolderZip,
-                    padding: EdgeInsets.zero,
-                    onPressed: onDownloadFolder,
-                    child: const Icon(CupertinoIcons.arrow_down_doc, size: 16),
-                  ),
-                const SizedBox(width: 8),
                 Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (var i = 0; i < crumbs.length; i++) ...[
-                          if (i > 0)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              child: Icon(
-                                CupertinoIcons.chevron_right,
-                                size: 10,
-                                color: LightSurfaces.resolve(
-                                  context,
-                                  LightSurfaces.textSecondary,
-                                  dark: CupertinoColors.tertiaryLabel,
-                                ),
-                              ),
-                            ),
-                          CupertinoButton(
-                            key: ValueKey('workspace-crumb-${crumbs[i].path}'),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 4,
-                            ),
-                            disabledColor: CupertinoColors.quaternaryLabel
-                                .resolveFrom(context),
-                            onPressed: crumbs[i].path == crumbs.last.path
-                                ? null
-                                : () => onCrumbTap(crumbs[i]),
-                            child: Text(
-                              crumbs[i].title,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark
-                                    ? null
-                                    : (crumbs[i].path == crumbs.last.path
-                                          ? LightSurfaces.textSecondary
-                                          : LightSurfaces.userDetail),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (isRefreshing)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CupertinoActivityIndicator(radius: 9),
-                  const SizedBox(width: 8),
-                  Text(
-                    l10n.loadingIndicator,
+                  child: Text(
+                    errorMessage!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -841,53 +1185,24 @@ class _PathHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-                ],
-              ),
-            )
-          else if (errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    CupertinoIcons.exclamationmark_triangle,
-                    size: 14,
-                    color: CupertinoColors.systemRed.resolveFrom(context),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      errorMessage!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: LightSurfaces.resolve(
-                          context,
-                          LightSurfaces.textSecondary,
-                          dark: secondaryText,
-                        ),
-                      ),
+                ),
+                CupertinoButton(
+                  key: const ValueKey('workspace-banner-retry'),
+                  padding: EdgeInsets.zero,
+                  onPressed: onRetry,
+                  child: Text(
+                    l10n.retry,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? null : LightSurfaces.userDetail,
                     ),
                   ),
-                  CupertinoButton(
-                    key: const ValueKey('workspace-banner-retry'),
-                    padding: EdgeInsets.zero,
-                    onPressed: onRetry,
-                    child: Text(
-                      l10n.retry,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? null : LightSurfaces.userDetail,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          const SizedBox(height: 4),
-        ],
-      ),
+          ),
+        const SizedBox(height: 4),
+      ],
     );
   }
 }
@@ -900,12 +1215,20 @@ class _WorkspaceEntryRow extends StatefulWidget {
     required this.busy,
     required this.onTap,
     required this.onActions,
+    this.selected = false,
+    this.onSelect,
   });
 
   final WorkspaceEntry entry;
   final bool busy;
   final VoidCallback onTap;
   final void Function(GlobalKey anchorKey) onActions;
+
+  /// 宽屏左栏选中态（L2）。窄屏恒为 false（行结构不变）。
+  final bool selected;
+
+  /// 宽屏「点文件 = 就地预览」回调；null = 保持原行为（点文件弹操作菜单）。
+  final VoidCallback? onSelect;
 
   @override
   State<_WorkspaceEntryRow> createState() => _WorkspaceEntryRowState();
@@ -919,11 +1242,19 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
     final l10n = AppLocalizations.of(context);
     final isDirectory = widget.entry.isBrowsableDirectory;
     final detail = workspaceEntryDetail(widget.entry);
-    return GestureDetector(
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    // 宽屏选中态前景（L2 蓝字）；未选中为 null = 沿用主题 label。
+    final selectedFg = isLight
+        ? LightSurfaces.selectionForeground
+        : CupertinoTheme.of(context).primaryColor;
+    final row = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
         if (isDirectory) {
           widget.onTap();
+        } else if (widget.onSelect != null) {
+          // 宽屏：点文件 = 就地预览（不再弹操作菜单）；操作菜单仍在行尾 ⋯ 按钮上。
+          widget.onSelect!();
         } else {
           widget.onActions(_actionKey);
         }
@@ -942,9 +1273,10 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
                     widget.entry.name ?? l10n.unnamedFile,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
+                      color: widget.selected ? selectedFg : null,
                     ),
                   ),
                   if (detail.isNotEmpty) ...[
@@ -1003,6 +1335,18 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
           ],
         ),
       ),
+    );
+    if (!widget.selected) return row;
+    // 宽屏左栏选中态：L2 —— 浅色中性灰底 + 蓝字/蓝图标；暗色沿用 primary 12%。
+    // 只在 selected 时包一层（窄屏恒 false ⇒ 行结构逐字节不变）。
+    return ColoredBox(
+      key: ValueKey(
+        'workspace-row-selected-${widget.entry.name ?? widget.entry.path}',
+      ),
+      color: isLight
+          ? LightSurfaces.selectedSurface
+          : CupertinoTheme.of(context).primaryColor.withValues(alpha: 0.12),
+      child: row,
     );
   }
 }

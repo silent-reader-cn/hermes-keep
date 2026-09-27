@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
@@ -78,6 +79,10 @@ CupertinoDynamicColor taskStatusColor(CronJob job) {
 /// Cupertino 风格：大标题 + 新建按钮 + 下拉刷新 + 任务列表（状态圆点 + 名称 +
 /// 调度/上次运行 + ellipsis 行菜单：运行 / 暂停 / 恢复 / 编辑 / 查看输出 / 删除）
 /// + 加载 / 错误 / 空态。新建与编辑共用 [TasksEditPage] 表单页。
+///
+/// 宽屏（≥900）双栏（批 4 · P4）：左 360 任务列表 + 右「任务输出」**常驻面板**，
+/// 不再走底部 sheet（[showCupertinoModalPopup]）；窄屏（<900）原样保留 sheet，
+/// 逐像素不变。
 class TasksPage extends ConsumerStatefulWidget {
   const TasksPage({super.key});
 
@@ -86,12 +91,30 @@ class TasksPage extends ConsumerStatefulWidget {
 }
 
 class _TasksPageState extends ConsumerState<TasksPage> {
+  /// 宽屏（≥900）左栏当前选中的任务 id（`jobId ?? id`，与既有 key 同口径）；
+  /// null = 未点过（右栏回落到第一个任务）。窄屏不使用。
+  String? _selectedJobId;
+
+  /// 宽屏右栏当前已加载/正在加载输出的任务 id 与其 future（配对保存，防止
+  /// 快速切换任务时「任务 A 的 future 渲染成任务 B 的面板」）。
+  String? _outputJobId;
+  Future<CronOutputResponse?>? _outputFuture;
+
+  /// 首帧占位（永不完成）：post-frame 取数前右栏显示加载态，避免先闪一帧
+  /// 「暂无输出」再切到内容。
+  static final Future<CronOutputResponse?> _pendingOutput =
+      Completer<CronOutputResponse?>().future;
+
   @override
   Widget build(BuildContext context) {
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final l10n = AppLocalizations.of(context);
     final async = ref.watch(tasksControllerProvider);
     final state = async.valueOrNull;
+    // 宽屏双栏只在「有任务可拆」时启用：加载 / 错误 / 空态仍复用同一套单列状态页
+    //（不为宽屏另造空态，状态页与窄屏完全同源）。
+    final isWideSplit =
+        isWideLayout(context) && state != null && state.jobs.isNotEmpty;
 
     ref.listen<AsyncValue<TasksState>>(tasksControllerProvider, (
       previous,
@@ -122,7 +145,11 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           ),
           // 刷新指示器必须排在所有 SliverToBoxAdapter 之前（对齐会话列表页）。
           AppRefreshControl(onRefresh: _onRefresh),
-          ..._buildContentSlivers(async, state),
+          // 窄屏（<900）：单列列表，点行 → 底部「任务输出」sheet —— 逐像素不变。
+          if (!isWideSplit) ..._buildContentSlivers(async, state),
+          // 宽屏（≥900）：左 360 列表 + 右「任务输出」常驻。
+          if (isWideSplit)
+            SliverToBoxAdapter(child: _buildWideSplitBody(state)),
         ],
       ),
     );
@@ -221,6 +248,173 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       if (pausedJobs.isNotEmpty)
         rowsSection(header: l10n.statusPaused, jobs: pausedJobs),
     ];
+  }
+
+  // -------------------------------------------------------------------------
+  // 宽屏（≥900）双栏（批 4 · P4）
+  //
+  // 为什么撤 sheet：宽屏明明有地方把「任务输出」常驻在右栏，却仍用手机式的底部
+  // 弹层 —— 看输出要弹、看完要关，弹层还盖住列表（没法一边看输出一边换任务）。
+  // 拆右栏后：切任务即换右栏内容，输出跟着页面滚，不再有「关掉弹层」这一步。
+  // 窄屏（<900）保持原 sheet（[_TaskOutputSheet] 原样保留、未删），逐像素不变。
+  // -------------------------------------------------------------------------
+
+  /// 左栏当前选中任务：优先 [_selectedJobId]；首帧或列表刷新后 id 消失时回落到
+  /// 第一个任务 —— 宽屏右栏是**常驻面板**，不留空态。
+  CronJob _resolveSelectedJob(List<CronJob> jobs) {
+    final id = _selectedJobId;
+    if (id != null) {
+      for (final job in jobs) {
+        if ((job.jobId ?? job.id) == id) return job;
+      }
+    }
+    return jobs.first;
+  }
+
+  /// 切换右栏任务：取一次输出并换面板（`_outputJobId` 与 future 成对更新，
+  /// 避免快速切换时把 A 的输出画到 B 的面板上）。
+  Future<void> _selectJob(CronJob job) async {
+    final id = job.jobId ?? job.id;
+    final future = ref.read(tasksControllerProvider.notifier).fetchOutput(job);
+    if (!mounted) return;
+    setState(() {
+      _selectedJobId = id;
+      _outputJobId = id;
+      _outputFuture = future;
+    });
+  }
+
+  /// 保证右栏当前任务的输出已取过（每个任务取一次）。
+  ///
+  /// **不在 build 里发请求**：首帧由 post-frame 回调补一次 setState（那一帧右栏
+  /// 显示加载态，见 [_pendingOutput]）。
+  void _ensureWideOutput(CronJob job) {
+    final id = job.jobId ?? job.id;
+    if (_outputJobId == id && _outputFuture != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_selectJob(job));
+    });
+  }
+
+  /// 宽屏主体：左栏（固定 360）+ 右栏「任务输出」常驻面板。
+  Widget _buildWideSplitBody(TasksState state) {
+    final selected = _resolveSelectedJob(state.jobs);
+    _ensureWideOutput(selected);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildJobRail(state, selected),
+        Expanded(child: _buildOutputPane(selected)),
+      ],
+    );
+  }
+
+  /// 左栏：固定宽 360、右侧 0.5px 发丝分栏线；沿用窄屏的「正常 / 已暂停」两组
+  /// 分组口径，组内为任务行（状态圆点 / 名称 / 状态 / 调度 / 行菜单）。
+  Widget _buildJobRail(TasksState state, CronJob selected) {
+    final l10n = AppLocalizations.of(context);
+    final runningJobs = state.jobs
+        .where((j) => j.status != CronJobStatus.paused)
+        .toList();
+    final pausedJobs = state.jobs
+        .where((j) => j.status == CronJobStatus.paused)
+        .toList();
+    final selectedId = selected.jobId ?? selected.id;
+
+    Widget row(CronJob job) {
+      final id = job.jobId ?? job.id;
+      return _WideTaskRailRow(
+        key: ValueKey('tasks-rail-row-$id'),
+        job: job,
+        selected: id == selectedId,
+        busy: state.isBusy(job.jobId ?? ''),
+        onTap: () => unawaited(_selectJob(job)),
+        onActions: (anchorKey) => _showRowActions(context, job, anchorKey),
+      );
+    }
+
+    return Container(
+      key: const ValueKey('tasks-rail'),
+      width: _kTaskRailWidth,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(color: _railSeparator(context), width: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (runningJobs.isNotEmpty) ...[
+            _WideTaskRailGroupLabel(
+              '${l10n.statusNormal}（${runningJobs.length}）',
+            ),
+            for (final job in runningJobs) row(job),
+          ],
+          if (pausedJobs.isNotEmpty) ...[
+            _WideTaskRailGroupLabel(
+              '${l10n.statusPaused}（${pausedJobs.length}）',
+            ),
+            for (final job in pausedJobs) row(job),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 右栏：「任务输出」常驻面板 —— 标题 + 0.5px 分隔线 + 输出正文。
+  ///
+  /// 正文与窄屏 sheet 共用 [_TaskOutputBody]（文案 / 字号 / 分隔线完全一致，只有
+  /// 外壳不同）；标题右侧放该任务的调度 / 上次运行，让面板自己说得清「这是谁」。
+  Widget _buildOutputPane(CronJob job) {
+    final l10n = AppLocalizations.of(context);
+    final subtitle = _TaskRow._subtitle(context, job);
+    final labelColor = CupertinoColors.label.resolveFrom(context);
+    final secondaryLabelColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
+    final separatorColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.divider,
+      dark: CupertinoColors.separator,
+    );
+
+    return Column(
+      key: const ValueKey('tasks-output-pane'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Row(
+            children: [
+              Text(
+                l10n.taskOutput,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: labelColor,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, color: secondaryLabelColor),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Container(height: 0.5, color: separatorColor),
+        _TaskOutputBody(outputFuture: _outputFuture ?? _pendingOutput),
+      ],
+    );
   }
 
   Widget _buildErrorSliver(Object? error) {
@@ -353,7 +547,10 @@ class _TasksPageState extends ConsumerState<TasksPage> {
       AdaptiveMenuItem(
         key: const ValueKey('tasks-action-output'),
         label: l10n.viewOutput,
-        onPressed: () => unawaited(_showOutput(context, job)),
+        // 宽屏：右栏常驻面板直接把该任务切到选中态（不弹 sheet）；窄屏原样弹 sheet。
+        onPressed: () => isWideLayout(context)
+            ? unawaited(_selectJob(job))
+            : unawaited(_showOutput(context, job)),
       ),
       AdaptiveMenuItem(
         key: const ValueKey('tasks-action-delete'),
@@ -375,6 +572,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     );
   }
 
+  /// 窄屏（<900）专用：底部「任务输出」sheet。宽屏不走这里 —— 右栏常驻面板
+  /// 由 [_selectJob] 直接切内容，不弹层（同页 [showCupertinoModalPopup] 只在窄屏触发）。
   Future<void> _showOutput(BuildContext context, CronJob job) async {
     final future = ref.read(tasksControllerProvider.notifier).fetchOutput(job);
     await showCupertinoModalPopup<void>(
@@ -443,6 +642,213 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   String _errorMessage(Object? error) {
     if (error is ApiException) return error.message;
     return error?.toString() ?? AppLocalizations.of(context).unknownError;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 宽屏（≥900）左栏令牌与行（批 4 · P4）
+// ---------------------------------------------------------------------------
+
+/// 左栏宽度 360（批 4 设计稿 P4「左 360 列表 + 右任务输出常驻」）。
+///
+/// 比技能页左栏（320）宽一档：这行要塞下「状态圆点 + 名称 + 状态标签 + 调度」，
+/// 且右侧还要留行菜单按钮。
+const double _kTaskRailWidth = 360.0;
+
+/// 左栏行文字 / 次级元素取色 —— 与批 3 左栏骨架 `features/shared/wide_nav_rail.dart`
+/// 及批 4 P2 技能左栏**同款取值**（浅色 #3A3A3C / #8A8A90，深色回退语义色）。
+/// （骨架文件属批 3 分区、本批不改，故这里按同款取值重画，不改共享件。）
+const Color _kRailRowLabel = Color(0xFF3A3A3C);
+const Color _kRailRowIcon = Color(0xFF8A8A90);
+
+/// 分栏线 / 发丝线：浅色与卡片描边同族，暗色沿用 separator。
+Color _railSeparator(BuildContext context) => LightSurfaces.resolve(
+  context,
+  LightSurfaces.divider,
+  dark: CupertinoColors.separator,
+);
+
+/// 宽屏左栏分组标题（10pt w600 次级灰；文案带「（n）」计数，沿用窄屏 section header
+/// 的 `正常（3）` 口径）。
+class _WideTaskRailGroupLabel extends StatelessWidget {
+  const _WideTaskRailGroupLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 3),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: LightSurfaces.resolve(
+            context,
+            _kRailRowIcon,
+            dark: CupertinoColors.secondaryLabel,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 宽屏左栏任务行：状态圆点 + 名称 + 状态标签 + 调度/上次运行 + 行菜单按钮。
+///
+/// 选中态走 L2 —— 浅色「中性灰底 [LightSurfaces.selectedSurface] + 蓝字
+/// [LightSurfaces.selectionForeground]」，暗色沿用 primary 12%（与批 3 的
+/// `WideNavRailRow`、批 4 技能左栏同一套口径）。
+/// 行菜单（运行 / 暂停 / 恢复 / 编辑 / 查看输出 / 删除）原样保留 —— 宽屏撤的只是
+/// **输出 sheet**，不是行操作。
+class _WideTaskRailRow extends StatefulWidget {
+  const _WideTaskRailRow({
+    super.key,
+    required this.job,
+    required this.selected,
+    required this.busy,
+    required this.onTap,
+    required this.onActions,
+  });
+
+  final CronJob job;
+  final bool selected;
+  final bool busy;
+  final VoidCallback onTap;
+  final void Function(GlobalKey anchorKey) onActions;
+
+  @override
+  State<_WideTaskRailRow> createState() => _WideTaskRailRowState();
+}
+
+class _WideTaskRailRowState extends State<_WideTaskRailRow> {
+  final GlobalKey _actionKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final activeFg = isLight
+        ? LightSurfaces.selectionForeground
+        : CupertinoTheme.of(context).primaryColor;
+    final activeBg = isLight
+        ? LightSurfaces.selectedSurface
+        : activeFg.withValues(alpha: 0.12);
+    final statusColor = taskStatusColor(widget.job).resolveFrom(context);
+    final subtitle = _TaskRow._subtitle(context, widget.job);
+    final labelFg = widget.selected
+        ? activeFg
+        : LightSurfaces.resolve(
+            context,
+            _kRailRowLabel,
+            dark: CupertinoColors.label,
+          );
+    final secondaryFg = widget.selected
+        ? activeFg
+        : LightSurfaces.resolve(
+            context,
+            _kRailRowIcon,
+            dark: CupertinoColors.secondaryLabel,
+          );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Semantics(
+        button: true,
+        selected: widget.selected,
+        label: '${widget.job.displayName}, ${l10n.viewOutput}',
+        child: CupertinoButton(
+          key: ValueKey('tasks-rail-tap-${widget.job.jobId ?? widget.job.id}'),
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(double.infinity, 40),
+          borderRadius: BorderRadius.circular(kRadiusInline),
+          color: widget.selected ? activeBg : CupertinoColors.transparent,
+          onPressed: () {
+            unawaited(selectionHaptic());
+            widget.onTap();
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              widget.job.displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: labelFg,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            taskStatusLabel(widget.job, context),
+                            style: TextStyle(fontSize: 11, color: statusColor),
+                          ),
+                        ],
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: secondaryFg),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                if (widget.busy)
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: CupertinoActivityIndicator(radius: 8),
+                  )
+                else
+                  KeyedSubtree(
+                    key: _actionKey,
+                    child: AccessibleButton(
+                      key: ValueKey(
+                        'tasks-actions-${widget.job.jobId ?? widget.job.id}',
+                      ),
+                      label: l10n.taskActions,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(32, 32),
+                      onPressed: () => widget.onActions(_actionKey),
+                      child: Icon(
+                        CupertinoIcons.ellipsis,
+                        size: 18,
+                        color: secondaryFg,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -612,6 +1018,142 @@ class _TaskRowState extends State<_TaskRow> {
   }
 }
 
+/// 任务输出正文（加载中 → 输出列表（文件名 + 内容预览）→ 空态）。
+///
+/// 宽屏右栏常驻面板（`_TasksPageState._buildOutputPane`）与窄屏底部 sheet
+/// （[_TaskOutputSheet]）**共用同一份正文**：文案 / 字号 / 缩进 / 分隔线完全一致，
+/// 两者只有外壳不同（sheet 多一个标题栏与关闭按钮，且限高 0.65 屏）。
+/// 拆出这个部件的意义就是「撤 sheet，但内容不抄第二遍」。
+class _TaskOutputBody extends StatelessWidget {
+  const _TaskOutputBody({required this.outputFuture});
+
+  final Future<CronOutputResponse?> outputFuture;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final cardBg = LightSurfaces.resolve(
+      context,
+      LightSurfaces.card,
+      dark: CupertinoColors.tertiarySystemBackground,
+    );
+    final labelColor = CupertinoColors.label.resolveFrom(context);
+    final secondaryLabelColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
+    final tertiaryLabelColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
+    final separatorColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.divider,
+      dark: CupertinoColors.separator,
+    );
+
+    return FutureBuilder<CronOutputResponse?>(
+      future: outputFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(36),
+            child: Center(child: CupertinoActivityIndicator(radius: 12)),
+          );
+        }
+        final outputs = snapshot.data?.outputs ?? const <CronOutputItem>[];
+        if (outputs.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CupertinoIcons.doc_text,
+                    size: 40,
+                    color: tertiaryLabelColor,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    l10n.noOutput,
+                    style: TextStyle(fontSize: 15, color: secondaryLabelColor),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return ListView.separated(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          itemCount: outputs.length,
+          separatorBuilder: (_, _) => Container(
+            height: 0.5,
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            color: separatorColor,
+          ),
+          itemBuilder: (context, index) {
+            final item = outputs[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        CupertinoIcons.doc,
+                        size: 16,
+                        color: secondaryLabelColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          item.filename ?? l10n.outputItemTitle(index + 1),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: labelColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (item.content != null && item.content!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: separatorColor, width: 0.5),
+                      ),
+                      child: Text(
+                        item.content!,
+                        maxLines: 10,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: labelColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 /// 任务输出底部面板：加载中 → 输出列表（文件名 + 内容预览）→ 空态。
 class _TaskOutputSheet extends StatelessWidget {
   const _TaskOutputSheet({required this.outputFuture});
@@ -627,17 +1169,7 @@ class _TaskOutputSheet extends StatelessWidget {
       LightSurfaces.page,
       dark: CupertinoColors.secondarySystemBackground,
     );
-    final cardBg = LightSurfaces.resolve(
-      context,
-      LightSurfaces.card,
-      dark: CupertinoColors.tertiarySystemBackground,
-    );
     final labelColor = CupertinoColors.label.resolveFrom(context);
-    final secondaryLabelColor = LightSurfaces.resolve(
-      context,
-      LightSurfaces.textSecondary,
-      dark: secondaryText,
-    );
     final tertiaryLabelColor = LightSurfaces.resolve(
       context,
       LightSurfaces.textSecondary,
@@ -683,117 +1215,7 @@ class _TaskOutputSheet extends StatelessWidget {
           ),
         ),
         Container(height: 0.5, color: separatorColor),
-        Flexible(
-          child: FutureBuilder<CronOutputResponse?>(
-            future: outputFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.all(36),
-                  child: Center(child: CupertinoActivityIndicator(radius: 12)),
-                );
-              }
-              final outputs =
-                  snapshot.data?.outputs ?? const <CronOutputItem>[];
-              if (outputs.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 36,
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          CupertinoIcons.doc_text,
-                          size: 40,
-                          color: tertiaryLabelColor,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          l10n.noOutput,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: secondaryLabelColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-              return ListView.separated(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                itemCount: outputs.length,
-                separatorBuilder: (_, _) => Container(
-                  height: 0.5,
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  color: separatorColor,
-                ),
-                itemBuilder: (context, index) {
-                  final item = outputs[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              CupertinoIcons.doc,
-                              size: 16,
-                              color: secondaryLabelColor,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                item.filename ??
-                                    l10n.outputItemTitle(index + 1),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: labelColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (item.content != null &&
-                            item.content!.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: cardBg,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: separatorColor,
-                                width: 0.5,
-                              ),
-                            ),
-                            child: Text(
-                              item.content!,
-                              maxLines: 10,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.4,
-                                color: labelColor,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
+        Flexible(child: _TaskOutputBody(outputFuture: outputFuture)),
       ],
     );
 

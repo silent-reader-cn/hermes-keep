@@ -23,43 +23,258 @@ Color _levelTint(DiagnosticsLogLevel level) {
   }
 }
 
-/// 单条诊断日志详情查看弹层（纯 Cupertino）。
-class DiagnosticsDetailSheet extends StatelessWidget {
-  const DiagnosticsDetailSheet({super.key, required this.entry});
+/// 复制单条日志到剪贴板（窄屏整页 sheet 与宽屏右栏内联详情共用）。
+Future<void> copyDiagnosticsEntry(
+  BuildContext context,
+  DiagnosticsLogEntry entry,
+) async {
+  final l10n = AppLocalizations.of(context);
+  await Clipboard.setData(ClipboardData(text: entry.toExportString()));
+  if (!context.mounted) return;
+  unawaited(
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text(l10n.copy),
+        content: Text(l10n.copiedToClipboard),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              l10n.ok,
+              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// 单条日志详情正文（元数据 + 主消息 + 详情 JSON）。
+///
+/// 抽出来是为了让**同一份正文**同时供两处使用：
+/// - 窄屏（<900）：[DiagnosticsDetailSheet] —— 整页 push，逐像素与既有实现相同；
+/// - 宽屏（≥900）：诊断页右栏内联展开（不再整页覆盖，见 `diagnostics_page.dart`
+///   的 `_buildWideDetailPane`）。
+///
+/// 两处显示的信息因此天然一致 —— 「搬迁不丢信息」这条在本页既适用于筛选 chips，
+/// 也适用于详情。
+class DiagnosticsDetailBody extends StatelessWidget {
+  const DiagnosticsDetailBody({super.key, required this.entry});
 
   final DiagnosticsLogEntry entry;
-
-  Future<void> _copyEntry(BuildContext context) async {
-    final l10n = AppLocalizations.of(context);
-    await Clipboard.setData(ClipboardData(text: entry.toExportString()));
-    if (!context.mounted) return;
-    unawaited(
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(l10n.copy),
-          content: Text(l10n.copiedToClipboard),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(
-                l10n.ok,
-                style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                    ? const TextStyle(color: LightSurfaces.menuAction)
-                    : null,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final color = entry.level.textColor.resolveFrom(context);
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      children: [
+        // 元数据行
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.card,
+              dark: CupertinoColors.secondarySystemGroupedBackground,
+            ),
+            borderRadius: BorderRadius.circular(10),
+            border: isLight
+                ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+                : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isLight
+                          ? _levelTint(entry.level)
+                          : color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: color.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      entry.level.label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: LightSurfaces.resolve(
+                        context,
+                        LightSurfaces.page,
+                        dark: CupertinoColors.systemGrey5,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      entry.tag,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: secondaryText,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (entry.durationMs != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${entry.durationMs}ms',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: secondaryText,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                formatLogTimestamp(entry.timestamp),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
+                ),
+              ),
+              if (entry.errorKind != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Error: ${entry.errorKind}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: statusRedText.resolveFrom(context),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 主消息
+        Text(
+          l10n.info,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.card,
+              dark: CupertinoColors.secondarySystemGroupedBackground,
+            ),
+            borderRadius: BorderRadius.circular(10),
+            border: isLight
+                ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+                : null,
+          ),
+          child: Text(
+            entry.message,
+            style: const TextStyle(fontSize: 14, fontFamily: 'monospace'),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // 详情 JSON
+        if (entry.details != null && entry.details!.isNotEmpty) ...[
+          Text(
+            l10n.description,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: secondaryText,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.card,
+                dark: CupertinoColors.secondarySystemGroupedBackground,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: isLight
+                  ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+                  : null,
+            ),
+            child: Text(
+              entry.detailsJson,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 单条诊断日志详情查看弹层（纯 Cupertino）。
+///
+/// 窄屏（<900）走这里：整页 push（`HermesPageRoute(fullscreenDialog: true)`）。
+/// 宽屏（≥900）改为诊断页右栏内联展开，复用同一份正文 [DiagnosticsDetailBody]。
+class DiagnosticsDetailSheet extends StatelessWidget {
+  const DiagnosticsDetailSheet({super.key, required this.entry});
+
+  final DiagnosticsLogEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
 
     return CupertinoPageScaffold(
       backgroundColor: isLight ? LightSurfaces.page : null,
@@ -75,7 +290,7 @@ class DiagnosticsDetailSheet extends StatelessWidget {
         middle: Text(l10n.diagnosticsDetailsTitle),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          onPressed: () => unawaited(_copyEntry(context)),
+          onPressed: () => unawaited(copyDiagnosticsEntry(context, entry)),
           child: Text(
             l10n.copy,
             style: isLight
@@ -84,196 +299,7 @@ class DiagnosticsDetailSheet extends StatelessWidget {
           ),
         ),
       ),
-      child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          children: [
-            // 元数据行
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: LightSurfaces.resolve(
-                  context,
-                  LightSurfaces.card,
-                  dark: CupertinoColors.secondarySystemGroupedBackground,
-                ),
-                borderRadius: BorderRadius.circular(10),
-                border: isLight
-                    ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
-                    : null,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isLight
-                              ? _levelTint(entry.level)
-                              : color.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: color.withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Text(
-                          entry.level.label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: color,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: LightSurfaces.resolve(
-                            context,
-                            LightSurfaces.page,
-                            dark: CupertinoColors.systemGrey5,
-                          ),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          entry.tag,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: LightSurfaces.resolve(
-                              context,
-                              LightSurfaces.textSecondary,
-                              dark: secondaryText,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (entry.durationMs != null) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          '${entry.durationMs}ms',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: LightSurfaces.resolve(
-                              context,
-                              LightSurfaces.textSecondary,
-                              dark: secondaryText,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    formatLogTimestamp(entry.timestamp),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: LightSurfaces.resolve(
-                        context,
-                        LightSurfaces.textSecondary,
-                        dark: secondaryText,
-                      ),
-                    ),
-                  ),
-                  if (entry.errorKind != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Error: ${entry.errorKind}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: statusRedText.resolveFrom(context),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 主消息
-            Text(
-              l10n.info,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: LightSurfaces.resolve(
-                  context,
-                  LightSurfaces.textSecondary,
-                  dark: secondaryText,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: LightSurfaces.resolve(
-                  context,
-                  LightSurfaces.card,
-                  dark: CupertinoColors.secondarySystemGroupedBackground,
-                ),
-                borderRadius: BorderRadius.circular(10),
-                border: isLight
-                    ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
-                    : null,
-              ),
-              child: Text(
-                entry.message,
-                style: const TextStyle(fontSize: 14, fontFamily: 'monospace'),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 详情 JSON
-            if (entry.details != null && entry.details!.isNotEmpty) ...[
-              Text(
-                l10n.description,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: LightSurfaces.resolve(
-                    context,
-                    LightSurfaces.textSecondary,
-                    dark: secondaryText,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: LightSurfaces.resolve(
-                    context,
-                    LightSurfaces.card,
-                    dark: CupertinoColors.secondarySystemGroupedBackground,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  border: isLight
-                      ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
-                      : null,
-                ),
-                child: Text(
-                  entry.detailsJson,
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+      child: SafeArea(child: DiagnosticsDetailBody(entry: entry)),
     );
   }
 }

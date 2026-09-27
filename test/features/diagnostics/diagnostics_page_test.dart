@@ -20,9 +20,7 @@ Widget _buildTestApp({
   Locale locale = const Locale('zh'),
 }) {
   return ProviderScope(
-    overrides: [
-      diagnosticsServiceProvider.overrideWithValue(service),
-    ],
+    overrides: [diagnosticsServiceProvider.overrideWithValue(service)],
     child: CupertinoApp(
       locale: locale,
       supportedLocales: const [Locale('zh'), Locale('en')],
@@ -122,44 +120,71 @@ void main() {
       expect(find.text('Timeout'), findsOneWidget);
     });
 
-    testWidgets('filtering by level chips updates displayed list', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1000, 1500);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+    testWidgets(
+      'filtering by level chips updates displayed list（宽屏左栏 / 窄屏顶部）',
+      (tester) async {
+        tester.view.physicalSize = const Size(1000, 1500);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      await service.setEnabled(true);
-      service.log(
-        level: DiagnosticsLogLevel.info,
-        tag: 'dio',
-        message: 'INFO message',
-      );
-      service.log(
-        level: DiagnosticsLogLevel.error,
-        tag: 'dio',
-        message: 'ERROR message',
-      );
+        await service.setEnabled(true);
+        service.log(
+          level: DiagnosticsLogLevel.info,
+          tag: 'dio',
+          message: 'INFO message',
+        );
+        service.log(
+          level: DiagnosticsLogLevel.error,
+          tag: 'dio',
+          message: 'ERROR message',
+        );
 
-      await tester.pumpWidget(_buildTestApp(service: service));
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildTestApp(service: service));
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pumpAndSettle();
 
-      expect(find.text('INFO message'), findsOneWidget);
-      expect(find.text('ERROR message'), findsOneWidget);
+        expect(find.text('INFO message'), findsOneWidget);
+        expect(find.text('ERROR message'), findsOneWidget);
 
-      // Toggle off INFO level chip (code 'I')
-      final infoChip = find.byKey(const ValueKey('diagnostics-filter-level-I'));
-      await tester.tap(infoChip);
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.pumpAndSettle();
+        // 宽屏（≥900）筛选入口 = 左 220 导航的级别行（批 4C：顶部 chips 行搬进左栏）。
+        // 位置变了，**筛选行为本身不变**：取消「信息」→ INFO 行消失、ERROR 行保留。
+        final infoChip = find.byKey(const ValueKey('diagnostics-nav-level-I'));
+        await tester.tap(infoChip);
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pumpAndSettle();
 
-      expect(find.text('INFO message'), findsNothing);
-      expect(find.text('ERROR message'), findsOneWidget);
-    });
+        expect(find.text('INFO message'), findsNothing);
+        expect(find.text('ERROR message'), findsOneWidget);
+
+        // 窄屏（<900）：筛选入口仍是顶部 chips 行，同一行为必须同样成立
+        // （批 4C 只改宽屏，窄屏这条契约原样保留）。
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        tester.view.physicalSize = const Size(800, 1500);
+        await tester.pumpWidget(_buildTestApp(service: service));
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('diagnostics-nav-rail')),
+          findsNothing,
+        );
+        expect(find.text('INFO message'), findsOneWidget);
+        expect(find.text('ERROR message'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey('diagnostics-filter-level-I')),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pumpAndSettle();
+
+        expect(find.text('INFO message'), findsNothing);
+        expect(find.text('ERROR message'), findsOneWidget);
+      },
+    );
 
     testWidgets('search filters entries with debounce', (tester) async {
       tester.view.physicalSize = const Size(1000, 1500);
@@ -241,7 +266,9 @@ void main() {
       expect(find.text('暂无日志记录'), findsOneWidget);
     });
 
-    testWidgets('tap log row opens detail sheet', (tester) async {
+    testWidgets('tap log row opens detail（宽屏右栏内联 / 窄屏整页 sheet）', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1000, 1500);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -261,11 +288,35 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pumpAndSettle();
 
-      final row = find.text('Detailed log message');
-      await tester.tap(row);
+      // 宽屏（≥900）：详情在右栏内展开，**不再 push 整页**（批 4C 新契约）；
+      // 展示的信息与窄屏 sheet 同源（标题 / 消息 / 详情 JSON 都在）。
+      await tester.tap(find.text('Detailed log message'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('diagnostics-wide-detail')),
+        findsOneWidget,
+      );
+      expect(find.byType(DiagnosticsDetailSheet), findsNothing);
+      expect(find.text('日志详情'), findsOneWidget);
+      expect(find.textContaining('value123'), findsOneWidget);
+
+      // 窄屏（<900）：仍是整页 sheet —— 既有契约原样保留。
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      tester.view.physicalSize = const Size(800, 1500);
+      await tester.pumpWidget(_buildTestApp(service: service));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Detailed log message'));
       await tester.pumpAndSettle();
 
       expect(find.byType(DiagnosticsDetailSheet), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('diagnostics-wide-detail')),
+        findsNothing,
+      );
       expect(find.text('日志详情'), findsOneWidget);
       expect(find.textContaining('value123'), findsOneWidget);
     });
@@ -504,7 +555,10 @@ void main() {
         '${tempDir.path}${separator}hermes_logs_export_20260903_191000.txt',
       );
       expect(exportedFile.existsSync(), isTrue);
-      expect(exportedFile.readAsStringSync(), contains('Selectable large entry'));
+      expect(
+        exportedFile.readAsStringSync(),
+        contains('Selectable large entry'),
+      );
     });
   });
 }

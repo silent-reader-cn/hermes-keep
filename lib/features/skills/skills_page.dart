@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/reading_width_box.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/skills.dart';
 import '../../core/utils/accessibility.dart';
@@ -20,6 +22,9 @@ import '../../app/widgets/app_refresh_control.dart';
 /// Cupertino 风格：大标题 + 刷新按钮 + 搜索框（本地过滤）+ 下拉刷新 +
 /// 分类分组技能列表（名称 / 描述 / 标签 / 已禁用徽标），点击行展开详情
 /// （路径 / 相关技能）；含加载 / 错误 / 空态。
+///
+/// 宽屏（≥900）双栏（批 4 · P2）：左 320 技能列表常驻 + 右详情（正文限宽 744
+/// 居中）；窄屏（<900）保留原**手风琴**就地展开，逐像素不变。
 class SkillsPage extends ConsumerStatefulWidget {
   const SkillsPage({super.key});
 
@@ -30,8 +35,13 @@ class SkillsPage extends ConsumerStatefulWidget {
 class _SkillsPageState extends ConsumerState<SkillsPage> {
   final TextEditingController _searchController = TextEditingController();
 
-  /// 已展开详情的技能名（点击行切换展开/收起）。
+  /// 已展开详情的技能名（点击行切换展开/收起）。**窄屏（<900）专用**：宽屏走
+  /// 右栏详情，不再就地展开。
   final Set<String> _expandedNames = {};
+
+  /// 宽屏（≥900）右栏详情当前选中的技能名；null = 未点过（右栏回落到第一个
+  /// 技能）。窄屏不使用。
+  String? _selectedSkillName;
 
   @override
   void dispose() {
@@ -46,6 +56,10 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
     final state = async.valueOrNull;
     final groups = ref.watch(skillsGroupsProvider);
     final isSearchMode = state?.searchQuery?.isNotEmpty == true;
+    // 宽屏双栏只在「有列表可拆」时启用：加载 / 错误 / 搜索无结果仍复用同一套
+    // 单列状态页（不为宽屏另造空态，状态页与窄屏完全同源）。
+    final isWideSplit =
+        isWideLayout(context) && state != null && groups.isNotEmpty;
 
     ref.listen<AsyncValue<SkillsState>>(skillsControllerProvider, (
       previous,
@@ -79,18 +93,178 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             onRefresh: () =>
                 ref.read(skillsControllerProvider.notifier).refresh(),
           ),
-          SliverToBoxAdapter(child: _buildSearchBar()),
-          ..._buildContentSlivers(async, state, groups, isSearchMode),
+          // 窄屏（<900）：搜索框 + 单列分组卡片，点击行手风琴就地展开 —— 逐像素不变。
+          if (!isWideSplit) ...[
+            SliverToBoxAdapter(child: _buildSearchBar()),
+            ..._buildContentSlivers(async, state, groups, isSearchMode),
+          ],
+          // 宽屏（≥900）：左 320 技能列表常驻 + 右详情（正文限宽 744 居中）。
+          if (isWideSplit)
+            SliverToBoxAdapter(child: _buildWideSplitBody(groups)),
         ],
       ),
     );
   }
 
-  Widget _buildSearchBar() {
+  // -------------------------------------------------------------------------
+  // 宽屏（≥900）双栏（批 4 · P2）
+  //
+  // 为什么拆右栏（**理由取自批 4 修正版，别再写成「详情整页跳走」——那不是事实**）：
+  // ① 现状是「一列卡片铺满 960」，宽屏右半屏整片空着；
+  // ② 详情本来就是**手风琴就地展开**（`_toggleExpanded` + `_SkillDetail`），
+  //    展开会把整列推长（其余技能被挤出屏幕），且一次只能看一个技能；
+  // ③ 拆右栏后列表常驻，可连续点选**对比**多个技能 —— 这才是本页真正的收益。
+  //
+  // 窄屏保持手风琴原地展开（上面那条分支），宽窄两套互不影响。
+  // -------------------------------------------------------------------------
+
+  /// 宽屏主体：左栏（固定 320，含搜索框）+ 右栏详情（阅读型限宽 744 居中）。
+  Widget _buildWideSplitBody(List<SkillGroup> groups) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSkillRail(groups),
+        Expanded(child: _buildSkillDetailPane(_resolveSelectedSkill(groups))),
+      ],
+    );
+  }
+
+  /// 当前选中技能：优先 [_selectedSkillName]；首帧或列表刷新后名字消失时回落到
+  /// 第一个技能 —— 宽屏右栏是**常驻面板**，不留空态。
+  SkillSummary _resolveSelectedSkill(List<SkillGroup> groups) {
+    final flat = [for (final group in groups) ...group.skills];
+    final name = _selectedSkillName;
+    if (name != null) {
+      for (final skill in flat) {
+        if (skillDisplayName(skill) == name) return skill;
+      }
+    }
+    return flat.first;
+  }
+
+  /// 左栏：固定宽 320、右侧 0.5px 发丝分栏线；搜索框 + 分组标题 + 技能行
+  /// （技能名 / 描述单行省略 / 启用开关）。
+  Widget _buildSkillRail(List<SkillGroup> groups) {
+    final selectedName = skillDisplayName(_resolveSelectedSkill(groups));
+    return Container(
+      key: const ValueKey('skills-rail'),
+      width: _kSkillRailWidth,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(color: _railSeparator(context), width: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSearchBar(padding: const EdgeInsets.only(bottom: 8)),
+          for (final group in groups) ...[
+            _WideSkillRailGroupLabel(_skillsGroupTitle(context, group.title)),
+            for (final skill in group.skills)
+              _WideSkillRailRow(
+                key: ValueKey('skills-rail-row-${skillDisplayName(skill)}'),
+                skill: skill,
+                selected: skillDisplayName(skill) == selectedName,
+                onTap: () => setState(
+                  () => _selectedSkillName = skillDisplayName(skill),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 右栏：详情正文限宽 744 并水平居中（G1 阅读型档位；与设置 / 记忆同口径）。
+  ///
+  /// **为什么不重复技能名**：技能名已经由左栏那一行承担（选中行 L2 高亮 + 常驻
+  /// 可见），右栏再写一遍是同一屏内说两遍同一件事；右栏只回答「这个技能是什么、
+  /// 在哪儿、和谁相关」。窄屏行内详情同理（名称在行首，详情挂在下方）。
+  Widget _buildSkillDetailPane(SkillSummary skill) {
+    final l10n = AppLocalizations.of(context);
+    final description = _SkillRow._trimmedOrNull(skill.description);
+    final tags = (skill.tags ?? const <String>[])
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toList();
+    final disabled = skill.disabled == true;
+    final hasDetail = skillHasDetail(skill);
+    // 什么都没有的技能（无描述 / 无标签 / 无路径 / 无相关）：给一句明确的
+    // 「没有更多详情」，而不是留一片看不出所以然的空白。
+    final isEmpty =
+        description == null && tags.isEmpty && !disabled && !hasDetail;
+
+    return ReadingWidthBox(
+      key: const ValueKey('skills-detail-pane'),
+      maxWidth: _kSkillDetailMaxWidth,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          kPanelPaddingWide,
+          12,
+          kPanelPaddingWide,
+          kPanelPaddingWide,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isEmpty)
+              Text(
+                l10n.noMoreSkillDetails,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.textSecondary,
+                    dark: secondaryText,
+                  ),
+                ),
+              ),
+            if (description != null) ...[
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+            ],
+            // 标签 / 已禁用徽标：窄屏挂在列表行上，宽屏移到这里（列表行只留
+            // 名称 + 描述 + 开关，保持左栏可扫读）。
+            if (disabled || tags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (disabled)
+                    _Badge(text: l10n.skillDisabledBadge, highlighted: false),
+                  for (final tag in tags) _Badge(text: tag, highlighted: true),
+                ],
+              ),
+            ],
+            // 路径 / 相关技能（本地元数据，无额外网络请求）。
+            _SkillDetail(
+              key: ValueKey('skills-detail-pane-${skillDisplayName(skill)}'),
+              skill: skill,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 搜索框。
+  ///
+  /// [padding] 默认逐像素沿用窄屏的 `16,4,16,8`；宽屏左栏（320）由 [_buildSkillRail]
+  /// 传入更紧的内边距（左栏自身已有 10 边距）。
+  Widget _buildSearchBar({
+    EdgeInsetsGeometry padding = const EdgeInsets.fromLTRB(16, 4, 16, 8),
+  }) {
     final l10n = AppLocalizations.of(context);
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      padding: padding,
       child: CupertinoSearchTextField(
         key: const ValueKey('skills-search'),
         controller: _searchController,
@@ -327,6 +501,35 @@ bool skillHasDetail(SkillSummary skill) {
   return related.any((e) => e.trim().isNotEmpty);
 }
 
+// ---------------------------------------------------------------------------
+// 宽屏（≥900）左栏 / 右栏令牌（批 4 · P2）
+// ---------------------------------------------------------------------------
+
+/// 左栏宽度 320（批 4 设计稿 P2「左 320 列表 + 右详情」）。
+///
+/// 与批 3 的设置/记忆左栏（220，导航型）刻意分档：那里是**分类导航**（短标签，
+/// 点到即换内容），这里是**技能列表**（要放下技能名 + 描述单行 + 开关）。
+const double _kSkillRailWidth = 320.0;
+
+/// 右栏详情正文限宽 744（G1 阅读型档位；设置 / 记忆同值）。
+///
+/// 不直接用 `kReadingMaxWidth`（760）是因为批 3 设置/记忆已经落码 744，同一套
+/// 「右栏限宽」在三页必须同值，否则并排对比时右栏内容左右游移。
+const double _kSkillDetailMaxWidth = 744.0;
+
+/// 左栏行文字（浅色设计稿 `#3A3A3C`）与行图标/分组标题（`#8A8A90`）—— 与批 3
+/// 左栏骨架 `features/shared/wide_nav_rail.dart` 同款取值；深色回退语义色。
+/// （该骨架文件属批 3 分区、本批不改，故这里按同款取值重画，不改共享件。）
+const Color _kRailRowLabel = Color(0xFF3A3A3C);
+const Color _kRailRowIcon = Color(0xFF8A8A90);
+
+/// 分栏线 / 发丝线：浅色与卡片描边同族，暗色沿用 separator。
+Color _railSeparator(BuildContext context) => LightSurfaces.resolve(
+  context,
+  LightSurfaces.divider,
+  dark: CupertinoColors.separator,
+);
+
 String _skillsGroupTitle(BuildContext context, String rawTitle) {
   final l10n = AppLocalizations.of(context);
   switch (rawTitle) {
@@ -493,6 +696,163 @@ class _SkillRow extends ConsumerWidget {
   static String? _trimmedOrNull(String? value) {
     final trimmed = value?.trim();
     return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+}
+
+/// 宽屏左栏分组标题（10pt w600 次级灰）。
+///
+/// 与 `features/shared/wide_nav_rail.dart` 的 `WideNavRailGroupLabel` 同款
+/// （同字号 / 同内缩 / 同取色）—— 两页左栏被并排对比时视觉应一致。
+class _WideSkillRailGroupLabel extends StatelessWidget {
+  const _WideSkillRailGroupLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 3),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: LightSurfaces.resolve(
+            context,
+            _kRailRowIcon,
+            dark: CupertinoColors.secondaryLabel,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 宽屏左栏技能行：技能名（单行省略）+ 描述（单行省略）+ 启用开关。
+///
+/// 选中态走 L2 —— 浅色「中性灰底 [LightSurfaces.selectedSurface] + 蓝字
+/// [LightSurfaces.selectionForeground]」，暗色沿用 primary 12%（与批 3 的
+/// `WideNavRailRow` 同一套口径；L2 是主人 2026-09-27 拍板的全局选中态）。
+/// 行高不固定（两行文案 + 开关），圆角 / 内边距与左栏骨架同档。
+class _WideSkillRailRow extends ConsumerWidget {
+  const _WideSkillRailRow({
+    super.key,
+    required this.skill,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final SkillSummary skill;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final activeFg = isLight
+        ? LightSurfaces.selectionForeground
+        : CupertinoTheme.of(context).primaryColor;
+    final activeBg = isLight
+        ? LightSurfaces.selectedSurface
+        : activeFg.withValues(alpha: 0.12);
+    final disabled = skill.disabled == true;
+    final description = _SkillRow._trimmedOrNull(skill.description);
+    final label = skillDisplayName(skill);
+    final isBusy =
+        ref
+            .watch(skillsControllerProvider)
+            .valueOrNull
+            ?.isBusy(skill.name ?? '') ??
+        false;
+
+    // 名称：选中 → L2 蓝字；未选中 → 与左栏骨架同族（已禁用则退到次级灰，
+    // 与窄屏行同口径）。
+    final nameFg = selected
+        ? activeFg
+        : disabled
+        ? LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          )
+        : LightSurfaces.resolve(
+            context,
+            _kRailRowLabel,
+            dark: CupertinoColors.label,
+          );
+    final descFg = selected
+        ? activeFg
+        : LightSurfaces.resolve(
+            context,
+            _kRailRowIcon,
+            dark: CupertinoColors.secondaryLabel,
+          );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Semantics(
+        label: label,
+        selected: selected,
+        button: true,
+        child: CupertinoButton(
+          key: ValueKey('skills-rail-tap-$label'),
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(double.infinity, 40),
+          borderRadius: BorderRadius.circular(kRadiusInline),
+          color: selected ? activeBg : CupertinoColors.transparent,
+          onPressed: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: nameFg,
+                        ),
+                      ),
+                      if (description != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: descFg),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SettingsSurfaces.toggle(
+                  context,
+                  CupertinoSwitch(
+                    key: ValueKey('skills-rail-toggle-$label'),
+                    value: !disabled,
+                    onChanged: isBusy
+                        ? null
+                        : (value) => unawaited(
+                            ref
+                                .read(skillsControllerProvider.notifier)
+                                .toggleSkill(skill, enabled: value),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

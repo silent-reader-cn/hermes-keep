@@ -5,14 +5,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/git_workspace.dart';
 import '../../core/utils/accessibility.dart';
+import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/app_scrollbar.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'git_branch_tree.dart';
 import 'git_providers.dart';
 import '../../app/widgets/app_refresh_control.dart';
+
+/// 宽屏左栏（变更列表）固定宽 380（批 4 设计稿 §P9「左 380 变更列表 + 右 diff」）。
+///
+/// 比工作区左栏（340）宽一档：这里每行要放下「文件路径 + 变更类型/增删行数 +
+/// 暂存/丢弃两个操作」，380 是清单里最紧一档刚好不折行的宽度。右栏 diff 是
+/// **工具型**内容（长行、缩进），故铺满、不设上限并可横向滚。
+const double kWideGitChangesWidth = 380.0;
 
 /// 会话工作区 Git 面板（对齐 Hermex GitWorkspaceView 的展示形态）。
 ///
@@ -32,9 +41,17 @@ class GitPage extends ConsumerStatefulWidget {
 class _GitPageState extends ConsumerState<GitPage> {
   final TextEditingController _messageController = TextEditingController();
 
+  /// 宽屏三处常显滚动条（G4）控制器：左栏列表 / diff 纵向 / diff 横向。
+  final ScrollController _changesScrollController = ScrollController();
+  final ScrollController _diffVerticalController = ScrollController();
+  final ScrollController _diffHorizontalController = ScrollController();
+
   @override
   void dispose() {
     _messageController.dispose();
+    _changesScrollController.dispose();
+    _diffVerticalController.dispose();
+    _diffHorizontalController.dispose();
     super.dispose();
   }
 
@@ -138,35 +155,160 @@ class _GitPageState extends ConsumerState<GitPage> {
     }
 
     return [
-      _buildSummarySliver(ref, state),
-      _buildBranchTreeSliver(ref, state),
-      if (!state.hasCommittableChanges)
-        SliverToBoxAdapter(child: _CleanWorkspacePlaceholder())
+      // 宽屏（≥900）：左 380 变更列表（四段保留）+ 右 diff 铺满。
+      // 窄屏（<900）：竖排堆叠原样（diff 就地展开）。
+      if (isWideLayout(context))
+        _buildWideHostSliver(_buildWideBody(ref, state))
       else ...[
-        if (state.stagedFiles.isNotEmpty)
-          _buildFileSectionSliver(
-            ref,
-            state,
-            l10n.stagedSection,
-            state.stagedFiles,
-          ),
-        if (state.unstagedFiles.isNotEmpty)
-          _buildFileSectionSliver(
-            ref,
-            state,
-            l10n.unstagedSection,
-            state.unstagedFiles,
-          ),
+        _buildSummarySliver(ref, state),
+        _buildBranchTreeSliver(ref, state),
+        if (!state.hasCommittableChanges)
+          SliverToBoxAdapter(child: _CleanWorkspacePlaceholder())
+        else ...[
+          if (state.stagedFiles.isNotEmpty)
+            _buildFileSectionSliver(
+              ref,
+              state,
+              l10n.stagedSection,
+              state.stagedFiles,
+            ),
+          if (state.unstagedFiles.isNotEmpty)
+            _buildFileSectionSliver(
+              ref,
+              state,
+              l10n.unstagedSection,
+              state.unstagedFiles,
+            ),
+        ],
+        if (state.status?.truncated == true)
+          SliverToBoxAdapter(child: _buildTruncatedWarning(l10n)),
+        _buildCommitSliver(ref, state),
+        _buildRemoteSliver(ref, state),
       ],
-      if (state.status?.truncated == true)
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Text(
-              l10n.tooManyChangedFilesWarning,
-              textAlign: TextAlign.center,
+    ];
+  }
+
+  // -------------------------------------------------------------------------
+  // 宽屏双栏（≥900）：左 380 变更列表 + 右 diff 铺满
+  // -------------------------------------------------------------------------
+
+  /// 双栏宿主：把「剩余视口高度」算准后交给两栏（两栏各自内部滚动）。
+  ///
+  /// 刻意**不用** `SliverFillRemaining`：`hasScrollBody: false` 会向子级要
+  /// intrinsic 高度 —— 子级里含 viewport（左栏的 [CustomScrollView]）时直接抛
+  /// `RenderViewport does not support returning intrinsic dimensions`；
+  /// `hasScrollBody: true` 又把该 sliver 的 scrollExtent 记成「整幅视口高」，
+  /// 外层会白白多出一段可滚动距离。显式按 `remainingPaintExtent` 定高，
+  /// 既拿到确定的剩余高度，又让外层 maxScrollExtent 恰好为 0（下拉刷新靠
+  /// overscroll 仍然可用）。
+  Widget _buildWideHostSliver(Widget child) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        return SliverToBoxAdapter(
+          child: SizedBox(
+            height: constraints.remainingPaintExtent,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  /// 宽屏主体：左栏复用与窄屏**同一批 sliver**（摘要 / 分支树 / 已暂存 /
+  /// 未暂存 / 提交 / 远程操作 —— 四段结构原样保留，唯一差别是 diff 不再内联），
+  /// 固定 [kWideGitChangesWidth]；右栏 diff **铺满**（`Expanded`，不限宽 + 可横滚）。
+  Widget _buildWideBody(WidgetRef ref, GitState state) {
+    final l10n = AppLocalizations.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          key: const ValueKey('git-wide-changes'),
+          width: kWideGitChangesWidth,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                right: BorderSide(
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.divider,
+                    dark: CupertinoColors.separator,
+                  ),
+                  width: 0.5,
+                ),
+              ),
+            ),
+            child: AppScrollbar(
+              key: const ValueKey('git-wide-changes-scroll'),
+              controller: _changesScrollController,
+              child: CustomScrollView(
+                controller: _changesScrollController,
+                slivers: [
+                  _buildSummarySliver(ref, state),
+                  _buildBranchTreeSliver(ref, state),
+                  if (!state.hasCommittableChanges)
+                    SliverToBoxAdapter(child: _CleanWorkspacePlaceholder())
+                  else ...[
+                    if (state.stagedFiles.isNotEmpty)
+                      _buildFileSectionSliver(
+                        ref,
+                        state,
+                        l10n.stagedSection,
+                        state.stagedFiles,
+                        selectedHighlight: true,
+                        inlineDiff: false,
+                      ),
+                    if (state.unstagedFiles.isNotEmpty)
+                      _buildFileSectionSliver(
+                        ref,
+                        state,
+                        l10n.unstagedSection,
+                        state.unstagedFiles,
+                        selectedHighlight: true,
+                        inlineDiff: false,
+                      ),
+                  ],
+                  if (state.status?.truncated == true)
+                    SliverToBoxAdapter(child: _buildTruncatedWarning(l10n)),
+                  _buildCommitSliver(ref, state),
+                  _buildRemoteSliver(ref, state),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          key: const ValueKey('git-wide-diff-pane'),
+          child: _buildWideDiffPane(state),
+        ),
+      ],
+    );
+  }
+
+  /// 右侧 diff 栏：标题行（文件路径 + 加载中）＋ 正文（铺满 + 双向常显滚动条）。
+  Widget _buildWideDiffPane(GitState state) {
+    final l10n = AppLocalizations.of(context);
+    final file = state.selectedFile;
+    if (file == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CupertinoIcons.doc_text,
+              size: 44,
+              color: LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              l10n.preview,
+              key: const ValueKey('git-wide-diff-empty'),
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 15,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -174,11 +316,104 @@ class _GitPageState extends ConsumerState<GitPage> {
                 ),
               ),
             ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.divider,
+                  dark: CupertinoColors.separator,
+                ),
+                width: 0.5,
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    file.displayPath,
+                    key: const ValueKey('git-wide-diff-path'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (state.isDiffLoading)
+                  const CupertinoActivityIndicator(radius: 8),
+              ],
+            ),
           ),
         ),
-      _buildCommitSliver(ref, state),
-      _buildRemoteSliver(ref, state),
-    ];
+        Expanded(child: _buildWideDiffBody(state, l10n)),
+      ],
+    );
+  }
+
+  /// 宽屏 diff 正文：**铺满**（不限宽）＋ 横向滚动（长行不换行、可横滚）。
+  Widget _buildWideDiffBody(GitState state, AppLocalizations l10n) {
+    return Container(
+      key: const ValueKey('git-diff'),
+      color: gitDiffSurface(context),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: AppScrollbar(
+        key: const ValueKey('git-wide-diff-scroll'),
+        controller: _diffVerticalController,
+        child: SingleChildScrollView(
+          controller: _diffVerticalController,
+          child: AppScrollbar(
+            key: const ValueKey('git-wide-diff-hscroll'),
+            controller: _diffHorizontalController,
+            child: SingleChildScrollView(
+              controller: _diffHorizontalController,
+              scrollDirection: Axis.horizontal,
+              child: Text(
+                gitDiffText(state, l10n),
+                key: const ValueKey('git-wide-diff-text'),
+                softWrap: false,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 文件数超限提示（窄屏 sliver 与宽屏左栏共用）。
+  Widget _buildTruncatedWarning(AppLocalizations l10n) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Text(
+        l10n.tooManyChangedFilesWarning,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildSummarySliver(WidgetRef ref, GitState state) {
@@ -276,8 +511,10 @@ class _GitPageState extends ConsumerState<GitPage> {
     WidgetRef ref,
     GitState state,
     String header,
-    List<GitFile> files,
-  ) {
+    List<GitFile> files, {
+    bool selectedHighlight = false,
+    bool inlineDiff = true,
+  }) {
     final controller = ref.read(
       gitControllerProvider(widget.sessionId).notifier,
     );
@@ -300,6 +537,8 @@ class _GitPageState extends ConsumerState<GitPage> {
             _FileTile(
               file: file,
               expanded: state.selectedFile?.id == file.id,
+              // 选中态底高亮只在宽屏左栏开（窄屏竖排保持原样、逐像素不变）。
+              selected: selectedHighlight && state.selectedFile?.id == file.id,
               isActionRunning: state.isActionRunning,
               onTap: () => unawaited(controller.selectFile(file)),
               onStage: file.staged == true
@@ -307,7 +546,9 @@ class _GitPageState extends ConsumerState<GitPage> {
                   : () => unawaited(controller.stage([_filePath(file)])),
               onDiscard: () => unawaited(controller.discard([_filePath(file)])),
             ),
-            if (state.selectedFile?.id == file.id) _DiffExpansion(state: state),
+            // 宽屏 diff 搬到右栏（inlineDiff=false）→ 左栏不再内联展开。
+            if (inlineDiff && state.selectedFile?.id == file.id)
+              _DiffExpansion(state: state),
           ],
         ],
       ),
@@ -621,6 +862,7 @@ class _FileTile extends StatelessWidget {
     required this.onTap,
     required this.onStage,
     required this.onDiscard,
+    this.selected = false,
   });
 
   final GitFile file;
@@ -630,6 +872,9 @@ class _FileTile extends StatelessWidget {
   final VoidCallback onStage;
   final VoidCallback onDiscard;
 
+  /// 宽屏左栏选中态（L2）；窄屏恒 false（行底逐像素不变）。
+  final bool selected;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -637,6 +882,13 @@ class _FileTile extends StatelessWidget {
     final kind = file.changeKind;
     return CupertinoListTile(
       key: ValueKey('git-file-${file.id}'),
+      // L2 选中底：浅色中性灰 .16、暗色 primary 12%（与左导航行同口径）。
+      backgroundColor: selected
+          ? (isDark
+                ? CupertinoTheme.of(context).primaryColor
+                      .withValues(alpha: 0.12)
+                : LightSurfaces.selectedSurface)
+          : null,
       leading: Icon(_kindIcon(kind), color: _kindColor(context, kind)),
       title: Text(
         file.displayPath,
@@ -777,6 +1029,34 @@ class _FileTile extends StatelessWidget {
 // diff 展开区
 // ---------------------------------------------------------------------------
 
+/// diff 块底色：浅色 [LightSurfaces.page]，暗色沿用 `secondarySystemBackground`。
+///
+/// 修复（真渲染目检发现，原注释自认「旧暗问题待裁」）：
+/// `CupertinoColors.secondarySystemBackground` 是 dynamic color，直接交给
+/// `Container.color` **不会**按亮度解析 —— 暗色下落到浅色 raw 值 (#F2F2F7)，
+/// 而正文文字继承主题为浅色 ⇒ 白字叠浅底、几乎不可读。
+/// 改走 [LightSurfaces.resolve]：暗色分支内部会 `CupertinoDynamicColor.resolve`
+/// ⇒ 解析为暗色 #1C1C1E；浅色仍是 page。
+///
+/// **宽窄两处共用同一份实现** —— 抽出成函数就是为了让「原地展开（窄屏）」与
+/// 「右栏铺满（宽屏）」不可能各自漂移回未解析的 dynamic color。
+Color gitDiffSurface(BuildContext context) => LightSurfaces.resolve(
+  context,
+  LightSurfaces.page,
+  dark: CupertinoColors.secondarySystemBackground,
+);
+
+/// diff 正文文案（含不可用 / 二进制 / 过大 / 空态兜底）；宽窄两处共用。
+String gitDiffText(GitState state, AppLocalizations l10n) {
+  final diff = state.diff;
+  if (diff == null) return l10n.cannotLoadDiff;
+  if (diff.binary == true) return l10n.binaryFileCannotShowDiff;
+  final text = diff.diff ?? '';
+  if (text.isEmpty) return l10n.noDiffContent;
+  if (diff.tooLarge == true) return l10n.fileTooLargePartialContent(text);
+  return text;
+}
+
 class _DiffExpansion extends StatelessWidget {
   const _DiffExpansion({required this.state});
 
@@ -791,39 +1071,13 @@ class _DiffExpansion extends StatelessWidget {
         child: Center(child: CupertinoActivityIndicator(radius: 10)),
       );
     }
-    final diff = state.diff;
-    String content;
-    if (diff == null) {
-      content = l10n.cannotLoadDiff;
-    } else if (diff.binary == true) {
-      content = l10n.binaryFileCannotShowDiff;
-    } else {
-      final text = diff.diff ?? '';
-      if (text.isEmpty) {
-        content = l10n.noDiffContent;
-      } else if (diff.tooLarge == true) {
-        content = l10n.fileTooLargePartialContent(text);
-      } else {
-        content = text;
-      }
-    }
     return Container(
       key: const ValueKey('git-diff'),
       width: double.infinity,
-      // 修复（真渲染目检发现，原注释自认「旧暗问题待裁」）：
-      // `CupertinoColors.secondarySystemBackground` 是 dynamic color，直接交给
-      // `Container.color` **不会**按亮度解析 —— 暗色下落到浅色 raw 值 (#F2F2F7)，
-      // 而正文文字继承主题为浅色 ⇒ 白字叠浅底、几乎不可读。
-      // 改走 LightSurfaces.resolve：暗色分支内部会 CupertinoDynamicColor.resolve
-      // ⇒ 解析为暗色 #1C1C1E；浅色仍是 page。
-      color: LightSurfaces.resolve(
-        context,
-        LightSurfaces.page,
-        dark: CupertinoColors.secondarySystemBackground,
-      ),
+      color: gitDiffSurface(context),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: Text(
-        content,
+        gitDiffText(state, l10n),
         style: const TextStyle(
           fontFamily: 'monospace',
           fontSize: 11,

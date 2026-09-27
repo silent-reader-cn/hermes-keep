@@ -90,9 +90,11 @@ import '../helpers/in_memory_secure_storage.dart';
 //
 // 覆盖页（10）：设置 / 记忆 / 技能 / 工作区 / 工作区管理 / 任务 / 下载 / Git /
 // 诊断 / 提示词 ⇒ 每页浅色 + 暗色各一张 = 20 张；
-// 补充图 2 组 ⇒ 记忆「我的笔记」分区、工作区文件预览（各浅/暗）= 4 张；
-// 合计 24 张。任务输出面板 / 技能详情 / Git diff 以**页内展开态**同框呈现
-// （主图即含），不另出图。
+// 补充图若干组（批 4A / 4B / 4C 各自新增，以下方实际用例为准）：
+//   记忆「我的笔记」分区 · **窄屏**工作区整页预览 · 工作区宽屏双栏就地预览 ·
+//   Git 宽屏双栏 diff 右栏 · 技能「左列表 + 右详情」 · 任务「右栏输出常驻 · 切任务」 ·
+//   诊断「级别筛选」与「右栏内联详情」（各浅/暗）。
+// 任务输出面板 / 技能详情 / Git diff / 诊断详情以**页内展开态**同框呈现（主图即含），不另出图。
 //
 // 真实性约定（同 readme_shots_test）：真字体（[loadHermesGoldenFonts]，否则
 // 中文渲染成方块）、真实 shell（AdaptiveShell 全壳，含侧栏与宽屏双栏）、
@@ -1379,6 +1381,13 @@ List<SavedPrompt> demoSavedPrompts() {
 /// 宽屏截图物理像素（逻辑 1280×800 @2x；≥ kAdaptiveBreakpoint=900 → 双栏）。
 const Size _wideSize = Size(2560, 1600);
 
+/// 窄屏截图物理像素（逻辑 800×600 @2x；< 900 → 单列）。
+///
+/// 用途只有一个：批 4 把「列表 → 整页详情」在宽屏改成就地/双栏后，少数页面
+/// （如工作区**整页预览**）的整页形态只剩窄屏路径 —— 那几张图改在窄屏出，
+/// 顺带把「窄屏逐像素不变」留成可视证据。
+const Size _narrowSize = Size(1600, 1200);
+
 /// 提示词页：产品里没有顶层路由（聊天输入栏底部 Sheet / 宽屏 popover），
 /// 这里直接渲染真实组件 [SavedPromptsSheet]，按底部弹层形态贴底呈现。
 class _PromptsPage extends StatelessWidget {
@@ -1414,6 +1423,38 @@ Future<void> _registerMonospaceCjk() async {
       .load();
 }
 
+/// 宽屏「切任务」目检用 fake：每个任务返回**各自**的输出正文。
+///
+/// 真 `FakeTasksApi.outputResponse` 是单值 —— 切任务后右栏仍是同一份内容，
+/// 目检会误读成「切换没生效」。本类只服务于批 4A 新增的「任务 · 宽屏输出常驻」
+/// 一图，不改既有用例（既有用例继续用 `FakeTasksApi` + `demoCronOutput()`）。
+class _PerJobOutputTasksApi extends FakeTasksApi {
+  _PerJobOutputTasksApi({super.jobs});
+
+  @override
+  Future<CronOutputResponse> fetchOutput(String jobId, {int? limit}) async {
+    await super.fetchOutput(jobId, limit: limit);
+    if (jobId == 'job-2') {
+      return const CronOutputResponse(
+        jobId: 'job-2',
+        outputs: [
+          CronOutputItem(
+            filename: '2026-09-27T09-00-22+cron-job-2.md',
+            content:
+                '# 用量周报 · 2026-09-27（周一 09:00）\n\n'
+                '本周 token 消耗 4,812,904（输入 3.9M / 输出 0.9M），较上周 −7.3%。\n'
+                '成本估算 \$18.42（基线 \$19.87，未超阈值）。\n\n'
+                '| 模型 | 调用 | 成本 |\n| --- | --- | --- |\n'
+                '| gpt-6-astra | 1,204 | \$11.08 |\n'
+                '| deepseek-v4 | 2,880 | \$7.34 |',
+          ),
+        ],
+      );
+    }
+    return demoCronOutput();
+  }
+}
+
 void main() {
   setUpAll(() async {
     // CJK → monospace 族首必须在 loadHermesGoldenFonts() 之前。
@@ -1434,10 +1475,11 @@ void main() {
     required String location,
     required Brightness brightness,
     List<Override> overrides = const [],
+    Size size = _wideSize,
     Future<void> Function(WidgetTester tester)? interact,
   }) async {
     LocaleResolver.reset(mode: AppLocaleMode.zh);
-    tester.view.physicalSize = _wideSize;
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.reset);
 
@@ -1577,6 +1619,25 @@ void main() {
     }
   }
 
+  /// 窄屏同款两图（`<900` 单列形态）。
+  ///
+  /// 批 4 把宽屏的「列表 → 整页详情」拆成双栏/就地后，**整页详情**只剩窄屏路径，
+  /// 这类图改由本方法在窄屏出（[capturePage] 传 `size: _narrowSize`）。
+  void narrowShotPair(
+    String title,
+    Future<void> Function(
+      WidgetTester tester,
+      Brightness brightness,
+    ) body,
+  ) {
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      final suffix = brightness == Brightness.dark ? '暗色' : '浅色';
+      testWidgets('窄屏$suffix · $title', (tester) async {
+        await body(tester, brightness);
+      }, skip: !_capture);
+    }
+  }
+
   // -------------------------------------------------------------------------
   // 1. 设置
   // -------------------------------------------------------------------------
@@ -1652,6 +1713,25 @@ void main() {
     );
   });
 
+  // 3b. 技能 · 宽屏双栏（批 4A · P2）：左 320 列表（选中态 L2）+ 右详情限宽 744。
+  // 点另一条真实技能名 → 右栏换内容、左栏列表不动（对照上一张「手风琴」形态）。
+  shotPair('技能 · 宽屏双栏', (tester, brightness) async {
+    await capturePage(
+      tester,
+      name: 'skills-wide-split',
+      location: '/skills',
+      brightness: brightness,
+      overrides: [
+        skillsApiFactoryProvider.overrideWithValue(
+          (_) => FakeSkillsApi(skills: demoSkills()),
+        ),
+      ],
+      interact: (tester) async {
+        await tester.tap(find.text('grounded-citations'));
+      },
+    );
+  });
+
   // -------------------------------------------------------------------------
   // 4. 工作区（文件树；补充一张文本文件预览）
   // -------------------------------------------------------------------------
@@ -1668,7 +1748,9 @@ void main() {
     );
   });
 
-  shotPair('工作区 · 文件预览', (tester, brightness) async {
+  // 批 4 · P3 之后：「预览」在宽屏**就地进右栏**（见下方 workspace-wide-split），
+  // 整页预览页（FilePreviewPage）只剩窄屏路径 —— 本图改在窄屏出，交互原样不动。
+  narrowShotPair('工作区 · 整页预览', (tester, brightness) async {
     final api = FakeWorkspaceApi(directories: demoWorkspaceDirectories())
       ..fileContents['lib/main.dart'] = const FileResponse(
         path: 'lib/main.dart',
@@ -1683,14 +1765,44 @@ void main() {
       name: 'workspace-preview',
       location: '/workspace/$_demoSessionId',
       brightness: brightness,
+      size: _narrowSize,
       overrides: [workspaceApiFactoryProvider.overrideWithValue((_) => api)],
       interact: (tester) async {
         // 进入 lib/ → 点 main.dart 打开条目操作菜单 → 预览
         await tester.tap(find.text('lib'));
         await tester.pump(const Duration(milliseconds: 400));
         await tester.tap(find.text('main.dart'));
-        await tester.pump(const Duration(milliseconds: 400));
+        // 窄屏（800×600）视口矮，弹层入场动画未结算时「预览」项还在屏下 ——
+        // 必须等它停稳再点，否则点到的是动画中途的坐标（旧宽屏图恰好侥幸不越界）。
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('workspace-action-preview')));
+        await tester.pump(const Duration(milliseconds: 600));
+      },
+    );
+  });
+
+  // 批 4 · P3：宽屏双栏「左 340 文件树 + 右预览铺满」（窄屏不受影响，见上两张）。
+  shotPair('工作区 · 宽屏双栏就地预览', (tester, brightness) async {
+    final api = FakeWorkspaceApi(directories: demoWorkspaceDirectories())
+      ..fileContents['lib/main.dart'] = const FileResponse(
+        path: 'lib/main.dart',
+        name: 'main.dart',
+        language: 'dart',
+        size: 8420,
+        lines: 42,
+        content: _demoDartFileContent,
+      );
+    await capturePage(
+      tester,
+      name: 'workspace-wide-split',
+      location: '/workspace/$_demoSessionId',
+      brightness: brightness,
+      overrides: [workspaceApiFactoryProvider.overrideWithValue((_) => api)],
+      interact: (tester) async {
+        // 宽屏点文件行 = 就地进右栏（不 push 整页预览）→ 左栏 L2 选中态 + 右栏代码。
+        await tester.tap(find.text('lib'));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('main.dart'));
         await tester.pump(const Duration(milliseconds: 600));
       },
     );
@@ -1730,6 +1842,25 @@ void main() {
       overrides: [tasksApiFactoryProvider.overrideWithValue((_) => api)],
       interact: (tester) async {
         await tester.tap(find.text('Hermes 仓 CI 巡检'));
+        await tester.pump(const Duration(milliseconds: 600));
+      },
+    );
+  });
+
+  // 6b. 任务 · 宽屏右栏输出常驻（批 4A · P4）：点**第二个**任务 → 左栏选中态换行、
+  // 右栏内容跟着换（宽屏不弹 sheet，「切任务即换内容」的直接对照图）。
+  shotPair('任务 · 宽屏输出常驻', (tester, brightness) async {
+    final api = _PerJobOutputTasksApi(jobs: demoCronJobs());
+    await capturePage(
+      tester,
+      name: 'tasks-wide-output',
+      location: '/tasks',
+      brightness: brightness,
+      overrides: [tasksApiFactoryProvider.overrideWithValue((_) => api)],
+      interact: (tester) async {
+        await tester.tap(
+          find.text('用量周报（近 7 天 token / 成本）'),
+        );
         await tester.pump(const Duration(milliseconds: 600));
       },
     );
@@ -1786,6 +1917,26 @@ void main() {
     );
   });
 
+  // 批 4 · P9：宽屏双栏「左 380 变更列表（四段）+ 右 diff 铺满」。
+  shotPair('Git · 宽屏双栏 diff 右栏', (tester, brightness) async {
+    final api = FakeGitApi()
+      ..statusResponse = demoGitStatus()
+      ..diffResponse = demoGitDiff()
+      ..branchesResponse = demoGitBranches();
+    await capturePage(
+      tester,
+      name: 'git-wide-split',
+      location: '/git/$_demoSessionId',
+      brightness: brightness,
+      overrides: [gitApiFactoryProvider.overrideWithValue((_) => api)],
+      interact: (tester) async {
+        // 点变更行 = diff 进右栏（左栏不再内联展开，四段结构同屏可读）。
+        await tester.tap(find.text(_demoDiffFilePath));
+        await tester.pump(const Duration(milliseconds: 400));
+      },
+    );
+  });
+
   // -------------------------------------------------------------------------
   // 9. 诊断（分段 + 日志表）
   // -------------------------------------------------------------------------
@@ -1799,6 +1950,53 @@ void main() {
       overrides: [diagnosticsServiceProvider.overrideWithValue(service)],
       interact: (tester) async {
         // 让诊断服务 500ms 防抖落库计时器结算，避免测试尾挂起 Timer。
+        await tester.pump(const Duration(milliseconds: 700));
+      },
+    );
+    service.clearMemoryOnly();
+  });
+
+  // -------------------------------------------------------------------------
+  // 9b. 诊断 · 批 4C 宽屏改造补图（左栏筛选选中态 / 详情在右栏内展开）
+  // -------------------------------------------------------------------------
+  shotPair('诊断 · 左栏筛选选中态', (tester, brightness) async {
+    final service = await demoDiagnosticsService();
+    await capturePage(
+      tester,
+      name: 'diagnostics-level-filter',
+      location: '/diagnostics',
+      brightness: brightness,
+      overrides: [diagnosticsServiceProvider.overrideWithValue(service)],
+      interact: (tester) async {
+        // 让诊断服务 500ms 防抖落库计时器结算，避免测试尾挂起 Timer。
+        await tester.pump(const Duration(milliseconds: 700));
+        // 撤掉 V / D / I，只留 W / E：未选中的级别必须回到灰底灰字
+        // （chips 的既有显色规则「选中才显级别色」搬进左栏后不变）。
+        for (final code in ['V', 'D', 'I']) {
+          await tester.tap(find.byKey(ValueKey('diagnostics-nav-level-$code')));
+          await tester.pump();
+        }
+        await tester.pump(const Duration(milliseconds: 700));
+      },
+    );
+    service.clearMemoryOnly();
+  });
+
+  shotPair('诊断 · 详情在右栏内展开', (tester, brightness) async {
+    final service = await demoDiagnosticsService();
+    await capturePage(
+      tester,
+      name: 'diagnostics-detail',
+      location: '/diagnostics',
+      brightness: brightness,
+      overrides: [diagnosticsServiceProvider.overrideWithValue(service)],
+      interact: (tester) async {
+        await tester.pump(const Duration(milliseconds: 700));
+        // 宽屏点日志行 → 详情在右栏内展开（不再整页 push）。
+        await tester.tap(
+          find.text('GET /api/workspace/download → 断流（已自动重试 1 次）'),
+        );
+        await tester.pump();
         await tester.pump(const Duration(milliseconds: 700));
       },
     );
