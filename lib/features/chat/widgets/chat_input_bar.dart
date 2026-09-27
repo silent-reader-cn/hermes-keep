@@ -777,7 +777,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ),
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          // #167 宽屏：底部留白归零，让工具行贴到窗口底边（与侧栏底部状态栏同底）。
+          padding: isWide
+              ? const EdgeInsets.fromLTRB(8, 6, 8, 0)
+              : const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: SafeArea(
             top: false,
             child: twoPane
@@ -1157,8 +1160,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                               ? l10n.steerPromptPlaceholder
                               : l10n.sendMessagePlaceholder)),
               enabled: !isSending && !_uploading && interactive,
-              // #163：宽屏最少 1 行起（空输入不再白占一行），内容多了自动长。
-              minLines: isWide ? 1 : 2,
+              // 主人 2026-09-27 定版：两行起（宽屏同样），内容多了自动长到 8 行。
+              minLines: 2,
               maxLines: 8,
               keyboardType: TextInputType.multiline,
               // #163：宽屏字段文字 17（主题默认）→ 15，与「正文 13.5 / 侧栏 12.5」
@@ -1201,74 +1204,94 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           ),
         ),
         const SizedBox(height: 6),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            AccessibleButton(
-              key: const ValueKey('chat-attach-button'),
-              label: l10n.addAttachment,
-              onPressed: (!interactive || isSending || _uploading)
-                  ? null
-                  : _handleAttachment,
-              padding: EdgeInsets.zero,
-              child: _uploading
-                  ? const CupertinoActivityIndicator()
-                  : Icon(
-                      CupertinoIcons.plus_circle,
-                      size: isWide ? 18 : 22,
+        // #167 宽屏：底部工具行（图标 / 仪表盘 / 工作区与模型 chip）与侧栏底部
+        // 状态栏**同高 42 且同底对齐**，顶沿补同款 0.5px 发丝线 ⇒ 两栏底部落在
+        // 同一条线上。窄屏不加（height/decoration 为 null，高度自适应原样）。
+        Container(
+          height: isWide ? 42 : null,
+          decoration: isWide
+              ? BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      width: 0.5,
                       color: LightSurfaces.resolve(
                         context,
-                        LightSurfaces.textSecondary,
-                        dark: CupertinoColors.systemGrey,
+                        LightSurfaces.divider,
+                        dark: CupertinoColors.systemGrey4,
                       ),
                     ),
-            ),
-            Container(
-              key: _bookmarkKey,
-              child: AccessibleButton(
-                key: const ValueKey('chat-saved-prompts-button'),
-                label: l10n.bookmarkPrompt,
+                  ),
+                )
+              : null,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              AccessibleButton(
+                key: const ValueKey('chat-attach-button'),
+                label: l10n.addAttachment,
                 onPressed: (!interactive || isSending || _uploading)
                     ? null
-                    : _showSavedPromptsSheet,
+                    : _handleAttachment,
                 padding: EdgeInsets.zero,
-                child: Icon(
-                  CupertinoIcons.bookmark,
-                  size: isWide ? 18 : 22,
-                  color: LightSurfaces.resolve(
-                    context,
-                    LightSurfaces.textSecondary,
-                    dark: CupertinoColors.systemGrey,
+                child: _uploading
+                    ? const CupertinoActivityIndicator()
+                    : Icon(
+                        CupertinoIcons.plus_circle,
+                        size: isWide ? 18 : 22,
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: CupertinoColors.systemGrey,
+                        ),
+                      ),
+              ),
+              Container(
+                key: _bookmarkKey,
+                child: AccessibleButton(
+                  key: const ValueKey('chat-saved-prompts-button'),
+                  label: l10n.bookmarkPrompt,
+                  onPressed: (!interactive || isSending || _uploading)
+                      ? null
+                      : _showSavedPromptsSheet,
+                  padding: EdgeInsets.zero,
+                  child: Icon(
+                    CupertinoIcons.bookmark,
+                    size: isWide ? 18 : 22,
+                    color: LightSurfaces.resolve(
+                      context,
+                      LightSurfaces.textSecondary,
+                      dark: CupertinoColors.systemGrey,
+                    ),
                   ),
                 ),
               ),
-            ),
-            Container(
-              key: _contextIndicatorKey,
-              child: ContextWindowIndicator(
-                snapshot: snapshot,
-                onTap: _showContextPopover,
-                isCompressing: isCompressing,
+              Container(
+                key: _contextIndicatorKey,
+                child: ContextWindowIndicator(
+                  snapshot: snapshot,
+                  onTap: _showContextPopover,
+                  isCompressing: isCompressing,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            // 性能监控面板：两段式且开关开启有数据时左靠剩余空间显示，紧跟左簇；无数据或关闭时不占位。
-            const Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: PerfMonitorPanel(),
+              const SizedBox(width: 8),
+              // 性能监控面板：两段式且开关开启有数据时左靠剩余空间显示，紧跟左簇；无数据或关闭时不占位。
+              const Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: PerfMonitorPanel(),
+                ),
               ),
-            ),
-            ComposerMetaChips(sessionId: widget.sessionId),
-            ..._buildTrailingControls(
-              l10n,
-              isStreaming,
-              isSending,
-              interactive,
-              canSendWithPending,
-              isCompressing,
-            ),
-          ],
+              ComposerMetaChips(sessionId: widget.sessionId),
+              ..._buildTrailingControls(
+                l10n,
+                isStreaming,
+                isSending,
+                interactive,
+                canSendWithPending,
+                isCompressing,
+              ),
+            ],
+          ),
         ),
       ],
     );

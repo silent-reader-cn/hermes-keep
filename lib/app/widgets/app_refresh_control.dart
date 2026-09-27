@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
+import '../shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
+
 /// 全 App 统一尺寸的下拉刷新控件（宽屏侧栏 + 各功能页共用）。
 ///
 /// 为什么需要它：Flutter 的 [CupertinoSliverRefreshControl] 默认指示器是
@@ -15,15 +17,22 @@ import 'package:flutter/cupertino.dart';
 class AppRefreshControl extends StatelessWidget {
   const AppRefreshControl({super.key, required this.onRefresh});
 
-  /// 指示器半径：8 → 直径约 16dp（SDK 默认 14 → 约 28dp）。
+  /// 宽屏指示器半径：8 → 直径约 16dp（SDK 默认 14 → 约 28dp）。
   ///
   /// 参照系：侧栏行内「进行中」小圆点 radius 6、品牌行刷新按钮 radius 10。
-  static const double indicatorRadius = 8.0;
+  static const double wideIndicatorRadius = 8.0;
 
-  /// 指示器区高度：48（SDK 默认 60）—— 收窄 overscroll 展开的空档。
-  static const double indicatorExtent = 48.0;
+  /// 宽屏指示器区高度：48（SDK 默认 60）。
+  static const double wideIndicatorExtent = 48.0;
 
-  /// 触发刷新的拉动距离（SDK 默认 100）。断言要求 ≥ [indicatorExtent]。
+  /// 窄屏沿用 SDK 默认（radius 14）—— 本轮尺寸收敛**只针对宽屏**，
+  /// 手机端下拉刷新保持原口径逐像素不变。
+  static const double narrowIndicatorRadius = 14.0;
+
+  /// 窄屏指示器区高度（SDK 默认 60）。
+  static const double narrowIndicatorExtent = 60.0;
+
+  /// 触发刷新的拉动距离（SDK 默认 100，宽窄一致）。断言要求 ≥ 指示器区高。
   static const double triggerPullDistance = 100.0;
 
   /// 与 `CupertinoSliverRefreshControl.onRefresh` 同义。
@@ -31,21 +40,37 @@ class AppRefreshControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+    final radius = isWide ? wideIndicatorRadius : narrowIndicatorRadius;
+    final extent = isWide ? wideIndicatorExtent : narrowIndicatorExtent;
     return CupertinoSliverRefreshControl(
-      refreshIndicatorExtent: indicatorExtent,
+      refreshIndicatorExtent: extent,
       refreshTriggerPullDistance: triggerPullDistance,
-      builder: _buildIndicator,
+      builder:
+          (
+            context,
+            refreshState,
+            pulledExtent,
+            refreshTriggerPullDistance,
+            refreshIndicatorExtent,
+          ) => _buildIndicator(
+            refreshState,
+            pulledExtent,
+            refreshTriggerPullDistance,
+            refreshIndicatorExtent,
+            radius,
+          ),
       onRefresh: onRefresh,
     );
   }
 
   /// 与 SDK 默认 builder 同构，仅替换半径与垂直落点（按新区高居中）。
   static Widget _buildIndicator(
-    BuildContext context,
     RefreshIndicatorMode refreshState,
     double pulledExtent,
     double refreshTriggerPullDistance,
     double refreshIndicatorExtent,
+    double radius,
   ) {
     final double percentageComplete =
         (pulledExtent / refreshTriggerPullDistance).clamp(0.0, 1.0);
@@ -56,10 +81,10 @@ class AppRefreshControl extends StatelessWidget {
         clipBehavior: Clip.none,
         children: <Widget>[
           Positioned(
-            top: (refreshIndicatorExtent - indicatorRadius * 2) / 2,
+            top: (refreshIndicatorExtent - radius * 2) / 2,
             left: 0.0,
             right: 0.0,
-            child: _indicatorFor(refreshState, percentageComplete),
+            child: _indicatorFor(refreshState, percentageComplete, radius),
           ),
         ],
       ),
@@ -69,6 +94,7 @@ class AppRefreshControl extends StatelessWidget {
   static Widget _indicatorFor(
     RefreshIndicatorMode refreshState,
     double percentageComplete,
+    double radius,
   ) {
     switch (refreshState) {
       case RefreshIndicatorMode.drag:
@@ -77,18 +103,16 @@ class AppRefreshControl extends StatelessWidget {
         return Opacity(
           opacity: opacityCurve.transform(percentageComplete),
           child: CupertinoActivityIndicator.partiallyRevealed(
-            radius: indicatorRadius,
+            radius: radius,
             progress: percentageComplete,
           ),
         );
       case RefreshIndicatorMode.armed:
       case RefreshIndicatorMode.refresh:
-        return const CupertinoActivityIndicator(radius: indicatorRadius);
+        return CupertinoActivityIndicator(radius: radius);
       case RefreshIndicatorMode.done:
         // 松手后随进度收缩（与 SDK 默认一致）。
-        return CupertinoActivityIndicator(
-          radius: indicatorRadius * percentageComplete,
-        );
+        return CupertinoActivityIndicator(radius: radius * percentageComplete);
       case RefreshIndicatorMode.inactive:
         return const SizedBox.shrink();
     }

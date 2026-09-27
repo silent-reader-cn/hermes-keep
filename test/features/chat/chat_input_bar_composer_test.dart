@@ -762,9 +762,9 @@ void main() {
     });
 
     // ---------------------------------------------------------------------
-    // #163 宽屏栏位档位（顶栏发丝线 / 标题 15 / 输入字段 15+单行起）
+    // #163 宽屏栏位档位（顶栏发丝线 / 标题 15 / 输入字段 15 + 两行起）
     // ---------------------------------------------------------------------
-    testWidgets('#163 宽屏：顶栏含 0.5 发丝线且标题 15pt、字段 15pt 单行起', (tester) async {
+    testWidgets('#163 宽屏：顶栏含 0.5 发丝线且标题 15pt、字段 15pt 两行起', (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
       // 注意：resetPhysicalSize 不复位 DPR，同文件后续用例会看到被改小的
@@ -800,11 +800,11 @@ void main() {
       final title = tester.widget<Text>(find.text('宽屏栏位校验'));
       expect(title.style?.fontSize, 15.0);
 
-      // 输入字段：15pt（原主题默认 17）、最少 1 行起。
+      // 输入字段：15pt（原主题默认 17）、两行起（主人 2026-09-27 定版）。
       final field = tester.widget<CupertinoTextField>(
         find.byKey(const ValueKey('chat-input-field')),
       );
-      expect(field.minLines, 1);
+      expect(field.minLines, 2);
       expect(field.style?.fontSize, 15.0);
 
       await _unmount(tester);
