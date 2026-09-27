@@ -12,12 +12,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../../../app/theme/layout_tokens.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../app/widgets/icon_hover_disk.dart';
 import '../../../core/api/sse_client.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tool_call.dart';
+import '../../../core/utils/accessibility.dart';
 import '../../../core/utils/selected_context.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
@@ -2599,60 +2602,76 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                         // 只弹出原生工具条），慢速右键才收得到。双层菜单正是这条
                         // 竞态的另一面：谁赢谁弹。改为 Listener 后外层恒定收到
                         // 右键，配合已抑制的原生工具条 ⇒ 恒定一层自定义菜单。
-                        child: Listener(
-                          onPointerDown: (event) {
-                            if ((event.buttons & kSecondaryMouseButton) == 0) {
-                              return;
-                            }
-                            unawaited(
-                              _showMessageActions(
-                                entry.message,
-                                messageIndex: entry.loadedIndex,
-                                position: event.position,
-                                selectionText:
-                                    _selectionByRenderId[entry.renderId],
-                              ),
-                            );
-                          },
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onLongPress: () => _showMessageActions(
+                        child: _MessageRowDesktopEntry(
+                          enabled: isWideLayout(context),
+                          // §D4 第二/第三入口：悬停「⋯」与键盘（Shift+F10 / Menu 键）
+                          // 与右键同一套动作 —— 三者都走 _showMessageActions。
+                          onOpenMenu: (position) => unawaited(
+                            _showMessageActions(
                               entry.message,
                               messageIndex: entry.loadedIndex,
+                              position: position,
                               selectionText:
                                   _selectionByRenderId[entry.renderId],
                             ),
-                            child: SearchMessageHighlight(
-                              highlight: isHighlightTarget,
-                              child: RepaintBoundary(
-                                child: ChatMessageBubble(
-                                  key: ValueKey(entry.renderId),
-                                  message: entry.message,
-                                  toolGroups: groups,
-                                  hideThinking: hideThinking,
-                                  collapseInjectedEnabled: collapseEnabled,
-                                  injectedExpanded: expanded,
-                                  onToggleInjected: () {
-                                    if (!mounted) return;
-                                    setState(() {
-                                      if (_expandedNoticeIds.contains(
-                                        noticeId,
-                                      )) {
-                                        _expandedNoticeIds.remove(noticeId);
+                          ),
+                          child: Listener(
+                            onPointerDown: (event) {
+                              if ((event.buttons & kSecondaryMouseButton) ==
+                                  0) {
+                                return;
+                              }
+                              unawaited(
+                                _showMessageActions(
+                                  entry.message,
+                                  messageIndex: entry.loadedIndex,
+                                  position: event.position,
+                                  selectionText:
+                                      _selectionByRenderId[entry.renderId],
+                                ),
+                              );
+                            },
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onLongPress: () => _showMessageActions(
+                                entry.message,
+                                messageIndex: entry.loadedIndex,
+                                selectionText:
+                                    _selectionByRenderId[entry.renderId],
+                              ),
+                              child: SearchMessageHighlight(
+                                highlight: isHighlightTarget,
+                                child: RepaintBoundary(
+                                  child: ChatMessageBubble(
+                                    key: ValueKey(entry.renderId),
+                                    message: entry.message,
+                                    toolGroups: groups,
+                                    hideThinking: hideThinking,
+                                    collapseInjectedEnabled: collapseEnabled,
+                                    injectedExpanded: expanded,
+                                    onToggleInjected: () {
+                                      if (!mounted) return;
+                                      setState(() {
+                                        if (_expandedNoticeIds.contains(
+                                          noticeId,
+                                        )) {
+                                          _expandedNoticeIds.remove(noticeId);
+                                        } else {
+                                          _expandedNoticeIds.add(noticeId);
+                                        }
+                                      });
+                                    },
+                                    onTextSelectionChanged: (t) {
+                                      if (t == null) {
+                                        _selectionByRenderId.remove(
+                                          entry.renderId,
+                                        );
                                       } else {
-                                        _expandedNoticeIds.add(noticeId);
+                                        _selectionByRenderId[entry.renderId] =
+                                            t;
                                       }
-                                    });
-                                  },
-                                  onTextSelectionChanged: (t) {
-                                    if (t == null) {
-                                      _selectionByRenderId.remove(
-                                        entry.renderId,
-                                      );
-                                    } else {
-                                      _selectionByRenderId[entry.renderId] = t;
-                                    }
-                                  },
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
@@ -3288,5 +3307,160 @@ class _OlderLoadingIndicator extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: 16),
       child: Center(child: CupertinoActivityIndicator(radius: 8)),
     );
+  }
+}
+
+/// §D4 第三入口的意图：焦点行上按 `Shift+F10` / `Menu` 键 → 打开消息操作菜单。
+///
+/// 两个键映射到**同一个意图**，打开的是同一个菜单、同一套动作（§D4「三入口一致」）。
+class _OpenMessageMenuIntent extends Intent {
+  const _OpenMessageMenuIntent();
+}
+
+/// §D4 三入口统一（鼠标端）：同一行的「右键 / 悬停 ⋯ / 键盘」打开同一个菜单。
+///
+/// - **右键**：由内层既有 `Listener`（`onPointerDown` + `kSecondaryMouseButton`）承担，
+///   本组件不改它 —— #134 的结论是必须用 `Listener`（正文里 `SelectableText` 的选字
+///   手势会在竞技场里抢赢 `GestureDetector`，快速右键外层收不到回调）；
+/// - **悬停「⋯」**：鼠标压上整行时行尾浮出一枚 28pt 圆底「⋯」（复用 G3 的
+///   [IconHoverDisk]），点它与右键同一套动作。悬停判定**必须自挂 [MouseRegion]**：
+///   [FocusableActionDetector.onShowHoverHighlight] 被 `_canShowHighlight` 门控，而
+///   鼠标移动会把 highlightMode 打回 `touch` ⇒ 拿它做悬停判定在真机上永不触发；
+/// - **键盘**：焦点落在整行时 `Shift+F10` / `Menu` 键打开同一菜单，并画
+///   [kFocusRingWidth]（2px）蓝焦点环；环只认**键盘导航**高亮
+///   （[FocusableActionDetector.onShowFocusHighlight] 只在 traditional 模式回调，
+///   鼠标点击不出环，符合 §G3「仅键盘导航触发，鼠标点击不显示」）；
+/// - **焦点环不挤压布局**：环画在 [Positioned.fill] + [IgnorePointer] 里，[Stack]
+///   只按非定位子（行内容）定尺 ⇒ 行高、文字位置逐像素不变。
+///
+/// 窄屏（[enabled] 为假 —— 调用方传 `isWideLayout(context)`）**原样透传** [child]：
+/// 不挂 Focus、不挂 [MouseRegion]、无圆底、无焦点环；手机端仍只有长按，逐像素不变。
+class _MessageRowDesktopEntry extends StatefulWidget {
+  const _MessageRowDesktopEntry({
+    required this.enabled,
+    required this.onOpenMenu,
+    required this.child,
+  });
+
+  /// 是否启用鼠标端三入口（宽屏为真；窄屏原样透传）。
+  final bool enabled;
+
+  /// 打开菜单（参数为菜单锚点的全局坐标）。
+  final void Function(Offset globalPosition) onOpenMenu;
+
+  /// 行内容（含 #134 的右键 [Listener]）。
+  final Widget child;
+
+  @override
+  State<_MessageRowDesktopEntry> createState() =>
+      _MessageRowDesktopEntryState();
+}
+
+class _MessageRowDesktopEntryState extends State<_MessageRowDesktopEntry> {
+  /// 菜单意图单例：`Shift+F10` 与 `Menu` 键都映射到它（同一套动作）。
+  static const _OpenMessageMenuIntent _openMenuIntent =
+      _OpenMessageMenuIntent();
+
+  /// 悬停「⋯」按钮的 key（点它时按按钮自身位置定位菜单）。
+  final GlobalKey _menuButtonKey = GlobalKey();
+
+  bool _hovered = false;
+  bool _focusHighlighted = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    return MouseRegion(
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: FocusableActionDetector(
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.f10, shift: true): _openMenuIntent,
+          SingleActivator(LogicalKeyboardKey.contextMenu): _openMenuIntent,
+        },
+        actions: <Type, Action<Intent>>{
+          _OpenMessageMenuIntent: CallbackAction<_OpenMessageMenuIntent>(
+            onInvoke: (_) {
+              widget.onOpenMenu(_rowBottomRight());
+              return null;
+            },
+          ),
+        },
+        onShowFocusHighlight: _setFocusHighlighted,
+        child: Stack(
+          children: [
+            widget.child,
+            if (_focusHighlighted)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: statusBlueText.resolveFrom(context),
+                        width: kFocusRingWidth,
+                      ),
+                      borderRadius: BorderRadius.circular(kRadiusInline),
+                    ),
+                  ),
+                ),
+              ),
+            if (_hovered)
+              Positioned(top: 0, right: 0, child: _menuButton(context)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _setHovered(bool value) {
+    if (value == _hovered) return;
+    setState(() => _hovered = value);
+  }
+
+  void _setFocusHighlighted(bool value) {
+    if (value == _focusHighlighted) return;
+    setState(() => _focusHighlighted = value);
+  }
+
+  /// 悬停「⋯」：28pt 圆底 + ⋯ 图标（色与侧栏会话行的行内「⋯」同源）。
+  Widget _menuButton(BuildContext context) {
+    return KeyedSubtree(
+      // 稳定 key（供测试/工装定位悬停「⋯」）：每行同一个值 —— 它与
+      // `chat-message-bubble` 同套路（重复 ValueKey 不在同一父级子表里，合法），
+      // 而同一时刻只可能有一行被悬停，故 `find.byKey` 恒为唯一。
+      key: const ValueKey('msg-row-hover-actions'),
+      child: IconHoverDisk(
+        hovered: true,
+        child: AccessibleButton(
+          key: _menuButtonKey,
+          label: AppLocalizations.of(context).messageActions,
+          minimumSize: const Size(kIconButtonHoverSize, kIconButtonHoverSize),
+          onPressed: () => widget.onOpenMenu(_buttonAnchor()),
+          child: Icon(
+            CupertinoIcons.ellipsis,
+            size: 15,
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: CupertinoColors.systemGrey,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 键盘入口的锚点：行右下角（键盘没有指针位置，取行的尾端最贴近用户在看的那行）。
+  Offset _rowBottomRight() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !box.attached) return Offset.zero;
+    return box.localToGlobal(Offset(box.size.width, box.size.height));
+  }
+
+  /// 「⋯」按钮的锚点：按钮左下角（菜单落在按钮正下方）。
+  Offset _buttonAnchor() {
+    final box = _menuButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !box.attached) return _rowBottomRight();
+    return box.localToGlobal(Offset(0, box.size.height));
   }
 }

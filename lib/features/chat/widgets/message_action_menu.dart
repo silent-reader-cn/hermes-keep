@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../app/shell/adaptive_shell.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../app/widgets/adaptive_action_menu.dart';
 import '../../../app/widgets/adaptive_popover.dart';
 import '../../../app/widgets/cupertino_popover.dart';
 import '../../../core/models/chat_message.dart';
@@ -31,9 +32,13 @@ abstract final class MessageAction {
 /// 弹出的消息操作菜单；返回 [MessageAction] tag，取消返回 null。
 ///
 /// - 宽屏（`width >= kAdaptiveBreakpoint`）且传入 [position] 时，使用
-///   [showCupertinoPopover] 弹出悬浮面板；
+///   [showCupertinoPopover] 弹出**鼠标档密排**悬浮面板（行高 30 / 宽 260 /
+///   分组线 / 快捷键列，见 §D3）；
 /// - 窄屏或未提供 [position] 时，使用 [showCupertinoModalPopup] 弹出
-///   CupertinoActionSheet 底部操作表；
+///   CupertinoActionSheet 底部操作表（行高 44，逐像素不变）；
+///
+/// 宽屏面板的快捷键**与点击同一个回调**，所以右侧列画出来的组合是真的能触发的
+/// 组合（`⌘C` / `Ctrl+C` 由目标平台裁决，见 [ActionMenuShortcut.primary]）。
 ///
 /// `truncate` 动作内部先弹确认对话框，确认后才返回 tag（取消层级：菜单取消 → null）。
 /// 内容为空时复制/复制MD 项禁用。
@@ -59,7 +64,7 @@ Future<String?> showMessageActionMenu(
   );
 }
 
-/// 窄屏 / 兜底模式：底部弹出 ActionSheet。
+/// 窄屏 / 兜底模式：底部弹出 ActionSheet（触屏档行高 44，本批**不动**）。
 Future<String?> _showMessageActionSheet(
   BuildContext context, {
   required ChatMessage message,
@@ -161,7 +166,12 @@ Future<String?> _showMessageActionSheet(
   );
 }
 
-/// 宽屏模式：右键位置悬浮面板。
+/// 宽屏模式：右键位置悬浮面板（鼠标档密排）。
+///
+/// §D3：固定宽 [kActionMenuMaxWidthWide]（≤260）、行高 [kActionMenuRowHeightWide]（30）、
+/// 三族分组线（复制 / 跳转 / 破坏性）、右侧快捷键列；文案一律取仓库真实 l10n。
+/// §D3 的快捷键列是**新增功能**：右侧列画出的组合在 [ActionMenuShortcutScope] 里
+/// 真正注册，走的是与点击完全相同的回调（不是装饰）。
 Future<String?> _showMessageActionPopover(
   BuildContext context, {
   required ChatMessage message,
@@ -171,7 +181,9 @@ Future<String?> _showMessageActionPopover(
   final l10n = AppLocalizations.of(context);
   final hasContent = (message.content ?? '').trim().isNotEmpty;
   final hasSelection = selectionText != null && selectionText.isNotEmpty;
-  final baseHeight = message.role == 'user' ? 220.0 : 180.0;
+  // 菜单高度按行数实算（供 placement 判上下翻转用）：行高 30 + 上下 4 的留白。
+  final rowCount =
+      (hasSelection ? 3 : 2) + (message.role == 'user' ? 2 : 1) + 1;
   final completer = Completer<String?>();
   var isProcessingAction = false;
 
@@ -180,126 +192,129 @@ Future<String?> _showMessageActionPopover(
     position: position,
     placement: PopoverPlacement.bottom,
     align: PopoverAlign.start,
-    preferredWidth: 200,
-    preferredHeight: hasSelection ? baseHeight + 40.0 : baseHeight,
+    preferredWidth: kActionMenuMaxWidthWide,
+    maxWidth: kActionMenuMaxWidthWide,
+    preferredHeight: rowCount * kActionMenuRowHeightWide + 12,
     onClosed: () {
       if (!isProcessingAction && !completer.isCompleted) {
         completer.complete(null);
       }
     },
     builder: (popoverContext, close) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: IntrinsicWidth(
+      void run(String action) {
+        isProcessingAction = true;
+        close();
+        if (!completer.isCompleted) {
+          completer.complete(action);
+        }
+      }
+
+      // 三族分组（§D3）：复制 / 跳转 / 破坏性。空组（如非 user 消息没有「编辑
+      // 并重新发送」）自然消失，分组线按「非首组的第一项」插入。
+      final groups = <List<_MessageMenuEntry>>[
+        [
+          _MessageMenuEntry(
+            key: const ValueKey('msg-action-copy'),
+            label: l10n.copyText,
+            icon: CupertinoIcons.doc_text,
+            shortcut: ActionMenuShortcut.primary(LogicalKeyboardKey.keyC),
+            enabled: hasContent,
+            onRun: () => run(MessageAction.copy),
+          ),
+          _MessageMenuEntry(
+            key: const ValueKey('msg-action-copy-md'),
+            label: l10n.copyMarkdown,
+            icon: CupertinoIcons.doc_richtext,
+            shortcut: ActionMenuShortcut.primary(
+              LogicalKeyboardKey.keyC,
+              shift: true,
+            ),
+            enabled: hasContent,
+            onRun: () => run(MessageAction.copyMd),
+          ),
+          if (hasSelection)
+            _MessageMenuEntry(
+              key: const ValueKey('msg-action-copy-selection'),
+              label: l10n.copySelection,
+              icon: CupertinoIcons.doc_on_clipboard,
+              shortcut: ActionMenuShortcut.primary(
+                LogicalKeyboardKey.keyC,
+                alt: true,
+              ),
+              onRun: () => run(MessageAction.copySelection),
+            ),
+        ],
+        [
+          if (message.role == 'user')
+            _MessageMenuEntry(
+              key: const ValueKey('msg-action-edit'),
+              label: l10n.editAndResend,
+              icon: CupertinoIcons.paintbrush,
+              shortcut: ActionMenuShortcut.enter(),
+              onRun: () => run(MessageAction.edit),
+            ),
+          _MessageMenuEntry(
+            key: const ValueKey('msg-action-branch'),
+            label: l10n.branchFromHere,
+            icon: CupertinoIcons.square_stack,
+            onRun: () => run(MessageAction.branch),
+          ),
+        ],
+        [
+          _MessageMenuEntry(
+            key: const ValueKey('msg-action-truncate'),
+            label: l10n.truncateFromHere,
+            icon: CupertinoIcons.xmark,
+            isDestructive: true,
+            onRun: () {
+              // 破坏性动作二阶确认：先按「已处理」关面板，再问；取消即整体取消。
+              isProcessingAction = true;
+              close();
+              unawaited(
+                _confirmTruncate(
+                  context: context,
+                  l10n: l10n,
+                  complete: (action) {
+                    if (!completer.isCompleted) completer.complete(action);
+                  },
+                ),
+              );
+            },
+          ),
+        ],
+      ];
+      final entries = <_MessageMenuEntry>[
+        for (var gi = 0; gi < groups.length; gi++)
+          for (var i = 0; i < groups[gi].length; i++)
+            groups[gi][i].withGroupStart(gi > 0 && i == 0),
+      ];
+      // 快捷键注册表：与点击同一个回调；禁用项（空消息的复制）与不存在的项
+      // （无选区时的复制选中）一律不注册 —— 否则「按了没反应」比没有更糟。
+      final bindings = <ShortcutActivator, VoidCallback>{
+        for (final entry in entries)
+          if (entry.enabled && entry.shortcut != null)
+            entry.shortcut!.activator: entry.onRun,
+      };
+      return ActionMenuShortcutScope(
+        bindings: bindings,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (hasSelection)
-                _MessageActionPopoverRow(
-                  key: const ValueKey('msg-action-copy-selection'),
-                  label: l10n.copySelection,
-                  onTap: () {
-                    isProcessingAction = true;
-                    close();
-                    if (!completer.isCompleted) {
-                      completer.complete(MessageAction.copySelection);
-                    }
-                  },
+              for (var i = 0; i < entries.length; i++) ...[
+                if (i > 0 && entries[i].startsGroup) const ActionMenuDivider(),
+                ActionMenuRow(
+                  key: entries[i].key,
+                  label: entries[i].label,
+                  icon: entries[i].icon,
+                  shortcut: entries[i].shortcut,
+                  enabled: entries[i].enabled,
+                  isDestructive: entries[i].isDestructive,
+                  onPressed: entries[i].onRun,
                 ),
-              _MessageActionPopoverRow(
-                key: const ValueKey('msg-action-copy'),
-                label: l10n.copyText,
-                enabled: hasContent,
-                onTap: () {
-                  isProcessingAction = true;
-                  close();
-                  if (!completer.isCompleted) {
-                    completer.complete(MessageAction.copy);
-                  }
-                },
-              ),
-              _MessageActionPopoverRow(
-                key: const ValueKey('msg-action-copy-md'),
-                label: l10n.copyMarkdown,
-                enabled: hasContent,
-                onTap: () {
-                  isProcessingAction = true;
-                  close();
-                  if (!completer.isCompleted) {
-                    completer.complete(MessageAction.copyMd);
-                  }
-                },
-              ),
-              if (message.role == 'user')
-                _MessageActionPopoverRow(
-                  key: const ValueKey('msg-action-edit'),
-                  label: l10n.editAndResend,
-                  onTap: () {
-                    isProcessingAction = true;
-                    close();
-                    if (!completer.isCompleted) {
-                      completer.complete(MessageAction.edit);
-                    }
-                  },
-                ),
-              _MessageActionPopoverRow(
-                key: const ValueKey('msg-action-branch'),
-                label: l10n.branchFromHere,
-                onTap: () {
-                  isProcessingAction = true;
-                  close();
-                  if (!completer.isCompleted) {
-                    completer.complete(MessageAction.branch);
-                  }
-                },
-              ),
-              _MessageActionPopoverRow(
-                key: const ValueKey('msg-action-truncate'),
-                label: l10n.truncateFromHere,
-                isDestructive: true,
-                onTap: () async {
-                  isProcessingAction = true;
-                  close();
-                  final confirmed = await showCupertinoDialog<bool>(
-                    context: context,
-                    builder: (dialogContext) => CupertinoAlertDialog(
-                      title: Text(l10n.truncateFromHere),
-                      content: Text(l10n.confirmTruncatePrompt),
-                      actions: [
-                        CupertinoDialogAction(
-                          textStyle:
-                              CupertinoTheme.brightnessOf(context) ==
-                                  Brightness.light
-                              ? const TextStyle(color: LightSurfaces.userDetail)
-                              : null,
-                          key: const ValueKey('msg-truncate-cancel'),
-                          onPressed: () => Navigator.pop(dialogContext, false),
-                          child: Text(l10n.cancel),
-                        ),
-                        CupertinoDialogAction(
-                          textStyle:
-                              CupertinoTheme.brightnessOf(context) ==
-                                  Brightness.light
-                              ? TextStyle(
-                                  color: statusRedText.resolveFrom(context),
-                                )
-                              : null,
-                          key: const ValueKey('msg-truncate-confirm'),
-                          isDestructiveAction: true,
-                          onPressed: () => Navigator.pop(dialogContext, true),
-                          child: Text(l10n.truncate),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (!completer.isCompleted) {
-                    completer.complete(
-                      confirmed == true ? MessageAction.truncate : null,
-                    );
-                  }
-                },
-              ),
+              ],
             ],
           ),
         ),
@@ -310,65 +325,77 @@ Future<String?> _showMessageActionPopover(
   return completer.future;
 }
 
-class _MessageActionPopoverRow extends StatelessWidget {
-  const _MessageActionPopoverRow({
-    super.key,
+/// 破坏性动作的二次确认（宽屏面板与窄屏 sheet 同一套文案与 key）。
+///
+/// 取消时补 `null` —— 与「菜单整体取消」同语义（调用方据此提前返回，不做任何事）。
+Future<void> _confirmTruncate({
+  required BuildContext context,
+  required AppLocalizations l10n,
+  required void Function(String? action) complete,
+}) async {
+  final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+  final confirmed = await showCupertinoDialog<bool>(
+    context: context,
+    builder: (dialogContext) => CupertinoAlertDialog(
+      title: Text(l10n.truncateFromHere),
+      content: Text(l10n.confirmTruncatePrompt),
+      actions: [
+        CupertinoDialogAction(
+          textStyle: isLight
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
+          key: const ValueKey('msg-truncate-cancel'),
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: Text(l10n.cancel),
+        ),
+        CupertinoDialogAction(
+          textStyle: isLight
+              ? TextStyle(color: statusRedText.resolveFrom(context))
+              : null,
+          key: const ValueKey('msg-truncate-confirm'),
+          isDestructiveAction: true,
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: Text(l10n.truncate),
+        ),
+      ],
+    ),
+  );
+  complete(confirmed == true ? MessageAction.truncate : null);
+}
+
+/// 宽屏面板的一行：文案 + 图标 + 快捷键 + 分组位（渲染交给 `ActionMenuRow`）。
+class _MessageMenuEntry {
+  const _MessageMenuEntry({
+    required this.key,
     required this.label,
-    required this.onTap,
-    this.isDestructive = false,
+    required this.icon,
+    required this.onRun,
+    this.shortcut,
     this.enabled = true,
+    this.isDestructive = false,
+    this.startsGroup = false,
   });
 
+  final Key key;
   final String label;
-  final VoidCallback onTap;
-  final bool isDestructive;
+  final IconData icon;
+  final VoidCallback onRun;
+  final ActionMenuShortcut? shortcut;
   final bool enabled;
+  final bool isDestructive;
+  final bool startsGroup;
 
-  @override
-  Widget build(BuildContext context) {
-    final color = !enabled
-        ? LightSurfaces.resolve(
-            context,
-            LightSurfaces.placeholder,
-            dark: CupertinoColors.placeholderText,
-          )
-        : isDestructive
-        ? LightSurfaces.resolve(
-            context,
-            statusRedText.resolveFrom(context),
-            dark: CupertinoColors.destructiveRed,
-          )
-        : CupertinoColors.label.resolveFrom(context);
-    if (CupertinoTheme.brightnessOf(context) == Brightness.light) {
-      return CupertinoListTile(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        backgroundColor: LightSurfaces.card,
-        backgroundColorActivated: LightSurfaces.pressed,
-        onTap: enabled ? onTap : null,
-        title: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: color,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-      );
-    }
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      alignment: Alignment.centerLeft,
-      onPressed: enabled ? onTap : null,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 14,
-          color: color,
-          fontWeight: FontWeight.w400,
-        ),
-      ),
-    );
-  }
+  /// 返回本项的副本并把 [startsGroup] 设为给定值（分组线由调用方按组边界裁决）。
+  _MessageMenuEntry withGroupStart(bool value) => _MessageMenuEntry(
+    key: key,
+    label: label,
+    icon: icon,
+    onRun: onRun,
+    shortcut: shortcut,
+    enabled: enabled,
+    isDestructive: isDestructive,
+    startsGroup: value,
+  );
 }
 
 /// 把 [message] 的纯文本写入剪贴板（返回结果供提示用）。
