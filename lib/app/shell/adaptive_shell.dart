@@ -45,11 +45,7 @@ const String kAdaptiveSidebarWidthStorageKey = 'adaptive_sidebar_width';
 ///   （如工作区非根目录 → 上一级目录，[AndroidBackInterceptorRegistry]）；
 ///   ③ 二级页回退到主页 `/`；④ 主页 2 秒内双击退出应用），其他平台行为空转。
 class AdaptiveShell extends StatefulWidget {
-  const AdaptiveShell({
-    super.key,
-    required this.state,
-    required this.child,
-  });
+  const AdaptiveShell({super.key, required this.state, required this.child});
 
   /// 当前路由状态。
   final GoRouterState state;
@@ -93,9 +89,9 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
     final rawWidth = prefs.get(kAdaptiveSidebarWidthStorageKey);
     if (rawWidth is num && mounted) {
       final resolved = rawWidth.toDouble().clamp(
-            kAdaptiveSidebarMinWidth,
-            kAdaptiveSidebarMaxWidth,
-          );
+        kAdaptiveSidebarMinWidth,
+        kAdaptiveSidebarMaxWidth,
+      );
       if (resolved == _sidebarWidth) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -255,7 +251,8 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     final router = GoRouter.maybeOf(context);
-    final effectiveLocation = router?.routerDelegate.currentConfiguration.last.matchedLocation ??
+    final effectiveLocation =
+        router?.routerDelegate.currentConfiguration.last.matchedLocation ??
         widget.state.matchedLocation;
     final isRootSessionList = effectiveLocation == '/';
     final isAndroid = defaultTargetPlatform == TargetPlatform.android;
@@ -263,34 +260,44 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
     final Widget content = isWide
         ? ColoredBox(
             color: CupertinoTheme.of(context).scaffoldBackgroundColor,
-            child: Row(
-              key: const ValueKey('adaptive-shell-wide-layout'),
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                SizedBox(
-                  key: const ValueKey('adaptive-shell-sidebar-container'),
-                  width: _sidebarWidth,
-                  child: SessionSidebar(
-                    currentLocation: effectiveLocation,
-                  ),
+                Row(
+                  key: const ValueKey('adaptive-shell-wide-layout'),
+                  children: [
+                    SizedBox(
+                      key: const ValueKey('adaptive-shell-sidebar-container'),
+                      width: _sidebarWidth,
+                      child: SessionSidebar(currentLocation: effectiveLocation),
+                    ),
+                    Expanded(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (isRootSessionList)
+                            const EmptyDetailPane()
+                          else
+                            widget.child,
+                          if (isRootSessionList)
+                            Offstage(offstage: true, child: widget.child),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                SidebarResizeHandle(
-                  onDragUpdate: _handleDragUpdate,
-                  onDragEnd: _handleDragEnd,
-                ),
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (isRootSessionList)
-                        const EmptyDetailPane()
-                      else
-                        widget.child,
-                      if (isRootSessionList)
-                        Offstage(
-                          offstage: true,
-                          child: widget.child,
-                        ),
-                    ],
+                // #168 拖拽把手改「覆盖层」：不再占布局宽度 —— 原先它横在两栏之间
+                // 吃掉 9px，两栏的水平发丝线因此在分界处各断一截（左右各少 ~4.5px，
+                // 肉眼即「接缝」）。改为以分界线为中心叠加后，两栏横线严丝合缝，
+                // 只有那条 1px 竖线穿过它们。
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  left: _sidebarWidth - SidebarResizeHandle.defaultWidth / 2,
+                  width: SidebarResizeHandle.defaultWidth,
+                  child: SidebarResizeHandle(
+                    onDragUpdate: _handleDragUpdate,
+                    onDragEnd: _handleDragEnd,
                   ),
                 ),
               ],
@@ -303,12 +310,8 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
       canPop: !isAndroid,
       onPopInvokedWithResult: _handlePopInvoked,
       child: Stack(
-        children: [
-          content,
-          if (_showExitToast) _buildExitToast(context),
-        ],
+        children: [content, if (_showExitToast) _buildExitToast(context)],
       ),
     );
   }
 }
-

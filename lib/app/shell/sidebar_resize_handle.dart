@@ -8,11 +8,15 @@ import '../theme/light_surfaces.dart';
 /// 鼠标悬停时展示左右调整光标 [SystemMouseCursors.resizeLeftRight]，
 /// 支持水平拖拽调整左侧栏宽度。
 class SidebarResizeHandle extends StatelessWidget {
+  /// 默认热区宽度（9px）：以分界线为中心左右各 4.5px。外壳按此值把把手做成
+  /// **覆盖层**（不占布局宽度），保证两栏水平发丝线在分界处严丝合缝。
+  static const double defaultWidth = 9.0;
+
   const SidebarResizeHandle({
     super.key,
     required this.onDragUpdate,
     this.onDragEnd,
-    this.width = 9.0,
+    this.width = defaultWidth,
     this.lineWidth = 1.0,
   });
 

@@ -1205,24 +1205,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         ),
         const SizedBox(height: 6),
         // #167 宽屏：底部工具行（图标 / 仪表盘 / 工作区与模型 chip）与侧栏底部
-        // 状态栏**同高 42 且同底对齐**，顶沿补同款 0.5px 发丝线 ⇒ 两栏底部落在
-        // 同一条线上。窄屏不加（height/decoration 为 null，高度自适应原样）。
-        Container(
+        // 状态栏**同高 42 且同底对齐**。主人 2026-09-27 二轮：**不要分割线**
+        // —— 上一版在工具行顶沿加的那条 0.5px 发丝线已撤除。
+        SizedBox(
           height: isWide ? 42 : null,
-          decoration: isWide
-              ? BoxDecoration(
-                  border: Border(
-                    top: BorderSide(
-                      width: 0.5,
-                      color: LightSurfaces.resolve(
-                        context,
-                        LightSurfaces.divider,
-                        dark: CupertinoColors.systemGrey4,
-                      ),
-                    ),
-                  ),
-                )
-              : null,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
