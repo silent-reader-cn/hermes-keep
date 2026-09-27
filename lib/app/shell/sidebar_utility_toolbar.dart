@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
+import '../theme/layout_tokens.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
+import '../widgets/icon_hover_disk.dart';
 import 'sidebar_utility_item.dart';
 
 /// 侧栏常驻工具入口行（TASK W2/W3 / 蓝本 SessionListComponents.swift §SessionSidebarUtilityRows）。
@@ -29,6 +31,8 @@ class SidebarUtilityToolbar extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final theme = CupertinoTheme.of(context);
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    // G3：光标语义只在宽屏生效（窄屏保持默认箭头，逐像素不变）。
+    final isWide = isWideLayout(context);
     final primaryColor = isLight
         ? statusBlueText.resolveFrom(context)
         : theme.primaryColor;
@@ -65,33 +69,43 @@ class SidebarUtilityToolbar extends ConsumerWidget {
                       label: title,
                       selected: isSelected,
                       button: true,
-                      child: CupertinoButton(
-                        key: ValueKey('sidebar-utility-${item.id}'),
-                        // 视觉压到 32pt（icon 20 + 上下 6pt），点击区保持
-                        // 44pt HIG 下限；配合外层 6pt×2 边距总高 44px，
-                        // 与内容区标准导航栏 / 紧凑导航条顶端对齐。
-                        minimumSize: const Size(40, 32),
-                        padding: const EdgeInsets.symmetric(vertical: 6.0),
-                        borderRadius: BorderRadius.circular(8.0),
-                        // L2（浅色）：选中底改中性灰 .16；暗色分支一字未改。
-                        color: isSelected
-                            ? (isLight
-                                  ? LightSurfaces.selectedSurface
-                                  : primaryColor.withValues(alpha: 0.12))
-                            : CupertinoColors.transparent,
-                        onPressed: () {
-                          unawaited(context.push(item.path));
-                        },
-                        child: Icon(
-                          item.icon,
-                          size: 20.0,
-                          // L2（浅色）：选中前景（图标）转 #005FB8；
-                          // 暗色沿用主题 primaryColor，取值不变。
+                      // G3：图标钮悬停圆底（28×28 圆）。包住**整颗按钮**，悬停命中
+                      // 区 = 整颗按钮；圆底居中（图标在按钮里居中，圆心正落在
+                      // 图标上）。选中优先：选中时 IconHoverDisk 不叠圆底，
+                      // 免得 16% 圆底压在选中底上读成「更深的选中」。
+                      child: IconHoverDisk(
+                        selected: isSelected,
+                        child: CupertinoButton(
+                          key: ValueKey('sidebar-utility-${item.id}'),
+                          // 视觉压到 32pt（icon 20 + 上下 6pt），点击区保持
+                          // 44pt HIG 下限；配合外层 6pt×2 边距总高 44px，
+                          // 与内容区标准导航栏 / 紧凑导航条顶端对齐。
+                          minimumSize: const Size(40, 32),
+                          padding: const EdgeInsets.symmetric(vertical: 6.0),
+                          borderRadius: BorderRadius.circular(8.0),
+                          // G3 光标语义（宽屏）：手型；禁用态自动转禁止符
+                          // （kPointerCursor 是 WidgetStateMouseCursor）。
+                          mouseCursor: isWide ? kPointerCursor : null,
+                          // L2（浅色）：选中底改中性灰 .16；暗色分支一字未改。
                           color: isSelected
                               ? (isLight
-                                    ? LightSurfaces.selectionForeground
-                                    : primaryColor)
-                              : inactiveColor,
+                                    ? LightSurfaces.selectedSurface
+                                    : primaryColor.withValues(alpha: 0.12))
+                              : CupertinoColors.transparent,
+                          onPressed: () {
+                            unawaited(context.push(item.path));
+                          },
+                          child: Icon(
+                            item.icon,
+                            size: 20.0,
+                            // L2（浅色）：选中前景（图标）转 #005FB8；
+                            // 暗色沿用主题 primaryColor，取值不变。
+                            color: isSelected
+                                ? (isLight
+                                      ? LightSurfaces.selectionForeground
+                                      : primaryColor)
+                                : inactiveColor,
+                          ),
                         ),
                       ),
                     ),

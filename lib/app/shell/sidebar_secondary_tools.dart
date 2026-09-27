@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
+import '../theme/layout_tokens.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
+import '../widgets/icon_hover_disk.dart';
 import '../../features/session_list/session_list_providers.dart';
 import '../../features/settings/settings_providers.dart';
 import 'sidebar_nav_order.dart';
@@ -120,6 +122,8 @@ class SidebarSecondaryTools extends ConsumerWidget {
 }
 
 /// 单个次级图标：命中区 30×26，图标 16，圆角 6（紧凑，与底部行高度匹配）。
+///
+/// G3：鼠标悬停给 28×28 圆底（`IconHoverDisk`，选中时不叠）+ 宽屏手型光标。
 class _SecondaryIcon extends StatelessWidget {
   const _SecondaryIcon({
     required this.item,
@@ -143,23 +147,32 @@ class _SecondaryIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // G3：光标语义只在宽屏生效（窄屏保持默认箭头，逐像素不变）。
+    final isWide = isWideLayout(context);
     return Semantics(
       key: ValueKey('sidebar-secondary-semantics-${item.id}'),
       label: label,
       tooltip: label,
       selected: selected,
       button: true,
-      child: CupertinoButton(
-        key: ValueKey('sidebar-secondary-${item.id}'),
-        padding: EdgeInsets.zero,
-        minimumSize: const Size(30.0, 26.0),
-        borderRadius: BorderRadius.circular(6.0),
-        color: selected ? activeBg : CupertinoColors.transparent,
-        onPressed: onPressed ?? () => unawaited(context.push(item.path)),
-        child: Icon(
-          item.icon,
-          size: 16.0,
-          color: selected ? activeFg : inactiveFg,
+      // G3：图标钮悬停圆底（28×28 圆）。包住**整颗按钮**（命中区 = 整颗按钮），
+      // 圆底居中 = 正垫在图标后面；选中优先（选中时不叠圆底）。
+      child: IconHoverDisk(
+        selected: selected,
+        child: CupertinoButton(
+          key: ValueKey('sidebar-secondary-${item.id}'),
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(30.0, 26.0),
+          borderRadius: BorderRadius.circular(6.0),
+          // G3 光标语义（宽屏）：手型；禁用态自动转禁止符。
+          mouseCursor: isWide ? kPointerCursor : null,
+          color: selected ? activeBg : CupertinoColors.transparent,
+          onPressed: onPressed ?? () => unawaited(context.push(item.path)),
+          child: Icon(
+            item.icon,
+            size: 16.0,
+            color: selected ? activeFg : inactiveFg,
+          ),
         ),
       ),
     );

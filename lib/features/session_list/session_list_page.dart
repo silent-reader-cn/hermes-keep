@@ -17,6 +17,7 @@ import '../../core/utils/accessibility.dart';
 import '../../core/utils/injection_markers.dart';
 import '../../core/utils/safe_clipboard.dart';
 import '../../app/shell/adaptive_shell.dart';
+import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
@@ -2312,6 +2313,9 @@ class _SessionRowState extends State<_SessionRow> {
 
     return MouseRegion(
       // #151：桌面悬停 —— 右侧「时间」与「⋯」按钮互换（手机无 hover，不受影响）。
+      // G3 光标语义：宽屏侧栏行可点 → 手型；窄屏保持默认箭头（defer）不变 ——
+      // 只在宽屏分支生效，手机端连光标语义都不动。
+      cursor: widget.compact ? kPointerCursor : MouseCursor.defer,
       onEnter: widget.compact ? (_) => setState(() => _hovering = true) : null,
       onExit: widget.compact ? (_) => setState(() => _hovering = false) : null,
       child: GestureDetector(

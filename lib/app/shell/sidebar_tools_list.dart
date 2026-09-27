@@ -9,8 +9,10 @@ import '../../features/session_list/session_list_providers.dart';
 import '../../features/tasks/tasks_providers.dart';
 import '../../features/settings/settings_providers.dart';
 import '../../l10n/app_localizations.dart';
+import '../theme/layout_tokens.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
+import '../widgets/icon_hover_disk.dart';
 import 'sidebar_nav_order.dart';
 import 'sidebar_utility_item.dart';
 
@@ -143,6 +145,8 @@ class SidebarToolsList extends ConsumerWidget {
 }
 
 /// 单个工具行：细图标 + 文字，行高 28，圆角 7（与设计稿一致）。
+///
+/// G3：鼠标悬停时行里那颗图标垫 28×28 圆底（`IconHoverDisk`），宽屏手型光标。
 class _ToolRow extends StatelessWidget {
   const _ToolRow({
     required this.itemId,
@@ -170,6 +174,14 @@ class _ToolRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // G3：悬停判定挂在**整行**上（这一行的按钮就是整行），圆底画在图标上 ——
+    // 图标只有 14pt，若让 IconHoverDisk 自己在图标盒上判悬停，命中区就只剩
+    // 14×14（鼠标在行里移动却点不亮圆底）。
+    return _HoverRow(builder: _buildRow);
+  }
+
+  /// 行内容；[hovering] 由 [_HoverRow] 提供（鼠标是否在本行上）。
+  Widget _buildRow(BuildContext context, bool hovering) {
     final fg = selected ? activeFg : inactiveFg;
     return Semantics(
       key: ValueKey('sidebar-tool-semantics-$itemId'),
@@ -183,6 +195,8 @@ class _ToolRow extends StatelessWidget {
           padding: EdgeInsets.zero,
           minimumSize: const Size(double.infinity, 28.0),
           borderRadius: BorderRadius.circular(7.0),
+          // G3 光标语义（宽屏）：手型；禁用态自动转禁止符。
+          mouseCursor: isWideLayout(context) ? kPointerCursor : null,
           color: selected ? activeBg : CupertinoColors.transparent,
           onPressed: onTap,
           child: Align(
@@ -191,7 +205,12 @@ class _ToolRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
               child: Row(
                 children: [
-                  Icon(icon, size: 14.0, color: fg),
+                  // G3：28×28 悬停圆底，垫在这颗 14pt 图标后面（悬停态来自整行）。
+                  IconHoverDisk(
+                    hovered: hovering,
+                    selected: selected,
+                    child: Icon(icon, size: 14.0, color: fg),
+                  ),
                   const SizedBox(width: 8.0),
                   Expanded(
                     child: Text(
@@ -244,5 +263,44 @@ class _ToolRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// G3：行级鼠标悬停探针（桌面）。
+///
+/// 为什么单独一层：`_ToolRow` 的「按钮」是整行（`CupertinoButton` 的
+/// `minimumSize: Size(double.infinity, 28)`），而图标只有 14pt —— 悬停判定必须
+/// 挂在行上，圆底才由「鼠标在本行」驱动；否则命中区只有图标那么大（鼠标在行里
+/// 移动却点不亮圆底）。
+///
+/// 光标语义一并在此：宽屏手型、窄屏保持默认箭头（窄屏逐像素与光标行为都不变）。
+class _HoverRow extends StatefulWidget {
+  const _HoverRow({required this.builder});
+
+  /// `hovering` = 鼠标是否在本行上。
+  final Widget Function(BuildContext context, bool hovering) builder;
+
+  @override
+  State<_HoverRow> createState() => _HoverRowState();
+}
+
+class _HoverRowState extends State<_HoverRow> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: isWideLayout(context) ? kPointerCursor : MouseCursor.defer,
+      onEnter: (_) => _setHovering(true),
+      onExit: (_) => _setHovering(false),
+      child: widget.builder(context, _hovering),
+    );
+  }
+
+  void _setHovering(bool value) {
+    if (_hovering == value) {
+      return;
+    }
+    setState(() => _hovering = value);
   }
 }
