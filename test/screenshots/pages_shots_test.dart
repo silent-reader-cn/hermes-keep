@@ -17,6 +17,8 @@ import 'package:hermes_ui/core/connections/connection_store.dart';
 import 'package:hermes_ui/core/connections/server_connection.dart';
 import 'package:hermes_ui/core/models/cron.dart';
 import 'package:hermes_ui/core/models/git_workspace.dart';
+import 'package:hermes_ui/core/models/insights.dart';
+import 'package:hermes_ui/core/models/kanban.dart';
 import 'package:hermes_ui/core/models/memory.dart';
 import 'package:hermes_ui/core/models/saved_prompt.dart';
 import 'package:hermes_ui/core/models/session.dart';
@@ -35,6 +37,10 @@ import 'package:hermes_ui/features/downloads/download_page.dart';
 import 'package:hermes_ui/features/downloads/download_providers.dart';
 import 'package:hermes_ui/features/git/git_api.dart';
 import 'package:hermes_ui/features/git/git_page.dart';
+import 'package:hermes_ui/features/insights/insights_api.dart';
+import 'package:hermes_ui/features/insights/insights_page.dart';
+import 'package:hermes_ui/features/kanban/kanban_page.dart';
+import 'package:hermes_ui/features/kanban/kanban_providers.dart';
 import 'package:hermes_ui/features/memory/memory_api.dart';
 import 'package:hermes_ui/features/memory/memory_page.dart';
 import 'package:hermes_ui/features/prompts/prompts_providers.dart';
@@ -57,6 +63,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../golden/golden_helpers.dart';
 import '../helpers/fake_git_api.dart';
+import '../helpers/fake_insights_api.dart';
+import '../helpers/fake_kanban_api.dart';
 import '../helpers/fake_memory_api.dart';
 import '../helpers/fake_prompts_api.dart';
 import '../helpers/fake_session_list_api.dart';
@@ -764,6 +772,286 @@ List<DownloadTask> demoDownloadTasks({required String completedDir}) {
 }
 
 // ---------------------------------------------------------------------------
+// 统计：8 项指标 + 14 天令牌 + 活动峰值 + 模型拆分（宽屏 Bento 目检数据）
+// ---------------------------------------------------------------------------
+
+InsightsResponse demoInsightsResponse() {
+  return const InsightsResponse(
+    periodDays: 30,
+    totalSessions: 68,
+    totalMessages: 1420,
+    totalInputTokens: 10400000,
+    totalOutputTokens: 1400000,
+    totalTokens: 11800000,
+    totalCost: 4.8642,
+    totalCacheReadTokens: 2400000,
+    totalCacheHitPercent: 62.5,
+    models: [
+      InsightsModelBreakdown(
+        model: 'gpt-5.2-codex',
+        totalTokens: 4960000,
+        tokenShare: 42,
+      ),
+      InsightsModelBreakdown(
+        model: 'claude-sonnet-4.5',
+        totalTokens: 3900000,
+        tokenShare: 33,
+      ),
+      InsightsModelBreakdown(
+        model: 'deepseek-v4.1',
+        totalTokens: 2124000,
+        tokenShare: 18,
+      ),
+      InsightsModelBreakdown(
+        model: 'gpt-4o-mini',
+        totalTokens: 826000,
+        tokenShare: 7,
+      ),
+    ],
+    dailyTokens: [
+      InsightsDailyToken(
+        date: '2026-08-26',
+        inputTokens: 350200,
+        outputTokens: 61800,
+        sessions: 3,
+        cost: 0.037,
+      ),
+      InsightsDailyToken(
+        date: '2026-08-27',
+        inputTokens: 270300,
+        outputTokens: 47700,
+        sessions: 2,
+        cost: 0.029,
+      ),
+      InsightsDailyToken(
+        date: '2026-08-28',
+        inputTokens: 736950,
+        outputTokens: 130050,
+        sessions: 5,
+        cost: 0.078,
+      ),
+      InsightsDailyToken(
+        date: '2026-08-29',
+        inputTokens: 853400,
+        outputTokens: 150600,
+        sessions: 6,
+        cost: 0.09,
+      ),
+      InsightsDailyToken(
+        date: '2026-08-30',
+        inputTokens: 431800,
+        outputTokens: 76200,
+        sessions: 3,
+        cost: 0.046,
+      ),
+      InsightsDailyToken(
+        date: '2026-08-31',
+        inputTokens: 621350,
+        outputTokens: 109650,
+        sessions: 4,
+        cost: 0.066,
+      ),
+      InsightsDailyToken(
+        date: '2026-09-01',
+        inputTokens: 562700,
+        outputTokens: 99300,
+        sessions: 4,
+        cost: 0.06,
+      ),
+      InsightsDailyToken(
+        date: '2026-09-02',
+        inputTokens: 836400,
+        outputTokens: 147600,
+        sessions: 6,
+        cost: 0.089,
+      ),
+      InsightsDailyToken(
+        date: '2026-09-03',
+        inputTokens: 413100,
+        outputTokens: 72900,
+        sessions: 3,
+        cost: 0.044,
+      ),
+      InsightsDailyToken(
+        date: '2026-09-04',
+        inputTokens: 682550,
+        outputTokens: 120450,
+        sessions: 5,
+        cost: 0.072,
+      ),
+      InsightsDailyToken(
+        date: '2026-09-05',
+        inputTokens: 1037000,
+        outputTokens: 183000,
+        sessions: 7,
+        cost: 0.11,
+      ),
+      InsightsDailyToken(
+        date: '2026-09-06',
+        inputTokens: 400350,
+        outputTokens: 70650,
+        sessions: 3,
+        cost: 0.042,
+      ),
+      InsightsDailyToken(
+        date: '2026-09-07',
+        inputTokens: 588200,
+        outputTokens: 103800,
+        sessions: 4,
+        cost: 0.062,
+      ),
+      InsightsDailyToken(
+        date: '2026-09-08',
+        inputTokens: 1045500,
+        outputTokens: 184500,
+        sessions: 7,
+        cost: 0.111,
+      ),
+    ],
+    activityByDay: [
+      InsightsActivityByDay(day: '2026-09-05', sessions: 7),
+      InsightsActivityByDay(day: '2026-09-08', sessions: 7),
+      InsightsActivityByDay(day: '2026-09-02', sessions: 6),
+    ],
+    activityByHour: [
+      InsightsActivityByHour(hour: 21, sessions: 7),
+      InsightsActivityByHour(hour: 10, sessions: 5),
+      InsightsActivityByHour(hour: 15, sessions: 4),
+    ],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 看板：分列卡片 + 卡片详情（描述 / 评论 —— 宽屏字号档目检数据）
+// ---------------------------------------------------------------------------
+
+const KanbanCard _demoKanbanCard = KanbanCard(
+  cardID: 'kb-2',
+  title: '首连宽限状态机复盘',
+  status: KanbanStatus('todo'),
+  assignee: 'dev-a',
+  commentCount: 2,
+  linkCounts: KanbanLinkCounts(parents: 1),
+  body:
+      '对照 #72 的 4s 宽限窗口，确认冷启动补报路径不丢事件。\n'
+      '判据：探活失败后的 500ms 重试仍能拿到 resolved 状态，且 expired '
+      '分支补出真错误而不是「离线缓存」文案。',
+);
+
+FakeKanbanApi demoKanbanApi() {
+  return FakeKanbanApi(
+    boards: const [
+      KanbanBoard(slug: 'default', name: '主看板'),
+      KanbanBoard(slug: 'infra', name: '基础设施'),
+      KanbanBoard(slug: 'release', name: '发版'),
+    ],
+    currentSlug: 'default',
+    snapshots: const {
+      'default': KanbanBoardSnapshot(
+        columns: [
+          KanbanColumn(
+            name: 'triage',
+            cards: [
+              KanbanCard(
+                cardID: 'kb-1',
+                title: '通知小图标 24dp 逐像素复核',
+                status: KanbanStatus('triage'),
+              ),
+              KanbanCard(
+                cardID: 'kb-9',
+                title: 'CI windows-installer 产物回读',
+                status: KanbanStatus('triage'),
+                assignee: 'dev-c',
+              ),
+            ],
+          ),
+          KanbanColumn(
+            name: 'todo',
+            cards: [
+              _demoKanbanCard,
+              KanbanCard(
+                cardID: 'kb-3',
+                title: 'Android 通知点击直达深链验证',
+                status: KanbanStatus('todo'),
+                assignee: 'dev-b',
+              ),
+              KanbanCard(
+                cardID: 'kb-4',
+                title: '侧栏保活三态文案校对',
+                status: KanbanStatus('todo'),
+              ),
+            ],
+          ),
+          KanbanColumn(
+            name: 'ready',
+            cards: [
+              KanbanCard(
+                cardID: 'kb-5',
+                title: '时间线卡片穿插回归',
+                status: KanbanStatus('ready'),
+                assignee: 'dev-a',
+                commentCount: 4,
+                linkCounts: KanbanLinkCounts(parents: 2),
+              ),
+            ],
+          ),
+          KanbanColumn(
+            name: 'running',
+            cards: [
+              KanbanCard(
+                cardID: 'kb-6',
+                title: '宽屏批次 2 三页落码',
+                status: KanbanStatus('running'),
+                assignee: 'dev-a',
+                commentCount: 3,
+              ),
+            ],
+          ),
+          KanbanColumn(
+            name: 'done',
+            cards: [
+              KanbanCard(
+                cardID: 'kb-7',
+                title: '柱状图 X 轴标签重叠修复',
+                status: KanbanStatus('done'),
+                commentCount: 2,
+              ),
+              KanbanCard(
+                cardID: 'kb-8',
+                title: 'sidecar 解释器探测顺序回归',
+                status: KanbanStatus('done'),
+                assignee: 'dev-b',
+              ),
+            ],
+          ),
+        ],
+      ),
+    },
+    details: const {
+      'kb-2': KanbanCardDetailEnvelope(
+        card: _demoKanbanCard,
+        comments: [
+          KanbanComment(
+            commentID: 'c-1',
+            cardID: 'kb-2',
+            author: 'dev-b',
+            body: '复现到了：冷启动第 2 次探活就把宽限窗口吃掉，第 3 次才补真错误。',
+            createdAt: '2026-09-27T09:41:00+08:00',
+          ),
+          KanbanComment(
+            commentID: 'c-2',
+            cardID: 'kb-2',
+            author: 'dev-a',
+            body: '已按 4s + 500ms 重排，补报只走一次，等闲时再跑一轮回归。',
+            createdAt: '2026-09-27T10:05:00+08:00',
+          ),
+        ],
+      ),
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Git：变更列表 + 单个文件 diff
 // ---------------------------------------------------------------------------
 
@@ -1196,6 +1484,14 @@ void main() {
               builder: (context, state) => const DownloadPage(),
             ),
             GoRoute(
+              path: '/insights',
+              builder: (context, state) => const InsightsPage(),
+            ),
+            GoRoute(
+              path: '/kanban',
+              builder: (context, state) => const KanbanPage(),
+            ),
+            GoRoute(
               path: '/git/:sessionId',
               builder: (context, state) =>
                   GitPage(sessionId: state.pathParameters['sessionId'] ?? ''),
@@ -1523,6 +1819,54 @@ void main() {
           (_) => FakePromptsApi(initialPrompts: demoSavedPrompts()),
         ),
       ],
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // 11. 统计（指标 Bento + 图表两列 —— 批 2 P7）
+  // -------------------------------------------------------------------------
+  shotPair('统计', (tester, brightness) async {
+    await capturePage(
+      tester,
+      name: 'insights',
+      location: '/insights',
+      brightness: brightness,
+      overrides: [
+        insightsApiFactoryProvider.overrideWithValue(
+          (_) => FakeInsightsApi(response: demoInsightsResponse()),
+        ),
+      ],
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // 12. 看板（看板视图 + 卡片详情 —— 批 2 P8）
+  // -------------------------------------------------------------------------
+  shotPair('看板', (tester, brightness) async {
+    final api = demoKanbanApi();
+    addTearDown(api.dispose);
+    await capturePage(
+      tester,
+      name: 'kanban',
+      location: '/kanban',
+      brightness: brightness,
+      overrides: [kanbanApiFactoryProvider.overrideWithValue((_) => api)],
+    );
+  });
+
+  shotPair('看板 · 卡片详情', (tester, brightness) async {
+    final api = demoKanbanApi();
+    addTearDown(api.dispose);
+    await capturePage(
+      tester,
+      name: 'kanban-detail',
+      location: '/kanban',
+      brightness: brightness,
+      overrides: [kanbanApiFactoryProvider.overrideWithValue((_) => api)],
+      interact: (tester) async {
+        await tester.tap(find.byKey(const ValueKey('kanban-card-kb-2')));
+        await tester.pumpAndSettle();
+      },
     );
   });
 

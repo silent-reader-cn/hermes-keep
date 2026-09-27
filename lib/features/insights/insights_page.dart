@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
@@ -14,6 +15,14 @@ import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'insights_providers.dart';
 import '../../app/widgets/app_refresh_control.dart';
+
+// 宽屏 Bento / 两列布局常量（批 2 局部常量）。
+//
+// 待批次 1 的 `lib/app/theme/layout_tokens.dart` 合入后改用同名 token
+// （本 worktree 基线里没有该文件，故先局部定义，取值对齐设计稿
+// `sketches/wide-pages-batch2-decision.html` 的 .bento/.cell/.cols2 规格）。
+const double _kWideGridGap = 12;
+const double _kWideCardRadius = 10;
 
 /// 用量统计页（对齐 Hermex InsightsView 的展示形态）。
 ///
@@ -113,38 +122,18 @@ class InsightsPage extends ConsumerWidget {
             border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
           )
         : null;
+    // 宽屏（≥900）：指标 4 列 Bento + 图表两列（左柱状图 / 右活动·模型），
+    // 一屏看完不再一路向下滚；窄屏保持下方既有单列结构（逐像素不变）。
+    if (MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint) {
+      return [
+        _timeframeSelectorSliver(context, ref, timeframe),
+        ..._buildWideBodySlivers(context, response, timeframe),
+        _pageFooterSliver(context, response, timeframe),
+      ];
+    }
+
     return [
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: CupertinoSlidingSegmentedControl<InsightsTimeframe>(
-            groupValue: timeframe,
-            onValueChanged: (value) {
-              if (value != null) {
-                unawaited(
-                  ref
-                      .read(insightsControllerProvider.notifier)
-                      .setTimeframe(value),
-                );
-              }
-            },
-            children: {
-              for (final t in InsightsTimeframe.values)
-                t: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  // 窄屏下每段宽度被均分（390pt ≈ 85pt/段），英文标签
-                  // （Last 30 Days）比中文长，裸 Text 会折成两行并溢出选中
-                  // 胶囊；scaleDown 保证单行自适应缩小，宽屏不加尺寸，中英文
-                  // 与既有基线像素一致。
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(_insightsTimeframeTitle(context, t)),
-                  ),
-                ),
-            },
-          ),
-        ),
-      ),
+      _timeframeSelectorSliver(context, ref, timeframe),
       SliverToBoxAdapter(
         child: CupertinoListSection.insetGrouped(
           backgroundColor: sectionBackground,
@@ -286,25 +275,379 @@ class InsightsPage extends ConsumerWidget {
             ],
           ),
         ),
+      _pageFooterSliver(context, response, timeframe),
+    ];
+  }
+
+  // -------------------------------------------------------------------------
+  // 宽屏（≥900）：指标 4 列 Bento + 图表两列
+  // -------------------------------------------------------------------------
+
+  /// 宽屏正文：指标 4 列 × 2 行 Bento + 图表两列（左柱状图 / 右活动·模型）。
+  ///
+  /// 出处：`sketches/wide-pages-batch2-decision.html` P7 推荐稿
+  /// （.bento 4 列 gap 12 / .cell 白卡 0.5px 描边圆角 10 / .cols2 两列 gap 12）。
+  List<Widget> _buildWideBodySlivers(
+    BuildContext context,
+    InsightsResponse response,
+    InsightsTimeframe timeframe,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    // 与窄屏同序、同条件（缓存两项缺失时自然少两格）。
+    final metrics = <({String title, String value, IconData icon})>[
+      (
+        title: l10n.metricSessions,
+        value: _formatNumber(response.totalSessions),
+        icon: CupertinoIcons.bubble_left_bubble_right,
+      ),
+      (
+        title: l10n.metricMessages,
+        value: _formatNumber(response.totalMessages),
+        icon: CupertinoIcons.text_bubble,
+      ),
+      (
+        title: l10n.metricInputTokens,
+        value: formatTokensCompact(response.totalInputTokens),
+        icon: CupertinoIcons.arrow_down_circle,
+      ),
+      (
+        title: l10n.metricOutputTokens,
+        value: formatTokensCompact(response.totalOutputTokens),
+        icon: CupertinoIcons.arrow_up_circle,
+      ),
+      (
+        title: l10n.metricTotalTokens,
+        value: formatTokensCompact(response.totalTokens),
+        icon: CupertinoIcons.sum,
+      ),
+      (
+        title: l10n.metricEstimatedCost,
+        value: _formatCost(response.totalCost),
+        icon: CupertinoIcons.money_dollar_circle,
+      ),
+      if (response.totalCacheHitPercent != null)
+        (
+          title: l10n.metricCacheHitRate,
+          value: _formatPercent(response.totalCacheHitPercent),
+          icon: CupertinoIcons.bolt_circle,
+        ),
+      if (response.totalCacheReadTokens != null)
+        (
+          title: l10n.metricCacheReadTokens,
+          value: formatTokensCompact(response.totalCacheReadTokens),
+          icon: CupertinoIcons.arrow_counterclockwise_circle,
+        ),
+    ];
+
+    final daily = _recentDailyTokens(response);
+    final models = _modelBreakdowns(response);
+    final hasActivity = _hasActivity(response);
+    return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          child: Text(
-            l10n.insightsSourceFooter(
-              response.periodDays ?? timeframe.serverDays,
-            ),
-            style: TextStyle(
-              fontSize: 12,
-              color: LightSurfaces.resolve(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _wideSectionHeader(
                 context,
-                LightSurfaces.textSecondary,
-                dark: secondaryText,
+                _periodHeaderText(context, response, timeframe),
               ),
+              const SizedBox(height: 8),
+              ..._wideBentoRows(metrics),
+            ],
+          ),
+        ),
+      ),
+      if (daily.isNotEmpty || hasActivity || models.isNotEmpty)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, _kWideGridGap, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: daily.isEmpty
+                      ? const SizedBox.shrink()
+                      : _wideCard(
+                          context,
+                          title: _dailyChartTitle(context, timeframe, response),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(2, 12, 2, 2),
+                            child: _DailyTokensBarChart(days: daily),
+                          ),
+                        ),
+                ),
+                const SizedBox(width: _kWideGridGap),
+                Expanded(
+                  child: Column(
+                    children: [
+                      if (hasActivity)
+                        _wideCard(
+                          context,
+                          title: l10n.activity,
+                          child: _wideActivityRows(context, response),
+                        ),
+                      if (hasActivity && models.isNotEmpty)
+                        const SizedBox(height: _kWideGridGap),
+                      if (models.isNotEmpty)
+                        _wideCard(
+                          context,
+                          title: l10n.models,
+                          child: Column(
+                            children: [
+                              for (final model in models)
+                                _ModelBreakdownTile(model: model),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+    ];
+  }
+
+  /// Bento 行：每行 4 格，末行不足时右侧留白（网格列数恒定，不因 7 格变形）。
+  List<Widget> _wideBentoRows(
+    List<({String title, String value, IconData icon})> metrics,
+  ) {
+    const perRow = 4;
+    final rows = <Widget>[];
+    for (var start = 0; start < metrics.length; start += perRow) {
+      if (start > 0) rows.add(const SizedBox(height: _kWideGridGap));
+      final count = metrics.length - start < perRow
+          ? metrics.length - start
+          : perRow;
+      rows.add(
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < perRow; i++) ...[
+                if (i > 0) const SizedBox(width: _kWideGridGap),
+                Expanded(
+                  child: i < count
+                      ? _WideMetricCell(
+                          title: metrics[start + i].title,
+                          value: metrics[start + i].value,
+                          icon: metrics[start + i].icon,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  /// 宽屏区块小标题（对齐既有 ListSection header 的字号与次级色）。
+  Widget _wideSectionHeader(BuildContext context, String title) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 13,
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.textSecondary,
+          dark: secondaryText,
+        ),
+      ),
+    );
+  }
+
+  /// 宽屏白卡：0.5px 描边 + 圆角 10（浅色实参；暗色沿用既有分组卡面）。
+  Widget _wideCard(
+    BuildContext context, {
+    required String title,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.card,
+          dark: CupertinoColors.secondarySystemGroupedBackground,
+        ),
+        borderRadius: BorderRadius.circular(_kWideCardRadius),
+        border: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
+  /// 宽屏「活动」卡：最活跃的一天 / 时段（文案与窄屏列表行同源）。
+  Widget _wideActivityRows(BuildContext context, InsightsResponse response) {
+    final l10n = AppLocalizations.of(context);
+    final peakDay = _peakDay(response);
+    final peakHour = _peakHour(response);
+    return Column(
+      children: [
+        if (peakDay != null)
+          _wideActivityRow(
+            context,
+            icon: CupertinoIcons.time_solid,
+            label: l10n.mostActiveDay,
+            value: l10n.peakDaySessions(
+              peakDay.day ?? l10n.unknown,
+              peakDay.sessions ?? 0,
+            ),
+            showDivider: peakHour != null,
+          ),
+        if (peakHour != null)
+          _wideActivityRow(
+            context,
+            icon: CupertinoIcons.time,
+            label: l10n.mostActiveHour,
+            value: l10n.peakHourSessions(
+              _formatHour(context, peakHour.hour),
+              peakHour.sessions ?? 0,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _wideActivityRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    bool showDivider = false,
+  }) {
+    final secondary = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: showDivider
+          ? BoxDecoration(
+              border: Border(
+                // 发丝分隔线：浅色与卡片描边同族，暗色沿用既有 separator。
+                bottom: BorderSide(
+                  color: LightSurfaces.resolve(
+                    context,
+                    LightSurfaces.cardBorder,
+                    dark: CupertinoColors.separator,
+                  ),
+                  width: 0.5,
+                ),
+              ),
+            )
+          : null,
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: secondary),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: CupertinoColors.label.resolveFrom(context),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(value, style: TextStyle(fontSize: 10.5, color: secondary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 时间范围分段控件（宽窄屏共用；窄屏尺寸与历史基线逐像素一致）。
+  Widget _timeframeSelectorSliver(
+    BuildContext context,
+    WidgetRef ref,
+    InsightsTimeframe timeframe,
+  ) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: CupertinoSlidingSegmentedControl<InsightsTimeframe>(
+          groupValue: timeframe,
+          onValueChanged: (value) {
+            if (value != null) {
+              unawaited(
+                ref
+                    .read(insightsControllerProvider.notifier)
+                    .setTimeframe(value),
+              );
+            }
+          },
+          children: {
+            for (final t in InsightsTimeframe.values)
+              t: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                // 窄屏下每段宽度被均分（390pt ≈ 85pt/段），英文标签
+                // （Last 30 Days）比中文长，裸 Text 会折成两行并溢出选中
+                // 胶囊；scaleDown 保证单行自适应缩小，宽屏不加尺寸，中英文
+                // 与既有基线像素一致。
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(_insightsTimeframeTitle(context, t)),
+                ),
+              ),
+          },
+        ),
+      ),
+    );
+  }
+
+  /// 数据来源页脚（宽窄屏共用）。
+  Widget _pageFooterSliver(
+    BuildContext context,
+    InsightsResponse response,
+    InsightsTimeframe timeframe,
+  ) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Text(
+          AppLocalizations.of(
+            context,
+          ).insightsSourceFooter(response.periodDays ?? timeframe.serverDays),
+          style: TextStyle(
+            fontSize: 12,
+            color: LightSurfaces.resolve(
+              context,
+              LightSurfaces.textSecondary,
+              dark: secondaryText,
             ),
           ),
         ),
       ),
-    ];
+    );
   }
 
   Widget _buildErrorSliver(BuildContext context, WidgetRef ref, Object? error) {
@@ -442,11 +785,20 @@ class InsightsPage extends ConsumerWidget {
     InsightsResponse response,
     InsightsTimeframe timeframe,
   ) {
+    return Text(_periodHeaderText(context, response, timeframe));
+  }
+
+  /// 时间段标题文案（宽窄屏共用：窄屏作 ListSection header，宽屏作区块小标题）。
+  String _periodHeaderText(
+    BuildContext context,
+    InsightsResponse response,
+    InsightsTimeframe timeframe,
+  ) {
     final l10n = AppLocalizations.of(context);
     if (response.periodDays != null) {
-      return Text(l10n.recentDaysHeader(response.periodDays!));
+      return l10n.recentDaysHeader(response.periodDays!);
     }
-    return Text(_insightsTimeframeTitle(context, timeframe));
+    return _insightsTimeframeTitle(context, timeframe);
   }
 
   String _errorMessage(BuildContext context, Object? error) {
@@ -511,6 +863,78 @@ class _MetricTile extends StatelessWidget {
       trailing: Text(
         value,
         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+/// 宽屏指标格：图标 + 指标名（小字）+ 数值（大字），值就在格子内。
+///
+/// 不复用 [CupertinoListTile]：它是「列表行」语义（leading/trailing 顶到行两端），
+/// 与 Bento 格子「值贴指标名下方」不同构。浅色白卡 + 0.5px 描边 + 圆角 10，
+/// 暗色沿用既有分组卡面（与下载卡片同款取舍）。
+class _WideMetricCell extends StatelessWidget {
+  const _WideMetricCell({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: secondaryText,
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.card,
+          dark: CupertinoColors.secondarySystemGroupedBackground,
+        ),
+        borderRadius: BorderRadius.circular(_kWideCardRadius),
+        border: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: secondary),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: secondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 21,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.3,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
+        ],
       ),
     );
   }

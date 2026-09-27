@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/api/api_exception.dart';
@@ -10,6 +11,7 @@ import '../../core/models/kanban.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../l10n/app_localizations.dart';
+import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
 import 'kanban_providers.dart';
 import '../../app/widgets/hermes_page_route.dart';
@@ -660,6 +662,8 @@ class _KanbanCardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final id = card.cardID ?? '';
+    // 宽屏（≥900）才降档：窄屏字号与布局逐像素不变。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     final dependencyBadge = _dependencyBadge(context, card.linkCounts);
     return _KanbanPressFeedback(
       builder: (pressed) => CupertinoButton(
@@ -695,7 +699,9 @@ class _KanbanCardTile extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 15,
+                  // 宽屏字号档：标题 15 → 14（窄屏维持 15，逐像素不变），
+                  // 与正文档（见下方 markdownBodyFontSizeFor）保持「标题 > 正文」。
+                  fontSize: isWide ? 14 : 15,
                   fontWeight: FontWeight.w500,
                   color: _usesLightSurfaces(context)
                       ? CupertinoColors.label.resolveFrom(context)
@@ -907,7 +913,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
           child: Text(
             (card.body ?? '').trim().isEmpty ? l10n.noDescription : card.body!,
             style: TextStyle(
-              fontSize: 15,
+              // 描述正文走仓库既有宽屏字号档（宽屏 13.5 / 窄屏 15），
+              // 与聊天正文、记忆正文同档。
+              fontSize: markdownBodyFontSizeFor(context),
               color: (card.body ?? '').trim().isEmpty
                   ? LightSurfaces.resolve(
                       context,
@@ -1083,7 +1091,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                 children: [
                   Text(
                     comment.body ?? '',
-                    style: const TextStyle(fontSize: 15),
+                    style: TextStyle(fontSize: markdownBodyFontSizeFor(context)),
                   ),
                   const SizedBox(height: 4),
                   Text(

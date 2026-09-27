@@ -26,8 +26,9 @@ Future<void> _pump(
   required FakeInsightsApi api,
   bool highContrast = false,
   CupertinoUserInterfaceLevelData level = CupertinoUserInterfaceLevelData.base,
+  double width = 1200,
 }) async {
-  tester.view.physicalSize = const Size(1200, 1600);
+  tester.view.physicalSize = Size(width, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -93,6 +94,10 @@ void main() {
             brightness: brightness,
             highContrast: highContrast,
             level: level,
+            // 本条钉的是**单列结构**（4 段 ListSection 的面/分隔线/装饰）
+            // → 用窄屏宽度：批 2 P7 起宽屏（≥900）改为 Bento 自绘卡片，
+            // 宽屏面与对比度契约见下方「宽屏卡片」用例。
+            width: 640,
             api: FakeInsightsApi(response: sampleResponse()),
           );
           final context = tester.element(find.byType(CupertinoPageScaffold));
@@ -237,6 +242,97 @@ void main() {
           await _unmount(tester);
         });
       }
+
+      // 批 2 P7：宽屏（≥900）改为「指标 Bento + 图表两列」的自绘卡片，
+      // 面与对比度契约必须在宽屏分支上重新钉一遍（上面那条钉的是窄屏 ListSection）。
+      testWidgets('Insights 宽屏 Bento 卡片面与文字对比 $brightness', (
+        tester,
+      ) async {
+        await _pump(
+          tester,
+          brightness: brightness,
+          api: FakeInsightsApi(response: sampleResponse()),
+        );
+        final context = tester.element(find.byType(CupertinoPageScaffold));
+        final isLight = brightness == Brightness.light;
+
+        // 宽屏不再有 ListSection：8 个指标格 + 图表 / 活动 / 模型 3 张卡。
+        expect(find.byType(CupertinoListSection), findsNothing);
+        final cards = tester
+            .widgetList<DecoratedBox>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is DecoratedBox &&
+                    widget.decoration is BoxDecoration &&
+                    (widget.decoration as BoxDecoration).borderRadius ==
+                        BorderRadius.circular(10),
+              ),
+            )
+            .toList();
+        expect(cards, hasLength(11));
+        for (final card in cards) {
+          final decoration = card.decoration as BoxDecoration;
+          expect(
+            decoration.color,
+            isLight
+                ? LightSurfaces.card
+                : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+                    context,
+                  ),
+          );
+          expect(
+            decoration.border,
+            isLight
+                ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
+                : isNull,
+          );
+        }
+
+        // 指标名走次级色、数值走 label：浅色下在卡面上达标。
+        for (final label in ['会话', '输入令牌', '估算费用']) {
+          final foreground = _textColor(tester, label);
+          expect(
+            foreground,
+            isLight
+                ? LightSurfaces.textSecondary
+                : Color(secondaryText.resolveFrom(context).toARGB32()),
+          );
+          if (isLight) {
+            expect(
+              contrastRatio(foreground, LightSurfaces.card),
+              greaterThanOrEqualTo(4.5),
+              reason: label,
+            );
+          }
+        }
+        if (isLight) {
+          for (final value in ['12', '1M', r'$1.2345']) {
+            expect(
+              contrastRatio(_textColor(tester, value), LightSurfaces.card),
+              greaterThanOrEqualTo(4.5),
+              reason: value,
+            );
+          }
+          // 柱色画在卡片面上，仍达数据图形阈值。
+          expect(
+            contrastRatio(
+              tester
+                  .widget<BarChart>(find.byType(BarChart))
+                  .data
+                  .barGroups
+                  .first
+                  .barRods
+                  .single
+                  .color!,
+              LightSurfaces.card,
+            ),
+            greaterThanOrEqualTo(3),
+          );
+        }
+
+        expect(tester.takeException(), isNull);
+        await _unmount(tester);
+      });
 
       for (final isError in [false, true]) {
         testWidgets('Insights empty/error contrast $brightness '

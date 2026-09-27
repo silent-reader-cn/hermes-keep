@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
@@ -20,6 +21,16 @@ import 'download_providers.dart';
 const MethodChannel _fileShareChannel = MethodChannel(
   'com.silentreader.hermes_ui/file_share',
 );
+
+// 宽屏两列网格常量（批 2 局部常量）。
+//
+// 待批次 1 的 `lib/app/theme/layout_tokens.dart` 合入后改用同名 token
+// （本 worktree 基线里没有该文件，故先局部定义，取值对齐设计稿
+// `sketches/wide-pages-batch2-decision.html` 的 .dgrid/.dcard 规格：外侧 16、
+// 卡间距 12）。实现方式：外层 ListView 左右各留 10，卡片自带 6pt 外边距
+// ⇒ 外侧 16 / 卡间 12 / 行间 12。
+const EdgeInsets _kWideGridPadding = EdgeInsets.fromLTRB(10, 2, 10, 10);
+const EdgeInsets _kWideCardMargin = EdgeInsets.all(6);
 
 /// 经 MainActivity 的 FileProvider MethodChannel 生成 content:// URI。
 /// 失败（通道缺失/异常）返回 null，由调用方兜底。
@@ -368,6 +379,8 @@ class DownloadPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    // 宽屏（≥900）才两列网格；窄屏维持既有单列列表（逐像素不变）。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     final tasks = ref.watch(downloadTasksProvider);
     final controller = ref.read(downloadControllerProvider.notifier);
 
@@ -415,6 +428,8 @@ class DownloadPage extends ConsumerWidget {
       child: SafeArea(
         child: sortedTasks.isEmpty
             ? _buildEmptyState(context, l10n)
+            : isWide
+            ? _buildWideGrid(sortedTasks)
             : ListView.builder(
                 key: const ValueKey('downloads-list-view'),
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -429,6 +444,45 @@ class DownloadPage extends ConsumerWidget {
                 },
               ),
       ),
+    );
+  }
+
+  /// 宽屏（≥900）两列网格：每格 ≈460，文件名与进度条回到一臂之内。
+  ///
+  /// 用「两卡一行 + [IntrinsicHeight]」而非 [GridView]：卡片高度随状态变化
+  /// （下载中多一条进度条、失败态状态行可能两行），固定 extent 的网格会把
+  /// 卡片裁掉或留大块空白。窄屏仍走单列列表（逐像素不变）。
+  Widget _buildWideGrid(List<DownloadTask> tasks) {
+    return ListView.builder(
+      key: const ValueKey('downloads-grid-view'),
+      padding: _kWideGridPadding,
+      // 两卡一行：奇数个任务时末行右侧留白（不拉伸卡片）。
+      itemCount: (tasks.length + 1) ~/ 2,
+      itemBuilder: (context, index) {
+        final left = tasks[index * 2];
+        final rightIndex = index * 2 + 1;
+        final right = rightIndex < tasks.length ? tasks[rightIndex] : null;
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _wideCard(left)),
+              Expanded(
+                child: right == null ? const SizedBox.shrink() : _wideCard(right),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _wideCard(DownloadTask task) {
+    return _DownloadTaskCard(
+      key: ValueKey('download-task-${task.id}'),
+      task: task,
+      onOpenFile: onOpenFile,
+      margin: _kWideCardMargin,
     );
   }
 
@@ -466,10 +520,18 @@ class DownloadPage extends ConsumerWidget {
 
 /// 单个下载任务卡片组件。
 class _DownloadTaskCard extends ConsumerWidget {
-  const _DownloadTaskCard({super.key, required this.task, this.onOpenFile});
+  const _DownloadTaskCard({
+    super.key,
+    required this.task,
+    this.onOpenFile,
+    this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+  });
 
   final DownloadTask task;
   final Future<void> Function(String path)? onOpenFile;
+
+  /// 卡片外边距：窄屏单列沿用历史值；宽屏两列网格传 [_kWideCardMargin]。
+  final EdgeInsets margin;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -739,7 +801,7 @@ class _DownloadTaskCard extends ConsumerWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      margin: margin,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: LightSurfaces.resolve(
