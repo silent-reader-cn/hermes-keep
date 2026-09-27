@@ -2111,6 +2111,20 @@ extension AppLocalizationsDesktopShell145 on AppLocalizations {
 }
 
 // ---------------------------------------------------------------------------
+// 宽屏设置页左分类导航（批 3 · P1 三组分类）
+// ---------------------------------------------------------------------------
+extension AppLocalizationsSettingsNavGroups on AppLocalizations {
+  /// 设置页左栏第一组：外观 / 对话。
+  String get settingsNavGroupCommon => isEnglish ? 'Common' : '常用';
+
+  /// 设置页左栏第二组：服务器 / 模型 / 通知。
+  String get settingsNavGroupServices => isEnglish ? 'Services' : '服务';
+
+  /// 设置页左栏第三组：定时 / 高级 / 关于。
+  String get settingsNavGroupOther => isEnglish ? 'Other' : '其他';
+}
+
+// ---------------------------------------------------------------------------
 // #146 会话列表按工作区分组
 // ---------------------------------------------------------------------------
 extension AppLocalizationsWorkspaceGroup146 on AppLocalizations {

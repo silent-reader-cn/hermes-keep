@@ -143,6 +143,15 @@ Future<void> _pump(
   await tester.pump(const Duration(milliseconds: 400));
 }
 
+/// 批 3 起宽屏（≥900）只渲染当前分类：服务器相关断言先点左栏「服务器」分类。
+///
+/// 窄屏（<900）仍是 8 个 section 长卷，不需要这一步。
+Future<void> _selectServerCategory(WidgetTester tester, double width) async {
+  if (width < 900) return;
+  await tester.tap(find.byKey(const ValueKey('settings-nav-server')));
+  await tester.pumpAndSettle();
+}
+
 Future<void> _reveal(WidgetTester tester, Finder finder) async {
   for (var i = 0; i < 20 && finder.hitTestable().evaluate().isEmpty; i++) {
     await tester.drag(
@@ -175,6 +184,7 @@ void main() {
       'server addresses remain readable selected and pressed at $width',
       (tester) async {
         await _pump(tester, const SettingsPage(), width: width);
+        await _selectServerCategory(tester, width);
         final active = find.byKey(const ValueKey('server-row-active'));
         await _reveal(tester, active);
         _expectReadable(
@@ -242,6 +252,7 @@ void main() {
       'all server placeholders and profile chevron are readable at $width',
       (tester) async {
         await _pump(tester, const SettingsPage(), width: width);
+        await _selectServerCategory(tester, width);
         final add = find.byKey(const ValueKey('server-add'));
         await _reveal(tester, add);
         await tester.tap(add);

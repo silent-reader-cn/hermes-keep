@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/locale/locale_provider.dart';
+import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
@@ -34,6 +35,7 @@ import '../onboarding/onboarding_providers.dart';
 import '../session_list/session_events_client.dart';
 import '../session_list/session_list_providers.dart';
 import '../shared/app_back_button.dart';
+import '../shared/wide_nav_rail.dart';
 import 'accessibility_settings.dart';
 import 'chat_send_shortcut_settings.dart';
 import 'composer_settings.dart';
@@ -61,6 +63,10 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   final ScrollController _scrollController = ScrollController();
 
+  /// 宽屏（≥900）左栏分类导航的当前选中项；默认第一项（外观）。
+  /// 窄屏不使用（长卷逐像素不变）。
+  _SettingsNavItem _selectedNavItem = _SettingsNavItem.appearance;
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -82,6 +88,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     return SettingsSurfaces.page(
       context,
       CupertinoPageScaffold(
@@ -95,19 +102,156 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               leading: const AppBackButton(),
               onTitleDoubleTap: _scrollToTop,
             ),
-            const SliverToBoxAdapter(child: _AppearanceSection()),
-            const SliverToBoxAdapter(child: _ChatSection()),
-            const SliverToBoxAdapter(child: _ServerSection()),
-            const SliverToBoxAdapter(child: _ModelSection()),
-            const SliverToBoxAdapter(child: _CronSection()),
-            const SliverToBoxAdapter(child: _NotificationSection()),
-            const SliverToBoxAdapter(child: _AdvancedSettingsSection()),
-            const SliverToBoxAdapter(child: _AboutSection()),
+            // 窄屏（<900）：8 个 section 顺序长卷 —— 逐像素不变。
+            if (!isWide) ...[
+              const SliverToBoxAdapter(child: _AppearanceSection()),
+              const SliverToBoxAdapter(child: _ChatSection()),
+              const SliverToBoxAdapter(child: _ServerSection()),
+              const SliverToBoxAdapter(child: _ModelSection()),
+              const SliverToBoxAdapter(child: _CronSection()),
+              const SliverToBoxAdapter(child: _NotificationSection()),
+              const SliverToBoxAdapter(child: _AdvancedSettingsSection()),
+              const SliverToBoxAdapter(child: _AboutSection()),
+            ],
+            // 宽屏（≥900）：左 220 分类导航 + 右内容限宽 744 居中，
+            // 只渲染当前分类对应的 section。
+            if (isWide) SliverToBoxAdapter(child: _buildWideBody(context)),
           ],
         ),
       ),
     );
   }
+
+  /// 宽屏主体：左 220 分类导航（常用 / 服务 / 其他 三组）+ 右内容限宽 744 居中。
+  Widget _buildWideBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        WideNavRail(
+          key: const ValueKey('settings-nav-rail'),
+          children: [
+            for (final group in _SettingsNavGroup.values) ...[
+              WideNavRailGroupLabel(group.label(l10n)),
+              for (final item in group.items)
+                WideNavRailRow(
+                  key: ValueKey('settings-nav-${item.name}'),
+                  icon: item.icon,
+                  label: item.label(l10n),
+                  selected: item == _selectedNavItem,
+                  onTap: () => setState(() => _selectedNavItem = item),
+                ),
+              if (group != _SettingsNavGroup.values.last)
+                const WideNavRailSeparator(),
+            ],
+          ],
+        ),
+        Expanded(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: _kSettingsContentMaxWidth,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [_selectedNavItem.buildSection()],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 宽屏分类导航（批 3 · P1：左 220 分类导航 + 右内容限宽 744）
+//
+// 8 个顶层 section 归成 3 组（常用 / 服务 / 其他），左栏竖排、点哪到哪；
+// section 内部一律不动 —— 导航只决定「渲染哪一个」。
+// 左栏视觉是两页共用骨架（`features/shared/wide_nav_rail.dart`）。
+// ---------------------------------------------------------------------------
+
+/// 右内容限宽 744（批 3 设计稿 P1「G1 规则」）。
+/// TODO(批 1)：`reading_width_box.dart` / `layout_tokens.dart` 合入后改用共享件。
+const double _kSettingsContentMaxWidth = 744.0;
+
+/// 设置页左栏导航项：与长卷里的 8 个顶层 section 一一对应。
+enum _SettingsNavItem {
+  appearance,
+  chat,
+  server,
+  model,
+  notification,
+  scheduled,
+  advanced,
+  about;
+
+  /// 导航项文案：取各 section 自己的分组标题（l10n 真值，不自造名）。
+  String label(AppLocalizations l10n) => switch (this) {
+    _SettingsNavItem.appearance => l10n.appearanceSection,
+    _SettingsNavItem.chat => l10n.chatSection,
+    _SettingsNavItem.server => l10n.serverSection,
+    _SettingsNavItem.model => l10n.modelsSection,
+    _SettingsNavItem.notification => l10n.notificationsSection,
+    _SettingsNavItem.scheduled => l10n.scheduledSection,
+    _SettingsNavItem.advanced => l10n.advancedSettingsSection,
+    _SettingsNavItem.about => l10n.aboutSection,
+  };
+
+  /// 导航项图标（批 3 设计稿 P1 逐个指定）。
+  IconData get icon => switch (this) {
+    _SettingsNavItem.appearance => CupertinoIcons.paintbrush,
+    _SettingsNavItem.chat => CupertinoIcons.chat_bubble,
+    _SettingsNavItem.server => CupertinoIcons.square_stack,
+    _SettingsNavItem.model => CupertinoIcons.chart_pie,
+    _SettingsNavItem.notification => CupertinoIcons.bell,
+    _SettingsNavItem.scheduled => CupertinoIcons.clock,
+    _SettingsNavItem.advanced => CupertinoIcons.doc_text,
+    _SettingsNavItem.about => CupertinoIcons.info_circle,
+  };
+
+  /// 该分类对应的 section 实例（section 内部结构原样复用）。
+  Widget buildSection() => switch (this) {
+    _SettingsNavItem.appearance => const _AppearanceSection(),
+    _SettingsNavItem.chat => const _ChatSection(),
+    _SettingsNavItem.server => const _ServerSection(),
+    _SettingsNavItem.model => const _ModelSection(),
+    _SettingsNavItem.notification => const _NotificationSection(),
+    _SettingsNavItem.scheduled => const _CronSection(),
+    _SettingsNavItem.advanced => const _AdvancedSettingsSection(),
+    _SettingsNavItem.about => const _AboutSection(),
+  };
+}
+
+/// 左栏三组分类（批 3 设计稿 P1：常用 / 服务 / 其他）。
+enum _SettingsNavGroup {
+  common,
+  services,
+  other;
+
+  String label(AppLocalizations l10n) => switch (this) {
+    _SettingsNavGroup.common => l10n.settingsNavGroupCommon,
+    _SettingsNavGroup.services => l10n.settingsNavGroupServices,
+    _SettingsNavGroup.other => l10n.settingsNavGroupOther,
+  };
+
+  List<_SettingsNavItem> get items => switch (this) {
+    _SettingsNavGroup.common => const [
+      _SettingsNavItem.appearance,
+      _SettingsNavItem.chat,
+    ],
+    _SettingsNavGroup.services => const [
+      _SettingsNavItem.server,
+      _SettingsNavItem.model,
+      _SettingsNavItem.notification,
+    ],
+    _SettingsNavGroup.other => const [
+      _SettingsNavItem.scheduled,
+      _SettingsNavItem.advanced,
+      _SettingsNavItem.about,
+    ],
+  };
 }
 
 // ---------------------------------------------------------------------------

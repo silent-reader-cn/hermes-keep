@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
@@ -14,11 +15,16 @@ import '../../core/utils/accessibility.dart';
 import '../../l10n/app_localizations.dart';
 import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
+import '../shared/wide_nav_rail.dart';
 import 'memory_api.dart';
 import 'memory_providers.dart';
 import '../../app/widgets/app_refresh_control.dart';
 
 enum _MemoryTab { memory, user, soul, projectContext }
+
+/// 正文限宽 720（既有口径，批 3 **不改宽度**；宽屏左栏导航另占 220）。
+/// TODO(批 1)：`reading_width_box.dart` 合入后改用共享件。
+const double _kMemoryContentMaxWidth = 720.0;
 
 /// 记忆查看页（对齐 Hermex MemoryView 的只读浏览形态）。
 ///
@@ -176,12 +182,25 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         ? _MemoryTab.memory
         : _selectedTab;
     final l10n = AppLocalizations.of(context);
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
 
+    // 宽屏（≥900）：顶部分段控件 → 左 220 分区导航；正文维持既有 720 限宽居中。
+    if (isWide) {
+      return [
+        SliverToBoxAdapter(
+          child: _buildWideBody(context, response, activeTab, hasProject),
+        ),
+      ];
+    }
+
+    // 窄屏（<900）：顶部分段控件 + 正文 —— 逐像素不变。
     return [
       SliverToBoxAdapter(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
+            constraints: const BoxConstraints(
+              maxWidth: _kMemoryContentMaxWidth,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -258,6 +277,58 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         ),
       ),
     ];
+  }
+
+  /// 宽屏主体：左 220 分区导航（四个分区竖排）+ 右正文（维持既有 720 限宽居中）。
+  Widget _buildWideBody(
+    BuildContext context,
+    MemoryResponse response,
+    _MemoryTab activeTab,
+    bool hasProject,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        WideNavRail(
+          key: const ValueKey('memory-nav-rail'),
+          children: [
+            for (final tab in _MemoryTab.values)
+              if (tab != _MemoryTab.projectContext || hasProject)
+                WideNavRailRow(
+                  key: ValueKey('memory-tab-${tab.navKeySuffix}'),
+                  icon: tab.navIcon,
+                  label: tab.navLabel(l10n),
+                  selected: tab == activeTab,
+                  onTap: () {
+                    if (tab == activeTab) return;
+                    setState(() {
+                      _selectedTab = tab;
+                      _isEditing = false;
+                      _saveError = null;
+                    });
+                  },
+                ),
+          ],
+        ),
+        Expanded(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: _kMemoryContentMaxWidth,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 12),
+                  _buildActiveCard(context, response, activeTab),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildActiveCard(
@@ -512,6 +583,31 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   }
 }
 
+/// 分区导航项：文案与图标（批 3 设计稿 P6；文案取 l10n 真值）。
+extension on _MemoryTab {
+  String navLabel(AppLocalizations l10n) => switch (this) {
+    _MemoryTab.memory => l10n.memoryNotesTitle,
+    _MemoryTab.user => l10n.memoryUserTitle,
+    _MemoryTab.soul => l10n.memorySoulTitle,
+    _MemoryTab.projectContext => l10n.projectContextTitle,
+  };
+
+  IconData get navIcon => switch (this) {
+    _MemoryTab.memory => CupertinoIcons.doc_text,
+    _MemoryTab.user => CupertinoIcons.person,
+    _MemoryTab.soul => CupertinoIcons.wand_stars,
+    _MemoryTab.projectContext => CupertinoIcons.square_stack,
+  };
+
+  /// 与窄屏分段控件同一套 ValueKey 后缀（工装 / 测试按 key 定位分区）。
+  String get navKeySuffix => switch (this) {
+    _MemoryTab.memory => 'memory',
+    _MemoryTab.user => 'user',
+    _MemoryTab.soul => 'soul',
+    _MemoryTab.projectContext => 'project',
+  };
+}
+
 String _memorySectionTitle(BuildContext context, MemorySection section) {
   final l10n = AppLocalizations.of(context);
   switch (section) {
@@ -750,7 +846,7 @@ class _MemorySectionBody extends StatelessWidget {
       return Text(
         _memorySectionEmptyMessage(context, section),
         style: TextStyle(
-          fontSize: 15,
+          fontSize: markdownBodyFontSizeFor(context),
           fontStyle: FontStyle.italic,
           color: LightSurfaces.resolve(
             context,
@@ -761,7 +857,13 @@ class _MemorySectionBody extends StatelessWidget {
       );
     }
     return _AdaptiveViewportScrollable(
-      child: Text(trimmed, style: const TextStyle(fontSize: 15, height: 1.4)),
+      child: Text(
+        trimmed,
+        style: TextStyle(
+          fontSize: markdownBodyFontSizeFor(context),
+          height: kMarkdownBodyLineHeight,
+        ),
+      ),
     );
   }
 }
@@ -783,7 +885,7 @@ class _MemorySectionMarkdownBody extends StatelessWidget {
       return Text(
         _memorySectionEmptyMessage(context, section),
         style: TextStyle(
-          fontSize: 15,
+          fontSize: markdownBodyFontSizeFor(context),
           fontStyle: FontStyle.italic,
           color: LightSurfaces.resolve(
             context,
@@ -834,16 +936,23 @@ MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
   final theme = CupertinoTheme.of(context);
   final label = CupertinoColors.label.resolveFrom(context);
   final grey5 = CupertinoColors.systemGrey5.resolveFrom(context);
+  // 正文字号套用仓库既有档位函数（宽屏 13.5 / 窄屏 15）—— 与聊天正文同档，
+  // 不在记忆页另写一套常量；代码块随之收一档（宽 12 / 窄 13）。
+  final body = markdownBodyFontSizeFor(context);
+  final code = isWideReadingContext(context) ? 12.0 : 13.0;
   // 以主题 textStyle（继承全局 MiSans 字体）为基底，正文显式语义色。
   return MarkdownStyleSheet.fromCupertinoTheme(theme).copyWith(
     p: theme.textTheme.textStyle.copyWith(
-      fontSize: 15,
+      fontSize: body,
       height: 1.4,
       color: label,
     ),
-    listBullet: theme.textTheme.textStyle.copyWith(fontSize: 15, color: label),
+    listBullet: theme.textTheme.textStyle.copyWith(
+      fontSize: body,
+      color: label,
+    ),
     code: TextStyle(
-      fontSize: 13,
+      fontSize: code,
       height: 1.4,
       fontFamily: 'monospace',
       color: label,
@@ -858,6 +967,15 @@ MarkdownStyleSheet _buildMarkdownStyleSheet(BuildContext context) {
       borderRadius: BorderRadius.circular(6),
     ),
     blockquotePadding: const EdgeInsets.all(8),
+    // 标题阶梯**必须**从 body 派生（复用聊天的同一套 headingSize：h1=body+5 → h6=body，
+    // w600）。不显式给 h1-h6 时会沿用 flutter_markdown 包自带默认标题（h1≈30），
+    // 宽屏缩档后就会出现「正文 13.5 正常、标题仍然巨大」的失衡。
+    h1: _heading(theme, label, body, 1),
+    h2: _heading(theme, label, body, 2),
+    h3: _heading(theme, label, body, 3),
+    h4: _heading(theme, label, body, 4),
+    h5: _heading(theme, label, body, 5),
+    h6: _heading(theme, label, body, 6),
   );
 }
 
@@ -975,3 +1093,12 @@ class _ProjectContextFooter extends StatelessWidget {
     );
   }
 }
+
+/// 标题样式：字号走仓库统一阶梯 [headingSize]（与聊天正文同源），权重与正文语义色一致。
+TextStyle _heading(CupertinoThemeData theme, Color label, double body, int level) =>
+    theme.textTheme.textStyle.copyWith(
+      fontSize: headingSize(level, body),
+      fontWeight: kMarkdownStrongWeight,
+      height: 1.4,
+      color: label,
+    );

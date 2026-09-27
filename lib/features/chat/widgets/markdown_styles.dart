@@ -94,9 +94,11 @@ TextStyle _body({
   );
 }
 
-/// 标题字号阶梯（气泡内收敛：h1=body+5 → h6=body，全部 w600）。
+/// 标题字号阶梯（h1=body+5 → h6=body，全部 w600）。
 /// 相对正文递进，故正文宽屏缩档时标题同步收敛。
-double _headingSize(int level, double body) => switch (level) {
+/// 公开：记忆页/文件预览等**非气泡**的 markdown 也必须从同一档派生，
+/// 否则会沿用 flutter_markdown 包自带的默认标题（h1≈30），宽屏下「标题巨、正文正常」。
+double headingSize(int level, double body) => switch (level) {
   1 => body + 5.0,
   2 => body + 3.0,
   3 => body + 1.0,
@@ -137,7 +139,7 @@ MarkdownStyleSheet buildAssistantMarkdownStyleSheet(
 
   TextStyle heading(int level) => _body(
     color: label,
-    size: _headingSize(level, body),
+    size: headingSize(level, body),
     height: line,
     weight: kMarkdownStrongWeight,
   );
@@ -225,7 +227,7 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(
 
   TextStyle heading(int level) => _body(
     color: white,
-    size: _headingSize(level, body),
+    size: headingSize(level, body),
     height: line,
     weight: kMarkdownStrongWeight,
   );
