@@ -1598,6 +1598,27 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _timelineSequence = 0;
     _replayRebuildTimeline = false;
     _prefillSince = null;
+    // 兜底防线：本轮只清 liveTimelinePoints，不清 live 工具/思考缓冲。若上一轮
+    // 收尾走的是漏清路径（或未来新加路径漏清），残留会被本轮时间线继承成
+    // 「孤儿堆」整堆挂到末尾（见 `_finishStream` 注释）。正常路径下这里恒为空，
+    // 非空即数据侧异常 —— 先归档退场再开新流，绝不让脏数据进入本轮。
+    if (state.liveToolCalls.isNotEmpty || state.liveReasoningText.isNotEmpty) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'chat',
+        message:
+            'Stale live buffers at stream start — archiving before new turn '
+            '(tools: ${state.liveToolCalls.length}, '
+            'reasoning: ${state.liveReasoningText.length}, '
+            'streamId: $streamId)',
+      );
+      state = state.copyWith(
+        completedToolCallGroups: _archiveLiveToolCallsToGroups(),
+        completedReasoningGroups: _archiveLiveReasoningToGroups(),
+        liveToolCalls: const [],
+        liveReasoningText: '',
+      );
+    }
     state = state.copyWith(
       phase: ChatPhase.streaming,
       clearSendErrorMessage: true,
@@ -3668,9 +3689,35 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           .toList();
       messages = [...messages, ...notices];
     }
+    // live 缓冲收尾归档：`_finishStream` 是「清残留」的统一入口，但它原先只清
+    // liveTimelinePoints 与流身份 —— liveToolCalls / liveReasoningText 原样留下。
+    // 切片器的孤儿兜底会把「有数据、无对应断点」的那一堆整堆挂到时间线末尾
+    //（toolStarts 为空 ⇒ 全堆 seq:-1 ⇒ 末尾一张大卡）—— 主人现象「锁屏一段时间后
+    // 对话最下方冒出一张 tools 超多的大卡」。走 finishStream 而不过
+    // `_completeCurrentResponse` 的正都是**异常收尾**（锁屏/后台静默断线、取消、
+    // dispose），即最容易漏清的路径；`_beginStream` 又只清断点不清数据 ⇒ 残留跨轮
+    // 只增不减。归档而非丢弃：`_archiveLive*ToGroups` 自带「服务端真身已覆盖则退场」
+    // 护栏（#147 家族），且空缓冲时整体 no-op ⇒ done 已收尾后重复调用安全。
+    final settledMessages = _retireStaleLiveRows(messages);
+    final archivedToolGroups = _reanchorGroupsToMessages(
+      _archiveLiveToolCallsToGroups(messages: settledMessages),
+      settledMessages,
+      messageOffset: state.messagesOffset,
+      oldStreamingId: state.stream.streamingAssistantMessageId,
+    );
+    final archivedReasoningGroups = _reanchorReasoningToMessages(
+      _archiveLiveReasoningToGroups(messages: settledMessages),
+      settledMessages,
+      messageOffset: state.messagesOffset,
+      oldStreamingId: state.stream.streamingAssistantMessageId,
+    );
     state = state.copyWith(
       phase: endPhase,
-      messages: messages,
+      messages: settledMessages,
+      completedToolCallGroups: archivedToolGroups,
+      completedReasoningGroups: archivedReasoningGroups,
+      liveToolCalls: const [],
+      liveReasoningText: '',
       pinnedLocalNotices: const [],
       clearSteerHints: true,
       clearPrefillStatus: true,

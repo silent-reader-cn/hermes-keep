@@ -128,6 +128,59 @@ void main() {
     });
   });
 
+  group('⑤ 异常收尾必须归档清空 live 缓冲（残留会在下一轮变末尾巨卡）', () {
+    test('锁屏期间累积的工具 + stop() 收尾 → live 清空、内容进归档（不丢）', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final clock = _FakeClock();
+        final container = _buildContainer(api, clock);
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // 锁屏期间工具事件照常到达（工具路径不冻结，只冻结 merge/reveal 消费）。
+        _setLifecycle(container, AppLifecycleState.paused);
+        for (var i = 0; i < 5; i++) {
+          api.emit(
+            ToolStartedSseEvent(
+              ToolStreamEvent(name: 'terminal', stableId: 't$i'),
+            ),
+          );
+        }
+        async.flushMicrotasks();
+        expect(
+          container.read(chatControllerProvider('')).liveToolCalls.length,
+          5,
+          reason: '前提：锁屏期间工具已累积进 live 缓冲',
+        );
+
+        // 收尾：`stop()` 走 `_finishStream(cancelled)`，**不经过**
+        // `_completeCurrentResponse` —— 正是主人「锁屏后异常收尾」的同类路径。
+        unawaited(controller.stop());
+        async.flushMicrotasks();
+
+        final state = container.read(chatControllerProvider(''));
+        expect(
+          state.liveToolCalls,
+          isEmpty,
+          reason:
+              '收尾必须归档清空 live 缓冲：残留会被下一轮的切片器当成「孤儿堆」'
+              '整堆 flush 到时间线末尾（主人现象「对话最下方一张 tools 超多的卡」）',
+        );
+        expect(state.liveTimelinePoints, isEmpty);
+        final archivedRealTools = state.completedToolCallGroups
+            .expand((g) => g.toolCalls)
+            .where((c) => !c.isThinking)
+            .length;
+        expect(
+          archivedRealTools,
+          5,
+          reason: '归档而非丢弃 —— 工具真实发生过，必须留在 completedToolCallGroups',
+        );
+      });
+    });
+  });
+
   group('② _revealQueue 上限保护（超限直接落全文）', () {
     test('超过 2000 词单元积压 → 一次铺全文，后续管线不破坏', () {
       fakeAsync((async) {

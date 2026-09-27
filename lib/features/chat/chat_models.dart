@@ -647,7 +647,14 @@ List<LiveTimelineEntry> buildLiveTimelineEntries({
         thinkStarts.isNotEmpty && minThinkStart > 0 && reasoningText.isNotEmpty
         ? reasoningText.substring(0, minThinkStart).trim()
         : null;
-    final orphanToolCount = minToolStart > 0 ? minToolStart : 0;
+    // 与 orphanThink 对称的守卫：**没有 tools 断点 = 本轮没有任何工具事件**，
+    // 此时 minToolStart 会停在初值 toolCallsLength，把整堆 live 工具误判成
+    // 「首个断点之前的孤儿」并整堆 flush 到时间线末尾 —— 主人现象「锁屏一段时间
+    // 后对话最下方冒出一张 tools 超多的大卡」。有工具数据却无 tools 断点，只可能
+    // 是数据侧残留（收尾只清断点不清数据 / 新一轮清断点继承旧数据），渲染层不该
+    // 替它兜底；真正的孤儿（重连/重锚：有 tools 断点但其 start > 0）不受影响。
+    final orphanToolCount =
+        toolStarts.isNotEmpty && minToolStart > 0 ? minToolStart : 0;
     if (orphanText != null && orphanText.trim().isNotEmpty) {
       entries.add(
         LiveTimelineEntry(

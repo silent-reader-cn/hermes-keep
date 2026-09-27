@@ -1586,3 +1586,56 @@ Future<void> resumeCompressionIfRunning();
 （含 #163–#170 全部改动），而该脚本派发的 CI 跑在**远端 ref** 上 ⇒ 必须先推送，
 否则取回的 linux 基线对应的是旧界面，CI 金照仍会红（脚本头部纪律同此：
 「推完最后一次 → 派发重生成 → 等它跑完取回 → 再提交推送基线」）。
+
+---
+
+## #171 锁屏后对话最下方冒出一张 tools 超多的大卡（异常收尾不清 live 缓冲）
+
+**分类**：问题（bug）　**状态**：代码已交付（待主人真机复验）　**发现**：2026-09-27（主人报告）
+
+### 现象（主人原话）
+「锁屏一段时间后，对话最下方就会出现一个 tools 调用特别多的卡；但这一轮会话末尾根本没有工具调用，
+而且本轮实际上只有几次工具调用。」（真机截图：会话 `Loading Attached files Users`，
+末尾一张「终端 ×62, 思考 ×35, …」折叠卡）
+
+### 取证（服务端物证，非推断）
+- 该会话（`84ccce21d092`）run journal `5ee54ef1…`（11:36:56→11:38:06，即截图那一轮）**tool 事件数 = 0**；
+  `ccf90590…`（11:21:29→11:36:54）也只有 19 个工具 ⇒ 62 个终端是**跨多轮累积**的残留，不属于任何单轮。
+- 会话 JSON 末条 assistant（收尾汇报）落库 `tool_calls` = **0** ⇒ 主人判断正确：该轮末尾确无工具调用。
+- 纯函数探针（喂真实切片器输入）：`points=[think,text]` + `liveToolCalls=62 残留`
+  → `entries=[text, tools(live:tools:orphan, 63 行)]` ⇒ 残留整堆被当「孤儿」flush 到正文之后。
+
+### 根因（两处独立缺陷，叠加才吐卡）
+**A. 数据侧：收尾入口只清一半** — `lib/features/chat/chat_controller.dart`
+- `_finishStream`（异常收尾统一入口）只清 `liveTimelinePoints` 与流身份，
+  **不清 `liveToolCalls` / `liveReasoningText`**；
+- `_beginStream`（新一轮开始）同样只清 points ⇒ 残留**跨轮只增不减**；
+- 走 `finishStream` 而不过 `_completeCurrentResponse` 的全是异常收尾
+  （`_handleTransportError` 无连接分支 / `_settleTurnFromTranscript` 无响应分支 / `stop()` / dispose），
+  即**锁屏、后台静默断线**最易命中的路径。
+
+**B. 渲染侧：`orphanToolCount` 缺对称守卫** — `lib/features/chat/chat_models.dart` → `buildLiveTimelineEntries`
+- 无 tools 断点时 `minToolStart` 停在初值 `toolCallsLength`，整堆被误判成「首个断点之前的孤儿」；
+- 同文件 `orphanThink` **本来就有** `thinkStarts.isNotEmpty` 守卫 —— 工具侧漏了这条，属实现不对称。
+
+### 修复
+- **A**：`_finishStream` 补「归档 live 工具/思考 + 清空」（复用 `_archiveLive*ToGroups` + 重锚，
+  与 `_completeCurrentResponse` 同口径；内部自带「服务端真身已覆盖则退场」护栏、空缓冲 no-op ⇒ 幂等安全）；
+  `_beginStream` 补兜底（残留非空即归档清空 + WARN 诊断），防未来新路径再次漏清。
+- **B**：`orphanToolCount` 补 `toolStarts.isNotEmpty`，与 `orphanThink` 对称。
+
+### 守卫与 RED 校验
+- 新增 `test/features/chat/live_timeline_orphan_residue_test.dart`（4 例：残留不整堆上屏 / 思考对称性 /
+  **真孤儿能力不误伤** / 正常路径不产孤儿键）。
+  RED：改回旧守卫 → 用例 1 精确红（`Expected: <0>, Actual: <62>`），其余 3 例保持绿。
+- `test/features/chat/chat_lockscreen_reveal_test.dart` 增 group ⑤（锁屏累积工具 + `stop()` 收尾 →
+  live 清空且内容进归档）。
+  RED：摘掉 `liveToolCalls: const []` → ⑤ 精确红（`Expected: empty`），其余 7 例保持绿。
+
+### 同类体检（5 处清点对称性）
+`_beginStream` / `_completeCurrentResponse` / `_finishStream` / `_archiveLiveToolCallsIfNeeded` 现均为
+「tools + reasoning + points 三件套齐清」；仅 `_applyDetail`（服务端覆盖重置）未清 points，
+但同处已清流身份 ⇒ 时间线 provider 返回 null，**无害**。
+
+### 验收
+`analyze` 零告警；全量 **5100 通过 / 8 skipped**（新增 5 例）。
