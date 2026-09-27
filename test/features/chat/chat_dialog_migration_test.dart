@@ -136,13 +136,6 @@ final Map<String, Map<String, int>> _kUnmigratedPopups =
       },
     };
 
-/// 本批**明确排除**（另一路会话在改）：守卫只允许它们保持「未迁移」原状，
-/// 一旦本批误改了它们，这里会立刻变红。
-const List<String> _kExcludedFiles = <String>[
-  'lib/features/chat/chat_page.dart',
-  'lib/features/chat/widgets/chat_media_view.dart',
-];
-
 /// 宽屏断言：居中卡片在、系统 alert 不在、宽度 = 档位绝对值、路由是宽屏特化路由。
 void _expectWideCard(WidgetTester tester, double width) {
   expect(find.byType(HermesDialogCard), findsOneWidget, reason: '宽屏必须走居中卡片');
