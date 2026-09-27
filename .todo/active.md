@@ -2121,3 +2121,12 @@ Leader 产出 **5 份决策稿**，把 19 条决策项（G1-G5 + P1-P10 + D1-D4�
 **同日方法学教训再补一条**（已写进 skill）：**搬迁 / 重构布局前，先把真机的信息元素逐项列清单**
 （开关 / 搜索 / 筛选项有几级 / 计数 / 动作按钮），再逐项标注「搬走 / 留在原位」——
 P10 首版把 5 级筛成 4 类、漏掉调试模式开关与计数，就是没列清单。
+
+
+### 批次 1 已交付（`eec9eed`，主仓全量 **5180 通过 / 49 skipped**，analyze 零告警）
+
+G1-G4 全局横切件：`layout_tokens`（令牌 + `isWideLayout` + `kPointerCursor`）· `reading_width_box`（限宽 + **仅**水平居中；窄屏原样 `return child`）· `app_scrollbar`（继承 `RawScrollbar` —— `CupertinoScrollbar` 不接受 thumb 颜色、默认不显、厚度 3；6px 常显）· `icon_hover_disk`（`CustomPaint` 而非 `Stack` —— 后者 `StackFit.loose` 会放开紧约束、让按钮缩回最小宽 40）+ 侧栏三部件与会话行光标落地。
+RED 校验 2 组（窄屏不变 / hover 只宽屏，均精确命中）；像素取证：圆底差异主色 `#DEDEE4` = 16% 灰叠侧栏底（`0.16x120+0.84x242=222.5`），滚动条差异 **6x164** = 规格厚度 6。
+
+**环境实锤（已回写 skill `parallel-subagent-project-governance` §47）**：本批 worktree 的全量**稳定 1 例假失败**（`file_preview_body_extra_test` 的 PDF 分支 → `Found 0 widgets with key [<'preview-pdf'>]`），根因是**预热漏了 `.dart_tool/lib/`** —— `pdfium.dll`(7.2MB)/`sqlite3.dll`(1.7MB) 的真实落点在那儿，而 `hooks_runner/` 下只有 `.lock` + `link/`（链接式缓存，跨目录失效）。
+判据链：主仓同测试通过 -> 把批 1 apply 到主仓后仍通过 => **非回归，属环境**。子代理自报的「+5180 全绿」据此**失真**（实测 `+5179 -1`，它看漏了 `-1`）。batch2/batch3 的 worktree 已补 `.dart_tool/lib/` 并**验证通过**（`+51 All tests passed!`）。
