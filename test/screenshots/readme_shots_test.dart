@@ -31,7 +31,11 @@ import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../golden/golden_helpers.dart';
+
+import 'package:hermes_ui/features/settings/perf_monitor_settings.dart';
+
 import '../helpers/fake_chat_api.dart';
+import '../helpers/fake_system_health.dart';
 import '../helpers/fake_insights_api.dart';
 import '../helpers/fake_kanban_api.dart';
 import '../helpers/fake_session_list_api.dart';
@@ -176,6 +180,120 @@ FakeSessionListApi demoSessionApi() {
   );
 }
 
+/// 演示聊天会话（zh / en 两套）。
+///
+/// 刻意给足内容，否则截图工装里的「演示图」看不出真实观感：
+/// - **正文要长**：标题 / 列表 / 表格 / 代码块都用上，宽屏右侧才有东西可看；
+/// - **上下文要有值**：喂 context_length / last_prompt_tokens 等 ⇒ 底栏上下文
+///   指示器环上有百分比（124000 / 200000 = 62%），不再是空「·」；
+/// - 消息条数 ≥ 4，两轮问答，接近真实会话。
+Map<String, Object?> demoChatSessionJson({required bool en}) {
+  return {
+    'session': {
+      'session_id': 's-demo-1',
+      'title': _demoTitles[0],
+      // 让输入区 chip 显示真实值（而非虚线空态）。
+      'workspace': r'D:\projects\hermes-ui',
+      'model': 'claude-opus-4.6',
+      // 上下文用量：62%（指示器环上直接可见）。
+      'context_length': 200000,
+      'threshold_tokens': 160000,
+      'last_prompt_tokens': 124000,
+      'input_tokens': 128400,
+      'output_tokens': 24600,
+      'estimated_cost': 0.86,
+      'message_count': 4,
+      'messages': [
+        {
+          'role': 'user',
+          'content': en
+              ? 'Lay out next month\'s release priorities for the Hermes '
+                    'client, plus an Android verification checklist.\n\n'
+                    'Context: the built-in service just shipped and its '
+                    'first-connect rate is still flaky; the session timeline '
+                    'has been reworked twice.'
+              : '帮我梳理一下 Hermes 客户端下个月的发布重点，并给出 Android 侧的\n'
+                    '验证清单。\n\n'
+                    '背景：内置服务刚上线，首连成功率还不稳；会话时间线最近改过两轮。',
+          'message_id': 'u1',
+        },
+        {
+          'role': 'assistant',
+          'content': en
+              ? '## Next month\'s priorities\n\n'
+                    '**In one line**: harden the *first-connect* and '
+                    '*turn-timeline* paths, everything else is small fixes.\n\n'
+                    '### 1. Built-in service\n'
+                    '- Cold-start grace window: 4s → 6s, probe every 500ms\n'
+                    '- Port 8787 busy: fall back to the next free port and '
+                    'show the real port in Settings\n'
+                    '- New "service self-check" entry: agent / model / port '
+                    'in one pass\n\n'
+                    '### 2. Turn timeline consistency\n\n'
+                    '| Case | Today | Target |\n'
+                    '| --- | --- | --- |\n'
+                    '| Thinking and tool cards interleaved | occasionally '
+                    'out of order | strictly event-time order |\n'
+                    '| Paging up in long sessions | viewport jumps | anchor '
+                    'stays put |\n\n'
+                    '### 3. Android background notifications\n\n'
+                    '```bash\n'
+                    'flutter build apk --release \\\\\n'
+                    '  --target-platform android-arm64\n'
+                    '```\n\n'
+                    'Tapping a notification must land on the right session; '
+                    'if the permission is denied, degrade to an in-app hint — '
+                    'never fail silently.\n\n'
+                    'The checklist is synced to the "Release prep" column on '
+                    'the board — **8 items**.'
+              : '## 下月发布重点\n\n'
+                    '**一句话**：把「首次连接」与「回合时间线」两条链路磨稳，'
+                    '其余只做小修。\n\n'
+                    '### 1. 内置服务体验\n'
+                    '- 首连成功率：冷启动宽限 4s → 6s，探活间隔 500ms\n'
+                    '- 端口占用：8787 被占时自动顺延，并在设置页显示实际端口\n'
+                    '- 自检入口：设置页新增「服务自检」，一次跑通 agent / '
+                    '模型 / 端口三项\n\n'
+                    '### 2. 会话时间线一致性\n\n'
+                    '| 场景 | 现状 | 目标 |\n'
+                    '| --- | --- | --- |\n'
+                    '| 思考卡与工具卡穿插 | 偶发顺序倒置 | 严格按事件时间线 |\n'
+                    '| 长会话上滚分页 | 视口跳动 | 锚点稳定不跳 |\n\n'
+                    '### 3. Android 后台通知\n\n'
+                    '```bash\n'
+                    'flutter build apk --release \\\\\n'
+                    '  --target-platform android-arm64\n'
+                    '```\n\n'
+                    '通知点击必须直达对应会话；权限被拒时降级为应用内提示，'
+                    '不能静默失败。\n\n'
+                    '验证清单已同步到看板「发布准备」列，共 **8 项**。',
+          'message_id': 'a1',
+        },
+        {
+          'role': 'user',
+          'content': en
+              ? 'Sort the checklist by priority — I need to assign people.'
+              : '验证清单按优先级排一下，我安排人手。',
+          'message_id': 'u2',
+        },
+        {
+          'role': 'assistant',
+          'content': en
+              ? 'Sorted: **P0** first-connect grace window, notification '
+                    'deep-link, timeline ordering (3 items); **P1** paging '
+                    'anchor, self-check entry, port fallback (3 items); '
+                    '**P2** copy and icon polish (2 items). The board column '
+                    'is updated.'
+              : '已按优先级排好：**P0** 首连宽限、通知直达、时间线顺序（3 项）；'
+                    '**P1** 分页锚点、自检入口、端口顺延（3 项）；'
+                    '**P2** 文案与图标打磨（2 项）。看板列已更新。',
+          'message_id': 'a2',
+        },
+      ],
+    },
+  };
+}
+
 /// 演示用量数据：30 天周期、21 根柱（覆盖图表截取窗口 14 根，标签
 /// 抽稀逻辑同时受验），数值勾稽自洽（输入+输出=总）。
 InsightsResponse demoInsights() {
@@ -208,17 +326,20 @@ InsightsResponse demoInsights() {
     dailyTokens: [
       for (var i = 0; i < 21; i++)
         InsightsDailyToken(
-          date: DateTime(2026, 8, 19)
-              .add(Duration(days: i))
-              .toIso8601String()
-              .substring(0, 10),
+          date: DateTime(
+            2026,
+            8,
+            19,
+          ).add(Duration(days: i)).toIso8601String().substring(0, 10),
           inputTokens: inp(i),
           outputTokens: outp(i),
           sessions: 3 + i % 7,
           cost: 0.02 + i * 0.01,
         ),
     ],
-    activityByDay: const [InsightsActivityByDay(day: '2026-09-06', sessions: 10)],
+    activityByDay: const [
+      InsightsActivityByDay(day: '2026-09-06', sessions: 10),
+    ],
     activityByHour: const [InsightsActivityByHour(hour: 21, sessions: 4)],
   );
 }
@@ -312,9 +433,7 @@ void main() {
     // 暗色套件加 -dark 后缀，与浅色互不覆盖。
     await expectLater(
       find.byType(CupertinoApp),
-      matchesGoldenFile(
-        '../../$_outDir/$name${_dark ? '-dark' : ''}.png',
-      ),
+      matchesGoldenFile('../../$_outDir/$name${_dark ? '-dark' : ''}.png'),
     );
   }
 
@@ -323,55 +442,9 @@ void main() {
   }, skip: !_capture);
 
   testWidgets('宽屏 · 聊天（hero）', (tester) async {
-    final api = FakeChatApi();
-    api.sessionResult = {
-      'session': {
-        'session_id': 's-demo-1',
-        'title': _demoTitles[0],
-        // #145：让输入区 chip 显示真实值（而非虚线空态），README 图才是
-        // 日常使用中的样子。
-        'workspace': r'D:\projects\hermes-ui',
-        'model': 'claude-opus-4.6',
-        'messages': [
-          {
-            'role': 'user',
-            'content': _en
-                ? 'List the release priorities for the Hermes client next '
-                    'month, plus an Android verification checklist.'
-                : '帮我梳理一下 Hermes 客户端下个月的发布重点，'
-                    '并给出 Android 侧的验证清单。',
-            'message_id': 'u1',
-          },
-          {
-            'role': 'assistant',
-            'content': _en
-                ? '**Release priorities**\n\n'
-                    '1. Built-in service polish: first-connect success rate and '
-                    'cold-start grace window\n'
-                    '2. Session timeline consistency: reasoning and tool cards '
-                    'interleaved\n'
-                    '3. Android background notifications: jump straight into the '
-                    'conversation when a turn finishes\n\n'
-                    '```bash\n'
-                    'flutter build apk --release \\\n'
-                    '  --target-platform android-arm64\n'
-                    '```\n\n'
-                    'The verification checklist is synced to the "Release prep" '
-                    'column on the board — 8 items.'
-                : '**下月发布重点**\n\n'
-                    '1. 内置服务体验打磨：首连成功率与冷启动宽限\n'
-                    '2. 会话时间线一致性：思考与工具卡片穿插\n'
-                    '3. Android 后台通知：回合完成直达会话\n\n'
-                    '```bash\n'
-                    'flutter build apk --release \\\n'
-                    '  --target-platform android-arm64\n'
-                    '```\n\n'
-                    '验证清单已同步到看板「发布准备」列，共 8 项。',
-            'message_id': 'a1',
-          },
-        ],
-      },
-    };
+    // 性能监控面板要开关 + 数据才占位；截图工装喂固定系统指标。
+    SharedPreferences.setMockInitialValues({kShowPerfMonitorKey: true});
+    final api = FakeChatApi()..sessionResult = demoChatSessionJson(en: _en);
     await captureShellShot(
       tester,
       name: 'wide-chat',
@@ -379,7 +452,10 @@ void main() {
       physicalSize: const Size(2560, 1600),
       overrides: [
         chatApiProvider.overrideWithValue(api),
-        sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        sessionListApiFactoryProvider.overrideWithValue(
+          (_) => demoSessionApi(),
+        ),
+        apiClientProvider.overrideWithValue(buildSystemHealthApiClient()),
         ...demoWorkspaceOverrides,
       ],
     );
@@ -392,7 +468,9 @@ void main() {
       location: '/',
       physicalSize: const Size(2560, 1600),
       overrides: [
-        sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        sessionListApiFactoryProvider.overrideWithValue(
+          (_) => demoSessionApi(),
+        ),
         ...demoWorkspaceOverrides,
       ],
     );
@@ -465,7 +543,9 @@ void main() {
       physicalSize: const Size(2560, 1600),
       overrides: [
         kanbanApiFactoryProvider.overrideWithValue((_) => api),
-        sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        sessionListApiFactoryProvider.overrideWithValue(
+          (_) => demoSessionApi(),
+        ),
         ...demoWorkspaceOverrides,
       ],
     );
@@ -481,59 +561,29 @@ void main() {
         insightsApiFactoryProvider.overrideWithValue(
           (_) => FakeInsightsApi(response: demoInsights()),
         ),
-        sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        sessionListApiFactoryProvider.overrideWithValue(
+          (_) => demoSessionApi(),
+        ),
         ...demoWorkspaceOverrides,
       ],
     );
   }, skip: !_capture);
 
   testWidgets('窄屏 · 聊天', (tester) async {
-    final api = FakeChatApi();
-    api.sessionResult = {
-      'session': {
-        'session_id': 's-demo-2',
-        'title': _demoTitles[1],
-        'messages': [
-          {
-            'role': 'user',
-            'content': _en
-                ? 'Write a pandas script that drops duplicate rows and sorts '
-                    'by date.'
-                : '写一个 pandas 去重并按日期排序的清洗脚本。',
-            'message_id': 'u1',
-          },
-          {
-            'role': 'assistant',
-            'content': _en
-                ? 'Sure — the core logic looks like this:\n\n'
-                    '```python\n'
-                    'df = (df.drop_duplicates(subset=["id"])\n'
-                    '        .sort_values("date"))\n'
-                    '```\n\n'
-                    'Install pandas first:\n\n'
-                    '```bash\npip install pandas\n```\n\n'
-                    'It prints the row counts before and after cleaning.'
-                : '好的，核心逻辑如下：\n\n'
-                    '```python\n'
-                    'df = (df.drop_duplicates(subset=["id"])\n'
-                    '        .sort_values("date"))\n'
-                    '```\n\n'
-                    '需要先安装 pandas：\n\n'
-                    '```bash\npip install pandas\n```\n\n'
-                    '运行后会输出清洗前后行数对比。',
-            'message_id': 'a1',
-          },
-        ],
-      },
-    };
+    // 与宽屏**共用同一份丰富演示数据**：主人要按同内容比对窄屏是否受影响。
+    SharedPreferences.setMockInitialValues({kShowPerfMonitorKey: true});
+    final api = FakeChatApi()..sessionResult = demoChatSessionJson(en: _en);
     await captureShellShot(
       tester,
       name: 'phone-chat',
-      location: '/chat/s-demo-2',
+      location: '/chat/s-demo-1',
       physicalSize: const Size(780, 1688),
       overrides: [
         chatApiProvider.overrideWithValue(api),
-        sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        sessionListApiFactoryProvider.overrideWithValue(
+          (_) => demoSessionApi(),
+        ),
+        apiClientProvider.overrideWithValue(buildSystemHealthApiClient()),
         ...demoWorkspaceOverrides,
       ],
     );
@@ -546,7 +596,9 @@ void main() {
       location: '/',
       physicalSize: const Size(780, 1688),
       overrides: [
-        sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        sessionListApiFactoryProvider.overrideWithValue(
+          (_) => demoSessionApi(),
+        ),
         ...demoWorkspaceOverrides,
       ],
     );
@@ -584,20 +636,59 @@ void main() {
                 ),
               ],
               dailyTokens: [
-                InsightsDailyToken(date: '2026-09-05', inputTokens: 420000, outputTokens: 52000, sessions: 6),
-                InsightsDailyToken(date: '2026-09-06', inputTokens: 380000, outputTokens: 49000, sessions: 5),
-                InsightsDailyToken(date: '2026-09-07', inputTokens: 510000, outputTokens: 61000, sessions: 8),
-                InsightsDailyToken(date: '2026-09-08', inputTokens: 300000, outputTokens: 38000, sessions: 4),
-                InsightsDailyToken(date: '2026-09-09', inputTokens: 460000, outputTokens: 55000, sessions: 7),
-                InsightsDailyToken(date: '2026-09-10', inputTokens: 520000, outputTokens: 63000, sessions: 9),
-                InsightsDailyToken(date: '2026-09-11', inputTokens: 610000, outputTokens: 72000, sessions: 10),
+                InsightsDailyToken(
+                  date: '2026-09-05',
+                  inputTokens: 420000,
+                  outputTokens: 52000,
+                  sessions: 6,
+                ),
+                InsightsDailyToken(
+                  date: '2026-09-06',
+                  inputTokens: 380000,
+                  outputTokens: 49000,
+                  sessions: 5,
+                ),
+                InsightsDailyToken(
+                  date: '2026-09-07',
+                  inputTokens: 510000,
+                  outputTokens: 61000,
+                  sessions: 8,
+                ),
+                InsightsDailyToken(
+                  date: '2026-09-08',
+                  inputTokens: 300000,
+                  outputTokens: 38000,
+                  sessions: 4,
+                ),
+                InsightsDailyToken(
+                  date: '2026-09-09',
+                  inputTokens: 460000,
+                  outputTokens: 55000,
+                  sessions: 7,
+                ),
+                InsightsDailyToken(
+                  date: '2026-09-10',
+                  inputTokens: 520000,
+                  outputTokens: 63000,
+                  sessions: 9,
+                ),
+                InsightsDailyToken(
+                  date: '2026-09-11',
+                  inputTokens: 610000,
+                  outputTokens: 72000,
+                  sessions: 10,
+                ),
               ],
-              activityByDay: [InsightsActivityByDay(day: '2026-09-11', sessions: 10)],
+              activityByDay: [
+                InsightsActivityByDay(day: '2026-09-11', sessions: 10),
+              ],
               activityByHour: [InsightsActivityByHour(hour: 21, sessions: 4)],
             ),
           ),
         ),
-        sessionListApiFactoryProvider.overrideWithValue((_) => demoSessionApi()),
+        sessionListApiFactoryProvider.overrideWithValue(
+          (_) => demoSessionApi(),
+        ),
         ...demoWorkspaceOverrides,
       ],
     );
@@ -610,10 +701,7 @@ class _StubProjectApi implements ProjectApi {
   Future<ProjectsResponse> fetchProjects() async => ProjectsResponse(
     projects: [
       const ProjectSummary(projectId: 'p-demo-hermes', name: 'Hermes'),
-      ProjectSummary(
-        projectId: 'p-demo-reading',
-        name: _en ? 'Reading' : '读书',
-      ),
+      ProjectSummary(projectId: 'p-demo-reading', name: _en ? 'Reading' : '读书'),
     ],
   );
 
@@ -631,7 +719,6 @@ class _StubProjectApi implements ProjectApi {
   }) async => const ProjectMutationResponse(ok: true);
 
   @override
-  Future<ProjectMutationResponse> deleteProject(
-    String projectId,
-  ) async => const ProjectMutationResponse(ok: true);
+  Future<ProjectMutationResponse> deleteProject(String projectId) async =>
+      const ProjectMutationResponse(ok: true);
 }
