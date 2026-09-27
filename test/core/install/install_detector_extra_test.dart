@@ -27,9 +27,13 @@ String _join(Object? first, String child) =>
     '$first${Platform.pathSeparator}$child';
 
 void main() {
+  // 本组是**包装器自身契约测试**：验证 `Process.run/start` 的 exitCode/stdout 透传
+  // 与异常透传——必须真跑一次进程才有意义（用 fake 只能验证 fake 自己）。
+  // 故显式 `allowSystemCallsInTest: true` 解锁测试环境硬闸门，且命令全部无害：
+  // `cmd /c echo`（或等价）与「不存在的可执行文件名」，不触碰任何真实系统状态。
   group('SystemProcessExecutor（生产默认进程执行器）', () {
     test('run：成功路径 —— 执行真实 shell echo 并回传 exitCode/stdout', () async {
-      const executor = SystemProcessExecutor();
+      const executor = SystemProcessExecutor(allowSystemCallsInTest: true);
       final cmd = _echoCommand('hermes-cov-probe');
 
       final result = await executor.run(
@@ -46,7 +50,7 @@ void main() {
     });
 
     test('run：不存在的可执行文件 → ProcessException（错误原样抛出，不被吞掉）', () async {
-      const executor = SystemProcessExecutor();
+      const executor = SystemProcessExecutor(allowSystemCallsInTest: true);
 
       await expectLater(
         executor.run(_missingExecutable, const <String>['--version']),
@@ -55,7 +59,7 @@ void main() {
     });
 
     test('start：成功路径 —— 启动真实 shell 并回传 exitCode', () async {
-      const executor = SystemProcessExecutor();
+      const executor = SystemProcessExecutor(allowSystemCallsInTest: true);
       final cmd = _echoCommand('hermes-cov-start-probe');
 
       final process = await executor.start(
@@ -71,7 +75,7 @@ void main() {
     });
 
     test('start：不存在的可执行文件 → ProcessException', () async {
-      const executor = SystemProcessExecutor();
+      const executor = SystemProcessExecutor(allowSystemCallsInTest: true);
 
       await expectLater(
         executor.start(_missingExecutable, const <String>[]),
@@ -100,15 +104,18 @@ void main() {
       expect(fs.directoryExists(missing), isFalse);
     });
 
-    test('createDirectory：recursive 默认递归建整条链，directoryExists 随后为 true', () async {
-      const fs = SystemFileSystemAdapter();
-      final nested = _join(_join(_join(tempDir.path, 'a'), 'b'), 'c');
+    test(
+      'createDirectory：recursive 默认递归建整条链，directoryExists 随后为 true',
+      () async {
+        const fs = SystemFileSystemAdapter();
+        final nested = _join(_join(_join(tempDir.path, 'a'), 'b'), 'c');
 
-      await fs.createDirectory(nested);
+        await fs.createDirectory(nested);
 
-      expect(fs.directoryExists(nested), isTrue);
-      expect(fs.directoryExists(_join(tempDir.path, 'a')), isTrue);
-    });
+        expect(fs.directoryExists(nested), isTrue);
+        expect(fs.directoryExists(_join(tempDir.path, 'a')), isTrue);
+      },
+    );
 
     test('createDirectory(recursive: false)：父目录已存在时创建子目录', () async {
       const fs = SystemFileSystemAdapter();
@@ -235,7 +242,8 @@ class _StubInstallDetector implements InstallDetector {
   String get hermesHomePath => r'C:\Users\Stub\AppData\Local\hermes';
 
   @override
-  String get hermesAgentPath => r'C:\Users\Stub\AppData\Local\hermes\hermes-agent';
+  String get hermesAgentPath =>
+      r'C:\Users\Stub\AppData\Local\hermes\hermes-agent';
 
   @override
   String get webuiPath => r'C:\Users\Stub\AppData\Local\hermes\webui';

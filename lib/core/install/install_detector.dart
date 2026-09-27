@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 
+import '../platform/test_environment.dart';
 import '../platform_paths.dart';
 
 /// 进程执行器抽象（用于单测 mock Process.run / Process.start，禁止在测试中拉起真实系统进程）。
@@ -27,7 +29,15 @@ abstract interface class ProcessExecutor {
 
 /// 生产环境默认进程执行器（封装 dart:io Process）。
 class SystemProcessExecutor implements ProcessExecutor {
-  const SystemProcessExecutor();
+  const SystemProcessExecutor({this.allowSystemCallsInTest = false});
+
+  /// 仅供**包装器自身契约测试**显式解锁（如验证 exitCode/stdout 透传、未知可执行
+  /// 文件的错误透传）。默认 `false` ⇒ 测试环境一律抛错，见 [_assertSystemCallsAllowed]。
+  ///
+  /// 开启时必须只用**无害命令**（`cmd /c echo`、或不存在的可执行文件名），
+  /// 不得触碰真实系统状态（写注册表 / 装软件 / 弹窗口）。
+  @visibleForTesting
+  final bool allowSystemCallsInTest;
 
   @override
   Future<ProcessResult> run(
@@ -36,14 +46,20 @@ class SystemProcessExecutor implements ProcessExecutor {
     String? workingDirectory,
     Map<String, String>? environment,
     bool runInShell = false,
-  }) =>
-      Process.run(
-        executable,
-        arguments,
-        workingDirectory: workingDirectory,
-        environment: environment,
-        runInShell: runInShell,
-      );
+  }) {
+    _assertSystemCallsAllowed(
+      'run',
+      executable,
+      allowInTest: allowSystemCallsInTest,
+    );
+    return Process.run(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+      runInShell: runInShell,
+    );
+  }
 
   @override
   Future<Process> start(
@@ -53,15 +69,40 @@ class SystemProcessExecutor implements ProcessExecutor {
     Map<String, String>? environment,
     bool runInShell = false,
     ProcessStartMode mode = ProcessStartMode.normal,
-  }) =>
-      Process.start(
-        executable,
-        arguments,
-        workingDirectory: workingDirectory,
-        environment: environment,
-        runInShell: runInShell,
-        mode: mode,
-      );
+  }) {
+    _assertSystemCallsAllowed(
+      'start',
+      executable,
+      allowInTest: allowSystemCallsInTest,
+    );
+    return Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+      runInShell: runInShell,
+      mode: mode,
+    );
+  }
+}
+
+/// 测试环境硬闸门：默认执行器**禁止真跑系统命令**。
+///
+/// 为什么是抛错而不是静默拦截：本接口返回真实 `ProcessResult`，静默拦截只能伪造
+/// 结果——那比「真跑」更危险（测试会以为自己验证了成功路径）。抛错则让漏注入替身的
+/// 测试立刻变红，暴露问题。
+void _assertSystemCallsAllowed(
+  String method,
+  String executable, {
+  required bool allowInTest,
+}) {
+  if (!allowInTest && isRunningUnderTest) {
+    throw StateError(
+      '测试环境禁止真跑系统命令（$method: $executable）。'
+      '请在测试里注入替身执行器'
+      '（例如 powershell_installer_extra_test.dart 的 _FakeProcessExecutor）。',
+    );
+  }
 }
 
 /// 文件系统与环境检测抽象（支持单测 mock 路径与文件检查）。
@@ -95,8 +136,7 @@ class SystemFileSystemAdapter implements FileSystemAdapter {
       File(path).writeAsString(content);
 
   @override
-  Future<String> readString(String path) =>
-      File(path).readAsString();
+  Future<String> readString(String path) => File(path).readAsString();
 
   @override
   String get localAppData =>

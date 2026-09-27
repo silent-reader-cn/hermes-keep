@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'test_environment.dart';
+
 /// 外部打开器接缝：把「用系统文件管理器打开某个路径」这件事收敛到一处。
 ///
 /// ## 为什么必须有这道接缝
@@ -54,9 +56,8 @@ class ExternalOpener {
   static bool get _platformIsMacOS => !kIsWeb && Platform.isMacOS;
   static bool get _platformIsLinux => !kIsWeb && Platform.isLinux;
 
-  /// 当前是否运行在 `flutter test` 里（flutter_test 会注入 `FLUTTER_TEST=true`）。
-  static bool get isTestEnvironment =>
-      !kIsWeb && (Platform.environment['FLUTTER_TEST'] ?? '') == 'true';
+  /// 当前是否运行在 `flutter test` 里（判据见 `test_environment.dart`）。
+  static bool get isTestEnvironment => isRunningUnderTest;
 
   /// 在文件管理器中**定位并高亮**某个文件（Windows 资源管理器 / macOS Finder）。
   Future<void> revealInFileManager(String path) async {

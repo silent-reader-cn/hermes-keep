@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/platform/test_environment.dart';
+
 /// Windows 开机启动注册表路径（HKCU，无需管理员权限）。
 const String startupRunKeyPath =
     r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run';
@@ -76,10 +78,20 @@ class WindowsStartupRegistrar implements StartupRegistrar {
   final bool Function() _isWindowsPlatform;
 
   /// 默认进程调用器。
+  ///
+  /// ⚠️ 测试环境硬闸门：`reg` 会**读写系统开机启动注册表**（持久副作用，比弹窗口
+  /// 严重一个量级），单测若漏注入 `runProcess` 进来，这里直接抛错而不是真跑——
+  /// 本接口返回 `ProcessResult`，静默拦截只能伪造结果，会更隐蔽地骗过测试。
   static Future<ProcessResult> _defaultRunProcess(
     String executable,
     List<String> arguments,
   ) {
+    if (isRunningUnderTest) {
+      throw StateError(
+        '测试环境禁止真跑 `$executable`（会改动系统开机启动注册表）。'
+        '请注入 runProcess 替身（见 startup_registrar_test.dart）。',
+      );
+    }
     return Process.run(executable, arguments);
   }
 

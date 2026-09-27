@@ -12,6 +12,7 @@ import 'package:hermes_ui/core/connections/server_connection.dart';
 import 'package:hermes_ui/core/install/install_detector.dart';
 import 'package:hermes_ui/core/models/server_info.dart';
 import 'package:hermes_ui/features/desktop/desktop_settings.dart';
+import 'package:hermes_ui/features/desktop/startup_registrar.dart';
 import 'package:hermes_ui/features/onboarding/onboarding_page.dart';
 import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 import 'package:hermes_ui/features/webui_sidecar/webui_sidecar_providers.dart';
@@ -19,6 +20,20 @@ import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/in_memory_secure_storage.dart';
+
+/// 开机启动注册表替身：单测绝不允许真跑 `reg`（会改动系统持久状态）。
+/// 本用例只关心「开关切换即时写回」，故只需记录调用。
+class _RecordingStartupRegistrar implements StartupRegistrar {
+  final List<String> calls = <String>[];
+
+  @override
+  Future<bool> isRegistered() async => false;
+
+  @override
+  Future<void> setRegistered(bool registered, {String? command}) async {
+    calls.add('setRegistered:$registered');
+  }
+}
 
 class _FakeInstallDetector implements InstallDetector {
   bool hasAgent = true;
@@ -28,7 +43,8 @@ class _FakeInstallDetector implements InstallDetector {
   bool isWindows = true;
 
   @override
-  String get hermesAgentPath => r'C:\Users\User\AppData\Local\hermes\hermes-agent';
+  String get hermesAgentPath =>
+      r'C:\Users\User\AppData\Local\hermes\hermes-agent';
 
   @override
   String get hermesHomePath => r'C:\Users\User\AppData\Local\hermes';
@@ -123,7 +139,7 @@ class _SpyConnectionStore extends ConnectionStore {
 
 class _MockWebuiSidecarService implements WebuiSidecarService {
   _MockWebuiSidecarService({SidecarState? initialState, this.onStart})
-      : _state = initialState ?? SidecarState.initial;
+    : _state = initialState ?? SidecarState.initial;
 
   SidecarState _state;
   final StreamController<SidecarState> _controller =
@@ -219,7 +235,8 @@ void main() {
     // 平台语义走注入：默认 Windows（本文件断言的是 Windows 桌面形态），
     // 传 false 可构造「非 Windows 宿主 → 形态 B」的判别用例。
     fakeFs.isWindows = isWindows;
-    final effectiveRouter = router ??
+    final effectiveRouter =
+        router ??
         GoRouter(
           initialLocation: '/onboarding',
           routes: [
@@ -264,8 +281,9 @@ void main() {
   }
 
   group('TASK U2 — 形态 A/B 判定', () {
-    testWidgets('bundledWebuiAvailable=false → 形态 B（分段控件不渲染，渲染远程表单）',
-        (tester) async {
+    testWidgets('bundledWebuiAvailable=false → 形态 B（分段控件不渲染，渲染远程表单）', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildTestApp(bundledAvailable: false));
       await tester.pumpAndSettle();
 
@@ -284,10 +302,8 @@ void main() {
       );
     });
 
-    testWidgets(
-        'bundledWebuiAvailable=true 且 isWindows=false → 形态 B'
-        '（形态判定跟随注入的平台语义，不读宿主 Platform.isWindows）',
-        (tester) async {
+    testWidgets('bundledWebuiAvailable=true 且 isWindows=false → 形态 B'
+        '（形态判定跟随注入的平台语义，不读宿主 Platform.isWindows）', (tester) async {
       // 判别用例：宿主是 Windows 时，旧实现（Platform.isWindows）会判成形态 A
       // → 本条即失败。CI(Linux) 上旧的实现同样判不出形态 A，故两头皆可比。
       await tester.pumpWidget(
@@ -303,8 +319,9 @@ void main() {
       expect(find.byKey(const ValueKey('onboarding-connect')), findsOneWidget);
     });
 
-    testWidgets('bundledWebuiAvailable=true → 形态 A（分段控件渲染，默认内置服务 Tab）',
-        (tester) async {
+    testWidgets('bundledWebuiAvailable=true → 形态 A（分段控件渲染，默认内置服务 Tab）', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildTestApp(bundledAvailable: true));
       await tester.pumpAndSettle();
 
@@ -387,8 +404,9 @@ void main() {
   });
 
   group('TASK U2 — 启动并连接全链 (start -> login -> upsert -> setActive 顺序断言)', () {
-    testWidgets('点击「启动并连接」依次执行 start -> login -> upsert -> setActive 并跳转 /',
-        (tester) async {
+    testWidgets('点击「启动并连接」依次执行 start -> login -> upsert -> setActive 并跳转 /', (
+      tester,
+    ) async {
       mockService = _MockWebuiSidecarService(
         onStart: () async {
           callOrder.add('start');
@@ -475,10 +493,12 @@ void main() {
   });
 
   group('TASK #76 — 引导页内置 Tab 门禁与 agent 缺失卡', () {
-    testWidgets('agentEnvPresent=false 时渲染缺失卡、文案明确、按钮置灰，重检触发 refresh',
-        (tester) async {
+    testWidgets('agentEnvPresent=false 时渲染缺失卡、文案明确、按钮置灰，重检触发 refresh', (
+      tester,
+    ) async {
       var installed = false;
-      final expectedVenv = '${fakeFs.customAgentDir}\\venv\\Scripts\\python.exe';
+      final expectedVenv =
+          '${fakeFs.customAgentDir}\\venv\\Scripts\\python.exe';
       fakeFs.fileExistsOverride = (path) => installed && path == expectedVenv;
 
       await tester.pumpWidget(buildTestApp(bundledAvailable: true));
@@ -544,6 +564,9 @@ void main() {
 
   group('TASK U2 — 高级折叠改动 -> config 写回', () {
     testWidgets('展开高级折叠并修改端口、主机、密码、开机自启，均即时写回 Provider', (tester) async {
+      // 开机自启开关会同步写注册表（`_syncStartupRegistration`）——注入替身，
+      // 单测绝不真跑 `reg`。
+      final startupRegistrar = _RecordingStartupRegistrar();
       final container = ProviderContainer(
         overrides: [
           connectionStoreProvider.overrideWithValue(spyStore),
@@ -552,6 +575,7 @@ void main() {
           bundledWebuiAvailableProvider.overrideWithValue(true),
           webuiSidecarServiceProvider.overrideWithValue(mockService),
           onboardingApiFactoryProvider.overrideWithValue((_, _) => fakeApi),
+          startupRegistrarProvider.overrideWithValue(startupRegistrar),
         ],
       );
       addTearDown(container.dispose);
@@ -660,7 +684,9 @@ void main() {
       // Settle the layout without waiting on the intentional brand loop.
       tester.platformDispatcher.accessibilityFeaturesTestValue =
           const FakeAccessibilityFeatures(disableAnimations: true);
-      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -675,8 +701,9 @@ void main() {
       );
 
       // 验证右列容器存在且宽度 <= 480
-      final containerFinder =
-          find.byKey(const ValueKey('wide-dual-pane-form-container'));
+      final containerFinder = find.byKey(
+        const ValueKey('wide-dual-pane-form-container'),
+      );
       expect(containerFinder, findsOneWidget);
 
       final size = tester.getSize(containerFinder);
@@ -693,7 +720,10 @@ void main() {
   group('TASK U2 — 已 active 且 running / 停用回退', () {
     testWidgets('已 active 且 running 时按钮变为「进入会话列表」并可直达 /', (tester) async {
       mockService = _MockWebuiSidecarService(
-        initialState: const SidecarState(status: SidecarStatus.running, pid: 1111),
+        initialState: const SidecarState(
+          status: SidecarStatus.running,
+          pid: 1111,
+        ),
       );
 
       final container = ProviderContainer(
@@ -764,8 +794,9 @@ void main() {
       expect(find.text('HOME_PAGE'), findsOneWidget);
     });
 
-    testWidgets('停用回退：active 从 builtin 被清时，停留内置 Tab 且状态胶囊显示未启动',
-        (tester) async {
+    testWidgets('停用回退：active 从 builtin 被清时，停留内置 Tab 且状态胶囊显示未启动', (
+      tester,
+    ) async {
       mockService = _MockWebuiSidecarService(
         initialState: const SidecarState(status: SidecarStatus.stopped),
       );

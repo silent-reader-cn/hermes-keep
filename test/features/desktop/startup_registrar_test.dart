@@ -170,7 +170,12 @@ void main() {
         DesktopSettingsController.keySilentStart: true,
       });
 
-      final container = ProviderContainer();
+      // 开关切换会同步写注册表（`_syncStartupRegistration`）——注入替身，
+      // 别让单测真跑 `reg`（本用例只关心 prefs 持久化与 state 联动）。
+      final registrar = FakeStartupRegistrar();
+      final container = ProviderContainer(
+        overrides: [startupRegistrarProvider.overrideWithValue(registrar)],
+      );
       addTearDown(container.dispose);
 
       // 先触发 build（内部 unawaited(_load())），再等异步加载完成
