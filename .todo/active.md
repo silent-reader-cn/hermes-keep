@@ -1571,3 +1571,18 @@ Future<void> resumeCompressionIfRunning();
 
 产物：`.shots/demo-rich-wide-chat-dark.png`、`.shots/demo-rich-phone-chat-dark.png`。
 验收：analyze 零告警；全量 5095 通过 / 8 skipped。
+
+### 追加（2026-09-27 第五轮）：窄屏顶栏补下边框（`2c7b03c`）
+
+**主人**：窄屏 title 栏下方也显示 border。原发丝线只在宽屏挂，现两屏常挂 ⇒ 窄屏顶栏总高 44 + 0.5。
+
+- 护栏用例改钉：窄屏分支由「`bottom` 为 null」→「有 0.5 线且总高 44.5」。
+- 金照：`goldens/windows/chat_{dark,light}.png` 重生成（其余金照逐像素未变）。
+- 产物：`.shots/navline-narrow-vs-wide.png`、`.shots/demo-rich-{phone,wide}-chat-navline-dark.png`。
+- 验收：analyze 零告警；全量 5095 通过 / 8 skipped。
+
+**⚠️ 待办（阻塞点）**：`goldens/linux/` 只能在 ubuntu runner 生成 ⇒ 需推送后跑
+`python tools/refresh_linux_goldens.py`。**当前本地 main 领先 origin/main 14 个提交**
+（含 #163–#170 全部改动），而该脚本派发的 CI 跑在**远端 ref** 上 ⇒ 必须先推送，
+否则取回的 linux 基线对应的是旧界面，CI 金照仍会红（脚本头部纪律同此：
+「推完最后一次 → 派发重生成 → 等它跑完取回 → 再提交推送基线」）。
