@@ -45,7 +45,14 @@ Future<DiagnosticsService> _demoService() async {
   final service = DiagnosticsService(customPrefs: prefs);
   await service.init(prefs: prefs);
   await service.setEnabled(true);
-  final base = DateTime(2026, 9, 27, 10, 9, 30);
+  // 演示日志锚定**今天**，不要写死日期：本文件有断言「切『今天』后仍留全部」
+  // （见下方 `左栏时间范围：切「今天」` 用例），原来写死 2026-09-27 ——
+  // 一旦跨过那一天，9 条数据全部落在「今天」之外，那条用例就**每天必红**
+  // （2026-09-28 00:04 实测踩到）。
+  // 时刻取今天正午：最早一条是 base-9min，仍稳落在今天之内；不依赖运行时刻
+  // （凌晨/深夜跑都成立），也不影响其余用例（本文件无「时:分」文本断言）。
+  final today = DateTime.now();
+  final base = DateTime(today.year, today.month, today.day, 12);
   var seq = 0;
   void log(DiagnosticsLogLevel level, String tag, String message) {
     seq += 1;
@@ -541,7 +548,7 @@ void main() {
         _textIn(tester, _timeRow(DiagnosticsTimeFilter.all), '全部').style?.color,
         isNot(LightSurfaces.selectionForeground),
       );
-      // 演示日志均为 2026-09-27 的过去时刻，选「今天」后按天过滤仍留全部
+      // 演示日志锚定今天（见 _demoService），选「今天」后按天过滤仍留全部
       // （时间过滤口径由 providers 承担，此处只钉「切换生效、选中态正确」）。
       expect(find.text('9 / 9'), findsOneWidget);
     });
