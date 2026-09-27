@@ -4,6 +4,7 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
+import '../../app/widgets/hermes_dialog.dart';
 import '../../l10n/app_localizations.dart';
 
 /// 原生 FileProvider 与权限通道。
@@ -53,26 +54,27 @@ Future<bool> installApkWithPermissionGate(
   final l10n = AppLocalizations.of(context);
   if (!await canRequestInstall(channel: channel)) {
     if (!context.mounted) return false;
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(l10n.installPermissionTitle),
-        content: Text(l10n.installPermissionBody),
-        actions: [
-          CupertinoDialogAction(
-            child: Text(l10n.cancel),
-            onPressed: () => Navigator.of(ctx).pop(),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: Text(l10n.installPermissionGoSettings),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              unawaited(openInstallPermissionSettings(channel: channel));
-            },
-          ),
-        ],
-      ),
+    // 批 5 · C4：D1 四档宽「确认框 380」（权限引导属警告/确认类；
+    // 窄屏仍走系统 alert，逐像素不变）。跳设置仍用外层 channel 语义不变。
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.installPermissionTitle),
+      content: (_) => Text(l10n.installPermissionBody),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(l10n.cancel),
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+        HermesDialogAction(
+          isDefaultAction: true,
+          builder: (_) => Text(l10n.installPermissionGoSettings),
+          onPressed: (dialogContext) {
+            Navigator.of(dialogContext).pop();
+            unawaited(openInstallPermissionSettings(channel: channel));
+          },
+        ),
+      ],
     );
     if (!context.mounted) return false;
     // 从设置页返回后复查

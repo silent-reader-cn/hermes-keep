@@ -592,31 +592,34 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   Future<void> _confirmDelete(BuildContext context, CronJob job) async {
     final l10n = AppLocalizations.of(context);
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.deleteTask),
-        content: Text(l10n.confirmDeleteTask(job.displayName)),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('tasks-delete-cancel'),
-            textStyle: isLight
-                ? const TextStyle(color: LightSurfaces.menuAction)
-                : null,
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            key: const ValueKey('tasks-delete-confirm'),
-            isDestructiveAction: true,
-            textStyle: isLight
-                ? TextStyle(color: statusRedText.resolveFrom(dialogContext))
-                : null,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.delete),
-          ),
-        ],
-      ),
+    // 批 5 · C3：确认框迁到 D1 四档宽的 `confirm`（380）—— 窄屏仍是系统 alert。
+    final confirmed = await showHermesDialog<bool>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.deleteTask),
+      content: (_) => Text(l10n.confirmDeleteTask(job.displayName)),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('tasks-delete-cancel'),
+          // 与改造前同落位：颜色走 `textStyle`（不是塞进 builder 的 Text），
+          // 窄屏 `CupertinoDialogAction.textStyle` 因此保持非空（既有守卫在钉它）。
+          textStyle: isLight
+              ? const TextStyle(color: LightSurfaces.menuAction)
+              : null,
+          builder: (_) => Text(l10n.cancel),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext, false),
+        ),
+        HermesDialogAction(
+          key: const ValueKey('tasks-delete-confirm'),
+          isDestructiveAction: true,
+          // 破坏性色同落位：`textStyle` + `statusRedText`（宽屏由基础设施同款合并）。
+          textStyle: isLight
+              ? TextStyle(color: statusRedText.resolveFrom(context))
+              : null,
+          builder: (_) => Text(l10n.delete),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext, true),
+        ),
+      ],
     );
     if (confirmed == true && mounted) {
       await ref.read(tasksControllerProvider.notifier).delete(job);
@@ -626,22 +629,22 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   Future<void> _showActionError(BuildContext context, String message) async {
     final l10n = AppLocalizations.of(context);
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.actionFailed),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('tasks-error-ok'),
-            textStyle: isLight
-                ? const TextStyle(color: LightSurfaces.menuAction)
-                : null,
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.ok),
-          ),
-        ],
-      ),
+    // 批 5 · C3：单动作告警框 → `confirm`（380），窄屏仍是系统 alert。
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.actionFailed),
+      content: (_) => Text(message),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('tasks-error-ok'),
+          textStyle: isLight
+              ? const TextStyle(color: LightSurfaces.menuAction)
+              : null,
+          builder: (_) => Text(l10n.ok),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext),
+        ),
+      ],
     );
     await ref.read(tasksControllerProvider.notifier).clearActionError();
   }

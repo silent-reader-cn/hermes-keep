@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/extensions.dart';
@@ -189,6 +190,11 @@ class ExtensionsSection extends ConsumerWidget {
     );
   }
 
+  /// 卸载扩展确认（**批 5 · C1**：D1 四档宽 —— 卸载属确认/警告类，取
+  /// `confirm` 380）。
+  ///
+  /// 窄屏（<900）逐像素不变（系统 `CupertinoAlertDialog`，动作浅色口径与
+  /// `SettingsSurfaces.dialog` 逐字段同值）；宽屏（≥900）走 380 宽居中卡片。
   Future<void> _confirmUninstall(
     BuildContext context,
     WidgetRef ref,
@@ -196,35 +202,42 @@ class ExtensionsSection extends ConsumerWidget {
   ) {
     final l10n = AppLocalizations.of(context);
     final displayName = ext.name.isNotEmpty ? ext.name : ext.id;
+    // 浅色下动作文字取高对比度深蓝（同 `SettingsSurfaces.dialog`）；深色返回
+    // null → 沿用原生色（`CupertinoDialogAction` 默认 primaryColor / systemRed）。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final ink = isLight
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
+    final dangerInk = isLight
+        ? TextStyle(color: statusRedText.resolveFrom(context))
+        : null;
 
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => SettingsSurfaces.dialog(
-        context,
-        CupertinoAlertDialog(
-          title: Text(l10n.uninstallExtension),
-          content: Text(l10n.confirmUninstallExtension(displayName)),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.cancel),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('extension-uninstall-confirm'),
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                unawaited(
-                  ref
-                      .read(extensionsControllerProvider.notifier)
-                      .uninstallExtension(ext.id),
-                );
-              },
-              child: Text(l10n.uninstall),
-            ),
-          ],
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.uninstallExtension),
+      content: (_) => Text(l10n.confirmUninstallExtension(displayName)),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(l10n.cancel),
+          textStyle: ink,
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
         ),
-      ),
+        HermesDialogAction(
+          key: const ValueKey('extension-uninstall-confirm'),
+          isDestructiveAction: true,
+          builder: (_) => Text(l10n.uninstall),
+          textStyle: dangerInk,
+          onPressed: (dialogContext) {
+            Navigator.of(dialogContext).pop();
+            unawaited(
+              ref
+                  .read(extensionsControllerProvider.notifier)
+                  .uninstallExtension(ext.id),
+            );
+          },
+        ),
+      ],
     );
   }
 

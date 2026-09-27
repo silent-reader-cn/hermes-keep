@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/app/theme/status_colors.dart';
+import 'package:hermes_ui/app/widgets/hermes_dialog.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
@@ -423,8 +424,17 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.text('2026-08-16'), findsOneWidget);
           expect(find.text(r'$0.01'), findsOneWidget);
-          final action = tester.widget<CupertinoDialogAction>(
-            find.byType(CupertinoDialogAction),
+          // 批 5 · C3：该弹窗已迁到 `showHermesDialog` —— 本用例用的是 1200 宽
+          // （≥900）→ 走**宽屏卡片**（形态契约，见 `test/features/tasks/
+          // tasks_dialog_migration_test.dart`）。动作件随之从
+          // `CupertinoDialogAction` 变成自绘 `CupertinoButton`，故下面按
+          // **动作文字**断言色值/对比度：两种形态都成立，浅色契约一条不减。
+          expect(find.byType(HermesDialogCard), findsOneWidget);
+          expect(find.byType(CupertinoAlertDialog), findsNothing);
+          expect(
+            tester.getSize(find.byKey(kHermesDialogCardKey)).width,
+            380.0,
+            reason: '明细弹窗按语义分档取 confirm（380）',
           );
           if (isLight) {
             final foreground = _textColor(tester, _l10n.ok);
@@ -441,7 +451,8 @@ void main() {
               );
             }
           } else {
-            expect(action.textStyle, isNull);
+            // 暗色：动作文字不覆盖样式（回退系统默认）。
+            expect(tester.widget<Text>(find.text(_l10n.ok)).style, isNull);
           }
           await tester.tap(find.text(_l10n.ok));
           await tester.pumpAndSettle();

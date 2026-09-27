@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/widgets/hermes_dialog.dart';
 import '../../features/downloads/download_controller.dart';
 import '../../features/downloads/download_models.dart';
 import '../../features/downloads/download_providers.dart';
@@ -125,18 +126,19 @@ Future<void> handleDownloadOrOpenRelease(
       );
 
       if (context.mounted) {
-        await showCupertinoDialog<void>(
-          context: context,
-          builder: (dialogCtx) => CupertinoAlertDialog(
-            title: Text(l10n.updateSectionTitle),
-            content: Text(l10n.updateDownloadingStarted),
-            actions: [
-              CupertinoDialogAction(
-                child: Text(l10n.ok),
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-              ),
-            ],
-          ),
+        // 批 5 · C4：D1 四档宽「确认框 380」（窄屏仍走系统 alert，逐像素不变）。
+        await showHermesDialog<void>(
+          context,
+          kind: HermesDialogKind.confirm,
+          title: (_) => Text(l10n.updateSectionTitle),
+          content: (_) => Text(l10n.updateDownloadingStarted),
+          actions: [
+            HermesDialogAction(
+              builder: (_) => Text(l10n.ok),
+              onPressed: (dialogContext) =>
+                  Navigator.of(dialogContext).pop(),
+            ),
+          ],
         );
       }
       return;
@@ -166,29 +168,31 @@ Future<void> promptInstallApk(
   Future<bool> Function(BuildContext context, String path)? apkInstaller,
 }) async {
   final l10n = AppLocalizations.of(context);
-  await showCupertinoDialog<void>(
-    context: context,
-    builder: (ctx) => CupertinoAlertDialog(
-      title: Text(l10n.updateSectionTitle),
-      content: Text(l10n.updateReadyToInstall),
-      actions: [
-        CupertinoDialogAction(
-          child: Text(l10n.cancel),
-          onPressed: () => Navigator.of(ctx).pop(),
-        ),
-        CupertinoDialogAction(
-          isDefaultAction: true,
-          child: Text(l10n.updateInstallNow),
-          onPressed: () {
-            Navigator.of(ctx).pop();
-            if (apkInstaller != null) {
-              unawaited(apkInstaller(context, path));
-            } else {
-              unawaited(installApkWithPermissionGate(context, path));
-            }
-          },
-        ),
-      ],
-    ),
+  // 批 5 · C4：D1 四档宽「确认框 380」（确认安装属确认类；窄屏逐像素不变）。
+  // 动作回调收 dialogContext 只用于 pop —— 安装本身仍用外层 context
+  // （业务语义不变：安装流程要活在调用页上，不活在弹窗路由上）。
+  await showHermesDialog<void>(
+    context,
+    kind: HermesDialogKind.confirm,
+    title: (_) => Text(l10n.updateSectionTitle),
+    content: (_) => Text(l10n.updateReadyToInstall),
+    actions: [
+      HermesDialogAction(
+        builder: (_) => Text(l10n.cancel),
+        onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+      ),
+      HermesDialogAction(
+        isDefaultAction: true,
+        builder: (_) => Text(l10n.updateInstallNow),
+        onPressed: (dialogContext) {
+          Navigator.of(dialogContext).pop();
+          if (apkInstaller != null) {
+            unawaited(apkInstaller(context, path));
+          } else {
+            unawaited(installApkWithPermissionGate(context, path));
+          }
+        },
+      ),
+    ],
   );
 }

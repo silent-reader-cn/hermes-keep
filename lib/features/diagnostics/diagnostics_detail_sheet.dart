@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../l10n/app_localizations.dart';
 import 'diagnostics_models.dart';
 
@@ -31,24 +32,24 @@ Future<void> copyDiagnosticsEntry(
   final l10n = AppLocalizations.of(context);
   await Clipboard.setData(ClipboardData(text: entry.toExportString()));
   if (!context.mounted) return;
+  // 批 5 · C3：单动作提示框 → D1 `confirm`（380）；窄屏仍是系统 alert。
   unawaited(
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(l10n.copy),
-        content: Text(l10n.copiedToClipboard),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(
-              l10n.ok,
-              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                  ? const TextStyle(color: LightSurfaces.menuAction)
-                  : null,
-            ),
+    showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.copy),
+      content: (_) => Text(l10n.copiedToClipboard),
+      actions: [
+        HermesDialogAction(
+          builder: (ctx) => Text(
+            l10n.ok,
+            style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
           ),
-        ],
-      ),
+          onPressed: (ctx) => Navigator.of(ctx).pop(),
+        ),
+      ],
     ),
   );
 }

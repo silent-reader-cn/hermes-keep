@@ -11,6 +11,7 @@ import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_server_panels.dart';
@@ -1167,24 +1168,31 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
     }
   }
 
+  /// 单动作提示弹窗（**批 5 · C1**：D1 四档宽 —— 纯提示/警告类取 `confirm` 380）。
+  ///
+  /// 窄屏（<900）逐像素不变（系统 `CupertinoAlertDialog`，动作浅色口径与
+  /// `SettingsSurfaces.dialog` 同值）；宽屏（≥900）走 380 宽居中卡片。
   void _showNotice(String title, String message) {
     final l10n = AppLocalizations.of(context);
+    // 浅色下动作文字取高对比度深蓝（同 `SettingsSurfaces.dialog`）；深色返回
+    // null → 沿用原生色（`CupertinoDialogAction` 默认 primaryColor）。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final ink = isLight
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
     unawaited(
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => SettingsSurfaces.dialog(
-          context,
-          CupertinoAlertDialog(
-            title: Text(title),
-            content: Text(message),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(l10n.ok),
-              ),
-            ],
+      showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(title),
+        content: (_) => Text(message),
+        actions: [
+          HermesDialogAction(
+            builder: (_) => Text(l10n.ok),
+            textStyle: ink,
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -1476,6 +1484,11 @@ class _ServerSection extends ConsumerWidget {
     );
   }
 
+  /// 删除服务器确认（**批 5 · C1**：D1 四档宽 —— 删除属确认/警告类，取
+  /// `confirm` 380）。
+  ///
+  /// 窄屏（<900）逐像素不变（系统 `CupertinoAlertDialog`，动作浅色口径与
+  /// `SettingsSurfaces.dialog` 逐字段同值）；宽屏（≥900）走 380 宽居中卡片。
   Future<void> _confirmDeleteServer(
     BuildContext context,
     WidgetRef ref,
@@ -1483,32 +1496,39 @@ class _ServerSection extends ConsumerWidget {
   ) {
     final l10n = AppLocalizations.of(context);
     final name = connection.name.isEmpty ? connection.baseUrl : connection.name;
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => SettingsSurfaces.dialog(
-        context,
-        CupertinoAlertDialog(
-          title: Text(l10n.deleteServer),
-          content: Text(l10n.confirmDeleteServer(name)),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('server-delete-confirm'),
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.of(context).pop();
-                unawaited(
-                  ref.read(connectionsProvider.notifier).remove(connection.id),
-                );
-              },
-              child: Text(l10n.delete),
-            ),
-          ],
+    // 浅色下动作文字取高对比度深蓝 / 破坏性命中 `statusRedText`（同
+    // `SettingsSurfaces.dialog`）；深色返回 null → 沿用原生色。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final ink = isLight
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
+    final dangerInk = isLight
+        ? TextStyle(color: statusRedText.resolveFrom(context))
+        : null;
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.deleteServer),
+      content: (_) => Text(l10n.confirmDeleteServer(name)),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(l10n.cancel),
+          textStyle: ink,
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
         ),
-      ),
+        HermesDialogAction(
+          key: const ValueKey('server-delete-confirm'),
+          isDestructiveAction: true,
+          builder: (_) => Text(l10n.delete),
+          textStyle: dangerInk,
+          onPressed: (dialogContext) {
+            Navigator.of(dialogContext).pop();
+            unawaited(
+              ref.read(connectionsProvider.notifier).remove(connection.id),
+            );
+          },
+        ),
+      ],
     );
   }
 }
@@ -1613,26 +1633,32 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
     }
   }
 
+  /// Profile 切换失败提示（**批 5 · C1**：D1 四档宽 —— 错误提示取 `confirm` 380）。
+  ///
+  /// 窄屏（<900）逐像素不变（系统 `CupertinoAlertDialog`）；宽屏（≥900）走
+  /// 380 宽居中卡片。
   Future<void> _showProfileError(Object error) {
     final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => SettingsSurfaces.dialog(
-        context,
-        CupertinoAlertDialog(
-          title: Text(l10n.profileSwitchFailed),
-          content: Text(
-            error is ApiException ? error.message : '$error',
-            style: TextStyle(color: statusRedText.resolveFrom(context)),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.ok),
-            ),
-          ],
-        ),
+    // 浅色下动作文字取高对比度深蓝（同 `SettingsSurfaces.dialog`）。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final ink = isLight
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.profileSwitchFailed),
+      content: (_) => Text(
+        error is ApiException ? error.message : '$error',
+        style: TextStyle(color: statusRedText.resolveFrom(context)),
       ),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(l10n.ok),
+          textStyle: ink,
+          onPressed: (dialogContext) => Navigator.pop(dialogContext),
+        ),
+      ],
     );
   }
 
@@ -2323,39 +2349,48 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
     if (launched || !mounted) return;
 
     final l10n = AppLocalizations.of(context);
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => SettingsSurfaces.dialog(
-        context,
-        CupertinoAlertDialog(
-          title: Text(l10n.actionFailed),
-          content: const Text(kHermesUiRepoUrl),
-          actions: [
-            CupertinoDialogAction(
-              child: Text(l10n.copy),
-              onPressed: () {
-                unawaited(
-                  Clipboard.setData(
-                    const ClipboardData(text: kHermesUiRepoUrl),
-                  ),
-                );
-                Navigator.of(ctx).pop();
-              },
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              child: Text(l10n.ok),
-              onPressed: () => Navigator.of(ctx).pop(),
-            ),
-          ],
+    // 浅色下动作文字取高对比度深蓝（同 `SettingsSurfaces.dialog`）；深色返回
+    // null → 沿用原生色（`CupertinoDialogAction` 默认 primaryColor）。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final ink = isLight
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.actionFailed),
+      content: (_) => const Text(kHermesUiRepoUrl),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(l10n.copy),
+          textStyle: ink,
+          onPressed: (dialogContext) {
+            unawaited(
+              Clipboard.setData(const ClipboardData(text: kHermesUiRepoUrl)),
+            );
+            Navigator.of(dialogContext).pop();
+          },
         ),
-      ),
+        HermesDialogAction(
+          isDefaultAction: true,
+          builder: (_) => Text(l10n.ok),
+          textStyle: ink,
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+      ],
     );
   }
 
   Future<void> _checkUpdate() async {
     if (_isChecking) return;
     setState(() => _isChecking = true);
+    // 浅色下动作文字取高对比度深蓝（同 `SettingsSurfaces.dialog`）；深色返回
+    // null → 沿用原生色（`CupertinoDialogAction` 默认 primaryColor）。
+    // 本方法四处弹窗共用这一份口径。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final ink = isLight
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
 
     UpdateCheckResult result;
     try {
@@ -2372,21 +2407,18 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
       );
       if (mounted) {
         final l10n = AppLocalizations.of(context);
-        await showCupertinoDialog<void>(
-          context: context,
-          builder: (ctx) => SettingsSurfaces.dialog(
-            context,
-            CupertinoAlertDialog(
-              title: Text(l10n.updateSectionTitle),
-              content: Text(l10n.updateCheckFailed),
-              actions: [
-                CupertinoDialogAction(
-                  child: Text(l10n.ok),
-                  onPressed: () => Navigator.of(ctx).pop(),
-                ),
-              ],
+        await showHermesDialog<void>(
+          context,
+          kind: HermesDialogKind.confirm,
+          title: (_) => Text(l10n.updateSectionTitle),
+          content: (_) => Text(l10n.updateCheckFailed),
+          actions: [
+            HermesDialogAction(
+              builder: (_) => Text(l10n.ok),
+              textStyle: ink,
+              onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
             ),
-          ),
+          ],
         );
       }
       return;
@@ -2406,63 +2438,58 @@ class _AboutSectionState extends ConsumerState<_AboutSection> {
           ? release.body.trim()
           : (release.name.isNotEmpty ? release.name : release.tagName);
 
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (ctx) => SettingsSurfaces.dialog(
-          context,
-          CupertinoAlertDialog(
-            title: Text(l10n.updateDialogTitle(release.tagName)),
-            content: Text(releaseNotes),
-            actions: [
-              CupertinoDialogAction(
-                child: Text(l10n.cancel),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                child: Text(l10n.updateGoToDownload),
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  unawaited(handleDownloadOrOpenRelease(context, ref, release));
-                },
-              ),
-            ],
+      // D1 四档宽的 **wideForm 760**：Release 说明是多行长文本预览，
+      // 380 窄条会把中文断得七零八落（改动前实拍见
+      // `.shots/dialogs/before/c1-settings-update-available-light.png`）。
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.wideForm,
+        title: (_) => Text(l10n.updateDialogTitle(release.tagName)),
+        content: (_) => Text(releaseNotes),
+        actions: [
+          HermesDialogAction(
+            builder: (_) => Text(l10n.cancel),
+            textStyle: ink,
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
           ),
-        ),
+          HermesDialogAction(
+            isDefaultAction: true,
+            builder: (_) => Text(l10n.updateGoToDownload),
+            textStyle: ink,
+            onPressed: (dialogContext) {
+              Navigator.of(dialogContext).pop();
+              unawaited(handleDownloadOrOpenRelease(context, ref, release));
+            },
+          ),
+        ],
       );
     } else if (result.status == UpdateCheckStatus.upToDate) {
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (ctx) => SettingsSurfaces.dialog(
-          context,
-          CupertinoAlertDialog(
-            title: Text(l10n.updateSectionTitle),
-            content: Text(l10n.updateAlreadyLatest),
-            actions: [
-              CupertinoDialogAction(
-                child: Text(l10n.ok),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ],
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.updateSectionTitle),
+        content: (_) => Text(l10n.updateAlreadyLatest),
+        actions: [
+          HermesDialogAction(
+            builder: (_) => Text(l10n.ok),
+            textStyle: ink,
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
           ),
-        ),
+        ],
       );
     } else {
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (ctx) => SettingsSurfaces.dialog(
-          context,
-          CupertinoAlertDialog(
-            title: Text(l10n.updateSectionTitle),
-            content: Text(l10n.updateCheckFailed),
-            actions: [
-              CupertinoDialogAction(
-                child: Text(l10n.ok),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ],
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.updateSectionTitle),
+        content: (_) => Text(l10n.updateCheckFailed),
+        actions: [
+          HermesDialogAction(
+            builder: (_) => Text(l10n.ok),
+            textStyle: ink,
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
           ),
-        ),
+        ],
       );
     }
   }

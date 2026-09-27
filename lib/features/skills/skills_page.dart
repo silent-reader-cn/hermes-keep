@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../app/widgets/reading_width_box.dart';
 import '../../core/api/api_exception.dart';
@@ -464,25 +465,27 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
 
   Future<void> _showActionError(BuildContext context, String message) async {
     final l10n = AppLocalizations.of(context);
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        final isLight =
-            CupertinoTheme.brightnessOf(dialogContext) == Brightness.light;
-        return CupertinoAlertDialog(
-          title: Text(l10n.actionFailed),
-          content: Text(message),
-          actions: [
-            CupertinoDialogAction(
-              textStyle: isLight
+    // 批 5 · C3：单动作告警框 → D1 `confirm`（380）；窄屏仍是系统 alert。
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.actionFailed),
+      content: (_) => Text(message),
+      actions: [
+        HermesDialogAction(
+          builder: (dialogContext) {
+            final isLight =
+                CupertinoTheme.brightnessOf(dialogContext) == Brightness.light;
+            return Text(
+              l10n.ok,
+              style: isLight
                   ? const TextStyle(color: LightSurfaces.userDetail)
                   : null,
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.ok),
-            ),
-          ],
-        );
-      },
+            );
+          },
+          onPressed: (dialogContext) => Navigator.pop(dialogContext),
+        ),
+      ],
     );
     await ref.read(skillsControllerProvider.notifier).clearActionError();
   }

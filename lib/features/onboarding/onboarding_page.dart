@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
@@ -330,34 +331,41 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     }
   }
 
-  /// CupertinoAlertDialog 错误弹窗（对齐 #19 确认框模式；红色正文）。
+  /// 错误弹窗（对齐 #19 确认框模式；红色正文）。
+  ///
+  /// 批 5 · C4：D1 四档宽「确认框 380」—— 宽屏不再出现 270 窄条；窄屏
+  /// 仍由 [showHermesDialog] 渲染成同一个 `CupertinoAlertDialog`（逐像素不变）。
+  /// `barrierDismissible: true` 与正文/动作样式逐字段保留原值。
   Future<void> _showErrorDialog(String title, String message) {
     final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
+    // 弹窗动作的浅色配色：原先取自 dialogContext 的亮度，迁移后动作在
+    // 构造期就要拿到样式（`HermesDialogAction.builder` 才收 dialogContext），
+    // 故改从调用点 context 取 —— 弹窗路由与调用页共用同一个 CupertinoTheme，
+    // 亮度必然一致（本仓无局部主题覆写）。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
       barrierDismissible: true,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(
-          message,
-          style: TextStyle(
-            fontSize: 14,
-            color: statusRedText.resolveFrom(context),
-          ),
+      title: (_) => Text(title),
+      content: (_) => Text(
+        message,
+        style: TextStyle(
+          fontSize: 14,
+          color: statusRedText.resolveFrom(context),
         ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(
-              l10n.ok,
-              style:
-                  CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
-                  ? const TextStyle(color: LightSurfaces.menuAction)
-                  : null,
-            ),
-          ),
-        ],
       ),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(
+            l10n.ok,
+            style: isLight
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
+          ),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext),
+        ),
+      ],
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../app/widgets/hermes_dialog.dart';
 import '../../../l10n/app_localizations.dart';
 import '../selection_provider.dart';
 
@@ -191,56 +192,57 @@ class _SelectionChipCard extends ConsumerWidget {
   ) async {
     final l10n = AppLocalizations.of(context);
     final controller = TextEditingController(text: sel.name);
-    final result = await showCupertinoDialog<String>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.rename),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(
-            key: const ValueKey('selection-rename-field'),
-            decoration: CupertinoTheme.brightnessOf(context) == Brightness.light
-                ? BoxDecoration(
-                    color: LightSurfaces.card,
-                    border: Border.all(
-                      color: LightSurfaces.cardBorder,
-                      width: 0.5,
-                    ),
-                    borderRadius: BorderRadius.circular(5),
-                  )
-                : const CupertinoTextField().decoration,
-            placeholderStyle:
-                CupertinoTheme.brightnessOf(context) == Brightness.light
-                ? const TextStyle(
-                    fontWeight: FontWeight.w400,
-                    color: LightSurfaces.placeholder,
-                  )
-                : const CupertinoTextField().placeholderStyle,
-            controller: controller,
-            autofocus: true,
-            maxLength: 120,
-            placeholder: sel.name,
-            onSubmitted: (v) => Navigator.of(dialogContext).pop(v),
-          ),
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    // D1 表单档（560）：内容是**可编辑输入框**（窄屏仍是原系统弹窗）。
+    final result = await showHermesDialog<String>(
+      context,
+      kind: HermesDialogKind.form,
+      title: (_) => Text(l10n.rename),
+      content: (dialogContext) => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: CupertinoTextField(
+          key: const ValueKey('selection-rename-field'),
+          decoration: isLight
+              ? BoxDecoration(
+                  color: LightSurfaces.card,
+                  border: Border.all(
+                    color: LightSurfaces.cardBorder,
+                    width: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(5),
+                )
+              : const CupertinoTextField().decoration,
+          placeholderStyle: isLight
+              ? const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  color: LightSurfaces.placeholder,
+                )
+              : const CupertinoTextField().placeholderStyle,
+          controller: controller,
+          autofocus: true,
+          maxLength: 120,
+          placeholder: sel.name,
+          onSubmitted: (v) => Navigator.of(dialogContext).pop(v),
         ),
-        actions: [
-          CupertinoDialogAction(
-            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-                ? const TextStyle(color: LightSurfaces.userDetail)
-                : null,
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-                ? const TextStyle(color: LightSurfaces.userDetail)
-                : null,
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: Text(l10n.confirm),
-          ),
-        ],
       ),
+      actions: [
+        HermesDialogAction(
+          textStyle: isLight
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
+          builder: (_) => Text(l10n.cancel),
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+        HermesDialogAction(
+          textStyle: isLight
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
+          isDefaultAction: true,
+          builder: (_) => Text(l10n.confirm),
+          onPressed: (dialogContext) =>
+              Navigator.of(dialogContext).pop(controller.text),
+        ),
+      ],
     );
     controller.dispose();
     if (result != null) {

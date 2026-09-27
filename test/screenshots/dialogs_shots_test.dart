@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,13 +11,20 @@ import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/cron.dart';
+import 'package:hermes_ui/core/models/session.dart';
+import 'package:hermes_ui/features/chat/selection_provider.dart';
+import 'package:hermes_ui/features/chat/widgets/selection_chips.dart';
 import 'package:hermes_ui/features/downloads/download_confirm_dialog.dart';
+import 'package:hermes_ui/features/projects/project_providers.dart';
+import 'package:hermes_ui/features/session_list/session_list_page.dart';
+import 'package:hermes_ui/features/session_list/session_list_providers.dart';
 import 'package:hermes_ui/features/tasks/tasks_page.dart';
 import 'package:hermes_ui/features/tasks/tasks_providers.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../golden/golden_helpers.dart';
+import '../helpers/fake_session_list_api.dart';
 import '../helpers/fake_tasks_api.dart';
 
 // ---------------------------------------------------------------------------
@@ -35,6 +44,9 @@ import '../helpers/fake_tasks_api.dart';
 //      （D1 的 380 确认框样板）。
 //   2. `dialog-tasks-form` —— 走**真实调用点** `TasksPage` 工具条「+」按钮
 //      （D2 的 560 表单 + 左 label 88 横排样板）。
+//   3. 批 5 · C2 三处 session / chat 系迁移（380 批量归档 / 760 导出长文预览 /
+//      560 选区重命名）—— 只走真实页面与真实面板入口；宽窄两档都出图，
+//      窄屏图是「逐像素不变」的迁移前后对照。
 //
 // 工装刻意只渲染「真实组件」：真人真字体（[loadHermesGoldenFonts]）、真主题
 // （[buildCupertinoTheme]）、真中文本地化；**不注入任何测试专用 UI**。
@@ -147,6 +159,115 @@ Override tasksApiFactoryOverride() => tasksApiFactoryProvider.overrideWithValue(
   (_) => FakeTasksApi(jobs: _demoJobs()),
 );
 
+// ---------------------------------------------------------------------------
+// 批 5 · C2（session / chat 系弹窗迁移到四档宽）的真实调用点宿主
+// ---------------------------------------------------------------------------
+
+/// 导出链路走 `apiClientProvider`（不是 fake session api）：dio mock 给长正文，
+/// 让「导出成功 = 长文本预览 = 760 宽表单档」这一档有真内容可看。
+class _ExportMockAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(
+    '# Hermes 会话导出\n'
+    '\n'
+    '- 第一条消息：批 5 · C2 弹窗调用点迁移\n'
+    '- 第二条消息：宽屏 760 长文预览应完整可见\n'
+    '- 第三条消息：窄屏仍走系统弹窗，逐像素不变\n'
+    '\n'
+    '## 说明\n'
+    '导出正文是长文本，宽屏档位取 wideForm（760）；窄屏仍由系统弹窗承载。\n',
+    200,
+  );
+
+  @override
+  void close({bool force = false}) {}
+}
+
+ApiClient _exportClient() {
+  final dio = Dio(
+    BaseOptions(validateStatus: (_) => true, followRedirects: false),
+  )..httpClientAdapter = _ExportMockAdapter();
+  final publicDio = Dio(
+    BaseOptions(validateStatus: (_) => true, followRedirects: false),
+  )..httpClientAdapter = _ExportMockAdapter();
+  return ApiClient(
+    baseUrl: 'https://hermes.example.com:8787',
+    dio: dio,
+    publicMediaDio: publicDio,
+  );
+}
+
+class _ShotsProjectApi implements ProjectApi {
+  @override
+  Future<ProjectsResponse> fetchProjects() async =>
+      const ProjectsResponse(projects: []);
+
+  @override
+  Future<ProjectMutationResponse> createProject({
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> renameProject({
+    required String projectId,
+    required String name,
+    String? color,
+  }) async => const ProjectMutationResponse(ok: true);
+
+  @override
+  Future<ProjectMutationResponse> deleteProject(String projectId) async =>
+      const ProjectMutationResponse(ok: true);
+}
+
+/// 会话列表页宿主所需的注入（真页面 + 演示会话）。
+List<Override> _sessionListShotsOverrides() => <Override>[
+  sessionListApiFactoryProvider.overrideWithValue(
+    (_) => FakeSessionListApi(
+      sessions: <SessionSummary>[
+        SessionSummary(
+          sessionId: 's1',
+          title: '批 5 · C2 弹窗迁移',
+          messageCount: 12,
+          lastMessageAt: DateTime.now().millisecondsSinceEpoch / 1000,
+        ),
+      ],
+    ),
+  ),
+  projectApiFactoryProvider.overrideWithValue((_) => _ShotsProjectApi()),
+];
+
+/// 选区条宿主：真实 `SelectionChipPanel` + 一条真实待发选区（工装数据）。
+class _SelectionRenameShotsHost extends StatelessWidget {
+  const _SelectionRenameShotsHost();
+
+  @override
+  Widget build(BuildContext context) => const ColoredBox(
+    color: CupertinoColors.systemGroupedBackground,
+    child: Align(
+      alignment: Alignment.bottomCenter,
+      child: SelectionChipPanel(sessionId: 's1'),
+    ),
+  );
+}
+
+/// 选区条演示数据的注入：`pendingSelectionsProvider` 是 family，覆写时要现造再喂。
+Override _selectionShotsOverride() => pendingSelectionsProvider.overrideWith(
+  (ref, sessionId) => SelectionNotifier()..add('被选中的正文片段（用于重命名目检）'),
+);
+
+/// 结算固定帧数（**不用 `pumpAndSettle`**：宽屏行操作菜单/SSE 心跳有常驻定时器，
+/// `pumpAndSettle` 会挂到超时）。
+Future<void> _settleFrames(WidgetTester tester, [int frames = 6]) async {
+  for (var i = 0; i < frames; i++) {
+    await tester.pump(const Duration(milliseconds: 120));
+  }
+}
+
 void main() {
   setUpAll(() async {
     await loadHermesGoldenFonts();
@@ -165,6 +286,7 @@ void main() {
     List<Override> overrides = const [],
     Future<void> Function(WidgetTester tester)? interact,
     Size size = _wideSize,
+    ApiClient? apiClient,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 2.0;
@@ -174,7 +296,7 @@ void main() {
       ProviderScope(
         overrides: [
           apiClientProvider.overrideWithValue(
-            ApiClient(baseUrl: 'https://hermes.example.com:8787'),
+            apiClient ?? ApiClient(baseUrl: 'https://hermes.example.com:8787'),
           ),
           ...overrides,
         ],
@@ -304,5 +426,102 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('tasks-create')));
       },
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // 4. 批 5 · C2 —— session / chat 系弹窗迁移到四档宽（真实调用点）
+  //
+  //    三处，覆盖本批用到的三档：380（确认）/ 560（表单）/ 760（宽表单）。
+  //    宽屏与窄屏都出图：宽屏看「档位形态」，窄屏是「逐像素不变」的对照图
+  //    （同一份工装在迁移前后各跑一次，窄屏图应逐字节相同）。
+  // -------------------------------------------------------------------------
+
+  /// 会话列表 · 批量归档确认框（380 确认档）。
+  Future<void> batchArchiveShot(
+    WidgetTester tester,
+    Brightness brightness, {
+    required bool narrow,
+  }) => capture(
+    tester,
+    name: narrow
+        ? 'dialog-session-batch-archive-narrow'
+        : 'dialog-session-batch-archive',
+    home: const SessionListPage(),
+    brightness: brightness,
+    size: narrow ? _narrowSize : _wideSize,
+    overrides: _sessionListShotsOverrides(),
+    interact: (tester) async {
+      await tester.longPress(find.byKey(const ValueKey('session-row-s1')));
+      await _settleFrames(tester);
+      await tester.tap(find.byKey(const ValueKey('batch-archive')));
+      await _settleFrames(tester);
+    },
+  );
+
+  /// 会话列表 · 导出成功（760 宽表单档 · 长文本预览）。
+  Future<void> exportWideFormShot(
+    WidgetTester tester,
+    Brightness brightness, {
+    required bool narrow,
+  }) => capture(
+    tester,
+    name: narrow
+        ? 'dialog-session-export-wide-form-narrow'
+        : 'dialog-session-export-wide-form',
+    home: const SessionListPage(),
+    brightness: brightness,
+    size: narrow ? _narrowSize : _wideSize,
+    apiClient: _exportClient(),
+    overrides: _sessionListShotsOverrides(),
+    interact: (tester) async {
+      await tester.tap(find.byKey(const ValueKey('session-actions-s1')));
+      await _settleFrames(tester);
+      await tester.tap(find.byKey(const ValueKey('session-action-export')));
+      await _settleFrames(tester);
+      await tester.tap(find.byKey(const ValueKey('session-export-markdown')));
+      await _settleFrames(tester, 10);
+    },
+  );
+
+  /// 选区条 · 重命名（560 表单档 · 含输入框）。
+  Future<void> selectionRenameShot(
+    WidgetTester tester,
+    Brightness brightness, {
+    required bool narrow,
+  }) => capture(
+    tester,
+    name: narrow ? 'dialog-selection-rename-narrow' : 'dialog-selection-rename',
+    home: const _SelectionRenameShotsHost(),
+    brightness: brightness,
+    size: narrow ? _narrowSize : _wideSize,
+    overrides: [_selectionShotsOverride()],
+    interact: (tester) async {
+      await tester.tap(find.byKey(const ValueKey('selection-rename-ctx-1')));
+      await _settleFrames(tester);
+    },
+  );
+
+  shotPair('弹窗 · 会话批量归档确认框（380）', (tester, brightness) async {
+    await batchArchiveShot(tester, brightness, narrow: false);
+  });
+
+  shotPair('弹窗 · 导出成功长文预览（760 宽表单档）', (tester, brightness) async {
+    await exportWideFormShot(tester, brightness, narrow: false);
+  });
+
+  shotPair('弹窗 · 选区重命名（560 表单档）', (tester, brightness) async {
+    await selectionRenameShot(tester, brightness, narrow: false);
+  });
+
+  narrowShotPair('弹窗 · 会话批量归档确认框（窄屏）', (tester, brightness) async {
+    await batchArchiveShot(tester, brightness, narrow: true);
+  });
+
+  narrowShotPair('弹窗 · 导出成功长文预览（窄屏）', (tester, brightness) async {
+    await exportWideFormShot(tester, brightness, narrow: true);
+  });
+
+  narrowShotPair('弹窗 · 选区重命名（窄屏）', (tester, brightness) async {
+    await selectionRenameShot(tester, brightness, narrow: true);
   });
 }

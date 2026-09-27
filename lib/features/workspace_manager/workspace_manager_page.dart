@@ -10,6 +10,7 @@ import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import 'add_workspace_sheet.dart';
@@ -348,57 +349,59 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
     final l10n = AppLocalizations.of(context);
     _renameController.text = workspace.name ?? _basename(workspace.path);
     setState(() => _renameTarget = workspace);
+    // 批 5 · C3：带输入框 → D1 `form`（560）；窄屏仍是系统 alert（竖排、逐像素不变）。
     unawaited(
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: Text(l10n.renameWorkspaceTitle),
-          content: CupertinoTextField(
-            key: const ValueKey('workspace-manager-rename-field'),
-            controller: _renameController,
-            autofocus: true,
-          ),
-          actions: [
-            CupertinoDialogAction(
-              key: const ValueKey('workspace-manager-rename-cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() => _renameTarget = null);
-              },
-              child: Text(
-                l10n.cancel,
-                style: CupertinoTheme.brightnessOf(context) == Brightness.light
-                    ? const TextStyle(color: LightSurfaces.menuAction)
-                    : null,
-              ),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('workspace-manager-rename-save'),
-              onPressed: () {
-                final target = _renameTarget;
-                final newName = _renameController.text.trim();
-                Navigator.of(context).pop();
-                setState(() => _renameTarget = null);
-                if (target != null && newName.isNotEmpty) {
-                  unawaited(
-                    ref
-                        .read(workspaceManagerControllerProvider.notifier)
-                        .renameWorkspace(
-                          path: target.path ?? '',
-                          name: newName,
-                        ),
-                  );
-                }
-              },
-              child: Text(
-                l10n.save,
-                style: CupertinoTheme.brightnessOf(context) == Brightness.light
-                    ? const TextStyle(color: LightSurfaces.menuAction)
-                    : null,
-              ),
-            ),
-          ],
+      showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.form,
+        title: (_) => Text(l10n.renameWorkspaceTitle),
+        content: (_) => CupertinoTextField(
+          key: const ValueKey('workspace-manager-rename-field'),
+          controller: _renameController,
+          autofocus: true,
         ),
+        actions: [
+          HermesDialogAction(
+            key: const ValueKey('workspace-manager-rename-cancel'),
+            builder: (dialogContext) => Text(
+              l10n.cancel,
+              style: CupertinoTheme.brightnessOf(dialogContext) ==
+                      Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
+            onPressed: (dialogContext) {
+              Navigator.of(dialogContext).pop();
+              setState(() => _renameTarget = null);
+            },
+          ),
+          HermesDialogAction(
+            key: const ValueKey('workspace-manager-rename-save'),
+            builder: (dialogContext) => Text(
+              l10n.save,
+              style: CupertinoTheme.brightnessOf(dialogContext) ==
+                      Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
+            onPressed: (dialogContext) {
+              final target = _renameTarget;
+              final newName = _renameController.text.trim();
+              Navigator.of(dialogContext).pop();
+              setState(() => _renameTarget = null);
+              if (target != null && newName.isNotEmpty) {
+                unawaited(
+                  ref
+                      .read(workspaceManagerControllerProvider.notifier)
+                      .renameWorkspace(
+                        path: target.path ?? '',
+                        name: newName,
+                      ),
+                );
+              }
+            },
+          ),
+        ],
       ),
     );
   }
@@ -406,72 +409,80 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
   void _showRemoveDialog(WorkspaceRoot workspace) {
     final l10n = AppLocalizations.of(context);
     setState(() => _pendingRemove = workspace);
+    // 批 5 · C3：移除工作区确认 → D1 `confirm`（380）；窄屏仍是系统 alert。
     unawaited(
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: Text(l10n.removeWorkspaceTitle),
-          content: Text(l10n.confirmRemoveWorkspace(_displayName(workspace))),
-          actions: [
-            CupertinoDialogAction(
-              key: const ValueKey('workspace-manager-remove-cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() => _pendingRemove = null);
-              },
-              child: Text(
-                l10n.cancel,
-                style: CupertinoTheme.brightnessOf(context) == Brightness.light
-                    ? const TextStyle(color: LightSurfaces.menuAction)
-                    : null,
+      showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.removeWorkspaceTitle),
+        content: (_) =>
+            Text(l10n.confirmRemoveWorkspace(_displayName(workspace))),
+        actions: [
+          HermesDialogAction(
+            key: const ValueKey('workspace-manager-remove-cancel'),
+            builder: (dialogContext) => Text(
+              l10n.cancel,
+              style: CupertinoTheme.brightnessOf(dialogContext) ==
+                      Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
+            ),
+            onPressed: (dialogContext) {
+              Navigator.of(dialogContext).pop();
+              setState(() => _pendingRemove = null);
+            },
+          ),
+          HermesDialogAction(
+            key: const ValueKey('workspace-manager-remove-confirm'),
+            isDestructiveAction: true,
+            builder: (dialogContext) => Text(
+              l10n.removeWorkspaceTitle,
+              style: TextStyle(
+                color: statusRedText.resolveFrom(dialogContext),
               ),
             ),
-            CupertinoDialogAction(
-              key: const ValueKey('workspace-manager-remove-confirm'),
-              isDestructiveAction: true,
-              onPressed: () {
-                final target = _pendingRemove;
-                Navigator.of(context).pop();
-                setState(() => _pendingRemove = null);
-                if (target != null && target.path != null) {
-                  unawaited(
-                    ref
-                        .read(workspaceManagerControllerProvider.notifier)
-                        .removeWorkspace(target.path!),
-                  );
-                }
-              },
-              child: Text(
-                l10n.removeWorkspaceTitle,
-                style: TextStyle(color: statusRedText.resolveFrom(context)),
-              ),
-            ),
-          ],
-        ),
+            onPressed: (dialogContext) {
+              final target = _pendingRemove;
+              Navigator.of(dialogContext).pop();
+              setState(() => _pendingRemove = null);
+              if (target != null && target.path != null) {
+                unawaited(
+                  ref
+                      .read(workspaceManagerControllerProvider.notifier)
+                      .removeWorkspace(target.path!),
+                );
+              }
+            },
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _showInfoDialog(String title, String message) {
     final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('workspace-manager-dialog-ok'),
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
+    // 批 5 · C3：单动作提示框 → D1 `confirm`（380）；窄屏仍是系统 alert。
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(title),
+      content: (_) => Text(message),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('workspace-manager-dialog-ok'),
+          builder: (dialogContext) {
+            final isLight =
+                CupertinoTheme.brightnessOf(dialogContext) == Brightness.light;
+            return Text(
               l10n.ok,
-              style: CupertinoTheme.brightnessOf(context) == Brightness.light
+              style: isLight
                   ? const TextStyle(color: LightSurfaces.menuAction)
                   : null,
-            ),
-          ),
-        ],
-      ),
+            );
+          },
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+      ],
     );
   }
 

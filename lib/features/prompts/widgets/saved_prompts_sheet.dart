@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../app/widgets/hermes_dialog.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/models/saved_prompt.dart';
 import '../../../l10n/app_localizations.dart';
@@ -103,30 +104,31 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
     bool isError = false,
   }) {
     final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        final isLight =
-            CupertinoTheme.brightnessOf(dialogContext) == Brightness.light;
-        return CupertinoAlertDialog(
-          title: Text(title),
-          content: Text(
-            message,
-            style: isError
-                ? TextStyle(color: statusRedText.resolveFrom(dialogContext))
-                : null,
-          ),
-          actions: [
-            CupertinoDialogAction(
-              textStyle: isLight
-                  ? const TextStyle(color: LightSurfaces.userDetail)
-                  : null,
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.ok),
-            ),
-          ],
-        );
-      },
+    // 动作配色的浅色判据原先取自 dialogContext 亮度；`HermesDialogAction`
+    // 的 `textStyle` 在构造期就要定值（builder 才收 dialogContext），故改从
+    // 调用点 context 取 —— 浮层与调用页共用同一 CupertinoTheme，亮度一致。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    // 批 5 · C4：D1 四档宽「确认框 380」（窄屏仍是系统 alert，逐像素不变；
+    // 正文红字与动作配色逐字段保留）。
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(title),
+      content: (dialogContext) => Text(
+        message,
+        style: isError
+            ? TextStyle(color: statusRedText.resolveFrom(dialogContext))
+            : null,
+      ),
+      actions: [
+        HermesDialogAction(
+          textStyle: isLight
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
+          builder: (_) => Text(l10n.ok),
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+      ],
     );
   }
 

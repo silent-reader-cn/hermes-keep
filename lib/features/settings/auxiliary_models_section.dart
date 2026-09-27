@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/auxiliary_model.dart';
@@ -142,37 +143,48 @@ class AuxiliaryModelsSection extends ConsumerWidget {
     );
   }
 
+  /// 重置全部辅助模型的任务选择（**批 5 · C1**：D1 四档宽 —— 破坏性确认取
+  /// `confirm` 380；「重置」属确认/警告类，非单选/表单）。
+  ///
+  /// 窄屏（<900）逐像素不变（系统 `CupertinoAlertDialog`，动作浅色口径与
+  /// `SettingsSurfaces.dialog` 逐字段同值）；宽屏（≥900）走 380 宽居中卡片。
   Future<void> _confirmResetAll(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => SettingsSurfaces.dialog(
-        context,
-        CupertinoAlertDialog(
-          title: Text(l10n.resetAuxiliary),
-          content: Text(l10n.confirmResetAuxiliary),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.cancel),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('settings-aux-reset-confirm'),
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                unawaited(
-                  ref
-                      .read(auxiliaryModelsControllerProvider.notifier)
-                      .resetAllToAuto(),
-                );
-              },
-              child: Text(l10n.resetAuxiliary),
-            ),
-          ],
+    // 浅色下动作文字取高对比度深蓝（同 `SettingsSurfaces.dialog`）；深色返回
+    // null → 沿用原生色（`CupertinoDialogAction` 默认 primaryColor / systemRed）。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final ink = isLight
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
+    final dangerInk = isLight
+        ? TextStyle(color: statusRedText.resolveFrom(context))
+        : null;
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.resetAuxiliary),
+      content: (_) => Text(l10n.confirmResetAuxiliary),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(l10n.cancel),
+          textStyle: ink,
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
         ),
-      ),
+        HermesDialogAction(
+          key: const ValueKey('settings-aux-reset-confirm'),
+          isDestructiveAction: true,
+          builder: (_) => Text(l10n.resetAuxiliary),
+          textStyle: dangerInk,
+          onPressed: (dialogContext) {
+            Navigator.of(dialogContext).pop();
+            unawaited(
+              ref
+                  .read(auxiliaryModelsControllerProvider.notifier)
+                  .resetAllToAuto(),
+            );
+          },
+        ),
+      ],
     );
   }
 

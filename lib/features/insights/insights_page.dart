@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/insights.dart';
@@ -1132,51 +1133,58 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
   void _showDayDetail(InsightsDailyToken day) {
     final l10n = AppLocalizations.of(context);
     final date = day.date ?? l10n.unknown;
+    // 批 5 · C3：明细弹窗 → D1 `confirm`（380）。
+    //
+    // 分档理由（拿不准 → 按任务书兜底取 `confirm`）：内容是**只读**的 5 行
+    // label/value 明细（非表单、非长文预览、无可选项），既不符合 `picker`
+    // 「从一组选项里选一个」，也不符合 `wideForm`「长文本预览」；
+    // 若要更宽松，把 `confirm` 换成 `picker`（460）即可，一行改。
     unawaited(
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text(date),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _detailRow(
-                  l10n.metricInputTokens,
-                  formatTokensCompact(day.inputTokens),
-                ),
-                _detailRow(
-                  l10n.metricOutputTokens,
-                  formatTokensCompact(day.outputTokens),
-                ),
-                _detailRow(
-                  l10n.metricTotalTokens,
-                  formatTokensCompact(day.totalTokens),
-                ),
-                _detailRow(
-                  l10n.metricSessions,
-                  formatInsightsNumber(day.sessions),
-                ),
-                _detailRow(
-                  l10n.metricEstimatedCost,
-                  formatInsightsCost(day.cost),
-                ),
-              ],
-            ),
+      showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(date),
+        content: (_) => Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _detailRow(
+                l10n.metricInputTokens,
+                formatTokensCompact(day.inputTokens),
+              ),
+              _detailRow(
+                l10n.metricOutputTokens,
+                formatTokensCompact(day.outputTokens),
+              ),
+              _detailRow(
+                l10n.metricTotalTokens,
+                formatTokensCompact(day.totalTokens),
+              ),
+              _detailRow(
+                l10n.metricSessions,
+                formatInsightsNumber(day.sessions),
+              ),
+              _detailRow(
+                l10n.metricEstimatedCost,
+                formatInsightsCost(day.cost),
+              ),
+            ],
           ),
-          actions: [
-            CupertinoDialogAction(
-              textStyle:
-                  CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
+        ),
+        actions: [
+          HermesDialogAction(
+            builder: (dialogContext) => Text(
+              l10n.ok,
+              style: CupertinoTheme.brightnessOf(dialogContext) ==
+                      Brightness.light
                   ? const TextStyle(color: LightSurfaces.menuAction)
                   : null,
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.ok),
             ),
-          ],
-        ),
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+          ),
+        ],
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/connections/connection_providers.dart';
@@ -152,19 +153,19 @@ class _FilePreviewPageState extends ConsumerState<FilePreviewPage> {
 
   Future<void> _showInfoDialog(String title, String message) {
     final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('preview-dialog-ok'),
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.ok),
-          ),
-        ],
-      ),
+    // 批 5 · C3：单动作提示框 → D1 `confirm`（380）；窄屏仍是系统 alert。
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(title),
+      content: (_) => Text(message),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('preview-dialog-ok'),
+          builder: (_) => Text(l10n.ok),
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+      ],
     );
   }
 }

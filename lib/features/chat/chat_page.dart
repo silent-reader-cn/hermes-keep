@@ -12,6 +12,7 @@ import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
@@ -441,34 +442,38 @@ Future<void> _showParentSessionDialog(
   String parentSessionId,
 ) async {
   final l10n = AppLocalizations.of(context);
-  await showCupertinoDialog<void>(
-    context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      key: const ValueKey('chat-branch-dialog'),
-      title: Text(l10n.branchSession),
-      content: Text(l10n.branchSessionDescription(parentSessionId)),
-      actions: [
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('chat-branch-dialog-close'),
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text(l10n.close),
-        ),
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('chat-goto-parent'),
-          onPressed: () {
-            Navigator.pop(dialogContext);
-            context.go('/chat/$parentSessionId');
-          },
-          child: Text(l10n.jumpToParentSession),
-        ),
-      ],
-    ),
+  // 动作文字色按亮度取（浅色取高对比深蓝，深色沿用原生）—— 与迁移前逐字段相同。
+  final actionStyle = CupertinoTheme.brightnessOf(context) == Brightness.light
+      ? const TextStyle(color: LightSurfaces.userDetail)
+      : null;
+  // 批次 5 · C5：批 5A 四档宽（信息型确认框 → 380）。窄屏仍是系统弹窗、
+  // 逐像素不变；宽屏出 380 居中卡片。
+  await showHermesDialog<void>(
+    context,
+    kind: HermesDialogKind.confirm,
+    // 弹窗自身的 ValueKey 原先挂在 `CupertinoAlertDialog` 上；`showHermesDialog`
+    // 不收 dialog 级 key，故改挂标题件 —— `find.byKey` 语义不变：弹窗在则
+    // 找得到，关掉就找不到。
+    title: (_) =>
+        Text(l10n.branchSession, key: const ValueKey('chat-branch-dialog')),
+    content: (_) => Text(l10n.branchSessionDescription(parentSessionId)),
+    actions: [
+      HermesDialogAction(
+        key: const ValueKey('chat-branch-dialog-close'),
+        textStyle: actionStyle,
+        builder: (_) => Text(l10n.close),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext),
+      ),
+      HermesDialogAction(
+        key: const ValueKey('chat-goto-parent'),
+        textStyle: actionStyle,
+        builder: (_) => Text(l10n.jumpToParentSession),
+        onPressed: (dialogContext) {
+          Navigator.pop(dialogContext);
+          context.go('/chat/$parentSessionId');
+        },
+      ),
+    ],
   );
 }
 
@@ -629,53 +634,50 @@ Future<void> _renameSession(
 ) async {
   final l10n = AppLocalizations.of(context);
   final input = TextEditingController(text: current);
-  final title = await showCupertinoDialog<String>(
-    context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text(l10n.renameSession),
-      content: Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: CupertinoTextField(
-          decoration: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? BoxDecoration(
-                  color: LightSurfaces.card,
-                  border: Border.all(
-                    color: LightSurfaces.cardBorder,
-                    width: 0.5,
-                  ),
-                  borderRadius: BorderRadius.circular(5),
-                )
-              : const CupertinoTextField().decoration,
-          placeholderStyle:
-              CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  color: LightSurfaces.placeholder,
-                )
-              : const CupertinoTextField().placeholderStyle,
-          controller: input,
-          autofocus: true,
-        ),
+  final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+  // 批次 5 · C5：含输入框 → 表单档 560（宽屏居中卡片；窄屏系统弹窗不变）。
+  final title = await showHermesDialog<String>(
+    context,
+    kind: HermesDialogKind.form,
+    title: (_) => Text(l10n.renameSession),
+    content: (_) => Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: CupertinoTextField(
+        decoration: isLight
+            ? BoxDecoration(
+                color: LightSurfaces.card,
+                border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+                borderRadius: BorderRadius.circular(5),
+              )
+            : const CupertinoTextField().decoration,
+        placeholderStyle: isLight
+            ? const TextStyle(
+                fontWeight: FontWeight.w400,
+                color: LightSurfaces.placeholder,
+              )
+            : const CupertinoTextField().placeholderStyle,
+        controller: input,
+        autofocus: true,
       ),
-      actions: [
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('chat-rename-cancel'),
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text(l10n.cancel),
-        ),
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('chat-rename-save'),
-          onPressed: () => Navigator.pop(dialogContext, input.text),
-          child: Text(l10n.save),
-        ),
-      ],
     ),
+    actions: [
+      HermesDialogAction(
+        key: const ValueKey('chat-rename-cancel'),
+        textStyle: isLight
+            ? const TextStyle(color: LightSurfaces.userDetail)
+            : null,
+        builder: (_) => Text(l10n.cancel),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext),
+      ),
+      HermesDialogAction(
+        key: const ValueKey('chat-rename-save'),
+        textStyle: isLight
+            ? const TextStyle(color: LightSurfaces.userDetail)
+            : null,
+        builder: (_) => Text(l10n.save),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext, input.text),
+      ),
+    ],
   );
   input.dispose();
   if (title != null) await controller.renameSession(title);
@@ -683,31 +685,31 @@ Future<void> _renameSession(
 
 Future<bool> _confirmSessionDelete(BuildContext context, String title) async {
   final l10n = AppLocalizations.of(context);
-  final result = await showCupertinoDialog<bool>(
-    context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text(l10n.deleteSession),
-      content: Text(l10n.confirmDeleteSession(title)),
-      actions: [
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('chat-delete-cancel'),
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: Text(l10n.cancel),
-        ),
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? TextStyle(color: statusRedText.resolveFrom(context))
-              : null,
-          key: const ValueKey('chat-delete-confirm'),
-          isDestructiveAction: true,
-          onPressed: () => Navigator.pop(dialogContext, true),
-          child: Text(l10n.delete),
-        ),
-      ],
-    ),
+  // 批次 5 · C5：破坏性确认 → 380。
+  final result = await showHermesDialog<bool>(
+    context,
+    kind: HermesDialogKind.confirm,
+    title: (_) => Text(l10n.deleteSession),
+    content: (_) => Text(l10n.confirmDeleteSession(title)),
+    actions: [
+      HermesDialogAction(
+        key: const ValueKey('chat-delete-cancel'),
+        textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? const TextStyle(color: LightSurfaces.userDetail)
+            : null,
+        builder: (_) => Text(l10n.cancel),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext, false),
+      ),
+      HermesDialogAction(
+        key: const ValueKey('chat-delete-confirm'),
+        isDestructiveAction: true,
+        textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? TextStyle(color: statusRedText.resolveFrom(context))
+            : null,
+        builder: (_) => Text(l10n.delete),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext, true),
+      ),
+    ],
   );
   return result == true;
 }
@@ -719,55 +721,52 @@ Future<void> _compressSession(
 ) async {
   final l10n = AppLocalizations.of(context);
   final input = TextEditingController();
-  final focusTopic = await showCupertinoDialog<String>(
-    context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text(l10n.compressSession),
-      content: Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: CupertinoTextField(
-          key: const ValueKey('chat-compress-topic'),
-          decoration: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? BoxDecoration(
-                  color: LightSurfaces.card,
-                  border: Border.all(
-                    color: LightSurfaces.cardBorder,
-                    width: 0.5,
-                  ),
-                  borderRadius: BorderRadius.circular(5),
-                )
-              : const CupertinoTextField().decoration,
-          placeholderStyle:
-              CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  color: LightSurfaces.placeholder,
-                )
-              : const CupertinoTextField().placeholderStyle,
-          controller: input,
-          placeholder: l10n.focusTopicPlaceholder,
-          autofocus: true,
-        ),
+  final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+  // 批次 5 · C5：含「聚焦主题」输入框 → 表单档 560（与重命名弹窗同档）。
+  final focusTopic = await showHermesDialog<String>(
+    context,
+    kind: HermesDialogKind.form,
+    title: (_) => Text(l10n.compressSession),
+    content: (_) => Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: CupertinoTextField(
+        key: const ValueKey('chat-compress-topic'),
+        decoration: isLight
+            ? BoxDecoration(
+                color: LightSurfaces.card,
+                border: Border.all(color: LightSurfaces.cardBorder, width: 0.5),
+                borderRadius: BorderRadius.circular(5),
+              )
+            : const CupertinoTextField().decoration,
+        placeholderStyle: isLight
+            ? const TextStyle(
+                fontWeight: FontWeight.w400,
+                color: LightSurfaces.placeholder,
+              )
+            : const CupertinoTextField().placeholderStyle,
+        controller: input,
+        placeholder: l10n.focusTopicPlaceholder,
+        autofocus: true,
       ),
-      actions: [
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('chat-compress-cancel'),
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text(l10n.cancel),
-        ),
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('chat-compress-confirm'),
-          onPressed: () => Navigator.pop(dialogContext, input.text),
-          child: Text(l10n.compress),
-        ),
-      ],
     ),
+    actions: [
+      HermesDialogAction(
+        key: const ValueKey('chat-compress-cancel'),
+        textStyle: isLight
+            ? const TextStyle(color: LightSurfaces.userDetail)
+            : null,
+        builder: (_) => Text(l10n.cancel),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext),
+      ),
+      HermesDialogAction(
+        key: const ValueKey('chat-compress-confirm'),
+        textStyle: isLight
+            ? const TextStyle(color: LightSurfaces.userDetail)
+            : null,
+        builder: (_) => Text(l10n.compress),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext, input.text),
+      ),
+    ],
   );
   input.dispose();
   // #156：改走异步压缩（立刻返回）；进度由会话状态承载，对话框关闭后
@@ -780,31 +779,31 @@ Future<void> _compressSession(
 /// 撤销上一轮确认（删除最后一轮对话，不可撤销）。
 Future<bool> _confirmSessionUndo(BuildContext context) async {
   final l10n = AppLocalizations.of(context);
-  final result = await showCupertinoDialog<bool>(
-    context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text(l10n.undoLastTurn),
-      content: Text(l10n.confirmUndoLastTurnPrompt),
-      actions: [
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('chat-undo-cancel'),
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: Text(l10n.cancel),
-        ),
-        CupertinoDialogAction(
-          textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? TextStyle(color: statusRedText.resolveFrom(context))
-              : null,
-          key: const ValueKey('chat-undo-confirm'),
-          isDestructiveAction: true,
-          onPressed: () => Navigator.pop(dialogContext, true),
-          child: Text(l10n.delete),
-        ),
-      ],
-    ),
+  // 批次 5 · C5：破坏性确认 → 380。
+  final result = await showHermesDialog<bool>(
+    context,
+    kind: HermesDialogKind.confirm,
+    title: (_) => Text(l10n.undoLastTurn),
+    content: (_) => Text(l10n.confirmUndoLastTurnPrompt),
+    actions: [
+      HermesDialogAction(
+        key: const ValueKey('chat-undo-cancel'),
+        textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? const TextStyle(color: LightSurfaces.userDetail)
+            : null,
+        builder: (_) => Text(l10n.cancel),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext, false),
+      ),
+      HermesDialogAction(
+        key: const ValueKey('chat-undo-confirm'),
+        isDestructiveAction: true,
+        textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+            ? TextStyle(color: statusRedText.resolveFrom(context))
+            : null,
+        builder: (_) => Text(l10n.delete),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext, true),
+      ),
+    ],
   );
   return result == true;
 }
@@ -827,46 +826,44 @@ Future<void> _exportSession(
       fileNamePrefix: 'hermes_session_export',
     );
     if (context.mounted) {
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text(l10n.exportSuccessDialogTitle),
-          content: Text(
-            result.isFileSaved
-                ? l10n.diagnosticsExportTooLargeSaved(result.filePath!)
-                : l10n.markdownCopiedToClipboard,
-          ),
-          actions: [
-            CupertinoDialogAction(
-              textStyle:
-                  CupertinoTheme.brightnessOf(context) == Brightness.light
-                  ? const TextStyle(color: LightSurfaces.userDetail)
-                  : null,
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.ok),
-            ),
-          ],
+      // 批次 5 · C5：正文可能是很长的落盘绝对路径 → 宽表单档 760。
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.wideForm,
+        title: (_) => Text(l10n.exportSuccessDialogTitle),
+        content: (_) => Text(
+          result.isFileSaved
+              ? l10n.diagnosticsExportTooLargeSaved(result.filePath!)
+              : l10n.markdownCopiedToClipboard,
         ),
+        actions: [
+          HermesDialogAction(
+            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.userDetail)
+                : null,
+            builder: (_) => Text(l10n.ok),
+            onPressed: (dialogContext) => Navigator.pop(dialogContext),
+          ),
+        ],
       );
     }
   } on ApiException catch (error) {
     if (context.mounted) {
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text(l10n.exportFailed),
-          content: Text(error.message),
-          actions: [
-            CupertinoDialogAction(
-              textStyle:
-                  CupertinoTheme.brightnessOf(context) == Brightness.light
-                  ? const TextStyle(color: LightSurfaces.userDetail)
-                  : null,
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.ok),
-            ),
-          ],
-        ),
+      // 批次 5 · C5：失败提示 → 380。
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.exportFailed),
+        content: (_) => Text(error.message),
+        actions: [
+          HermesDialogAction(
+            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.userDetail)
+                : null,
+            builder: (_) => Text(l10n.ok),
+            onPressed: (dialogContext) => Navigator.pop(dialogContext),
+          ),
+        ],
       );
     }
   }

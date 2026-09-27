@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../core/utils/safe_clipboard.dart';
 import '../../l10n/app_localizations.dart';
@@ -149,35 +150,35 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
 
   Future<void> _confirmClearLogs() async {
     final l10n = AppLocalizations.of(context);
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(l10n.diagnosticsClear),
-        content: Text(l10n.diagnosticsConfirmClear),
-        actions: [
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            key: const ValueKey('diagnostics-clear-confirm'),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(
-              l10n.clear,
-              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                  ? const TextStyle(color: Color(0xFFB3001B))
-                  : null,
-            ),
+    // 批 5 · C3：清空日志确认 → D1 `confirm`（380）；窄屏仍是系统 alert。
+    final confirmed = await showHermesDialog<bool>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.diagnosticsClear),
+      content: (_) => Text(l10n.diagnosticsConfirmClear),
+      actions: [
+        HermesDialogAction(
+          isDestructiveAction: true,
+          key: const ValueKey('diagnostics-clear-confirm'),
+          builder: (ctx) => Text(
+            l10n.clear,
+            style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                ? const TextStyle(color: Color(0xFFB3001B))
+                : null,
           ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              l10n.cancel,
-              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                  ? const TextStyle(color: LightSurfaces.menuAction)
-                  : null,
-            ),
+          onPressed: (ctx) => Navigator.of(ctx).pop(true),
+        ),
+        HermesDialogAction(
+          isDefaultAction: true,
+          builder: (ctx) => Text(
+            l10n.cancel,
+            style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
           ),
-        ],
-      ),
+          onPressed: (ctx) => Navigator.of(ctx).pop(false),
+        ),
+      ],
     );
     if (confirmed == true && mounted) {
       await ref.read(diagnosticsLogsProvider.notifier).clear();
@@ -186,24 +187,24 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
 
   void _showAlert(String title, String message) {
     final l10n = AppLocalizations.of(context);
+    // 批 5 · C3：单动作提示框 → D1 `confirm`（380）；窄屏仍是系统 alert。
     unawaited(
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(
-                l10n.ok,
-                style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                    ? const TextStyle(color: LightSurfaces.menuAction)
-                    : null,
-              ),
+      showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(title),
+        content: (_) => Text(message),
+        actions: [
+          HermesDialogAction(
+            builder: (ctx) => Text(
+              l10n.ok,
+              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
             ),
-          ],
-        ),
+            onPressed: (ctx) => Navigator.of(ctx).pop(),
+          ),
+        ],
       ),
     );
   }

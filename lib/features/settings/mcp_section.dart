@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/mcp.dart';
@@ -178,41 +179,53 @@ class McpSection extends ConsumerWidget {
     );
   }
 
+  /// 删除 MCP 服务器确认（**批 5 · C1**：D1 四档宽 —— 删除属确认/警告类，
+  /// 取 `confirm` 380）。
+  ///
+  /// 窄屏（<900）逐像素不变（系统 `CupertinoAlertDialog`，动作浅色口径与
+  /// `SettingsSurfaces.dialog` 逐字段同值）；宽屏（≥900）走 380 宽居中卡片。
   Future<void> _confirmDelete(
     BuildContext context,
     WidgetRef ref,
     McpServer server,
   ) {
     final l10n = AppLocalizations.of(context);
+    // 浅色下动作文字取高对比度深蓝（同 `SettingsSurfaces.dialog`）；深色返回
+    // null → 沿用原生色（`CupertinoDialogAction` 默认 primaryColor / systemRed）。
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final ink = isLight
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
+    final dangerInk = isLight
+        ? TextStyle(color: statusRedText.resolveFrom(context))
+        : null;
 
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => SettingsSurfaces.dialog(
-        context,
-        CupertinoAlertDialog(
-          title: Text(l10n.deleteMcpServer),
-          content: Text(l10n.confirmDeleteMcpServer(server.name)),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.cancel),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('mcp-delete-confirm'),
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                unawaited(
-                  ref
-                      .read(mcpControllerProvider.notifier)
-                      .deleteServer(server.name),
-                );
-              },
-              child: Text(l10n.delete),
-            ),
-          ],
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.deleteMcpServer),
+      content: (_) => Text(l10n.confirmDeleteMcpServer(server.name)),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(l10n.cancel),
+          textStyle: ink,
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
         ),
-      ),
+        HermesDialogAction(
+          key: const ValueKey('mcp-delete-confirm'),
+          isDestructiveAction: true,
+          builder: (_) => Text(l10n.delete),
+          textStyle: dangerInk,
+          onPressed: (dialogContext) {
+            Navigator.of(dialogContext).pop();
+            unawaited(
+              ref
+                  .read(mcpControllerProvider.notifier)
+                  .deleteServer(server.name),
+            );
+          },
+        ),
+      ],
     );
   }
 

@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../core/platform/external_opener.dart';
 import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_models.dart';
@@ -86,36 +87,38 @@ Future<void> _installApkWithPermissionGate(
   final l10n = AppLocalizations.of(context);
   if (!await _canRequestInstall()) {
     if (!context.mounted) return;
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(l10n.installPermissionTitle),
-        content: Text(l10n.installPermissionBody),
-        actions: [
-          CupertinoDialogAction(
-            child: Text(
-              l10n.cancel,
-              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                  ? const TextStyle(color: LightSurfaces.menuAction)
-                  : null,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(),
+    // 批次 5 · C5：授权引导 → 380 确认框。
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.installPermissionTitle),
+      content: (_) => Text(l10n.installPermissionBody),
+      actions: [
+        HermesDialogAction(
+          builder: (dialogContext) => Text(
+            l10n.cancel,
+            style:
+                CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
           ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: Text(
-              l10n.installPermissionGoSettings,
-              style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                  ? const TextStyle(color: LightSurfaces.menuAction)
-                  : null,
-            ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              unawaited(_openInstallPermissionSettings());
-            },
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+        HermesDialogAction(
+          isDefaultAction: true,
+          builder: (dialogContext) => Text(
+            l10n.installPermissionGoSettings,
+            style:
+                CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
+                ? const TextStyle(color: LightSurfaces.menuAction)
+                : null,
           ),
-        ],
-      ),
+          onPressed: (dialogContext) {
+            Navigator.of(dialogContext).pop();
+            unawaited(_openInstallPermissionSettings());
+          },
+        ),
+      ],
     );
     if (!context.mounted) return;
     // 用户从设置页返回后复查：已授予则继续安装。
@@ -186,23 +189,24 @@ Future<void> openDownloadedFile(
     );
     if (context.mounted) {
       final l10n = AppLocalizations.of(context);
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(l10n.notice),
-          content: Text(l10n.downloadFileMissing),
-          actions: [
-            CupertinoDialogAction(
-              child: Text(
-                l10n.ok,
-                style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                    ? const TextStyle(color: LightSurfaces.menuAction)
-                    : null,
-              ),
-              onPressed: () => Navigator.of(ctx).pop(),
+      // 批次 5 · C5：提示/警告 → 380。
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.notice),
+        content: (_) => Text(l10n.downloadFileMissing),
+        actions: [
+          HermesDialogAction(
+            builder: (dialogContext) => Text(
+              l10n.ok,
+              style:
+                  CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
             ),
-          ],
-        ),
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+          ),
+        ],
       );
     }
     return;
@@ -240,23 +244,24 @@ Future<void> openDownloadedFile(
     );
     if (context.mounted) {
       final l10n = AppLocalizations.of(context);
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(l10n.downloadOpenFileFailed),
-          content: Text(error.toString()),
-          actions: [
-            CupertinoDialogAction(
-              child: Text(
-                l10n.ok,
-                style: CupertinoTheme.brightnessOf(ctx) == Brightness.light
-                    ? const TextStyle(color: LightSurfaces.menuAction)
-                    : null,
-              ),
-              onPressed: () => Navigator.of(ctx).pop(),
+      // 批次 5 · C5：失败提示 → 380。
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.downloadOpenFileFailed),
+        content: (_) => Text(error.toString()),
+        actions: [
+          HermesDialogAction(
+            builder: (dialogContext) => Text(
+              l10n.ok,
+              style:
+                  CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
+                  ? const TextStyle(color: LightSurfaces.menuAction)
+                  : null,
             ),
-          ],
-        ),
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+          ),
+        ],
       );
     }
   }

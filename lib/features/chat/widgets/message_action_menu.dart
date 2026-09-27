@@ -9,6 +9,7 @@ import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/adaptive_action_menu.dart';
 import '../../../app/widgets/adaptive_popover.dart';
 import '../../../app/widgets/cupertino_popover.dart';
+import '../../../app/widgets/hermes_dialog.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -130,25 +131,27 @@ Future<String?> _showMessageActionSheet(
           key: const ValueKey('msg-action-truncate'),
           isDestructiveAction: true,
           onPressed: () async {
-            final confirmed = await showCupertinoDialog<bool>(
-              context: sheetContext,
-              builder: (dialogContext) => CupertinoAlertDialog(
-                title: Text(l10n.truncateFromHere),
-                content: Text(l10n.confirmTruncatePrompt),
-                actions: [
-                  CupertinoDialogAction(
-                    key: const ValueKey('msg-truncate-cancel'),
-                    onPressed: () => Navigator.pop(dialogContext, false),
-                    child: Text(l10n.cancel, style: actionStyle),
-                  ),
-                  CupertinoDialogAction(
-                    key: const ValueKey('msg-truncate-confirm'),
-                    isDestructiveAction: true,
-                    onPressed: () => Navigator.pop(dialogContext, true),
-                    child: Text(l10n.truncate, style: destructiveStyle),
-                  ),
-                ],
-              ),
+            // D1 确认档（380）：破坏性二次确认（窄屏仍是原系统弹窗）。
+            final confirmed = await showHermesDialog<bool>(
+              sheetContext,
+              kind: HermesDialogKind.confirm,
+              title: (_) => Text(l10n.truncateFromHere),
+              content: (_) => Text(l10n.confirmTruncatePrompt),
+              actions: [
+                HermesDialogAction(
+                  key: const ValueKey('msg-truncate-cancel'),
+                  builder: (_) => Text(l10n.cancel, style: actionStyle),
+                  onPressed: (dialogContext) =>
+                      Navigator.pop(dialogContext, false),
+                ),
+                HermesDialogAction(
+                  key: const ValueKey('msg-truncate-confirm'),
+                  isDestructiveAction: true,
+                  builder: (_) => Text(l10n.truncate, style: destructiveStyle),
+                  onPressed: (dialogContext) =>
+                      Navigator.pop(dialogContext, true),
+                ),
+              ],
             );
             if (confirmed == true && sheetContext.mounted) {
               Navigator.pop(sheetContext, MessageAction.truncate);
@@ -334,31 +337,31 @@ Future<void> _confirmTruncate({
   required void Function(String? action) complete,
 }) async {
   final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
-  final confirmed = await showCupertinoDialog<bool>(
-    context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text(l10n.truncateFromHere),
-      content: Text(l10n.confirmTruncatePrompt),
-      actions: [
-        CupertinoDialogAction(
-          textStyle: isLight
-              ? const TextStyle(color: LightSurfaces.userDetail)
-              : null,
-          key: const ValueKey('msg-truncate-cancel'),
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: Text(l10n.cancel),
-        ),
-        CupertinoDialogAction(
-          textStyle: isLight
-              ? TextStyle(color: statusRedText.resolveFrom(context))
-              : null,
-          key: const ValueKey('msg-truncate-confirm'),
-          isDestructiveAction: true,
-          onPressed: () => Navigator.pop(dialogContext, true),
-          child: Text(l10n.truncate),
-        ),
-      ],
-    ),
+  // D1 确认档（380）—— 与窄屏 sheet 路径的同一个弹窗共用分档。
+  final confirmed = await showHermesDialog<bool>(
+    context,
+    kind: HermesDialogKind.confirm,
+    title: (_) => Text(l10n.truncateFromHere),
+    content: (_) => Text(l10n.confirmTruncatePrompt),
+    actions: [
+      HermesDialogAction(
+        textStyle: isLight
+            ? const TextStyle(color: LightSurfaces.userDetail)
+            : null,
+        key: const ValueKey('msg-truncate-cancel'),
+        builder: (_) => Text(l10n.cancel),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext, false),
+      ),
+      HermesDialogAction(
+        textStyle: isLight
+            ? TextStyle(color: statusRedText.resolveFrom(context))
+            : null,
+        key: const ValueKey('msg-truncate-confirm'),
+        isDestructiveAction: true,
+        builder: (_) => Text(l10n.truncate),
+        onPressed: (dialogContext) => Navigator.pop(dialogContext, true),
+      ),
+    ],
   );
   complete(confirmed == true ? MessageAction.truncate : null);
 }

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/light_surfaces.dart';
+import '../../../app/widgets/hermes_dialog.dart';
 import '../../../app/widgets/hermes_page_route.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/cache/cache_providers.dart';
@@ -1112,21 +1113,20 @@ class _MediaRefreshButtonState extends ConsumerState<_MediaRefreshButton> {
     } catch (error) {
       // 刷新失败保留旧图（service 先下载后落盘），这里只把原因说清楚。
       if (!mounted) return;
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text(l10n.refreshFailed),
-          content: Text(
-            error is ApiException ? error.message : error.toString(),
+      // 批次 5 · C5：失败提示 → 380（宽屏居中卡片；窄屏系统弹窗不变）。
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.refreshFailed),
+        content: (_) =>
+            Text(error is ApiException ? error.message : error.toString()),
+        actions: [
+          HermesDialogAction(
+            key: const ValueKey('media-refresh-error-ok'),
+            builder: (_) => Text(l10n.ok),
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
           ),
-          actions: [
-            CupertinoDialogAction(
-              key: const ValueKey('media-refresh-error-ok'),
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.ok),
-            ),
-          ],
-        ),
+        ],
       );
     } finally {
       if (mounted) setState(() => _refreshing = false);

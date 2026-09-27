@@ -10,6 +10,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
 import '../../core/utils/accessibility.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../l10n/app_localizations.dart';
 import '../chat/widgets/markdown_styles.dart';
 import '../shared/app_back_button.dart';
@@ -510,21 +511,23 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
 
   Future<void> _showActionError(BuildContext context, String message) async {
     final l10n = AppLocalizations.of(context);
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.actionFailed),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            textStyle: _usesLightSurfaces(dialogContext)
+    // 批 5 · C3：单动作告警框 → D1 `confirm`（380）；窄屏仍是系统 alert。
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.actionFailed),
+      content: (_) => Text(message),
+      actions: [
+        HermesDialogAction(
+          builder: (dialogContext) => Text(
+            l10n.ok,
+            style: _usesLightSurfaces(dialogContext)
                 ? const TextStyle(color: LightSurfaces.menuAction)
                 : null,
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.ok),
           ),
-        ],
-      ),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext),
+        ),
+      ],
     );
     await ref.read(kanbanControllerProvider.notifier).clearActionError();
   }
@@ -1189,21 +1192,23 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
 
   Future<void> _showActionError(BuildContext context, String message) async {
     final l10n = AppLocalizations.of(context);
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.actionFailed),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            textStyle: _usesLightSurfaces(dialogContext)
+    // 批 5 · C3：单动作告警框 → D1 `confirm`（380）；窄屏仍是系统 alert。
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.actionFailed),
+      content: (_) => Text(message),
+      actions: [
+        HermesDialogAction(
+          builder: (dialogContext) => Text(
+            l10n.ok,
+            style: _usesLightSurfaces(dialogContext)
                 ? const TextStyle(color: LightSurfaces.menuAction)
                 : null,
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.ok),
           ),
-        ],
-      ),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext),
+        ),
+      ],
     );
     if (!mounted) return;
     await ref

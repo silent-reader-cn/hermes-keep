@@ -37,6 +37,7 @@ import 'session_list_shell_requests.dart';
 import 'session_list_utility_rows.dart';
 import 'session_row_subtitle_settings.dart';
 import '../../app/widgets/app_refresh_control.dart';
+import '../../app/widgets/hermes_dialog.dart';
 
 /// 会话列表页（app_shell_spec.md §3：`/` 为主列表）。
 ///
@@ -1593,70 +1594,68 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           );
       if (!context.mounted) return;
       final content = utf8.decode(response.data, allowMalformed: true);
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text(l10n.exportSuccess(format)),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 260),
-            child: SingleChildScrollView(
-              child: Text(content.isEmpty ? l10n.exportContentEmpty : content),
-            ),
+      // D1 宽表单档（760）：导出正文是**长文本预览**，窄屏仍是原系统弹窗。
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.wideForm,
+        title: (_) => Text(l10n.exportSuccess(format)),
+        content: (_) => ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 260),
+          child: SingleChildScrollView(
+            child: Text(content.isEmpty ? l10n.exportContentEmpty : content),
           ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () async {
-                // 同源修复：导出内容无界，超限/剪贴板异常走 SafeClipboard
-                // 落盘文件；提示弹窗沿用 diagnosticsExportTooLargeSaved。
-                final result = await SafeClipboard.copyOrSave(
-                  content,
-                  fileNamePrefix: 'hermes_session_export',
-                );
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (result.isFileSaved && context.mounted) {
-                  await showCupertinoDialog<void>(
-                    context: context,
-                    builder: (alertContext) => CupertinoAlertDialog(
-                      title: Text(l10n.exportSuccessDialogTitle),
-                      content: Text(
-                        l10n.diagnosticsExportTooLargeSaved(result.filePath!),
-                      ),
-                      actions: [
-                        CupertinoDialogAction(
-                          onPressed: () => Navigator.pop(alertContext),
-                          child: Text(l10n.ok),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              },
-              child: Text(l10n.copyContent),
-            ),
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.close),
-            ),
-          ],
         ),
+        actions: [
+          HermesDialogAction(
+            builder: (_) => Text(l10n.copyContent),
+            onPressed: (dialogContext) async {
+              // 同源修复：导出内容无界，超限/剪贴板异常走 SafeClipboard
+              // 落盘文件；提示弹窗沿用 diagnosticsExportTooLargeSaved。
+              final result = await SafeClipboard.copyOrSave(
+                content,
+                fileNamePrefix: 'hermes_session_export',
+              );
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              if (result.isFileSaved && context.mounted) {
+                await showHermesDialog<void>(
+                  context,
+                  kind: HermesDialogKind.confirm,
+                  title: (_) => Text(l10n.exportSuccessDialogTitle),
+                  content: (_) => Text(
+                    l10n.diagnosticsExportTooLargeSaved(result.filePath!),
+                  ),
+                  actions: [
+                    HermesDialogAction(
+                      builder: (_) => Text(l10n.ok),
+                      onPressed: (alertContext) => Navigator.pop(alertContext),
+                    ),
+                  ],
+                );
+              }
+            },
+          ),
+          HermesDialogAction(
+            builder: (_) => Text(l10n.close),
+            onPressed: (dialogContext) => Navigator.pop(dialogContext),
+          ),
+        ],
       );
     } catch (error) {
       if (!context.mounted) return;
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text(l10n.exportFailed),
-          content: Text(
-            error is ApiException ? error.message : '$error',
-            style: TextStyle(color: statusRedText.resolveFrom(context)),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.ok),
-            ),
-          ],
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.exportFailed),
+        content: (_) => Text(
+          error is ApiException ? error.message : '$error',
+          style: TextStyle(color: statusRedText.resolveFrom(context)),
         ),
+        actions: [
+          HermesDialogAction(
+            builder: (_) => Text(l10n.ok),
+            onPressed: (dialogContext) => Navigator.pop(dialogContext),
+          ),
+        ],
       );
     }
   }
@@ -1677,27 +1676,25 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     SessionSummary session,
   ) async {
     final l10n = AppLocalizations.of(context);
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.deleteSession),
-        content: Text(
-          l10n.confirmDeleteSession(_displayTitle(context, session)),
+    final confirmed = await showHermesDialog<bool>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.deleteSession),
+      content: (_) =>
+          Text(l10n.confirmDeleteSession(_displayTitle(context, session))),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('session-delete-cancel'),
+          builder: (_) => Text(l10n.cancel),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext, false),
         ),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('session-delete-cancel'),
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            key: const ValueKey('session-delete-confirm'),
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.delete),
-          ),
-        ],
-      ),
+        HermesDialogAction(
+          key: const ValueKey('session-delete-confirm'),
+          isDestructiveAction: true,
+          builder: (_) => Text(l10n.delete),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext, true),
+        ),
+      ],
     );
     if (confirmed == true && context.mounted) {
       await ref.read(sessionListControllerProvider.notifier).delete(session);
@@ -1706,25 +1703,28 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   Future<void> _confirmBatchArchive(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
+    final confirmed = await showHermesDialog<bool>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.batchArchiveTitle),
+      // 弹窗自身的 ValueKey 由本基础设施在窄屏内部构造（调用点无法再传
+      // `CupertinoAlertDialog.key`），键挂在正文上以保持既有 finder 契约。
+      content: (_) => Text(
+        l10n.confirmBatchArchivePrompt,
         key: const ValueKey('batch-archive-dialog'),
-        title: Text(l10n.batchArchiveTitle),
-        content: Text(l10n.confirmBatchArchivePrompt),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('batch-archive-cancel'),
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            key: const ValueKey('batch-archive-confirm'),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.archive),
-          ),
-        ],
       ),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('batch-archive-cancel'),
+          builder: (_) => Text(l10n.cancel),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext, false),
+        ),
+        HermesDialogAction(
+          key: const ValueKey('batch-archive-confirm'),
+          builder: (_) => Text(l10n.archive),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext, true),
+        ),
+      ],
     );
     if (confirmed == true && context.mounted) {
       final result = await ref
@@ -1744,26 +1744,28 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ?.selectedSessionIds
             .length ??
         0;
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
+    final confirmed = await showHermesDialog<bool>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.batchDeleteTitle),
+      // 键挂在正文上（同上述批量归档：弹窗自身 key 由基础设施内部构造）。
+      content: (_) => Text(
+        l10n.confirmBatchDeletePrompt(count),
         key: const ValueKey('batch-delete-dialog'),
-        title: Text(l10n.batchDeleteTitle),
-        content: Text(l10n.confirmBatchDeletePrompt(count)),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('batch-delete-cancel'),
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            key: const ValueKey('batch-delete-confirm'),
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l10n.delete),
-          ),
-        ],
       ),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('batch-delete-cancel'),
+          builder: (_) => Text(l10n.cancel),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext, false),
+        ),
+        HermesDialogAction(
+          key: const ValueKey('batch-delete-confirm'),
+          isDestructiveAction: true,
+          builder: (_) => Text(l10n.delete),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext, true),
+        ),
+      ],
     );
     if (confirmed == true && context.mounted) {
       final result = await ref
@@ -1819,21 +1821,20 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   Future<void> _showActionError(BuildContext context, String message) async {
     final l10n = AppLocalizations.of(context);
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.actionFailed),
-        content: Text(
-          message,
-          style: TextStyle(color: statusRedText.resolveFrom(context)),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l10n.ok),
-          ),
-        ],
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.actionFailed),
+      content: (_) => Text(
+        message,
+        style: TextStyle(color: statusRedText.resolveFrom(context)),
       ),
+      actions: [
+        HermesDialogAction(
+          builder: (_) => Text(l10n.ok),
+          onPressed: (dialogContext) => Navigator.pop(dialogContext),
+        ),
+      ],
     );
     await ref.read(sessionListControllerProvider.notifier).clearActionError();
   }

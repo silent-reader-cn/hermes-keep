@@ -8,6 +8,7 @@ import '../../../app/shell/adaptive_shell.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/cupertino_popover.dart';
+import '../../../app/widgets/hermes_dialog.dart';
 import '../../../core/api/api_client_upload.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/connections/connection_providers.dart';
@@ -565,24 +566,24 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   Future<void> _showError(String title, String message) {
     final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(
-          message,
-          style: TextStyle(color: statusRedText.resolveFrom(context)),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-                ? const TextStyle(color: LightSurfaces.userDetail)
-                : null,
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.ok),
-          ),
-        ],
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(title),
+      content: (_) => Text(
+        message,
+        style: TextStyle(color: statusRedText.resolveFrom(context)),
       ),
+      actions: [
+        HermesDialogAction(
+          textStyle: isLight
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
+          builder: (_) => Text(l10n.ok),
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+      ],
     );
   }
 
@@ -598,29 +599,29 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   /// clarify 流）一律直接走 controller.stop()，不经此确认框。
   Future<void> _stop() async {
     final l10n = AppLocalizations.of(context);
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(l10n.stopGeneratingTitle),
-        content: Text(l10n.stopGeneratingConfirmPrompt),
-        actions: [
-          CupertinoDialogAction(
-            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-                ? const TextStyle(color: LightSurfaces.userDetail)
-                : null,
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(l10n.cancel),
-          ),
-          CupertinoDialogAction(
-            textStyle: CupertinoTheme.brightnessOf(context) == Brightness.light
-                ? TextStyle(color: statusRedText.resolveFrom(context))
-                : null,
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(l10n.stopGenerating),
-          ),
-        ],
-      ),
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    final confirmed = await showHermesDialog<bool>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(l10n.stopGeneratingTitle),
+      content: (_) => Text(l10n.stopGeneratingConfirmPrompt),
+      actions: [
+        HermesDialogAction(
+          textStyle: isLight
+              ? const TextStyle(color: LightSurfaces.userDetail)
+              : null,
+          builder: (_) => Text(l10n.cancel),
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(false),
+        ),
+        HermesDialogAction(
+          textStyle: isLight
+              ? TextStyle(color: statusRedText.resolveFrom(context))
+              : null,
+          isDestructiveAction: true,
+          builder: (_) => Text(l10n.stopGenerating),
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(true),
+        ),
+      ],
     );
     if (confirmed != true) return;
     await ref.read(chatControllerProvider(widget.sessionId).notifier).stop();

@@ -14,6 +14,7 @@ import '../../app/shell/android_back_interceptor.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../app/widgets/app_scrollbar.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../l10n/app_localizations.dart';
 import '../shared/app_back_button.dart';
 import '../workspace_manager/file_preview_page.dart';
@@ -754,43 +755,43 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   void _showDeleteDialog(WorkspaceEntry entry) {
     final l10n = AppLocalizations.of(context);
     setState(() => _pendingDelete = entry);
+    // 批 5 · C3：删除确认 → D1 `confirm`（380）；窄屏仍是系统 alert（逐像素不变）。
     unawaited(
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: Text(l10n.deleteFile),
-          content: Text(l10n.confirmDeleteFile(entry.name ?? entry.path ?? '')),
-          actions: [
-            CupertinoDialogAction(
-              key: const ValueKey('workspace-delete-cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() => _pendingDelete = null);
-              },
-              child: Text(l10n.cancel),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('workspace-delete-confirm'),
-              isDestructiveAction: true,
-              onPressed: () {
-                final target = _pendingDelete;
-                Navigator.of(context).pop();
-                setState(() => _pendingDelete = null);
-                if (target != null) {
-                  unawaited(
-                    ref
-                        .read(
-                          workspaceControllerProvider(widget.sessionId)
-                              .notifier,
-                        )
-                        .delete(target),
-                  );
-                }
-              },
-              child: Text(l10n.delete),
-            ),
-          ],
-        ),
+      showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.confirm,
+        title: (_) => Text(l10n.deleteFile),
+        content: (_) =>
+            Text(l10n.confirmDeleteFile(entry.name ?? entry.path ?? '')),
+        actions: [
+          HermesDialogAction(
+            key: const ValueKey('workspace-delete-cancel'),
+            builder: (_) => Text(l10n.cancel),
+            onPressed: (dialogContext) {
+              Navigator.of(dialogContext).pop();
+              setState(() => _pendingDelete = null);
+            },
+          ),
+          HermesDialogAction(
+            key: const ValueKey('workspace-delete-confirm'),
+            isDestructiveAction: true,
+            builder: (_) => Text(l10n.delete),
+            onPressed: (dialogContext) {
+              final target = _pendingDelete;
+              Navigator.of(dialogContext).pop();
+              setState(() => _pendingDelete = null);
+              if (target != null) {
+                unawaited(
+                  ref
+                      .read(
+                        workspaceControllerProvider(widget.sessionId).notifier,
+                      )
+                      .delete(target),
+                );
+              }
+            },
+          ),
+        ],
       ),
     );
   }
@@ -799,47 +800,46 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     final l10n = AppLocalizations.of(context);
     _renameController.text = entry.name ?? entry.path ?? '';
     setState(() => _renameEntry = entry);
+    // 批 5 · C3：带输入框 → D1 `form`（560，宽屏横排更宽松）；窄屏仍竖排系统 alert。
     unawaited(
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: Text(l10n.rename),
-          content: CupertinoTextField(
-            key: const ValueKey('workspace-rename-field'),
-            controller: _renameController,
-            autofocus: true,
-          ),
-          actions: [
-            CupertinoDialogAction(
-              key: const ValueKey('workspace-rename-cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() => _renameEntry = null);
-              },
-              child: Text(l10n.cancel),
-            ),
-            CupertinoDialogAction(
-              key: const ValueKey('workspace-rename-save'),
-              onPressed: () {
-                final target = _renameEntry;
-                final newName = _renameController.text;
-                Navigator.of(context).pop();
-                setState(() => _renameEntry = null);
-                if (target != null && newName.trim().isNotEmpty) {
-                  unawaited(
-                    ref
-                        .read(
-                          workspaceControllerProvider(widget.sessionId)
-                              .notifier,
-                        )
-                        .rename(target, newName),
-                  );
-                }
-              },
-              child: Text(l10n.save),
-            ),
-          ],
+      showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.form,
+        title: (_) => Text(l10n.rename),
+        content: (_) => CupertinoTextField(
+          key: const ValueKey('workspace-rename-field'),
+          controller: _renameController,
+          autofocus: true,
         ),
+        actions: [
+          HermesDialogAction(
+            key: const ValueKey('workspace-rename-cancel'),
+            builder: (_) => Text(l10n.cancel),
+            onPressed: (dialogContext) {
+              Navigator.of(dialogContext).pop();
+              setState(() => _renameEntry = null);
+            },
+          ),
+          HermesDialogAction(
+            key: const ValueKey('workspace-rename-save'),
+            builder: (_) => Text(l10n.save),
+            onPressed: (dialogContext) {
+              final target = _renameEntry;
+              final newName = _renameController.text;
+              Navigator.of(dialogContext).pop();
+              setState(() => _renameEntry = null);
+              if (target != null && newName.trim().isNotEmpty) {
+                unawaited(
+                  ref
+                      .read(
+                        workspaceControllerProvider(widget.sessionId).notifier,
+                      )
+                      .rename(target, newName),
+                );
+              }
+            },
+          ),
+        ],
       ),
     );
   }
@@ -883,19 +883,19 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
   Future<void> _showInfoDialog(String title, String message) {
     final l10n = AppLocalizations.of(context);
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            key: const ValueKey('workspace-dialog-ok'),
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.ok),
-          ),
-        ],
-      ),
+    // 批 5 · C3：单动作提示框 → D1 `confirm`（380）；窄屏仍是系统 alert。
+    return showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      title: (_) => Text(title),
+      content: (_) => Text(message),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('workspace-dialog-ok'),
+          builder: (_) => Text(l10n.ok),
+          onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+        ),
+      ],
     );
   }
 

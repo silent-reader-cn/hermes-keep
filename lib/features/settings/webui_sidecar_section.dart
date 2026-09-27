@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../core/platform/external_opener.dart';
 import '../../l10n/app_localizations.dart';
 import '../webui_sidecar/webui_sidecar_providers.dart';
@@ -140,52 +141,64 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
 
   Future<void> _showMissingAgentDialog() async {
     final l10n = AppLocalizations.of(context);
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return SettingsSurfaces.dialog(
-          context,
-          CupertinoAlertDialog(
-            key: const ValueKey('settings-webui-missing-agent-dialog'),
-            title: Text(l10n.agentGateNeedInstallTitle),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Text(l10n.agentGateNeedInstallDesc),
-            ),
-            actions: [
-              CupertinoDialogAction(
-                key: const ValueKey('settings-webui-dialog-cancel-btn'),
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                },
-                child: Text(l10n.agentGateCancel),
-              ),
-              CupertinoDialogAction(
-                key: const ValueKey('settings-webui-dialog-guide-btn'),
-                onPressed: () async {
-                  Navigator.of(dialogContext).pop();
-                  try {
-                    await launchUrl(
-                      Uri.parse(hermesAgentDocsUrl),
-                      mode: LaunchMode.externalApplication,
-                    );
-                  } catch (_) {}
-                },
-                child: Text(l10n.agentGateGoToInstallGuide),
-              ),
-              CupertinoDialogAction(
-                key: const ValueKey('settings-webui-dialog-recheck-btn'),
-                isDefaultAction: true,
-                onPressed: () async {
-                  Navigator.of(dialogContext).pop();
-                  await ref.read(agentEnvPresentProvider.notifier).refresh();
-                },
-                child: Text(l10n.agentGateRecheck),
-              ),
-            ],
-          ),
-        );
-      },
+    // 批次 5 · C5：阻断型提示（三动作）→ 380 确认框。
+    //
+    // 浅色动作色与迁移前一致：原先这层由 `SettingsSurfaces.dialog` 统一改写
+    // （`(action.textStyle ?? const TextStyle()).copyWith(color:
+    // LightSurfaces.menuAction)`）；基础件自建 alert，故把同一条规则写进
+    // `HermesDialogAction.textStyle` —— 三个动作都带 onPressed，走不到
+    // SettingsSurfaces 里「禁用动作改 textSecondary」那条分支（详见守卫测试
+    // `chat/c5_dialog_migration_test.dart` 的窄屏分支说明）。
+    final actionStyle = SettingsSurfaces.isLight(context)
+        ? const TextStyle(color: LightSurfaces.menuAction)
+        : null;
+    await showHermesDialog<void>(
+      context,
+      kind: HermesDialogKind.confirm,
+      // 弹窗自身的 ValueKey 原挂在 `CupertinoAlertDialog` 上；基础件不收
+      // dialog 级 key，改挂标题件 —— `find.byKey` 语义不变。
+      title: (_) => Text(
+        l10n.agentGateNeedInstallTitle,
+        key: const ValueKey('settings-webui-missing-agent-dialog'),
+      ),
+      content: (_) => Padding(
+        padding: const EdgeInsets.only(top: 8.0),
+        child: Text(l10n.agentGateNeedInstallDesc),
+      ),
+      actions: [
+        HermesDialogAction(
+          key: const ValueKey('settings-webui-dialog-cancel-btn'),
+          textStyle: actionStyle,
+          builder: (_) => Text(l10n.agentGateCancel),
+          onPressed: (dialogContext) {
+            Navigator.of(dialogContext).pop();
+          },
+        ),
+        HermesDialogAction(
+          key: const ValueKey('settings-webui-dialog-guide-btn'),
+          textStyle: actionStyle,
+          builder: (_) => Text(l10n.agentGateGoToInstallGuide),
+          onPressed: (dialogContext) async {
+            Navigator.of(dialogContext).pop();
+            try {
+              await launchUrl(
+                Uri.parse(hermesAgentDocsUrl),
+                mode: LaunchMode.externalApplication,
+              );
+            } catch (_) {}
+          },
+        ),
+        HermesDialogAction(
+          key: const ValueKey('settings-webui-dialog-recheck-btn'),
+          isDefaultAction: true,
+          textStyle: actionStyle,
+          builder: (_) => Text(l10n.agentGateRecheck),
+          onPressed: (dialogContext) async {
+            Navigator.of(dialogContext).pop();
+            await ref.read(agentEnvPresentProvider.notifier).refresh();
+          },
+        ),
+      ],
     );
   }
 
