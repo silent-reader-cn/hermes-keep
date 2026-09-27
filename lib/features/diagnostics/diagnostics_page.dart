@@ -632,9 +632,10 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
+          // L2：分段控件选中底改中性灰 .16；前景仍是 statusBlueText(#005FB8)。
           color: isSelected
               ? (isLight
-                    ? LightSurfaces.selection
+                    ? LightSurfaces.selectedSurface
                     : activeColor.withValues(alpha: 0.15))
               : unselectedBg,
           borderRadius: BorderRadius.circular(6),
@@ -779,9 +780,10 @@ class _DiagnosticsLogRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
+          // L2：选中的日志行底同步换中性灰 .16（同级单位：选中行）。
           color: isSelected
               ? (isLight
-                    ? LightSurfaces.selection
+                    ? LightSurfaces.selectedSurface
                     : statusBlueText
                           .resolveFrom(context)
                           .withValues(alpha: 0.1))

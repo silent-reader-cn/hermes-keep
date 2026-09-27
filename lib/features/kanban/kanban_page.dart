@@ -250,9 +250,10 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
                 borderRadius: BorderRadius.circular(14),
                 pressedOpacity: isLight ? 1 : 0.4,
                 // An opaque dark fill separates unselected chips from cards.
+                // L2：选中的看板 chip 底改中性灰 .16（暗色填充取值未动）。
                 color: isLight
                     ? (selected
-                          ? LightSurfaces.selection
+                          ? LightSurfaces.selectedSurface
                           : (pressed
                                 ? LightSurfaces.pressed
                                 : LightSurfaces.card))
@@ -260,7 +261,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
                           ? CupertinoColors.activeBlue
                           : _kanbanDarkControlFill),
                 disabledColor: isLight
-                    ? LightSurfaces.selection
+                    ? LightSurfaces.selectedSurface
                     : CupertinoColors.transparent,
                 onPressed: selected
                     ? null

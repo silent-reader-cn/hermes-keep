@@ -460,7 +460,8 @@ void main() {
       );
 
       final devNode = tester.widget<Container>(find.byKey(nodeKey('dev')));
-      expect(devNode.color, LightSurfaces.selection);
+      // L2：浅色「当前」行底改中性灰 .16。
+      expect(devNode.color, LightSurfaces.selectedSurface);
       expect(find.byKey(switchKey('dev')), findsNothing);
       expect(find.byKey(switchKey('main')), findsOneWidget);
       expect(tester.widget<Container>(find.byKey(nodeKey('main'))).color, isNull);
@@ -480,7 +481,7 @@ void main() {
 
       expect(
         tester.widget<Container>(find.byKey(nodeKey('dev'))).color,
-        LightSurfaces.selection,
+        LightSurfaces.selectedSurface,
       );
       expect(find.byKey(switchKey('main')), findsOneWidget);
     });
@@ -715,7 +716,7 @@ void main() {
       expect(find.byKey(nodeKey('origin/feature')), findsNothing);
       expect(
         tester.widget<Container>(find.byKey(nodeKey('main'))).color,
-        LightSurfaces.selection,
+        LightSurfaces.selectedSurface,
       );
     });
 

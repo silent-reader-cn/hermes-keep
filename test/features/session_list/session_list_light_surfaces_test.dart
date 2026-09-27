@@ -192,8 +192,9 @@ void main() {
         matching: find.byType(CupertinoListTile),
       ),
     );
+    // L2：筛选弹层的选中行底同步换中性灰 .16。
     expect(
-      tiles.any((tile) => tile.backgroundColor == LightSurfaces.selection),
+      tiles.any((tile) => tile.backgroundColor == LightSurfaces.selectedSurface),
       isTrue,
     );
     expect(

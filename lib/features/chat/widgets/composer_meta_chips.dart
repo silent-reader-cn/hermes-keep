@@ -830,7 +830,10 @@ Widget _selectionMenuButton(
   if (CupertinoTheme.brightnessOf(context) == Brightness.light) {
     return CupertinoListTile(
       padding: padding,
-      backgroundColor: selected ? LightSurfaces.selection : LightSurfaces.card,
+      // L2：选中项底改中性灰 .16；前景文字/勾选图标已是 #005FB8。
+      backgroundColor: selected
+          ? LightSurfaces.selectedSurface
+          : LightSurfaces.card,
       backgroundColorActivated: LightSurfaces.pressed,
       onTap: onPressed,
       title: child,

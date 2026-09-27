@@ -273,9 +273,10 @@ void main() {
       final otherFinder = find.byKey(const ValueKey('kanban-board-other'));
       final other = tester.widget<CupertinoButton>(otherFinder);
       expect(selected.onPressed, isNull);
+      // L2：浅色选中 chip 底改中性灰 .16（暗色分支取值未变）。
       expect(
         selected.disabledColor,
-        light ? LightSurfaces.selection : CupertinoColors.transparent,
+        light ? LightSurfaces.selectedSurface : CupertinoColors.transparent,
       );
       if (!light) {
         final context = tester.element(otherFinder);

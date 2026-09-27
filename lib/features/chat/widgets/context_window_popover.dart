@@ -1429,7 +1429,10 @@ Widget _selectionMenuButton(
   if (CupertinoTheme.brightnessOf(context) == Brightness.light) {
     return CupertinoListTile(
       padding: padding,
-      backgroundColor: selected ? LightSurfaces.selection : LightSurfaces.card,
+      // L2：选中项底改中性灰 .16（暗色分支整体不走这条路径，未动）。
+      backgroundColor: selected
+          ? LightSurfaces.selectedSurface
+          : LightSurfaces.card,
       backgroundColorActivated: LightSurfaces.pressed,
       onTap: onPressed,
       title: child,

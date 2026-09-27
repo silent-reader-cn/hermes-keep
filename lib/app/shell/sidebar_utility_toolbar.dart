@@ -73,9 +73,10 @@ class SidebarUtilityToolbar extends ConsumerWidget {
                         minimumSize: const Size(40, 32),
                         padding: const EdgeInsets.symmetric(vertical: 6.0),
                         borderRadius: BorderRadius.circular(8.0),
+                        // L2（浅色）：选中底改中性灰 .16；暗色分支一字未改。
                         color: isSelected
                             ? (isLight
-                                  ? LightSurfaces.selection
+                                  ? LightSurfaces.selectedSurface
                                   : primaryColor.withValues(alpha: 0.12))
                             : CupertinoColors.transparent,
                         onPressed: () {
@@ -84,7 +85,13 @@ class SidebarUtilityToolbar extends ConsumerWidget {
                         child: Icon(
                           item.icon,
                           size: 20.0,
-                          color: isSelected ? primaryColor : inactiveColor,
+                          // L2（浅色）：选中前景（图标）转 #005FB8；
+                          // 暗色沿用主题 primaryColor，取值不变。
+                          color: isSelected
+                              ? (isLight
+                                    ? LightSurfaces.selectionForeground
+                                    : primaryColor)
+                              : inactiveColor,
                         ),
                       ),
                     ),

@@ -302,12 +302,13 @@ void main() {
       final mainNode = tester.widget<Container>(
         find.byKey(const ValueKey('git-branch-node-main')),
       );
-      expect(mainNode.color, LightSurfaces.selection);
+      // L2 选中态（2026-09-27 拍板）：浅色选中底由旧浅蓝 #E0ECFF 改中性灰 .16。
+      expect(mainNode.color, LightSurfaces.selectedSurface);
 
       final devButton = tester.widget<CupertinoButton>(
         find.byKey(const ValueKey('git-branch-switch-dev')),
       );
-      expect(devButton.color, LightSurfaces.selection);
+      expect(devButton.color, LightSurfaces.selectedSurface);
 
       final section = tester.widget<CupertinoListSection>(
         find.byKey(const ValueKey('git-branch-tree-section')),
@@ -317,7 +318,7 @@ void main() {
       expect(sectionBox.border?.top.color, LightSurfaces.cardBorder);
       expect(sectionBox.border?.top.width, 0.5);
 
-      // checkmark_alt 在浅色 selection 背景上升级为 statusGreenText (0xFF1E7A34)
+      // checkmark_alt 在浅色选中背景上升级为 statusGreenText (0xFF1E7A34)
       final checkIcon = tester.widget<Icon>(
         find.byIcon(CupertinoIcons.checkmark_alt),
       );
@@ -411,7 +412,7 @@ void main() {
         final mainNode = tester.widget<Container>(
           find.byKey(const ValueKey('git-branch-node-main')),
         );
-        expect(mainNode.color, isNot(LightSurfaces.selection));
+        expect(mainNode.color, isNot(LightSurfaces.selectedSurface));
         final expectedDarkNodeColor = CupertinoColors.systemBlue
             .resolveFrom(
               tester.element(
@@ -458,7 +459,7 @@ void main() {
       final mainNode = tester.widget<Container>(
         find.byKey(const ValueKey('git-branch-node-main')),
       );
-      expect(mainNode.color, isNot(LightSurfaces.selection));
+      expect(mainNode.color, isNot(LightSurfaces.selectedSurface));
     });
   });
 }

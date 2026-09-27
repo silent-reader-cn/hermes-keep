@@ -147,8 +147,10 @@ abstract final class SettingsSurfaces {
   }
 
   /// Selection adds a surface only in light mode; checkmarks remain intact.
+  ///
+  /// L2：浅色选中底改中性灰 .16（暗色返回 null，取值未变）。
   static Color? selection(BuildContext context, bool selected) =>
-      isLight(context) && selected ? LightSurfaces.selection : null;
+      isLight(context) && selected ? LightSurfaces.selectedSurface : null;
 
   /// Preserves the SDK's original dark text-field decoration verbatim.
   static BoxDecoration fieldDecoration(BuildContext context) => isLight(context)

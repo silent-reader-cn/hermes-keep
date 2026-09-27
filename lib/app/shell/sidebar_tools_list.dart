@@ -50,8 +50,9 @@ class SidebarToolsList extends ConsumerWidget {
       LightSurfaces.textSecondary,
       dark: CupertinoColors.secondaryLabel,
     );
+    // L2（浅色）：选中底改中性灰 .16；暗色沿用 primary 12%，取值不变。
     final activeBg = isLight
-        ? LightSurfaces.selection
+        ? LightSurfaces.selectedSurface
         : activeFg.withValues(alpha: 0.12);
     final divider = LightSurfaces.resolve(
       context,

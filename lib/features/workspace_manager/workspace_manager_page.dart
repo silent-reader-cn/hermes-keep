@@ -673,11 +673,12 @@ class _CurrentBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
+        // L2：「当前」徽标底改中性灰 .16（字仍 statusBlueText）。
         color: isDark
             ? CupertinoColors.systemBlue
                   .resolveFrom(context)
                   .withValues(alpha: 0.15)
-            : LightSurfaces.selection,
+            : LightSurfaces.selectedSurface,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(

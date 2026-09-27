@@ -12,6 +12,7 @@ import 'package:hermes_ui/features/workspace_manager/add_workspace_sheet.dart';
 import 'package:hermes_ui/features/workspace_manager/workspace_manager_page.dart';
 import 'package:hermes_ui/features/workspace_manager/workspace_manager_providers.dart';
 
+import '../../helpers/contrast_utils.dart';
 import '../../helpers/fake_workspace_manager_api.dart';
 
 /// WCAG 2.1 相对亮度计算
@@ -47,17 +48,22 @@ void main() {
       );
       expect(userDetailOnCard, greaterThanOrEqualTo(4.5));
 
-      // 2. 当前选中徽标字 statusBlueText (#005FB8) 在 selection 面 (#E0ECFF) 上 >= 4.5:1
+      // 2. 当前选中徽标字 statusBlueText (#005FB8) 在 L2 选中面
+      //    （selectedSurface 合成到白卡 ≈ #E9E9EB）上 >= 4.5:1
+      final l2SelectionOnCard = compositeOver(
+        LightSurfaces.selectedSurface,
+        LightSurfaces.card,
+      );
       final badgeOnSelection = _contrastRatio(
         statusBlueText.color,
-        LightSurfaces.selection,
+        l2SelectionOnCard,
       );
       expect(badgeOnSelection, greaterThanOrEqualTo(4.5));
 
-      // 3. 勾选图标 statusGreenText (#1E7A34) 在 selection 面 (#E0ECFF) 上 >= 3:1 (图形标识)
+      // 3. 勾选图标 statusGreenText (#1E7A34) 在同一选中面上 >= 3:1 (图形标识)
       final checkOnSelection = _contrastRatio(
         statusGreenText.color,
-        LightSurfaces.selection,
+        l2SelectionOnCard,
       );
       expect(checkOnSelection, greaterThanOrEqualTo(3.0));
 
@@ -123,7 +129,8 @@ void main() {
             .last,
       );
       final lightBadgeBox = lightBadge.decoration as BoxDecoration;
-      expect(lightBadgeBox.color, LightSurfaces.selection);
+      // L2：浅色「当前」徽标底改中性灰 .16（半透明叠加层）。
+      expect(lightBadgeBox.color, LightSurfaces.selectedSurface);
 
       // 卸载以防 ProviderScope 残留
       await tester.pumpWidget(const SizedBox());

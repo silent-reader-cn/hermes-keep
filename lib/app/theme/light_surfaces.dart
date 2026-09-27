@@ -19,6 +19,10 @@
 // page 变浅后 textSecondary 对 page 余量增大（4.527→4.821），维持不变。
 // tertiaryLabel/placeholderText 合成到 page/card 后仅 1.683235/1.725396，
 // 可读占位文案使用 placeholder，不通过降低透明度制造文字层级。
+// v4（2026-09-27 主人拍板 L2 选中态）：新增 selectedSurface / hoverSurface /
+// currentStroke / selectionForeground —— 前三者是**半透明叠加层**，不参与上面的
+// 不透明对比度表（合成值见各令牌 doc）。出处均为设计稿
+// `sketches/selection-light-mode-proposal.html` §3/§4（L2 规格表）。
 
 import 'package:flutter/cupertino.dart';
 
@@ -43,8 +47,33 @@ abstract final class LightSurfaces {
   /// 可读占位文案，与次级文字共用对比度下限。
   static const Color placeholder = textSecondary;
 
-  /// 会话行选中面；蓝色色相配合勾选图标表达选择状态。
+  /// 旧浅蓝选中面（#E0ECFF，≈ primary 12% 叠白）。
+  ///
+  /// L2 起**不再用于「选中行」**（改由 [selectedSurface] 承担）：主人判定该色
+  /// 「在白纸上贴了张便利贴」。剩余用途是文本选区底（`DefaultSelectionStyle`
+  /// 的 selectionColor）与诊断级别色相，本令牌值保持不变以维持那些场景原样。
   static const Color selection = Color(0xFFE0ECFF);
+
+  /// 选中态底（L2 浅色规格）。半透明中性灰、零色相，叠加在白卡与 [page] 上
+  /// 都立得住（合成后：白卡 ≈ #E9E9EB、[page] ≈ #DEDEE4）。
+  /// 出处：`sketches/selection-light-mode-proposal.html` §4「选中 · 底 rgba(120,120,128,.16)」。
+  static const Color selectedSurface = Color.fromRGBO(120, 120, 128, 0.16);
+
+  /// 悬停态底（L2 浅色规格）：比 [selectedSurface] 淡一档、同样不带色相，
+  /// 扫列表时不会「闪蓝」。与选中的差别 = 有蓝字 vs 无蓝字。
+  /// 出处：同设计稿 §3「hover · 底 rgba(120,120,128,.10)」。
+  static const Color hoverSurface = Color.fromRGBO(120, 120, 128, 0.10);
+
+  /// 「当前」持久态内描边（1px，圆角内），叠在 [selectedSurface] 之上，
+  /// 用于侧栏「当前会话」与文件树「当前文件」，比选中「更停得住」。
+  /// 出处：同设计稿 §4「当前 · 内描边 rgba(0,95,184,.28)」。
+  static const Color currentStroke = Color.fromRGBO(0, 95, 184, 0.28);
+
+  /// 选中态前景（文字**和**图标）。
+  ///
+  /// 与 [userDetail] **同值同源**（#005FB8，浅色正文 AA），此处按语义另设
+  /// 别名，避免选中态语义挂在「用户气泡详情」令牌上。
+  static const Color selectionForeground = userDetail;
 
   /// 会话行按下面，与白色静止行形成可见差异。
   static const Color pressed = page;

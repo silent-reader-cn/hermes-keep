@@ -183,12 +183,13 @@ class _GitBranchTreeState extends State<GitBranchTree> {
 
     return Container(
       key: ValueKey('git-branch-node-${branch.name}'),
+      // L2：分支树「当前」行底改中性灰 .16（暗色分支取值未动）。
       color: isCurrent
           ? (isDark
                 ? CupertinoColors.systemBlue
                       .resolveFrom(context)
                       .withValues(alpha: 0.07)
-                : LightSurfaces.selection)
+                : LightSurfaces.selectedSurface)
           : null,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
@@ -251,11 +252,12 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           vertical: 1.5,
                         ),
                         decoration: BoxDecoration(
+                          // L2：当前分支徽标底改中性灰 .16（字仍 statusBlueText）。
                           color: isDark
                               ? CupertinoColors.systemBlue
                                     .resolveFrom(context)
                                     .withValues(alpha: 0.16)
-                              : LightSurfaces.selection,
+                              : LightSurfaces.selectedSurface,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -411,11 +413,12 @@ class _GitBranchTreeState extends State<GitBranchTree> {
               key: ValueKey('git-branch-switch-${branch.name}'),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               minimumSize: const Size(0, 26),
+              // L2：切换按钮底改中性灰 .16（字仍 #005FB8 = userDetail）。
               color: isDark
                   ? CupertinoColors.systemBlue
                         .resolveFrom(context)
                         .withValues(alpha: 0.12)
-                  : LightSurfaces.selection,
+                  : LightSurfaces.selectedSurface,
               borderRadius: BorderRadius.circular(6),
               onPressed: widget.isActionRunning
                   ? null

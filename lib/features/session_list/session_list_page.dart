@@ -1985,6 +1985,15 @@ class _SessionRowState extends State<_SessionRow> {
     final hasIcons = iconWidgets.isNotEmpty;
 
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    // L2 选中态（2026-09-27 主人拍板，规格见
+    // `sketches/selection-light-mode-proposal.html` §4）：宽屏侧栏紧凑行
+    // 选中底改中性灰 .16、前景（文字与图标）转 #005FB8、当前会话加内描边；
+    // hover 底 .10 为本次新增。**窄屏（!compact）与暗色分支逐字节不变**：
+    // 选中底仍为旧浅蓝 [LightSurfaces.selection] / 暗色 0xFF2C2C2E，
+    // 且 `_hovering` 只在 compact 置位、`isCurrent` 只在 compact 下传。
+    final highlighted = widget.selected || widget.isCurrent;
+    final l2Selection = isLight && widget.compact && highlighted;
+    final l2Current = isLight && widget.compact && widget.isCurrent;
     // #150 档 B（对齐设计稿）：侧栏紧凑模式下，元信息不再另起一行，
     // 只在用户显式开启副标题项时保留第二行；默认右侧显示极简相对时间。
     // 紧凑模式（侧栏）**永远单行**：副标题项不另起一行，而是把「最有信息量的
@@ -2056,7 +2065,14 @@ class _SessionRowState extends State<_SessionRow> {
                             // #161：回到设计稿口径（12.5）。#153 曾把侧栏统一抬到
                             // 15（对齐正文基准），主人实测「比设计稿大一圈」⇒ 回调；
                             // 窄屏分支（下方 17）保持不动。
-                            style: const TextStyle(fontSize: 12.5),
+                            // L2：选中/当前行文字转 #005FB8（其余情形 color 为
+                            // null ⇒ 继承主题 label，与改动前一致）。
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: l2Selection
+                                  ? LightSurfaces.selectionForeground
+                                  : null,
+                            ),
                           ),
                         )
                       else
@@ -2185,16 +2201,22 @@ class _SessionRowState extends State<_SessionRow> {
     // #161：宽屏侧栏「当前正在查看的会话」高亮 —— 底色 + 左侧 2px 蓝条。
     // 窄屏恒为 false（SessionListPage 只在 isCompactSidebar 时下传），
     // 故手机端视觉逐像素不变。
-    final highlighted = widget.selected || widget.isCurrent;
     final highlightBg = highlighted
         ? LightSurfaces.resolve(
             context,
-            LightSurfaces.selection,
+            // L2：侧栏选中底；窄屏保持旧浅蓝（逐像素不变）。
+            widget.compact
+                ? LightSurfaces.selectedSurface
+                : LightSurfaces.selection,
             // 暗色下 selected 原本没有底色（旧实现仅亮色分支有 DecoratedBox）；
             // 这里给暗色补一个对应的深色选中底，使两种模式的高亮一致。
             dark: const Color(0xFF2C2C2E),
           )
-        : (isLight && _pressed ? LightSurfaces.pressed : null);
+        : (isLight && _pressed
+              ? LightSurfaces.pressed
+              // L2（新增）：浅色紧凑行的鼠标悬停底（比选中淡一档、不带色相）。
+              // `_hovering` 仅 compact 的 onEnter 置位 ⇒ 窄屏永不走这里。
+              : (isLight && _hovering ? LightSurfaces.hoverSurface : null));
 
     // 左侧指示条：只在「当前会话」出现（多选高亮不加，避免与勾选框语义重复）。
     final Widget contentWithIndicator = widget.isCurrent && widget.compact
@@ -2234,9 +2256,14 @@ class _SessionRowState extends State<_SessionRow> {
           decoration: ShapeDecoration(
             // highlighted 时两模式都有底色；否则亮色 pressed / 暗色 null（零副作用）。
             color: highlightBg,
-            shape: const RoundedSuperellipseBorder(
+            shape: RoundedSuperellipseBorder(
               // 设计稿 `.sess{border-radius:7px}`（行自身圆角，不含卡片容器）
-              borderRadius: BorderRadius.all(Radius.circular(7)),
+              borderRadius: const BorderRadius.all(Radius.circular(7)),
+              // L2「当前」态内描边（1px，圆角内）。其余情形 `BorderSide.none`
+              // ⇒ 不画任何像素（暗色 / 窄屏 / 非当前行逐像素不变）。
+              side: l2Current
+                  ? const BorderSide(color: LightSurfaces.currentStroke)
+                  : BorderSide.none,
             ),
           ),
           child: contentWithIndicator,
@@ -2248,6 +2275,11 @@ class _SessionRowState extends State<_SessionRow> {
   /// #151：紧凑模式行内「⋯」按钮（悬停时占据右侧槽，与时间同位互换）。
   /// 点它用整行锚点打开操作菜单 —— 与右键、长按同一套动作。
   Widget _buildInlineActionsButton(BuildContext context) {
+    // L2：选中/当前行内的图标同转 #005FB8（仅浅色紧凑行）。
+    final selectedFg =
+        CupertinoTheme.brightnessOf(context) == Brightness.light &&
+        widget.compact &&
+        (widget.selected || widget.isCurrent);
     return AccessibleButton(
       key: ValueKey(
         'session-inline-actions-${widget.session.sessionId ?? widget.session.id}',
@@ -2259,11 +2291,13 @@ class _SessionRowState extends State<_SessionRow> {
       child: Icon(
         CupertinoIcons.ellipsis,
         size: 14,
-        color: LightSurfaces.resolve(
-          context,
-          LightSurfaces.textSecondary,
-          dark: CupertinoColors.systemGrey,
-        ),
+        color: selectedFg
+            ? LightSurfaces.selectionForeground
+            : LightSurfaces.resolve(
+                context,
+                LightSurfaces.textSecondary,
+                dark: CupertinoColors.systemGrey,
+              ),
       ),
     );
   }
@@ -2725,7 +2759,8 @@ class _SheetOptionRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       backgroundColor: LightSurfaces.resolve(
         context,
-        selected ? LightSurfaces.selection : LightSurfaces.card,
+        // L2：筛选弹层的选中行底同步换中性灰 .16（同类选中态全局一致）。
+        selected ? LightSurfaces.selectedSurface : LightSurfaces.card,
         dark: CupertinoColors.secondarySystemGroupedBackground,
       ),
       backgroundColorActivated:
@@ -2783,7 +2818,8 @@ class _SheetCheckboxRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       backgroundColor: LightSurfaces.resolve(
         context,
-        selected ? LightSurfaces.selection : LightSurfaces.card,
+        // L2：筛选弹层的选中行底同步换中性灰 .16（同类选中态全局一致）。
+        selected ? LightSurfaces.selectedSurface : LightSurfaces.card,
         dark: CupertinoColors.secondarySystemGroupedBackground,
       ),
       backgroundColorActivated:
