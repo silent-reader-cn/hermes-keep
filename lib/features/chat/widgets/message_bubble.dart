@@ -11,6 +11,7 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/message_attachment.dart';
 import '../../../core/models/tool_call.dart';
 import '../../../core/utils/injected_message.dart';
+import '../../../core/utils/injection_markers.dart';
 import '../../../core/utils/selected_context.dart';
 import '../../chat/chat_models.dart';
 import 'chat_media_parser.dart';
@@ -226,9 +227,14 @@ class _UserContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = message.content == null ? '' : message.content!.trim();
-    final display = content.isEmpty
+    // 注入标记一律不进用户气泡（第二道防线）：正常路径由装配层的「同源两形态」
+    // 折叠挡掉（见 `dedupeServerUserMessages`），但任何漏折叠的路径也不该把
+    // `[Workspace::v1: …]` / `[Attached files: …]` / 行级 `[screenshot]` 露给用户
+    //（主人现象：同一条消息显示两次，第二条「没做渲染」= 直接显示注入原文）。
+    final sanitized = content.isEmpty ? '' : stripInjectionMarkers(content);
+    final display = sanitized.isEmpty
         ? ''
-        : MessageAttachment.contentWithoutAttachedFilesMarker(content);
+        : MessageAttachment.contentWithoutAttachedFilesMarker(sanitized);
 
     // SelectedContext 解析闭环：行级扫描 marker + label + > 引用，围栏保护
     // 顺序：先解析选中上下文，再对剩余 cleanText 做媒体标记解析

@@ -1639,3 +1639,60 @@ Future<void> resumeCompressionIfRunning();
 
 ### 验收
 `analyze` 零告警；全量 **5100 通过 / 8 skipped**（新增 5 例）。
+
+---
+
+## #172 用户消息显示两次 + 第二条「没做渲染」（done 快照装配路径漏折叠）
+
+**分类**：问题（bug）　**状态**：代码已交付（待主人真机复验）　**发现**：2026-09-27（主人报告）
+
+### 现象（主人原话）
+「消息会显示两次而且第二条没做渲染」——同一条用户消息出现两个气泡：
+第一个正常（正文干净 + 附件缩略图卡），第二个把
+`[Workspace::v1: …]` / `[Attached files: …]` / `[screenshot]` 注入原文裸着显示。
+
+### 取证（三层实证）
+1. **Hermes `state.db` 只有一行**（`messages.id=203663`，`content` 为注入原文形态）
+   ⇒ 不是用户发重、也不是服务端存重。
+2. **webui 把同一行的两个「投影」都发了出来**（`webui_30002/sessions/5052efdc1f11.json`）：
+   - 解析版：`content` 已剥标记 + `attachments` 字段 + `_db_persisted/_row_id/id`
+   - 注入原文版：`[Workspace::v1: …]` 前缀 + 尾部 `[screenshot]`，**只有 role/content/timestamp**
+   - 两者 `timestamp` **完全相同**（`1790481123.4963927`）
+   （webui 自身在 `api/models.py:8043-8057` 记录了同族 bug #5339，说明这是它已知的对齐残留。）
+3. **App 侧失效点**：两条都没有 `message_id`（webui 这两行不带该字段）
+   ⇒ `ChatMessage.messageId` 均为 null ⇒ 按 id 的去重全失效；
+   且用户气泡只调 `contentWithoutAttachedFilesMarker`、**不调 `stripInjectionMarkers`**
+   ⇒ 注入原文原样上屏（即主人说的「没做渲染」）。
+
+### 根因：#171 家族 —— 两条装配路径只修了一条
+本 bug 于 `5b83e5d`（2026-09-06）在 **`diffMergeMessages`** 内修过
+（`_dedupeServerUserMessages`，注释描述与此现象逐字一致）。但仓库有**两条**直吃服务端行的路径：
+
+| 路径 | 场景 | 修复前 |
+|---|---|---|
+| `diffMergeMessages`（`chat_diff_merge.dart`） | `loadMessages` 主路径 | ✅ 已折叠 |
+| `ChatController._mergingLoadedMessages` | **done 帧自带 session 快照的收尾刷新** | ❌ 未折叠 |
+
+主人截图时刻为「回合刚结束」，走的正是第二条 ⇒ 双气泡。
+
+### 修复
+1. `chat_diff_merge.dart`：`_dedupeServerUserMessages` → 公开导出 `dedupeServerUserMessages`
+   （附「两条装配路径必须各自折叠」的注释）。
+2. `chat_controller.dart` → `_mergingLoadedMessages` 入口补折叠（三条 return 全覆盖）。
+3. `message_bubble.dart` → 用户气泡正文先 `stripInjectionMarkers` 再出（第二道防线，
+   任何漏折叠路径也不再把注入原文露给用户）。
+4. 顺带修正本轮新增用例的括号层级（曾误嵌进上一个 test 的 fakeAsync 体内）。
+
+### 守卫与 RED
+- 新增 `chat_controller_test.dart` 用例「#171: done 快照含『同源两形态』user 行 → 只保留一条」，
+  以 `DoneSseEvent(DoneStreamEvent(session: …))` 驱动——**正是主人看到的路径**。
+  RED：注释掉 `loaded = dedupeServerUserMessages(loaded);`
+  → `Expected: length <1> / Actual: has length of <2>` 精确复现双气泡。
+- 既有 `_dedupeServerUserMessages` 的 5 例回归（`5b83e5d`）保持绿。
+
+### 验收
+`analyze` 零告警；全量 **5101 通过 / 8 skipped**（4 文件 +86/−9）。
+
+### 遗留（服务端侧，未动）
+webui 上游「同一行两投影都输出」的行为未修（`api/models.py` 自带 #5339 记载）。
+客户端已挡死；是否去 `D:\hermes-webui` 根治由主人定。

@@ -831,6 +831,66 @@ void main() {
         );
       });
     });
+
+    test('#171: done 快照含「同源两形态」user 行 → 只保留一条（不再双气泡）', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // webui 上游对同一条 user 消息落两条：解析版（带 attachments）+
+        // 注入原文版（同 timestamp、无 id），见 `dedupeServerUserMessages` 注释。
+        const marker = '#171双气泡探针标记文本';
+        const attPath =
+            r'C:\Users\Admin\AppData\Local\hermes\webui_30002\attachments\x1\shot.jpg';
+        const ts = 1790481123.4963927;
+        api.emit(
+          const DoneSseEvent(
+            DoneStreamEvent(
+              session: {
+                'session_id': 's1',
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': '$marker\n\n[Attached files: $attPath]',
+                    'timestamp': ts,
+                    'attachments': ['shot.jpg'],
+                  },
+                  {
+                    'role': 'user',
+                    'content':
+                        '[Workspace::v1: D:\\projects\\hermes-ui]\n$marker\n\n'
+                        '[Attached files: $attPath]\n[screenshot]',
+                    'timestamp': ts,
+                  },
+                  {
+                    'role': 'assistant',
+                    'content': 'answer',
+                    'timestamp': 1790481130.0,
+                  },
+                ],
+              },
+            ),
+          ),
+        );
+        async.flushMicrotasks();
+
+        final state = container.read(chatControllerProvider(''));
+        final userRows = state.messages
+            .where(
+              (m) => m.role == 'user' && (m.content ?? '').contains(marker),
+            )
+            .toList();
+        expect(userRows, hasLength(1), reason: '同一条消息的两个投影必须折叠为一条，否则用户气泡显示两次');
+        expect(
+          userRows.first.content,
+          isNot(contains('[Workspace::v1')),
+          reason: '保留下来的那条不得是注入原文形态',
+        );
+      });
+    });
   });
 
   group('同回合连续工具调用合并-Hermes 真实形状（role=tool 结果+空文本 assistant 交替）', () {

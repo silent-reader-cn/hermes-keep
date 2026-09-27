@@ -776,7 +776,6 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _compressPollInFlight = false;
   }
 
-
   /// 从此处截断：保留 [messageIndex] 及其之前的全部消息，删除其后所有。
   ///
   /// [includeTarget] 为 true 时（默认）keep_count = index + 1（含自己保留）；
@@ -3247,6 +3246,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     List<ChatMessage> current,
     String? streamingMessageId,
   ) {
+    // 服务端行先折叠「同源两形态」：webui 对同一条 user 消息会落两条（解析版 +
+    // 注入原文版，timestamp 完全相同，见 `dedupeServerUserMessages` 注释）。
+    // 本路径直吃 **done 帧自带的 session 快照**，不经过 `diffMergeMessages` ——
+    // 那条路径已折叠，这条原先没有，于是回合完成瞬间会冒出第二个「裸标记」气泡
+    //（主人现象：消息显示两次、第二条没做渲染）。三条 return 都基于 loaded，
+    // 故在入口折叠一次即可全覆盖。
+    loaded = dedupeServerUserMessages(loaded);
     if (loaded.isEmpty) return List<ChatMessage>.from(current);
     if (current.isEmpty) return loaded;
     final result = List<ChatMessage>.from(loaded);
@@ -4068,7 +4074,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     final streamId = state.stream.activeStreamId!;
     _malformedDoneStreak++;
-    final breaker = _malformedDoneStreak >
+    final breaker =
+        _malformedDoneStreak >
         _watchdogConfig.effectiveMaxMalformedDoneSettleAttempts;
     DiagnosticsService.instance.log(
       level: breaker ? DiagnosticsLogLevel.error : DiagnosticsLogLevel.warn,
@@ -4153,8 +4160,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         .difference(serverAssistantIdsBefore)
         .isNotEmpty;
     final effectiveNotice =
-        notice ??
-        (transcriptAdvanced ? null : '收尾数据不完整，已按当前记录收尾。');
+        notice ?? (transcriptAdvanced ? null : '收尾数据不完整，已按当前记录收尾。');
     if (effectiveNotice != null) {
       state = state.copyWith(sendErrorMessage: effectiveNotice);
     }

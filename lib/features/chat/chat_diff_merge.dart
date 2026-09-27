@@ -17,13 +17,13 @@ List<ChatMessage> diffMergeMessages({
   String? liveStreamingMessageId,
 }) {
   if (localMessages.isEmpty) {
-    return _dedupeServerUserMessages(serverMessages);
+    return dedupeServerUserMessages(serverMessages);
   }
   if (serverMessages.isEmpty) {
     return List<ChatMessage>.of(localMessages);
   }
 
-  serverMessages = _dedupeServerUserMessages(serverMessages);
+  serverMessages = dedupeServerUserMessages(serverMessages);
 
   final matchedLocalIndices = <int>{};
   final serverToLocal = <int, int>{};
@@ -143,7 +143,12 @@ List<ChatMessage> diffMergeMessages({
 ///
 /// 去重规则：相邻 user 行若 timestamp 相同（±0.5s 容差）且归一化内容
 /// 相等，仅保留一条——优先保留带权威 id 的解析版。
-List<ChatMessage> _dedupeServerUserMessages(List<ChatMessage> serverMessages) {
+///
+/// **公开导出**：本仓库有**两条**服务端消息装配路径 ——
+/// ① `diffMergeMessages`（loadMessages 主路径，本文件内已调用）；
+/// ② `ChatController._mergingLoadedMessages`（done 帧自带 session 快照的收尾刷新）。
+/// 两者都直吃服务端行，必须各自折叠一次；只修一条 = 另一条继续双气泡（#171 家族）。
+List<ChatMessage> dedupeServerUserMessages(List<ChatMessage> serverMessages) {
   bool hasAuthoritativeId(ChatMessage m) {
     final id = m.messageId;
     return id != null && id.isNotEmpty && !_isTempId(id);
