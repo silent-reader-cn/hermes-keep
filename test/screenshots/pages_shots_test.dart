@@ -11,6 +11,7 @@ import 'package:hermes_ui/app/locale/locale_resolver.dart';
 import 'package:hermes_ui/app/shell/adaptive_shell.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
+import 'package:hermes_ui/app/theme/ui_scale_provider.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/connection_store.dart';
@@ -1563,9 +1564,19 @@ void main() {
             (_) => demoSessionListApi(),
           ),
           ...demoWorkspaceOverrides,
+          // HiDPI 工装：用环境变量 UI_SCALE=x125|x150|x2 钉住缩放档位（默认 100%），
+          // 使同一套工装能出任意档位的真实渲染图；不传则与既有出图逐像素一致。
+          uiScaleProvider.overrideWith(() => _EnvUiScale(_envUiScale)),
           ...overrides,
         ],
         child: CupertinoApp.router(
+          // HiDPI 工装：工装自建 app（绕过 HermesApp），故缩放要在**这里**接一次；
+          // 与产品代码 app.dart 的接线语义相同（同一份 applyUiScale）。
+          builder: (context, child) => applyUiScale(
+            context,
+            child ?? const SizedBox.shrink(),
+            _envUiScale,
+          ),
           routerConfig: router,
           debugShowCheckedModeBanner: false,
           theme: buildCupertinoTheme(brightness),
@@ -2089,3 +2100,22 @@ class _DemoUpdateChecker extends UpdateCheckerService {
 
 /// 产物根目录（相对本文件：test/screenshots/ → 仓库根 .shots）。
 const String _shotRoot = '../../.shots';
+
+/// 工装环境变量：UI_SCALE=x125 / x150 / x2（缺省或非法 => 100%）。
+AppUiScale get _envUiScale {
+  final raw = Platform.environment['UI_SCALE'];
+  for (final scale in AppUiScale.values) {
+    if (scale.name == raw) return scale;
+  }
+  return AppUiScale.x1;
+}
+
+/// 把缩放档位钉到环境变量（不读 prefs、不持久化）——仅供出图工装使用。
+class _EnvUiScale extends UiScaleController {
+  _EnvUiScale(this.scale);
+
+  final AppUiScale scale;
+
+  @override
+  AppUiScale build() => scale;
+}

@@ -16,6 +16,7 @@ import 'locale/locale_provider.dart';
 import 'router.dart';
 import 'theme/cupertino_theme.dart';
 import 'theme/theme_provider.dart';
+import 'theme/ui_scale_provider.dart';
 import 'widgets/focus_gated_ticker_mode.dart';
 
 /// 根 Widget（app_shell_spec.md §2.2）。
@@ -37,6 +38,8 @@ class HermesApp extends ConsumerWidget {
     final forceHighContrast = ref
         .watch(accessibilitySettingsProvider)
         .forceHighContrast;
+    // HiDPI 界面缩放档位（默认 100% = 逐像素现状）。
+    final uiScale = ref.watch(uiScaleProvider);
     final brightness = switch (themeMode) {
       AppThemeMode.light => Brightness.light,
       AppThemeMode.dark => Brightness.dark,
@@ -59,12 +62,19 @@ class HermesApp extends ConsumerWidget {
           // 开启时把 highContrast 强制为 true，令全部 Cupertino 动态色切到更强变体。
           builder: (context, child) {
             final content = child ?? const SizedBox.shrink();
+            // ── HiDPI 界面缩放（主人 2026-09-27 需求）────────────────────────
+            // 把「逻辑视口」按档位缩小 ⇒ 组件/字号/间距**等比放大**，效果即 UI 缩放。
+            // 覆写的是应用层 MediaQuery，不动平台真实 dpr（渲染精度不变）。
+            // **必须在所有 MediaQuery 读取之上**：各页 `isWideLayout` 走 sizeOf，
+            // 此处的 size 就是它们看到的宽度 ⇒ A 方案（缩放后参与宽窄屏判定）自动生效。
+            // 100% 档**不新建 MediaQuery**（与改造前逐像素一致）。
+            final scaled = applyUiScale(context, content, uiScale);
             final themed = forceHighContrast
                 ? MediaQuery(
                     data: MediaQuery.of(context).copyWith(highContrast: true),
-                    child: content,
+                    child: scaled,
                   )
-                : content;
+                : scaled;
             // 窗口失焦时静音整棵子树的动画 ticker；见 FocusGatedTickerMode。
             return FocusGatedTickerMode(child: themed);
           },

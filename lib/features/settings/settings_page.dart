@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/locale/locale_provider.dart';
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
+import '../../app/theme/ui_scale_provider.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/theme_provider.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
@@ -273,6 +274,7 @@ class _AppearanceSection extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final mode = ref.watch(themeModeProvider);
     final localeMode = ref.watch(localeModeProvider);
+    final uiScale = ref.watch(uiScaleProvider);
 
     // #159：显式值（null = 自动）。
 
@@ -306,6 +308,35 @@ class _AppearanceSection extends ConsumerWidget {
                       AppThemeMode.system: Text(l10n.themeSystem),
                       AppThemeMode.light: Text(l10n.themeLight),
                       AppThemeMode.dark: Text(l10n.themeDark),
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // HiDPI 界面缩放（主人 2026-09-27）：100% / 125% / 150% / 200%。
+          // 150% 以上会把逻辑宽压到 900 以下 ⇒ 按 A 方案自动转窄屏单栏。
+          CupertinoListTile(
+            title: Text(l10n.settingsUiScale),
+            subtitle: Text(l10n.settingsUiScaleDesc),
+            trailing: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SettingsSurfaces.segmented(
+                  context,
+                  CupertinoSlidingSegmentedControl<AppUiScale>(
+                    groupValue: uiScale,
+                    onValueChanged: (value) {
+                      if (value != null) {
+                        unawaited(
+                          ref.read(uiScaleProvider.notifier).setScale(value),
+                        );
+                      }
+                    },
+                    children: {
+                      for (final scale in AppUiScale.values)
+                        scale: Text(scale.label),
                     },
                   ),
                 ),

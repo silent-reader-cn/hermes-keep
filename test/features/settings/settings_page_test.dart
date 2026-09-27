@@ -919,6 +919,9 @@ void main() {
       );
       await pumpPage(tester, container);
 
+      // HiDPI（#164）：新增「界面缩放」项让设置页变长，「服务器」分区下移出视口 =>
+      // tap 前先滚到目标（否则 hitTest 打空，断言以「状态没变」这种迷惑方式失败）。
+      await tester.ensureVisible(find.byKey(const ValueKey('server-edit-c1')));
       await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
       await tester.pumpAndSettle();
 
@@ -977,6 +980,9 @@ void main() {
       );
       await pumpPage(tester, container);
 
+      // HiDPI（#164）：新增「界面缩放」项让设置页变长，「服务器」分区下移出视口 =>
+      // tap 前先滚到目标（否则 hitTest 打空，断言以「状态没变」这种迷惑方式失败）。
+      await tester.ensureVisible(find.byKey(const ValueKey('server-edit-c1')));
       await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
       await tester.pumpAndSettle();
 
@@ -1028,6 +1034,9 @@ void main() {
       );
       await pumpPage(tester, container);
 
+      // HiDPI（#164）：新增「界面缩放」项让设置页变长，「服务器」分区下移出视口 =>
+      // tap 前先滚到目标（否则 hitTest 打空，断言以「状态没变」这种迷惑方式失败）。
+      await tester.ensureVisible(find.byKey(const ValueKey('server-edit-c1')));
       await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
       await tester.pumpAndSettle();
 
@@ -1487,7 +1496,10 @@ void main() {
           await tester.pump(const Duration(milliseconds: 50));
 
           // 打开服务器编辑页
-          await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
+          // HiDPI（#164）：新增「界面缩放」项让设置页变长，「服务器」分区下移出视口 =>
+      // tap 前先滚到目标（否则 hitTest 打空，断言以「状态没变」这种迷惑方式失败）。
+      await tester.ensureVisible(find.byKey(const ValueKey('server-edit-c1')));
+      await tester.tap(find.byKey(const ValueKey('server-edit-c1')));
           await tester.pumpAndSettle();
 
           final navBarFinder = find.byType(CupertinoNavigationBar);

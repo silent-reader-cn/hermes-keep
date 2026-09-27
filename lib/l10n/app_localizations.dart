@@ -1675,6 +1675,11 @@ class AppLocalizations {
   // ---------------------------------------------------------------------------
   // Language Settings (多语言设置)
   // ---------------------------------------------------------------------------
+  // HiDPI 界面缩放（主人 2026-09-27 需求）。档位文案是数字百分比，中英一致。
+  String get settingsUiScale => isEnglish ? 'UI Scale' : '界面缩放';
+  String get settingsUiScaleDesc =>
+      isEnglish ? 'Scales the whole interface; higher values may switch to single-column' : '整体缩放界面；档位越高越可能转为单栏';
+
   String get languageSectionTitle => isEnglish ? 'Language' : '语言';
   String get languageAuto => isEnglish ? 'Auto' : '自动';
   String get languageZh => '中文';

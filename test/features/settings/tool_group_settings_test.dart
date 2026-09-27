@@ -318,6 +318,13 @@ void main() {
       );
       addTearDown(container.dispose);
 
+      // HiDPI（#164）：设置页新增「界面缩放」项后整体变长，默认 800x600 视口下
+      // 「对话」分区的开关会被推到视口外 => tap 打空（hitTest 只有 render view）、
+      // 断言以「开关状态没变」这种迷惑方式失败。这里给一个**高视口**让内容整体可见，
+      // 比依赖 ensureVisible 更稳、也与布局细节解耦（宽度仍 800 => 仍是窄屏，语义不变）。
+      tester.view.physicalSize = const Size(800, 2600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -347,6 +354,9 @@ void main() {
       expect(tester.widget<CupertinoSwitch>(switchFinder).value, isFalse);
 
       // 点击切换为开启
+      // HiDPI（#164）：新增「界面缩放」项让设置页变长，目标控件可能滚出视口 =>
+      // tap 前先滚到它（否则 hitTest 打空，开关状态不变导致断言失败）。
+      await tester.ensureVisible(switchFinder);
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
@@ -355,6 +365,9 @@ void main() {
       expect(prefs.getBool(kToolGroupCoalesceKey), isTrue);
 
       // 再次点击恢复关闭
+      // HiDPI（#164）：新增「界面缩放」项让设置页变长，目标控件可能滚出视口 =>
+      // tap 前先滚到它（否则 hitTest 打空，开关状态不变导致断言失败）。
+      await tester.ensureVisible(switchFinder);
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
@@ -403,6 +416,9 @@ void main() {
       expect(tester.widget<CupertinoSwitch>(switchFinder).value, isTrue);
 
       // 点击切换为关闭
+      // HiDPI（#164）：新增「界面缩放」项让设置页变长，目标控件可能滚出视口 =>
+      // tap 前先滚到它（否则 hitTest 打空，开关状态不变导致断言失败）。
+      await tester.ensureVisible(switchFinder);
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
@@ -411,6 +427,9 @@ void main() {
       expect(prefs.getBool(kTurnCollapseKey), isFalse);
 
       // 再次点击恢复开启
+      // HiDPI（#164）：新增「界面缩放」项让设置页变长，目标控件可能滚出视口 =>
+      // tap 前先滚到它（否则 hitTest 打空，开关状态不变导致断言失败）。
+      await tester.ensureVisible(switchFinder);
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
