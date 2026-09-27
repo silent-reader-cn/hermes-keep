@@ -8,6 +8,7 @@ import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
+import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/cron.dart';
@@ -512,9 +513,121 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   Future<void> _onRefresh() =>
       ref.read(tasksControllerProvider.notifier).refresh();
 
+  /// 新建 / 编辑定时任务。
+  ///
+  /// - **窄屏（<900）逐像素不变**：仍 push 整页 [TasksEditPage]（`HermesPageRoute`）；
+  /// - **宽屏（>=900）**：改弹 560 居中卡片（`HermesDialogKind.form`）——
+  ///   批 5A · D1「表单 560」+ D2「左 label 88 / 右控件横排」样板。
+  ///   改造前宽屏把表单拉成 1248 宽的整页横幅、label 压在控件上方占两行高，
+  ///   一次性输入却要跨屏扫视（对照图见 `.shots/dialogs/{before,after}/`）。
   void _openEditor(BuildContext context, {CronJob? job}) {
-    Navigator.of(context)
-        .push(HermesPageRoute<void>(builder: (_) => TasksEditPage(job: job)));
+    if (!isWideLayout(context)) {
+      Navigator.of(context).push(
+        HermesPageRoute<void>(builder: (_) => TasksEditPage(job: job)),
+      );
+      return;
+    }
+    unawaited(_showEditorDialog(context, job));
+  }
+
+  /// 宽屏任务表单弹窗（560 卡片）：字段组与窄屏整页共用 [_TaskFormFields]，
+  /// 差别只有「卡片底栏的取消 / 保存」和「横排 vs 竖排」。
+  ///
+  /// 状态都活在本方法作用域里：输入控件的值在 controller，保存钮的可用态靠
+  /// [showHermesDialog] 的 `rebuildOn`（[ValueNotifier]）驱动卡片重建 ——
+  /// 窄屏整页那条路径仍用 `setState` + 导航栏保存钮，两者互不影响。
+  Future<void> _showEditorDialog(BuildContext context, CronJob? job) async {
+    final l10n = AppLocalizations.of(context);
+    final isEdit = job != null;
+    final nameController = TextEditingController(text: job?.name ?? '');
+    final scheduleController = TextEditingController(
+      text: job?.editableScheduleText ?? '',
+    );
+    final promptController = TextEditingController(text: job?.prompt ?? '');
+    var toastNotifications = job?.toastNotifications ?? true;
+    var saving = false;
+    // 卡片重建信号：输入变化 / 开关 / 保存中都要重算底栏可用态。
+    final changes = ValueNotifier<int>(0);
+
+    bool canSave() =>
+        !saving &&
+        scheduleController.text.trim().isNotEmpty &&
+        promptController.text.trim().isNotEmpty;
+
+    Future<void> runSave(BuildContext dialogContext) async {
+      saving = true;
+      changes.value++;
+      final controller = ref.read(tasksControllerProvider.notifier);
+      final ok = isEdit
+          ? await controller.save(
+              job,
+              name: nameController.text,
+              schedule: scheduleController.text.trim(),
+              prompt: promptController.text.trim(),
+              toastNotifications: toastNotifications,
+            )
+          : await controller.create(
+              name: nameController.text,
+              schedule: scheduleController.text.trim(),
+              prompt: promptController.text.trim(),
+              toastNotifications: toastNotifications,
+            );
+      if (ok) {
+        if (dialogContext.mounted) {
+          Navigator.of(dialogContext).pop();
+        }
+        // 弹窗已关，作用域即将 dispose —— 不再触碰 [changes]。
+        return;
+      }
+      saving = false;
+      changes.value++;
+    }
+
+    try {
+      await showHermesDialog<void>(
+        context,
+        kind: HermesDialogKind.form,
+        rebuildOn: changes,
+        title: (_) => Text(isEdit ? l10n.editTask : l10n.newTask),
+        // 左右/下内边距由卡片自身给（20 = Cupertino `_kDialogEdgePadding`），
+        // 这里只补标题与首个字段之间的 14 —— 再叠一层 20 会让字段缩到 378 宽、
+        // 与 D2 稿面（560 − 2×18 − 88 − 12 ≈ 424）差出一档。
+        content: (_) => Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: _TaskFormFields(
+            nameController: nameController,
+            scheduleController: scheduleController,
+            promptController: promptController,
+            toastNotifications: toastNotifications,
+            onChanged: () => changes.value++,
+            onToastChanged: (value) {
+              toastNotifications = value;
+              changes.value++;
+            },
+          ),
+        ),
+        actions: [
+          HermesDialogAction(
+            key: const ValueKey('tasks-form-cancel'),
+            builder: (_) => Text(l10n.cancel),
+            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
+          ),
+          HermesDialogAction(
+            key: const ValueKey('tasks-form-save'),
+            isDefaultAction: true,
+            builder: (_) => Text(isEdit ? l10n.save : l10n.create),
+            // 可用态每次卡片重建时求值（`rebuildOn: changes` 驱动）。
+            enabled: canSave,
+            onPressed: (dialogContext) => unawaited(runSave(dialogContext)),
+          ),
+        ],
+      );
+    } finally {
+      nameController.dispose();
+      scheduleController.dispose();
+      promptController.dispose();
+      changes.dispose();
+    }
   }
 
   void _showRowActions(BuildContext context, CronJob job, GlobalKey anchorKey) {
@@ -1330,39 +1443,18 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildField(
-            label: l10n.taskName,
-            fieldKey: const ValueKey('tasks-form-name'),
-            controller: _nameController,
-            placeholder: l10n.taskNamePlaceholder,
-          ),
-          const SizedBox(height: 16),
-          _buildField(
-            label: l10n.scheduleExpression,
-            fieldKey: const ValueKey('tasks-form-schedule'),
-            controller: _scheduleController,
-            placeholder: l10n.schedulePlaceholder,
-          ),
-          const SizedBox(height: 16),
-          _buildField(
-            label: l10n.promptLabel,
-            fieldKey: const ValueKey('tasks-form-prompt'),
-            controller: _promptController,
-            placeholder: l10n.promptPlaceholder,
-            maxLines: 6,
-          ),
-          const SizedBox(height: 16),
-          CupertinoListTile(
-            title: Text(l10n.pushNotifications),
-            trailing: SettingsSurfaces.toggle(
-              context,
-              CupertinoSwitch(
-                key: const ValueKey('tasks-form-toast'),
-                value: _toastNotifications,
-                onChanged: (value) =>
-                    setState(() => _toastNotifications = value),
-              ),
-            ),
+          // 字段组与宽屏弹窗（`_showEditorDialog`）**共用同一份定义** ——
+          // 批 5A · D2 的复用件，避免两处字段漂移。窄屏下每一行仍是
+          // 「label 上 / 控件下」竖排（`HermesFormRow` 的窄屏分支），
+          // 与改造前逐像素相同。
+          _TaskFormFields(
+            nameController: _nameController,
+            scheduleController: _scheduleController,
+            promptController: _promptController,
+            toastNotifications: _toastNotifications,
+            onChanged: () => setState(() {}),
+            onToastChanged: (value) =>
+                setState(() => _toastNotifications = value),
           ),
         ],
       ),
@@ -1381,56 +1473,6 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
             ),
           )
         : content;
-  }
-
-  Widget _buildField({
-    required String label,
-    required Key fieldKey,
-    required TextEditingController controller,
-    required String placeholder,
-    int maxLines = 1,
-  }) {
-    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: LightSurfaces.resolve(
-              context,
-              LightSurfaces.textSecondary,
-              dark: secondaryText,
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        CupertinoTextField(
-          key: fieldKey,
-          controller: controller,
-          placeholder: placeholder,
-          maxLines: maxLines,
-          decoration: isLight
-              ? BoxDecoration(
-                  color: LightSurfaces.card,
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(
-                    color: LightSurfaces.cardBorder,
-                    width: 0.5,
-                  ),
-                )
-              : const CupertinoTextField().decoration,
-          placeholderStyle: isLight
-              ? const TextStyle(
-                  fontWeight: FontWeight.w400,
-                  color: LightSurfaces.placeholder,
-                )
-              : const CupertinoTextField().placeholderStyle,
-          onChanged: (_) => setState(() {}),
-        ),
-      ],
-    );
   }
 
   Future<void> _save(BuildContext context) async {
@@ -1456,5 +1498,155 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
     if (ok) {
       Navigator.maybePop(context);
     }
+  }
+}
+
+/// 新建 / 编辑定时任务的字段组 —— **窄屏整页与宽屏弹窗共用同一份定义**（批 5A · D2）。
+///
+/// 每行都走 [HermesFormRow]：窄屏「label 上 / 控件下」竖排（与改造前逐像素
+/// 相同），宽屏「左 label 88 / 右控件」横排。
+///
+/// [onChanged] / [onToastChanged] 只上报「有变化」，怎么消费由宿主决定
+/// （窄屏整页 `setState`；宽屏弹窗弹卡片重建）。
+class _TaskFormFields extends StatelessWidget {
+  const _TaskFormFields({
+    required this.nameController,
+    required this.scheduleController,
+    required this.promptController,
+    required this.toastNotifications,
+    required this.onChanged,
+    required this.onToastChanged,
+  });
+
+  final TextEditingController nameController;
+  final TextEditingController scheduleController;
+  final TextEditingController promptController;
+  final bool toastNotifications;
+  final VoidCallback onChanged;
+  final ValueChanged<bool> onToastChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    // 表单正文一律**左对齐**：宽屏卡片把 content 包在
+    // `DefaultTextStyle(textAlign: center)`（与 `CupertinoAlertDialog` 的正文
+    // 同款）里，直接沿用会让「名称 / 调度表达式 / 提示词」在 88 槽内各自居中、
+    // 排成一列锯齿。窄屏整页的环境值本来就是 start，故这层 merge 在窄屏是
+    // **恒等变换**，不改任何像素。
+    return DefaultTextStyle.merge(
+      textAlign: TextAlign.start,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _TaskFormField(
+            label: l10n.taskName,
+            fieldKey: const ValueKey('tasks-form-name'),
+            controller: nameController,
+            placeholder: l10n.taskNamePlaceholder,
+            onChanged: onChanged,
+          ),
+          const SizedBox(height: 16),
+          _TaskFormField(
+            label: l10n.scheduleExpression,
+            fieldKey: const ValueKey('tasks-form-schedule'),
+            controller: scheduleController,
+            placeholder: l10n.schedulePlaceholder,
+            onChanged: onChanged,
+          ),
+          const SizedBox(height: 16),
+          _TaskFormField(
+            label: l10n.promptLabel,
+            fieldKey: const ValueKey('tasks-form-prompt'),
+            controller: promptController,
+            placeholder: l10n.promptPlaceholder,
+            // 6 行文本域的宽屏 label 取顶对齐：居中会飘到文本域的正中间。
+            labelAlignment: CrossAxisAlignment.start,
+            maxLines: 6,
+            onChanged: onChanged,
+          ),
+          const SizedBox(height: 16),
+          CupertinoListTile(
+            title: Text(l10n.pushNotifications),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('tasks-form-toast'),
+                value: toastNotifications,
+                onChanged: onToastChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 单个字段行：label 件 + 带边框输入框，排布全部交给 [HermesFormRow]。
+class _TaskFormField extends StatelessWidget {
+  const _TaskFormField({
+    required this.label,
+    required this.fieldKey,
+    required this.controller,
+    required this.placeholder,
+    required this.onChanged,
+    this.labelAlignment = CrossAxisAlignment.center,
+    this.maxLines = 1,
+  });
+
+  final String label;
+  final Key fieldKey;
+  final TextEditingController controller;
+  final String placeholder;
+  final VoidCallback onChanged;
+
+  /// 宽屏横排时 label 的竖直对齐（见 [HermesFormRow.alignment]）。
+  final CrossAxisAlignment labelAlignment;
+
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    return HermesFormRow(
+      alignment: labelAlignment,
+      // label 件的字号 / 颜色**逐字保留改造前原值**：窄屏逐像素不变由
+      // 「`HermesFormRow` 不重新解释 label 样式」这条结构性约定保证。
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          color: LightSurfaces.resolve(
+            context,
+            LightSurfaces.textSecondary,
+            dark: secondaryText,
+          ),
+        ),
+      ),
+      child: CupertinoTextField(
+        key: fieldKey,
+        controller: controller,
+        placeholder: placeholder,
+        maxLines: maxLines,
+        decoration: isLight
+            ? BoxDecoration(
+                color: LightSurfaces.card,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: LightSurfaces.cardBorder,
+                  width: 0.5,
+                ),
+              )
+            : const CupertinoTextField().decoration,
+        placeholderStyle: isLight
+            ? const TextStyle(
+                fontWeight: FontWeight.w400,
+                color: LightSurfaces.placeholder,
+              )
+            : const CupertinoTextField().placeholderStyle,
+        onChanged: (_) => onChanged(),
+      ),
+    );
   }
 }
