@@ -2167,3 +2167,21 @@ RED 校验 2 组（窄屏不变 / hover 只宽屏，均精确命中）；像素�
 ② 左栏级别中文名与「时间范围」组标题就地写死（l10n 无键 + 本批禁改 `lib/l10n/**`，代码有 TODO，i18n 补齐列下一批）。
 
 **剩余工作**：技术债（`kWideNavRailWidth` 搬 `layout_tokens`）-> 批次 5（D1-D4 弹窗与菜单，**必须最后做**：它要改各页弹窗/菜单调用点）。
+
+
+### 批次 5（弹窗与菜单）基础设施已交付（`9168c52` / `3da4fe9`，合并态主仓全量 **5280 通过 / 92 skipped / 0 失败**）
+
+**5A（D1+D2）**：新增 `lib/app/widgets/hermes_dialog.dart`（自定义 dialog route + 四档宽 380/460/560/760 + `HermesFormRow` 左 label 88 / 右控件）；两个样板落地（下载确认框 270->380；定时任务表单 整页->560 卡片 + 字段横排，Leader 像素交叉验证卡片宽 = 923-363 = 560）。
+- **实测 Flutter 事实**：`CupertinoAlertDialog` 宽度是内部写死的 `SizedBox(width:270)`（**不是约束**，外面套 380 仍是 270）；`CupertinoDialogAction` 是**纯表现件**（`onPressed` 只由 alert 自身手势层回调，无手势识别器）=> 宽屏必须自绘卡片 + 自绘按钮。
+- 行为变化待主人确认：定时任务在**宽屏**由「整页 push `TasksEditPage`」改为「560 卡片弹窗」（窄屏仍 push 整页，逐像素不变）。
+
+**5B（D3+D4）**：密排（行高 44->30、宽 <=260、分组线、图标）+ **快捷键列（本批唯一新增功能；提交信息里单列了可单独回退的符号清单）** + 三入口（右键 / 悬停 ⋯ / 键盘 Shift+F10·Menu + 焦点行 2px 圆角环）。
+- 两条实测踩坑：悬停判定不能用 `FocusableActionDetector.onShowHoverHighlight`（被 traditional 模式门控，鼠标移动会把 highlightMode 打回 touch）；快捷键不能用 `Focus`/`Shortcuts`（菜单弹出时焦点在输入框 => 要么抢焦点要么全哑）=> 改 `HardwareKeyboard` 全局 handler（命中即吃、菜单关掉即摘）。
+- 窄屏不变量：同工装出图 **md5 完全一致**（`8953575e…`，32782 B）。
+
+**事故（已核实零损失，如实归档）**：两条 worktree 各自用 `git stash` 做基线出图，而 **`refs/stash` 跨 worktree 共享** => 互相 pop 掉对方改动（A 的 pop 吞了 B 的 stash）。双方从 dangling stash commit（`7f8fd4b` / `d9f1336`）逐字节恢复并验证等价；备份留在 `D:/tmp/b5a-stash-spill/`、`D:/tmp/b5b-incident/`。**根因是任务书没写「worktree 内禁用 git stash」**（Leader 自身的疏漏），已补进 skill。
+
+**剩余（三件）**：
+1. **C 步**：D1 的调用点全量迁移（`showCupertinoDialog` **78 处 / 27 文件**，其中 43 处弹 `CupertinoAlertDialog`）—— 已按文件分布算好 **4 片可并行**（settings 系 17 / session+chat 系 26 / 任务工作区看板系 24 / 下载与更新系 10）。
+2. **测试稳定性**：`download_controller_test` 的「#69 total 未知(-1)时进度仍回传 receivedBytes」**单跑 5 次绿 4 红 1** => 仓库既有 flaky（约 20% 假红），今天已污染三次判断，单独收一笔。
+3. **主人待裁量**：诊断页详情展开时日志表让位 / 左栏级别中文名与「时间范围」组标题写死（l10n 补下一批）/ 定时任务宽屏改弹窗的取舍 / D3 快捷键列是否保留。
