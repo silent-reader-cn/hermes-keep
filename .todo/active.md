@@ -2150,3 +2150,20 @@ RED 校验 2 组（窄屏不变 / hover 只宽屏，均精确命中）；像素�
 **技术债（下一笔单独处理，不混入这两笔）**：批 2/3 因基线早于批 1，用局部常量顶替（3 处 `TODO(批 1)`：memory_page / settings_page / wide_nav_rail）。
 **两个陷阱**：`layout_tokens` 的 `kReadingMaxWidth=760` 与设置页 744 / 记忆页 720 **不是同值**；批 2/3 用 `Center` 而 `ReadingWidthBox` 用 `Align(topCenter)` => **垂直对齐不等价**（内容矮时会变）。
 处理原则：只做**无行为变化**的部分（`kWideNavRailWidth` 搬进 tokens）；替换容器前先做行为（像素）对比。
+
+
+### 批次 4（五页宽屏双栏）已交付（`fa7b271`，合并态主仓全量 **5244 通过 / 81 skipped / 0 失败**）
+
+三路并行（4A 技能+任务 / 4B 工作区+Git / 4C 诊断），文件级零重叠。唯一共享文件 `test/screenshots/pages_shots_test.dart`（三路都往头注加补充图清单）产生 **1 处注释冲突**，Leader 手工合并三方信息（4C apply 时又撞同一处，同样处理）。
+
+**4A（P2/P4）**：技能 = 左 320 列表 + 右详情 `ReadingWidthBox(744)` 居中（窄屏手风琴原样）；任务 = 左 360 + 右「任务输出」常驻（宽屏撤 sheet，`_TaskOutputSheet` 保留供窄屏；抽 `_TaskOutputBody` 与 sheet 共用正文）。守卫 19 例；窄屏 16 张逐像素全绿。
+**4B（P3/P9）**：工作区 = 左 340 文件树 + 右 `Expanded` 铺满 + 横滚；Git = 左 380 变更（四段全留）+ 右 diff 铺满。**抽出 `gitDiffSurface()/gitDiffText()` 让宽窄共用**（暗色 resolve 修复单源化）。**窄屏金照不加 `--update-goldens` 直接通过**。宿主选型踩坑：`SliverFillRemaining` 两变体皆不可用（intrinsic 抛异常 / scrollExtent 虚高）-> 改 `SliverLayoutBuilder + remainingPaintExtent`。
+**4C（P10）**：左 220 筛选导航（全部 + V/D/I/W/E，**级别色 + 计数全保留**、时间范围同列在下）+ 右栏五类元素**一律原地** + 日志表铺满 + 详情右栏内展开（窄屏仍走整页 sheet）。级别颜色经**真渲染像素采样**核对（浅/暗两套值与窄屏 chips 基线逐值相同）。改钉 3 条**均重写而非删除**且都补了窄屏段 => 窄屏覆盖不减反增。
+
+**并发 flaky 的最终反证**：三路各自跑全量时各出现 1-2 例 native 假失败（`file_preview_body_extra_test` 的 PDF/视频分支），**合并态跑全量时全部消失**（5244 全绿）=> 确属并发争用。判据三分类（坏环境 / 并发干扰 / 改钉 vs 回归）已回写 skill。
+
+**待主人裁量（已给推荐）**：
+① 诊断页详情展开时日志表让位（740pt 右栏内「日志表铺满」与「详情同屏」不可兼得，取规格明文的铺满）；
+② 左栏级别中文名与「时间范围」组标题就地写死（l10n 无键 + 本批禁改 `lib/l10n/**`，代码有 TODO，i18n 补齐列下一批）。
+
+**剩余工作**：技术债（`kWideNavRailWidth` 搬 `layout_tokens`）-> 批次 5（D1-D4 弹窗与菜单，**必须最后做**：它要改各页弹窗/菜单调用点）。
