@@ -168,6 +168,25 @@ ShapeDecoration _rowDecoration(WidgetTester tester, String id) {
 RoundedSuperellipseBorder _rowShape(WidgetTester tester, String id) =>
     _rowDecoration(tester, id).shape as RoundedSuperellipseBorder;
 
+/// 该行当前是否有着色底。
+///
+/// K1（主人 2026-09-27 拍板）之后，「已勾选但非当前」的行**不再有着色面**，
+/// 故 `_rowDecoration` 会因 finder 匹配 0 个而抛 `Bad state: No element` ——
+/// 否定断言一律改用本 helper。
+bool _rowHasSurface(WidgetTester tester, String id) =>
+    find
+        .descendant(
+          of: _row(id),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is DecoratedBox &&
+                widget.decoration is ShapeDecoration &&
+                (widget.decoration as ShapeDecoration).color != null,
+          ),
+        )
+        .evaluate()
+        .isNotEmpty;
+
 Color? _rowTitleColor(WidgetTester tester, String id, String title) =>
     tester
         .widget<Text>(
@@ -197,16 +216,17 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('宽屏浅色 · 三态（hover / 选中 / 当前）', () {
-    testWidgets('选中行底 = rgba(120,120,128,.16)、文字与图标转 #005FB8', (tester) async {
+    testWidgets('K1 · 已勾选行不再着色（无底、字不转蓝）—— 那套语言留给「当前」独占', (tester) async {
       await _pumpSidebar(tester, brightness: Brightness.light);
 
-      expect(_rowDecoration(tester, 'beta').color, LightSurfaces.selectedSurface);
-      expect(_rowTitleColor(tester, 'beta', _titleBeta), LightSurfaces.selectionForeground);
+      // K1：宽屏多选态不再用「灰底 + 蓝字」表达「已勾选」（那是「当前查看」的
+      // 语言，两者同框时无从分辨）；选择语义由左侧勾选框独立承担。
+      expect(_rowHasSurface(tester, 'beta'), isFalse);
+      expect(_rowTitleColor(tester, 'beta', _titleBeta), isNull);
 
-      // 悬停同一行时仍是选中底（选中优先于 hover）。
+      // 悬停已勾选行 ⇒ 只给 hover 底（不再被「选中底」压住）。
       await _hover(tester, 'beta');
-      expect(_rowDecoration(tester, 'beta').color, LightSurfaces.selectedSurface);
-      expect(_anySurface(LightSurfaces.hoverSurface), findsNothing);
+      expect(_rowDecoration(tester, 'beta').color, LightSurfaces.hoverSurface);
     });
 
     testWidgets('高亮行内的图标（悬停出现的「⋯」）同样转 #005FB8', (tester) async {
@@ -247,8 +267,8 @@ void main() {
       expect(side.width, 1.0);
       expect(_rowTitleColor(tester, 'alpha', _titleAlpha), LightSurfaces.selectionForeground);
 
-      // 非当前行不得有描边。
-      expect(_rowShape(tester, 'beta').side, BorderSide.none);
+      // 非当前行不得有描边（K1 后已勾选行连底都没有 ⇒ 直接断言无着色面）。
+      expect(_rowHasSurface(tester, 'beta'), isFalse);
 
       // 左侧 2px 蓝条（#161 既有语义）保留。
       final bars = tester
@@ -330,12 +350,15 @@ void main() {
   });
 
   group('暗色档逐字节不变', () {
-    testWidgets('选中行仍是 0xFF2C2C2E、无内描边、无 hover 底、文字不转蓝', (tester) async {
+    testWidgets('已勾选行不着色（K1 与浅色一致）· 无内描边、无 hover 底；「当前」用暗色蓝前景', (tester) async {
       await _pumpSidebar(tester, brightness: Brightness.dark);
 
-      expect(_rowDecoration(tester, 'beta').color, const Color(0xFF2C2C2E));
+      // K1：暗色的多选行同样不着色（只靠勾选框），与浅色同一套语义。
+      expect(_rowHasSurface(tester, 'beta'), isFalse);
       expect(_rowShape(tester, 'alpha').side, BorderSide.none);
       expect(_rowTitleColor(tester, 'beta', _titleBeta), isNot(LightSurfaces.selectionForeground));
+      // 明暗同一套逻辑：暗色「当前」行的前景是暗色蓝 #0A84FF（不是浅色的 #005FB8）。
+      expect(_rowTitleColor(tester, 'alpha', _titleAlpha)?.toARGB32(), 0xFF0A84FF);
 
       await _hover(tester, 'gamma');
       expect(_anySurface(LightSurfaces.hoverSurface), findsNothing);

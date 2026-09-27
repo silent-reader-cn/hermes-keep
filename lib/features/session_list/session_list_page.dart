@@ -490,12 +490,120 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   /// #174：批量操作在途时本栏**原地**切换为进度形态 ——
   /// 「归档中 2/3」+ 转圈 + 细进度条，且全部按钮置灰
   /// （既给出反馈，也防连点触发第二批请求）。
+  ///
+  /// B1（主人 2026-09-27 拍板）：**宽屏侧栏只有 320pt**，一行塞不下「计数 + 全选
+  /// + 三个动作」（字距被压满、点按目标偏小）⇒ 拆两行：计数与「全选」在上，
+  /// 三个动作做成等宽图标按钮在下。窄屏（手机全宽）保持单行原样，逐像素不变。
   Widget _buildBatchBar(SessionListState state) {
     final l10n = AppLocalizations.of(context);
     final controller = ref.read(sessionListControllerProvider.notifier);
     final progress = state.batchProgress;
     final busy = progress != null;
     final count = state.selectedSessionIds.length;
+    // 与 _buildSessionRows 同款判据（本方法不能引用 build 的局部变量）。
+    final wideBar =
+        MediaQuery.sizeOf(context).width >= 900 && !widget.showUtilityRows;
+    final deleteTint = LightSurfaces.resolve(
+      context,
+      statusRedText.resolveFrom(context),
+      dark: CupertinoColors.systemRed,
+    );
+    final neutralTint = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
+
+    /// 一个动作槽位：宽屏 = 等宽「图标 + 文字」按钮；窄屏 = 原来的文字按钮。
+    Widget slot({
+      required Key key,
+      required IconData icon,
+      required String text,
+      required Color tint,
+      required VoidCallback? onPressed,
+    }) {
+      if (!wideBar) {
+        return CupertinoButton(
+          key: key,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          onPressed: onPressed,
+          child: Text(
+            text,
+            // #174：只在可点时涂色；禁用交回 CupertinoButton 的统一灰。
+            style: TextStyle(
+              fontSize: 14,
+              color: onPressed == null ? null : tint,
+            ),
+          ),
+        );
+      }
+      final enabled = onPressed != null;
+      return Expanded(
+        child: CupertinoButton(
+          key: key,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          minimumSize: const Size(0, 36),
+          color: enabled ? tint.withValues(alpha: 0.12) : null,
+          borderRadius: BorderRadius.circular(8),
+          onPressed: onPressed,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: enabled ? tint : null),
+              const SizedBox(width: 5),
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: enabled ? tint : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final label = Text(
+      busy ? _batchProgressLabel(l10n, progress) : l10n.selectedCount(count),
+      key: const ValueKey('batch-bar-label'),
+      style: const TextStyle(fontSize: 14),
+      overflow: TextOverflow.ellipsis,
+    );
+    final selectAll = CupertinoButton(
+      key: const ValueKey('batch-select-all'),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      onPressed: busy ? null : controller.selectAllInSection,
+      child: Text(l10n.selectAll, style: const TextStyle(fontSize: 14)),
+    );
+    final archive = slot(
+      key: const ValueKey('batch-archive'),
+      icon: CupertinoIcons.archivebox,
+      text: l10n.archive,
+      tint: neutralTint,
+      onPressed: count == 0 || busy
+          ? null
+          : () => unawaited(_confirmBatchArchive(context)),
+    );
+    final delete = slot(
+      key: const ValueKey('batch-delete'),
+      icon: CupertinoIcons.trash,
+      text: l10n.delete,
+      tint: deleteTint,
+      onPressed: count == 0 || busy
+          ? null
+          : () => unawaited(_confirmBatchDelete(context)),
+    );
+    final move = slot(
+      key: const ValueKey('batch-move'),
+      icon: CupertinoIcons.folder,
+      text: l10n.batchMoveProject,
+      tint: neutralTint,
+      onPressed: count == 0 || busy
+          ? null
+          : () => unawaited(_batchMoveToProject(context)),
+    );
+
     return Container(
       decoration: BoxDecoration(
         color: LightSurfaces.resolve(
@@ -527,71 +635,28 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                     const CupertinoActivityIndicator(radius: 6),
                     const SizedBox(width: 8),
                   ],
-                  Expanded(
-                    child: Text(
-                      busy
-                          ? _batchProgressLabel(l10n, progress)
-                          : l10n.selectedCount(count),
-                      key: const ValueKey('batch-bar-label'),
-                      style: const TextStyle(fontSize: 14),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  CupertinoButton(
-                    key: const ValueKey('batch-select-all'),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    onPressed: busy ? null : controller.selectAllInSection,
-                    child: Text(
-                      l10n.selectAll,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ),
-                  CupertinoButton(
-                    key: const ValueKey('batch-archive'),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    onPressed: count == 0 || busy
-                        ? null
-                        : () => unawaited(_confirmBatchArchive(context)),
-                    child: Text(
-                      l10n.archive,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ),
-                  CupertinoButton(
-                    key: const ValueKey('batch-delete'),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    onPressed: count == 0 || busy
-                        ? null
-                        : () => unawaited(_confirmBatchDelete(context)),
-                    child: Text(
-                      l10n.delete,
-                      // #174：只在**可点**时涂红；禁用态交给 CupertinoButton
-                      // 的统一灰（否则「删除」在置灰状态下仍是红的，看起来还能点）。
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: count == 0 || busy
-                            ? null
-                            : LightSurfaces.resolve(
-                                context,
-                                statusRedText.resolveFrom(context),
-                                dark: CupertinoColors.systemRed,
-                              ),
-                      ),
-                    ),
-                  ),
-                  CupertinoButton(
-                    key: const ValueKey('batch-move'),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    onPressed: count == 0 || busy
-                        ? null
-                        : () => unawaited(_batchMoveToProject(context)),
-                    child: Text(
-                      l10n.batchMoveProject,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ),
+                  Expanded(child: label),
+                  selectAll,
                 ],
               ),
+              if (wideBar) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    archive,
+                    const SizedBox(width: 6),
+                    delete,
+                    const SizedBox(width: 6),
+                    move,
+                  ],
+                ),
+              ] else ...[
+                // 窄屏：动作与计数同排（保持原单行布局）。
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [archive, delete, move],
+                ),
+              ],
               if (busy) ...[
                 const SizedBox(height: 8),
                 _buildBatchProgressBar(progress),
@@ -1991,8 +2056,14 @@ class _SessionRowState extends State<_SessionRow> {
     // hover 底 .10 为本次新增。**窄屏（!compact）与暗色分支逐字节不变**：
     // 选中底仍为旧浅蓝 [LightSurfaces.selection] / 暗色 0xFF2C2C2E，
     // 且 `_hovering` 只在 compact 置位、`isCurrent` 只在 compact 下传。
-    final highlighted = widget.selected || widget.isCurrent;
-    final l2Selection = isLight && widget.compact && highlighted;
+    // #175 / K1（主人 2026-09-27 拍板）：宽屏多选态**不再**用底色与蓝字表达「已勾选」
+    // —— 那套语言（灰底 + 蓝字）留给「当前正在查看」独占，否则两者同框时无从分辨
+    // （当前会话恰好也被勾选时，两种意思长得一模一样）；多选语义由左侧勾选框独立承担。
+    // 窄屏（!compact）保持旧行为，逐像素不变。
+    final highlighted =
+        widget.compact ? widget.isCurrent : (widget.selected || widget.isCurrent);
+    // 明暗两态共用同一套逻辑（中性底 + 蓝前景）：浅色 #005FB8 / 暗色 #0A84FF。
+    final l2Selection = widget.compact && highlighted;
     final l2Current = isLight && widget.compact && widget.isCurrent;
     // #150 档 B（对齐设计稿）：侧栏紧凑模式下，元信息不再另起一行，
     // 只在用户显式开启副标题项时保留第二行；默认右侧显示极简相对时间。
@@ -2070,7 +2141,7 @@ class _SessionRowState extends State<_SessionRow> {
                             style: TextStyle(
                               fontSize: 12.5,
                               color: l2Selection
-                                  ? LightSurfaces.selectionForeground
+                                  ? _l2Foreground(context)
                                   : null,
                             ),
                           ),
@@ -2276,10 +2347,8 @@ class _SessionRowState extends State<_SessionRow> {
   /// 点它用整行锚点打开操作菜单 —— 与右键、长按同一套动作。
   Widget _buildInlineActionsButton(BuildContext context) {
     // L2：选中/当前行内的图标同转 #005FB8（仅浅色紧凑行）。
-    final selectedFg =
-        CupertinoTheme.brightnessOf(context) == Brightness.light &&
-        widget.compact &&
-        (widget.selected || widget.isCurrent);
+    // K1：宽屏多选态不着色 ⇒ 这里同样只认「当前查看」；明暗两态都用蓝前景。
+    final selectedFg = widget.compact && widget.isCurrent;
     return AccessibleButton(
       key: ValueKey(
         'session-inline-actions-${widget.session.sessionId ?? widget.session.id}',
@@ -2292,7 +2361,7 @@ class _SessionRowState extends State<_SessionRow> {
         CupertinoIcons.ellipsis,
         size: 14,
         color: selectedFg
-            ? LightSurfaces.selectionForeground
+            ? _l2Foreground(context)
             : LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -3251,3 +3320,13 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
     return trimmed.substring(idx + 1);
   }
 }
+
+
+/// L2 选中前景色：浅色 #005FB8 / 暗色 #0A84FF（明暗同一套逻辑）。
+///
+/// 刻意放在**顶层**（而非某个 State 的方法）：页面级与 [_SessionRowState]
+/// 两处都要用，跨类调用会各自找不到。
+Color _l2Foreground(BuildContext context) =>
+    CupertinoTheme.brightnessOf(context) == Brightness.light
+        ? LightSurfaces.selectionForeground
+        : CupertinoColors.activeBlue.resolveFrom(context);
