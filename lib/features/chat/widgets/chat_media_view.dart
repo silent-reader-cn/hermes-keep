@@ -13,6 +13,7 @@ import '../../../core/api/api_exception.dart';
 import '../../../core/cache/cache_providers.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/message_attachment.dart';
+import '../../../core/platform/external_opener.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../diagnostics/diagnostics_models.dart';
 import '../../diagnostics/diagnostics_service.dart';
@@ -932,6 +933,7 @@ class _AttachmentDownloadButton extends ConsumerWidget {
             url,
             mimeType: mimeType,
             customOpener: onOpenFile,
+            opener: ref.read(externalOpenerProvider),
           );
         },
         icon: CupertinoIcons.check_mark,
@@ -961,6 +963,7 @@ class _AttachmentDownloadButton extends ConsumerWidget {
                 task.savedPath!,
                 mimeType: task.mimeType ?? mimeType,
                 customOpener: onOpenFile,
+                opener: ref.read(externalOpenerProvider),
               );
             },
             icon: CupertinoIcons.check_mark,

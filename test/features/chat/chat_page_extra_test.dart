@@ -14,6 +14,7 @@ import 'package:hermes_ui/core/api/endpoints.dart';
 import 'package:hermes_ui/core/api/sse_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/connection_store.dart';
+import 'package:hermes_ui/core/platform/external_opener.dart';
 import 'package:hermes_ui/core/utils/safe_clipboard.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
@@ -225,6 +226,52 @@ void main() {
 
       // #163：菜单入口与顶栏图标同一分流 —— 本机无该目录 → 内置工作区文件页。
       expect(find.text('工作区页:s1'), findsOneWidget);
+
+      await _unmount(tester);
+    }, skip: !_isWindowsDesktop);
+
+    testWidgets('会话 workspace 命中本机真实目录 → 经外部打开器打开，不落内置工作区页', (tester) async {
+      // 这条正是原先零覆盖的分支：旧实现直接 `Process.run('explorer', ...)`，
+      // 测试只能拿「不存在的目录」绕开副作用，于是「存在目录 → 打开资源管理器」
+      // 这一支从未被测过。现在经外部打开器接缝注入记录器，可以放心覆盖。
+      final dirPath = (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('hermes_ws_probe_'),
+      ))!.path;
+      addTearDown(() async {
+        final dir = Directory(dirPath);
+        if (dir.existsSync()) {
+          await dir.delete(recursive: true);
+        }
+      });
+
+      final api = _FakeChatApi()
+        ..sessionResult = {
+          'session': {
+            'session_id': 's1',
+            'title': '项目会话',
+            'workspace': dirPath,
+            'messages': const [],
+          },
+        };
+
+      final opened = <String>[];
+      final opener = ExternalOpener(
+        isWindows: true,
+        isMacOS: false,
+        isLinux: false,
+        processRunner: (executable, arguments) async {
+          opened.add('$executable ${arguments.join(' ')}');
+        },
+      );
+
+      await _pumpRouted(tester, api, opener: opener);
+
+      await tester.tap(find.byKey(const ValueKey('chat-open-project-folder')));
+      await _settleRealIo(tester);
+      await tester.pumpAndSettle();
+
+      expect(opened, <String>['explorer $dirPath']);
+      expect(find.text('工作区页:s1'), findsNothing);
 
       await _unmount(tester);
     }, skip: !_isWindowsDesktop);
@@ -1062,6 +1109,7 @@ Future<GoRouter> _pumpRouted(
   _FakeChatApi api, {
   Brightness brightness = Brightness.light,
   _ExportStubApiClient? apiClient,
+  ExternalOpener? opener,
 }) async {
   tester.view.physicalSize = const Size(800, 2000);
   tester.view.devicePixelRatio = 1.0;
@@ -1095,6 +1143,7 @@ Future<GoRouter> _pumpRouted(
         chatApiProvider.overrideWithValue(api),
         connectionStoreProvider.overrideWithValue(_memoryConnectionStore()),
         if (apiClient != null) apiClientProvider.overrideWithValue(apiClient),
+        if (opener != null) externalOpenerProvider.overrideWithValue(opener),
       ],
       child: CupertinoApp.router(
         theme: CupertinoThemeData(brightness: brightness),

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show FileSystemEntity, Platform, Process;
+import 'dart:io' show FileSystemEntity, Platform;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, mapEquals;
@@ -15,6 +15,7 @@ import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
+import '../../core/platform/external_opener.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/safe_clipboard.dart';
 import '../../l10n/app_localizations.dart';
@@ -491,7 +492,8 @@ Future<void> openSessionProjectFolder(
     final isWindowsDesktop = !kIsWeb && Platform.isWindows;
     final existsLocally = await FileSystemEntity.isDirectory(path);
     if (isWindowsDesktop && existsLocally) {
-      await Process.run('explorer', [path]);
+      // 外部打开器接缝：测试环境会被硬闸门拦截，不会弹出真实资源管理器窗口。
+      await ref.read(externalOpenerProvider).openDirectory(path);
       return;
     }
     if (!context.mounted) return;

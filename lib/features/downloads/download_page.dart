@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../core/platform/external_opener.dart';
 import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_models.dart';
 import '../diagnostics/diagnostics_service.dart';
@@ -157,20 +158,24 @@ Future<void> shareDownloadedFile(String path, {String? mimeType}) async {
 /// 行为契约：
 /// 1. 若提供了 [customOpener]（主要用于测试与平台注入），优先调用并返回；
 /// 2. 校验文件是否存在：若不存在，记录警告并弹出 Cupertino 提示框；
-/// 3. Windows 平台：调用 `explorer /select, <path>` 在文件资源管理器中定位高亮文件；
-/// 4. Android 平台：使用 `android_intent_plus` 发起 `ACTION_VIEW` 打开文件 content/file uri；
-/// 5. macOS / Linux 平台：分别调用 `open -R` / `xdg-open` 打开对应文件；
-/// 6. 异常捕获：记录诊断日志，并在 UI 提供可读错误提示，绝不静默失败。
+/// 3. Android 平台：使用 `android_intent_plus` 发起 `ACTION_VIEW` 打开文件 content/file uri；
+/// 4. 桌面三平台统一交给 [ExternalOpener] 接缝（Windows 资源管理器定位高亮文件 /
+///    macOS `open -R` / Linux `xdg-open`）——**不再裸调 `Process.run`**，
+///    接缝自带测试环境硬闸门，单测不会拉起真实系统窗口；
+/// 5. 异常捕获：记录诊断日志，并在 UI 提供可读错误提示，绝不静默失败。
 Future<void> openDownloadedFile(
   BuildContext context,
   String path, {
   String? mimeType,
   Future<void> Function(String path)? customOpener,
+  ExternalOpener? opener,
 }) async {
   if (customOpener != null) {
     await customOpener(path);
     return;
   }
+
+  final resolvedOpener = opener ?? ExternalOpener();
 
   final file = File(path);
   if (!file.existsSync()) {
@@ -204,18 +209,6 @@ Future<void> openDownloadedFile(
   }
 
   try {
-    if (!kIsWeb && Platform.isWindows) {
-      await Process.run('explorer', ['/select,', path]);
-      return;
-    }
-    if (!kIsWeb && Platform.isMacOS) {
-      await Process.run('open', ['-R', path]);
-      return;
-    }
-    if (!kIsWeb && Platform.isLinux) {
-      await Process.run('xdg-open', [path]);
-      return;
-    }
     if (!kIsWeb && Platform.isAndroid) {
       // Android 7+ StrictMode 禁止裸 file:// URI 跨应用共享（FileUriExposedException），
       // 必须先经原生 FileProvider 换成 content:// URI 再发 ACTION_VIEW。
@@ -231,6 +224,11 @@ Future<void> openDownloadedFile(
       );
       await intent.launch();
       return;
+    }
+    // 桌面三平台统一走外部打开器接缝（内部按平台分流；未知平台 no-op）。
+    // 接缝在测试环境下会拦截系统调用，单测不会再弹出资源管理器窗口。
+    if (!kIsWeb) {
+      await resolvedOpener.revealInFileManager(path);
     }
   } catch (error) {
     DiagnosticsService.instance.log(
@@ -468,7 +466,9 @@ class DownloadPage extends ConsumerWidget {
             children: [
               Expanded(child: _wideCard(left)),
               Expanded(
-                child: right == null ? const SizedBox.shrink() : _wideCard(right),
+                child: right == null
+                    ? const SizedBox.shrink()
+                    : _wideCard(right),
               ),
             ],
           ),
@@ -655,6 +655,7 @@ class _DownloadTaskCard extends ConsumerWidget {
                       task.savedPath!,
                       mimeType: task.mimeType,
                       customOpener: onOpenFile,
+                      opener: ref.read(externalOpenerProvider),
                     ),
                   );
                 }
@@ -690,6 +691,7 @@ class _DownloadTaskCard extends ConsumerWidget {
                       task.savedPath!,
                       mimeType: task.mimeType,
                       customOpener: onOpenFile,
+                      opener: ref.read(externalOpenerProvider),
                     ),
                   );
                 }

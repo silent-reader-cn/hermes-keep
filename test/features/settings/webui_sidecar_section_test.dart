@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/core/platform/external_opener.dart';
 import 'package:hermes_ui/features/settings/settings_subpages.dart';
 import 'package:hermes_ui/features/settings/webui_sidecar_section.dart';
 import 'package:hermes_ui/features/webui_sidecar/webui_sidecar_providers.dart';
@@ -39,7 +41,7 @@ class _FakeSidecarFileSystem implements SidecarFileSystem {
   }
 
   @override
-  String get logDirectoryPath => r'C:\logs';
+  String logDirectoryPath = r'C:\logs';
 
   @override
   String get logFilePath => r'C:\logs\webui.log';
@@ -79,7 +81,7 @@ class _FakeSecureStorage implements SidecarSecureStorage {
 
 class _MockWebuiSidecarService implements WebuiSidecarService {
   _MockWebuiSidecarService({SidecarState? initialState})
-      : _state = initialState ?? SidecarState.initial;
+    : _state = initialState ?? SidecarState.initial;
 
   SidecarState _state;
   final StreamController<SidecarState> _controller =
@@ -125,19 +127,12 @@ void main() {
   late _FakeSidecarFileSystem fakeFs;
   late _FakeSecureStorage fakeSecureStorage;
   late _MockWebuiSidecarService mockService;
+  late SharedPreferences prefs;
   late ProviderContainer container;
 
-  setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    fakeFs = _FakeSidecarFileSystem();
-    fakeSecureStorage = _FakeSecureStorage();
-    mockService = _MockWebuiSidecarService();
-
-    fakeSecureStorage.values[WebuiSidecarConfigStorage.keyPassword] =
-        'init-secret-123456';
-
-    container = ProviderContainer(
+  /// 组装容器（可注入外部打开器，用于断言「打开日志目录」真的走了接缝）。
+  ProviderContainer buildContainer({ExternalOpener? opener}) {
+    return ProviderContainer(
       overrides: [
         sidecarFileSystemProvider.overrideWithValue(fakeFs),
         webuiSidecarConfigStorageProvider.overrideWithValue(
@@ -147,8 +142,22 @@ void main() {
           ),
         ),
         webuiSidecarServiceProvider.overrideWithValue(mockService),
+        if (opener != null) externalOpenerProvider.overrideWithValue(opener),
       ],
     );
+  }
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
+    fakeFs = _FakeSidecarFileSystem();
+    fakeSecureStorage = _FakeSecureStorage();
+    mockService = _MockWebuiSidecarService();
+
+    fakeSecureStorage.values[WebuiSidecarConfigStorage.keyPassword] =
+        'init-secret-123456';
+
+    container = buildContainer();
     await container.read(webuiSidecarConfigProvider.notifier).load();
   });
 
@@ -161,11 +170,7 @@ void main() {
       container: container,
       child: CupertinoApp(
         home: CupertinoPageScaffold(
-          child: ListView(
-            children: [
-              child ?? const WebuiSidecarSection(),
-            ],
-          ),
+          child: ListView(children: [child ?? const WebuiSidecarSection()]),
         ),
       ),
     );
@@ -258,7 +263,8 @@ void main() {
 
     testWidgets('弹窗中点击「重新检测」触发 refresh', (tester) async {
       var installed = false;
-      final expectedVenv = '${fakeFs.customAgentDir}\\venv\\Scripts\\python.exe';
+      final expectedVenv =
+          '${fakeFs.customAgentDir}\\venv\\Scripts\\python.exe';
       fakeFs.fileExistsOverride = (path) => installed && path == expectedVenv;
       await container.read(agentEnvPresentProvider.notifier).refresh();
 
@@ -412,9 +418,7 @@ void main() {
 
       // 眼睛切明文
       await tester.tap(
-        find.byKey(
-          const ValueKey('settings-webui-password-visibility-btn'),
-        ),
+        find.byKey(const ValueKey('settings-webui-password-visibility-btn')),
       );
       await tester.pumpAndSettle();
       expect(
@@ -422,9 +426,7 @@ void main() {
         isFalse,
       );
       await tester.tap(
-        find.byKey(
-          const ValueKey('settings-webui-password-visibility-btn'),
-        ),
+        find.byKey(const ValueKey('settings-webui-password-visibility-btn')),
       );
       await tester.pumpAndSettle();
       expect(
@@ -575,6 +577,44 @@ void main() {
       );
       expect(openLogsFinder, findsOneWidget);
       expect(find.text('打开日志目录'), findsOneWidget);
+    });
+
+    testWidgets('点击「打开日志目录」→ 经外部打开器打开（不拉起真实资源管理器）', (tester) async {
+      // 日志目录指向临时目录：默认假值 `C:\logs` 会被 `Directory(...).create`
+      // 真的在盘根建出来，故此处换成系统临时目录。
+      final logDirPath = (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('hermes_sidecar_logs_'),
+      ))!.path;
+      addTearDown(() async {
+        final dir = Directory(logDirPath);
+        if (dir.existsSync()) {
+          await dir.delete(recursive: true);
+        }
+      });
+      fakeFs.logDirectoryPath = logDirPath;
+
+      final opened = <String>[];
+      final opener = ExternalOpener(
+        isWindows: true,
+        isMacOS: false,
+        isLinux: false,
+        processRunner: (executable, arguments) async {
+          opened.add('$executable ${arguments.join(' ')}');
+        },
+      );
+
+      // 重建容器以注入记录型打开器（setUp 的容器没有该 override）。
+      container.dispose();
+      container = buildContainer(opener: opener);
+      await container.read(webuiSidecarConfigProvider.notifier).load();
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('settings-webui-open-logs')));
+      await tester.pumpAndSettle();
+
+      expect(opened, <String>['explorer $logDirPath']);
     });
 
     testWidgets('DesktopSettingsPage 在 Windows 下渲染内置 WebUI 分组', (tester) async {

@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/core/cache/app_database.dart';
 import 'package:hermes_ui/core/cache/cache_providers.dart';
+import 'package:hermes_ui/core/platform/external_opener.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_service.dart';
 import 'package:hermes_ui/features/downloads/download_controller.dart';
 import 'package:hermes_ui/features/downloads/download_models.dart';
@@ -211,7 +212,10 @@ void main() {
         getDownloadFileTypeIcon(DownloadFileType.audio),
         CupertinoIcons.music_note,
       );
-      expect(getDownloadFileTypeIcon(DownloadFileType.video), CupertinoIcons.film);
+      expect(
+        getDownloadFileTypeIcon(DownloadFileType.video),
+        CupertinoIcons.film,
+      );
       expect(
         getDownloadFileTypeIcon(DownloadFileType.document),
         CupertinoIcons.doc_text,
@@ -224,10 +228,15 @@ void main() {
         getDownloadFileTypeIcon(DownloadFileType.code),
         CupertinoIcons.chevron_left_slash_chevron_right,
       );
-      expect(getDownloadFileTypeIcon(DownloadFileType.other), CupertinoIcons.doc);
+      expect(
+        getDownloadFileTypeIcon(DownloadFileType.other),
+        CupertinoIcons.doc,
+      );
 
       // 枚举全覆盖且互不重复（避免新增分类后静默落到默认图标）。
-      final icons = DownloadFileType.values.map(getDownloadFileTypeIcon).toList();
+      final icons = DownloadFileType.values
+          .map(getDownloadFileTypeIcon)
+          .toList();
       expect(icons.length, DownloadFileType.values.length);
       expect(icons.toSet().length, DownloadFileType.values.length);
     });
@@ -247,7 +256,10 @@ void main() {
       expect(localizeDownloadFileType(DownloadFileType.image, en), 'Image');
       expect(localizeDownloadFileType(DownloadFileType.audio, en), 'Audio');
       expect(localizeDownloadFileType(DownloadFileType.video, en), 'Video');
-      expect(localizeDownloadFileType(DownloadFileType.document, en), 'Document');
+      expect(
+        localizeDownloadFileType(DownloadFileType.document, en),
+        'Document',
+      );
       expect(localizeDownloadFileType(DownloadFileType.archive, en), 'Archive');
       expect(localizeDownloadFileType(DownloadFileType.code, en), 'Code');
       expect(localizeDownloadFileType(DownloadFileType.other, en), 'File');
@@ -390,7 +402,8 @@ void main() {
         CupertinoColors.systemGrey5.resolveFrom(context),
       );
       expect(
-        (tester.widget<Container>(defaultBoxes.last).decoration! as BoxDecoration)
+        (tester.widget<Container>(defaultBoxes.last).decoration!
+                as BoxDecoration)
             .color,
         CupertinoTheme.of(context).primaryColor,
       );
@@ -401,7 +414,9 @@ void main() {
   group('openDownloadedFile 顶层行为', () {
     testWidgets('文件不存在：落诊断日志并弹出提示弹窗（可关闭）', (tester) async {
       late BuildContext pageContext;
-      await tester.pumpWidget(buildContextHost((context) => pageContext = context));
+      await tester.pumpWidget(
+        buildContextHost((context) => pageContext = context),
+      );
       // CupertinoApp 的本地化委托异步解析：首帧后需 settle，Builder 才会真正
       // 构建并交出已挂载 context。
       await tester.pumpAndSettle();
@@ -429,37 +444,55 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
     });
 
-    // ⚠️ 该用例会真实调用 Windows 资源管理器（explorer /select, <path>），
-    // 可能在桌面上弹出一个定位窗口——这是被覆盖分支本身的副作用，
-    // 非测试污染；若不希望有此副作用，删除本用例即可。
-    testWidgets('文件存在 + Windows 平台：走资源管理器定位分支且不弹错误框', (tester) async {
+    // 该用例原先会真实调用 Windows 资源管理器（每跑一次测试就在桌面弹一个定位窗口，
+    // 无人值守反复跑会积攒一堆）。现改走 ExternalOpener 接缝：注入记录型 runner，
+    // 零系统副作用，且能断言命令行拼装——覆盖面比原来「只要不抛异常」更大。
+    testWidgets('文件存在 + Windows 平台：经外部打开器定位文件且不弹错误框', (tester) async {
       final path = (await tester.runAsync(() async {
         final file = File('${tempDir.path}/locate_me.txt');
         await file.writeAsString('payload');
         return file.path;
       }))!;
 
+      final calls = <String>[];
+      final opener = ExternalOpener(
+        isWindows: true,
+        isMacOS: false,
+        isLinux: false,
+        processRunner: (executable, arguments) async {
+          calls.add('$executable ${arguments.join(' ')}');
+        },
+      );
+
       late BuildContext pageContext;
-      await tester.pumpWidget(buildContextHost((context) => pageContext = context));
+      await tester.pumpWidget(
+        buildContextHost((context) => pageContext = context),
+      );
       // CupertinoApp 的本地化委托异步解析：首帧后需 settle，Builder 才会真正
       // 构建并交出已挂载 context。
       await tester.pumpAndSettle();
 
-      await tester.runAsync(() => openDownloadedFile(pageContext, path));
+      await tester.runAsync(
+        () => openDownloadedFile(pageContext, path, opener: opener),
+      );
       await tester.pump();
 
       expect(File(path).existsSync(), isTrue);
       expect(find.byType(CupertinoAlertDialog), findsNothing);
+      expect(calls, <String>['explorer /select, $path']);
       expect(
-        DiagnosticsService.instance.logs
-            .where((e) => e.message.contains('打开文件异常')),
+        DiagnosticsService.instance.logs.where(
+          (e) => e.message.contains('打开文件异常'),
+        ),
         isEmpty,
       );
     });
 
     testWidgets('customOpener 注入时短路平台分支，不再校验文件存在性', (tester) async {
       late BuildContext pageContext;
-      await tester.pumpWidget(buildContextHost((context) => pageContext = context));
+      await tester.pumpWidget(
+        buildContextHost((context) => pageContext = context),
+      );
       // CupertinoApp 的本地化委托异步解析：首帧后需 settle，Builder 才会真正
       // 构建并交出已挂载 context。
       await tester.pumpAndSettle();
@@ -505,10 +538,22 @@ void main() {
       expect(find.byType(CupertinoProgressBar), findsNWidgets(2));
 
       // 未传自定义打开回调时，下载中卡片只有取消按钮。
-      expect(find.byKey(const ValueKey('download-cancel-unknown-size')), findsOneWidget);
-      expect(find.byKey(const ValueKey('download-open-unknown-size')), findsNothing);
-      expect(find.byKey(const ValueKey('download-retry-unknown-size')), findsNothing);
-      expect(find.byKey(const ValueKey('download-delete-unknown-size')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('download-cancel-unknown-size')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('download-open-unknown-size')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('download-retry-unknown-size')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('download-delete-unknown-size')),
+        findsNothing,
+      );
     });
 
     testWidgets('排队中/下载中：「取消」按钮分别调用 controller.cancel', (tester) async {
@@ -682,11 +727,7 @@ void main() {
 
     testWidgets('顶部「清除已完成」调用 controller.clearTerminalRecords', (tester) async {
       final tasks = [
-        _task(
-          id: 't1',
-          fileName: 'old.zip',
-          status: DownloadStatus.failed,
-        ),
+        _task(id: 't1', fileName: 'old.zip', status: DownloadStatus.failed),
       ];
 
       await tester.pumpWidget(buildPage(tasks: tasks));
@@ -741,13 +782,14 @@ void main() {
       final redownloadFinder = find.byKey(
         const ValueKey('download-retry-dark-redownload'),
       );
-      final darkPrimary = CupertinoTheme.of(tester.element(openFinder)).primaryColor;
+      final darkPrimary = CupertinoTheme.of(tester.element(openFinder))
+          .primaryColor;
 
+      expect(tester.widget<CupertinoButton>(openFinder).color, darkPrimary);
       expect(
         tester.widget<CupertinoButton>(openFinder).color,
-        darkPrimary,
+        isNot(LightSurfaces.userDetail),
       );
-      expect(tester.widget<CupertinoButton>(openFinder).color, isNot(LightSurfaces.userDetail));
       expect(
         tester.widget<CupertinoButton>(redownloadFinder).color,
         darkPrimary,

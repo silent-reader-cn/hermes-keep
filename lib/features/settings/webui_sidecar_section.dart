@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../core/platform/external_opener.dart';
 import '../../l10n/app_localizations.dart';
 import '../webui_sidecar/webui_sidecar_providers.dart';
 import 'settings_surfaces.dart';
@@ -221,9 +222,10 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
         await dir.create(recursive: true);
       } catch (_) {}
     }
-    // 平台判定走注入接缝（宿主在 CI 上是 Linux）。
+    // 平台判定走注入接缝（宿主在 CI 上是 Linux）；打开动作走外部打开器接缝，
+    // 测试环境会被硬闸门拦截，不会弹出真实资源管理器窗口。
     if (fs.isWindows) {
-      await Process.run('explorer', [logDir]);
+      await ref.read(externalOpenerProvider).openDirectory(logDir);
     }
   }
 
