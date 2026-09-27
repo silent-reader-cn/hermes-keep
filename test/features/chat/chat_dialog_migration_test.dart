@@ -493,13 +493,23 @@ void main() {
       }
     });
 
-    test('明确排除的两个文件未被本批改动（仍是原调用）', () {
-      for (final path in _kExcludedFiles) {
+    // 【五路合成后改钉 2026-09-27】原断言「排除的两个文件仍是原调用」只在**隔离 worktree**
+    // 期有意义（那是防撞车的自查）；五路合成后这两个文件已由 **C5** 合法迁移（C5 的分区
+    // 正是它们），排他性断言必然失败。撞车风险由「worktree 隔离 + 文件级分区」在**流程上**
+    // 保证，不靠测试断言 —— 这里改为断言**本片分区完备**（正向、与合并状态无关）。
+    test('本片分区完备：四个文件的旧调用已清零（排除文件归 C5，不在本片断言内）', () {
+      const migrated = <String>[
+        'lib/features/session_list/session_list_page.dart',
+        'lib/features/chat/widgets/chat_input_bar.dart',
+        'lib/features/chat/widgets/selection_chips.dart',
+        'lib/features/chat/widgets/message_action_menu.dart',
+      ];
+      for (final path in migrated) {
         final source = File(path).readAsStringSync();
         expect(
-          'showCupertinoDialog'.allMatches(source).isNotEmpty,
-          isTrue,
-          reason: '$path 属另一路会话的作业面，本批不得迁移它（否则合并会撞车）',
+          'showCupertinoDialog'.allMatches(source),
+          isEmpty,
+          reason: '$path 属本片分区，不应再有旧调用',
         );
       }
     });
