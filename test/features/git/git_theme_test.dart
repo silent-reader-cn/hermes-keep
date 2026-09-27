@@ -167,7 +167,7 @@ void main() {
       });
     }
 
-    testWidgets('light/dark: Diff 区域在浅色模式用 page，暗色模式严格保留原始 0xFFF2F2F7', (
+    testWidgets('light/dark: Diff 区域底色按亮度解析（暗色不得落到未解析动态色的浅色 raw 值）', (
       tester,
     ) async {
       // 浅色模式
@@ -191,11 +191,26 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      final darkDiff = tester.widget<Container>(
-        find.byKey(const ValueKey('git-diff')),
+      final darkFinder = find.byKey(const ValueKey('git-diff'));
+      final darkDiff = tester.widget<Container>(darkFinder);
+      final darkCtx = tester.element(darkFinder);
+
+      // 改钉说明：原断言把缺陷当成了契约（注释自述「原始**未解析**动态色在底层
+      // 渲染为 0xFFF2F2F7」）—— dynamic color 直接交给 Container.color 不会按
+      // 亮度解析，而正文文字继承主题为浅色 ⇒ 白字叠浅底、几乎不可读。
+      // 该缺陷由「功能页真渲染工装」目检发现（文本断言完全抓不到）。
+      expect(
+        darkDiff.color!.toARGB32(),
+        isNot(0xFFF2F2F7),
+        reason: '暗色 diff 底色不得是未解析动态色的浅色 raw 值',
       );
-      // 暗色逐字节硬值锁定：原始未解析动态色在底层渲染为 0xFFF2F2F7
-      expect(darkDiff.color!.toARGB32(), 0xFFF2F2F7);
+      expect(
+        darkDiff.color!.toARGB32(),
+        CupertinoColors.secondarySystemBackground
+            .resolveFrom(darkCtx)
+            .toARGB32(),
+        reason: '应按当前亮度解析为暗色值',
+      );
     });
 
     testWidgets('light/dark: 操作错误横幅在浅色用 tintError + 发丝边框，暗色锁死 0x1FFF3B30 无边框', (
@@ -461,5 +476,6 @@ void main() {
       );
       expect(mainNode.color, isNot(LightSurfaces.selectedSurface));
     });
+
   });
 }

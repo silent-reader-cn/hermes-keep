@@ -785,7 +785,6 @@ class _DiffExpansion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     if (state.isDiffLoading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
@@ -811,10 +810,17 @@ class _DiffExpansion extends StatelessWidget {
     return Container(
       key: const ValueKey('git-diff'),
       width: double.infinity,
-      // 暗色保持原 raw 绘制值 CupertinoColors.secondarySystemBackground（实际 #F2F2F7，旧暗问题待裁）；浅色接 page
-      color: isDark
-          ? CupertinoColors.secondarySystemBackground
-          : LightSurfaces.page,
+      // 修复（真渲染目检发现，原注释自认「旧暗问题待裁」）：
+      // `CupertinoColors.secondarySystemBackground` 是 dynamic color，直接交给
+      // `Container.color` **不会**按亮度解析 —— 暗色下落到浅色 raw 值 (#F2F2F7)，
+      // 而正文文字继承主题为浅色 ⇒ 白字叠浅底、几乎不可读。
+      // 改走 LightSurfaces.resolve：暗色分支内部会 CupertinoDynamicColor.resolve
+      // ⇒ 解析为暗色 #1C1C1E；浅色仍是 page。
+      color: LightSurfaces.resolve(
+        context,
+        LightSurfaces.page,
+        dark: CupertinoColors.secondarySystemBackground,
+      ),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: Text(
         content,
