@@ -519,7 +519,11 @@ void main() {
         sourceUrl: 'https://example.com/unknown_total.bin',
         fileName: 'unknown_total.bin',
       );
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+      // 用**队列静默信号**替代固定时间窗：120ms 在并发/冷启动负载下偶发不够，
+      // 会在任务到终态前断言 → 断言失败后 tearDown 关 drift、而队列链仍在落库
+      // → "Can't re-open a database after closing it"。
+      // （本用例曾实测单跑 5 次 4 绿 1 红，假红污染了多轮并行验收的判断。）
+      await settleDownloads(container, reason: '未知总量的下载未到终态');
 
       final task = container.read(downloadControllerProvider).taskById(id);
       // 首帧回调即刷 receivedBytes（timeHit）；完成后为 completed+700。
