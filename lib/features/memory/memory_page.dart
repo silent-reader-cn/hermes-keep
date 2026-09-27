@@ -23,7 +23,12 @@ import '../../app/widgets/app_refresh_control.dart';
 enum _MemoryTab { memory, user, soul, projectContext }
 
 /// 正文限宽 720（既有口径，批 3 **不改宽度**；宽屏左栏导航另占 220）。
-/// TODO(批 1)：`reading_width_box.dart` 合入后改用共享件。
+/// 内容限宽（720）。
+///
+/// 注：这里**刻意不用**批 1 的 `ReadingWidthBox` —— 它内部是 `Align(topCenter)`
+/// （**顶对齐**），而本页两处用的是 `Center`（**垂直居中**）。对内容较矮的分区
+/// （如「我的笔记」只有几行）两者观感不同，而「居中」是批 3 已交付并验收过的行为，
+/// 不为「统一组件」而改动已验收行为。`layout_tokens.dart` 的常量按需复用，不受影响。
 const double _kMemoryContentMaxWidth = 720.0;
 
 /// 记忆查看页（对齐 Hermex MemoryView 的只读浏览形态）。

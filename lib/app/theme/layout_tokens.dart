@@ -94,6 +94,15 @@ const double kScrollbarThickness = 6.0;
 /// 常显滚动条圆头半径（3，恰为厚度一半 —— 保证端头是半圆）。
 const double kScrollbarRadius = 3.0;
 
+/// 宽屏左栏（分类 / 分区导航）固定宽度（220）。
+///
+/// 批 3 的 `features/shared/wide_nav_rail.dart` 骨架默认吃这个值；批 4 的五页左列表
+/// 在 220–380 区间按内容取（技能 320 / 任务 360 / 工作区 340 / Git 380 / 诊断 220），
+/// 其中诊断页与骨架同为 220。放这里是为了让「左栏宽度」只有一个来源，各页不再各写
+/// magic number（这批之前 `wide_nav_rail.dart` 里有一份局部 `kWideNavRailWidth`
+/// 与本文件并存，已并入）。
+const double kWideNavRailWidth = 220.0;
+
 /// G3 光标语义令牌：可点元素 → 手型 [SystemMouseCursors.click]；
 /// 禁用态 → 禁止符 [SystemMouseCursors.forbidden]。
 ///

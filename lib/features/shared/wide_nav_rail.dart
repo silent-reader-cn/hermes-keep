@@ -12,10 +12,10 @@ library;
 import 'package:flutter/cupertino.dart';
 
 import '../../app/theme/light_surfaces.dart';
-
-/// 左栏宽度 220（批 3 设计稿 P1 / P6 同一尺寸）。
-/// TODO(批 1)：`lib/app/theme/layout_tokens.dart` 合入后改用共享 token。
-const double kWideNavRailWidth = 220.0;
+import '../../app/theme/layout_tokens.dart';
+// 左栏宽度来自 `app/theme/layout_tokens.dart`（G1-G4 令牌，单一事实来源）；
+// 这里 export 一下，使既有「只 import 本文件」的调用点继续拿得到同名符号。
+export '../../app/theme/layout_tokens.dart' show kWideNavRailWidth;
 
 /// 左导航行文案（浅色设计稿 `#3A3A3C`，对 page 10.17:1）；深色回退 label 语义色。
 const Color _kNavRowLabel = Color(0xFF3A3A3C);
