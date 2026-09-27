@@ -252,8 +252,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
         leading: const AppBackButton(),
-        // #163：宽屏补 0.5px 发丝线，与左侧品牌栏下方那条对齐（同色同高）。
-        bottom: isWide ? const _NavBarHairline() : null,
+        // #163/#170：顶栏底部 0.5px 发丝线。宽屏与左侧品牌栏同高对齐；窄屏
+        // 主人 2026-09-27 拍板同样显示（iOS 惯例：内容从栏下滑过时给出分界）。
+        bottom: const _NavBarHairline(),
         middle: GestureDetector(
           key: const ValueKey('chat-title-outline-trigger'),
           onTap: _toggleOutline,

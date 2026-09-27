@@ -811,7 +811,7 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    testWidgets('#163 窄屏：顶栏不加线、标题与字段走原档位（逐像素不变）', (tester) async {
+    testWidgets('#163 窄屏：顶栏同样带 0.5 线、标题与字段仍走原档位', (tester) async {
       // flutter_test 默认逻辑宽 800（< 900）= 窄屏分支；显式固定，免受同文件
       // 其他用例改过的 viewport 影响。
       tester.view.physicalSize = const Size(800, 600);
@@ -840,7 +840,9 @@ void main() {
       final navBar = tester.widget<CupertinoNavigationBar>(
         find.byType(CupertinoNavigationBar),
       );
-      expect(navBar.bottom, isNull);
+      // #170：窄屏顶栏同样带 0.5px 发丝线（总高 44.5）。
+      expect(navBar.bottom, isNotNull);
+      expect(tester.getSize(find.byType(CupertinoNavigationBar)).height, 44.5);
       final title = tester.widget<Text>(find.text('窄屏栏位校验'));
       expect(title.style, isNull);
 
