@@ -1696,3 +1696,61 @@ Future<void> resumeCompressionIfRunning();
 ### 遗留（服务端侧，未动）
 webui 上游「同一行两投影都输出」的行为未修（`api/models.py` 自带 #5339 记载）。
 客户端已挡死；是否去 `D:\hermes-webui` 根治由主人定。
+
+---
+
+## #173 轮次完成后「重播该轮已显示完毕的内容」（服务端内部恢复载体被当消息渲染）
+
+**分类**：问题（bug）　**状态**：代码已交付（待主人真机复验）　**发现**：2026-09-27（主人报告）
+
+### 现象（主人原话）
+「我还发现一个问题 就是会话轮次完成以后 有时候会重播该轮次已经显示完毕的整个会话。」
+
+### 取证（实证，非推断）
+同一会话（`5052efdc1f11`）里同一段 assistant 正文**出现两次**（`[296]` 与 `[300]`，逐字相同）：
+
+```
+[295] user      ts=…628  「我还发现一个问题…」                        ← 正常 DB 行
+[296] assistant ts=…708  正文 + tool_calls                            ← 正常（已显示完毕）
+[297][298] tool                                                       ← 工具结果
+[299] user      ts=…626  _recovered=true   同一条用户消息             ← 恢复副本
+[300] assistant ts=…815  _partial=true + _partial_tool_calls=[整轮]   ← 部分副本
+[301] assistant ts=…815  _error=true   **Error:** HTTP 500 … EOF      ← 错误载体
+```
+
+**关键**：该轮请求撞上 provider `HTTP 500 … EOF` ⇒ Hermes 写回三个**内部恢复标记**。
+
+服务端语义（webui 自己就是按「内部状态」处理的）：
+- `api/streaming.py:4100-4110`：「Skip persisted error markers — **never send them to the LLM as prior context**」
+  ／「Skip `_partial` markers with no visible content」
+- `api/models.py:8147` 注释：「appending those rows makes … show **duplicated process prose** after cancel」
+  ⇒ webui **已经知道**「重复过程正文」这一现象（它有 sidecar display-owner 逻辑）
+- `api/routes.py:4698`：组装**客户端内容行**时把 `tool_calls` 与 `_partial_tool_calls` **一并展开**
+  ⇒ partial 会带出**整轮工具卡**
+
+**App 侧零处理**（`grep '_partial'` / `'_recovered'` 全空）⇒ 当普通消息渲染 ⇒ **该轮被整段再放一遍** ✓
+
+排除项：`expand_renderable` 在 webui 已废弃（`_ = expand_renderable`，仅兼容旧前端）⇒ App 收到的是**带标记的原始消息**，不是展开行。
+
+### 修复（判据刻意保守：只去重、绝不无条件丢弃）
+1. `lib/core/models/chat_message.dart`：新增 `isPartialArtifact` / `isRecoveredArtifact`
+   （解析 `_partial` / `_recovered`；`copyWith` / `toJson` / `==` / `hashCode` 同步）。
+2. `lib/features/chat/chat_diff_merge.dart`：新增 `dropRecoveryArtifacts`：
+   **内容（归一化后 ≥16 字）被同会话非载体消息覆盖 ⇒ 丢弃**；
+   覆盖池只收非载体消息（避免两个载体互相「覆盖」而都留下）；
+   **无覆盖则保留**（重试也失败时 partial 可能是该轮唯一回复）；`_error` **保留**。
+3. **两条装配路径都接线**（#172 教训）：`diffMergeMessages` 入口 + `ChatController._mergingLoadedMessages` 入口。
+
+### 守卫与 RED
+- 新增 `test/features/chat/chat_recovery_artifact_dedup_test.dart`（8 例：partial 被覆盖即丢 /
+  recovered 去重 / **唯一内容必须保留** / **短文本不误伤** / 两载体互不覆盖 / `_error` 保留 /
+  正常对话不动 / `diffMergeMessages` 入口接线）。
+- `chat_controller_test.dart` 新增「done 快照含内部恢复载体 → 不重复渲染该轮」。
+  RED：摘掉 `_mergingLoadedMessages` 的接线 → `Expected <2>, Actual <4>` 精确复现重复渲染。
+
+### 验收
+`analyze` 零告警；全量测试见提交信息。
+
+### 遗留（服务端侧）
+webui 的 sidecar display-owner 逻辑（`_sidecar_has_terminal_partial_error`）只在它自己的合并路径生效，
+App 读的另一条路径仍会拿到载体行。客户端现已挡死；是否去 `D:\hermes-webui` 根治由主人定。

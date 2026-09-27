@@ -891,6 +891,65 @@ void main() {
         );
       });
     });
+
+    test('#173: done 快照含内部恢复载体（_partial/_recovered）→ 不重复渲染该轮', () {
+      fakeAsync((async) {
+        final api = FakeChatApi();
+        final container = _buildContainer(api, _FakeClock());
+        final controller = container.read(chatControllerProvider('').notifier);
+        unawaited(controller.send('hi'));
+        async.flushMicrotasks();
+
+        // Hermes 出错重试时写回的内部载体：partial（部分回复快照，带
+        // _partial_tool_calls）与 recovered（用户消息副本），内容与正常消息重复。
+        const body = '#173恢复载体探针正文（内容足够长以便进入覆盖池判定）';
+        api.emit(
+          const DoneSseEvent(
+            DoneStreamEvent(
+              session: {
+                'session_id': 's1',
+                'messages': [
+                  {'role': 'user', 'content': body, 'timestamp': 1790488628.0},
+                  {
+                    'role': 'assistant',
+                    'content': body,
+                    'timestamp': 1790488708.0,
+                  },
+                  {
+                    'role': 'assistant',
+                    'content': body,
+                    'timestamp': 1790488815.0,
+                    '_partial': true,
+                    '_partial_tool_calls': [
+                      {
+                        'name': 'terminal',
+                        'args': {'command': 'x'},
+                      },
+                    ],
+                  },
+                  {
+                    'role': 'user',
+                    'content': body,
+                    'timestamp': 1790488626.0,
+                    '_recovered': true,
+                  },
+                ],
+              },
+            ),
+          ),
+        );
+        async.flushMicrotasks();
+
+        final state = container.read(chatControllerProvider(''));
+        expect(
+          state.messages
+              .where((m) => (m.content ?? '').contains('恢复载体探针'))
+              .length,
+          2,
+          reason: '载体必须退场（只剩 user + assistant 两条），否则该轮已显示内容会被再播一遍',
+        );
+      });
+    });
   });
 
   group('同回合连续工具调用合并-Hermes 真实形状（role=tool 结果+空文本 assistant 交替）', () {

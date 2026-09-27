@@ -28,6 +28,8 @@ class ChatMessage {
     this.reasoning,
     this.attachments,
     this.turnTps,
+    this.isPartialArtifact = false,
+    this.isRecoveredArtifact = false,
   });
 
   /// 容错解码。content 可为字符串 / 内容部件数组 / 任意 JSONValue；
@@ -60,6 +62,8 @@ class ChatMessage {
       }
     }
     final turnTps = lossyDouble(json, '_turnTps');
+    final isPartialArtifact = json['_partial'] == true;
+    final isRecoveredArtifact = json['_recovered'] == true;
     final decodedAttachments = _decodeAttachmentsTolerantly(json);
     return ChatMessage(
       role: role,
@@ -74,6 +78,8 @@ class ChatMessage {
       reasoning: reasoning,
       attachments: _enrichAttachments(decodedAttachments, content),
       turnTps: turnTps,
+      isPartialArtifact: isPartialArtifact,
+      isRecoveredArtifact: isRecoveredArtifact,
     );
   }
 
@@ -92,6 +98,18 @@ class ChatMessage {
   final List<MessageAttachment>? attachments;
   final double? turnTps;
 
+  /// Hermes 内部恢复载体：中断/出错后写回的「部分回复」快照（`_partial`）。
+  ///
+  /// 其内容与已显示的流式内容**重复**（并带 `_partial_tool_calls`，webui 组装
+  /// 客户端内容行时会与 `tool_calls` 一起展开 ⇒ 整轮正文+工具卡被再放一遍）。
+  /// 装配层按「内容已被同会话其他消息覆盖即去重」处理，**绝不无条件丢弃**
+  ///（重试失败时它可能是该轮唯一回复）。
+  final bool isPartialArtifact;
+
+  /// Hermes 内部恢复载体：中断恢复时写回的用户消息副本（`_recovered`），
+  /// 与原始 user 消息同内容。同按内容覆盖去重。
+  final bool isRecoveredArtifact;
+
   /// Identifiable：`messageId ?? '$role-$timestamp-$content'`。
   String get id => messageId ?? '$role-${timestamp ?? 0}-${content ?? ''}';
 
@@ -109,6 +127,8 @@ class ChatMessage {
     String? reasoning,
     List<MessageAttachment>? attachments,
     double? turnTps,
+    bool? isPartialArtifact,
+    bool? isRecoveredArtifact,
   }) {
     return ChatMessage(
       role: role ?? this.role,
@@ -123,6 +143,8 @@ class ChatMessage {
       reasoning: reasoning ?? this.reasoning,
       attachments: attachments ?? this.attachments,
       turnTps: turnTps ?? this.turnTps,
+      isPartialArtifact: isPartialArtifact ?? this.isPartialArtifact,
+      isRecoveredArtifact: isRecoveredArtifact ?? this.isRecoveredArtifact,
     );
   }
 
@@ -143,6 +165,8 @@ class ChatMessage {
       if (attachments != null)
         'attachments': attachments!.map((e) => e.toJson()).toList(),
       if (turnTps != null) '_turnTps': turnTps,
+      if (isPartialArtifact) '_partial': true,
+      if (isRecoveredArtifact) '_recovered': true,
     };
   }
 
@@ -366,7 +390,9 @@ class ChatMessage {
         deepEquals(other.contentParts, contentParts) &&
         other.reasoning == reasoning &&
         deepEquals(other.attachments, attachments) &&
-        other.turnTps == turnTps;
+        other.turnTps == turnTps &&
+        other.isPartialArtifact == isPartialArtifact &&
+        other.isRecoveredArtifact == isRecoveredArtifact;
   }
 
   @override
@@ -384,6 +410,8 @@ class ChatMessage {
       reasoning,
       deepHash(attachments),
       turnTps,
+      isPartialArtifact,
+      isRecoveredArtifact,
     );
   }
 

@@ -16,6 +16,9 @@ List<ChatMessage> diffMergeMessages({
   required List<ChatMessage> serverMessages,
   String? liveStreamingMessageId,
 }) {
+  // 内部恢复载体（_partial / _recovered）先退场：它们不是对话内容，而是 Hermes
+  // 出错重试时写回的**重复副本**（详见 dropRecoveryArtifacts）。
+  serverMessages = dropRecoveryArtifacts(serverMessages);
   if (localMessages.isEmpty) {
     return dedupeServerUserMessages(serverMessages);
   }
@@ -360,4 +363,64 @@ void _stableSortMessages(List<ChatMessage> list) {
       return tsA.compareTo(tsB);
     });
   }
+}
+
+/// 内容归一化键（丢弃空白差异），用于「是否已被同会话其他消息覆盖」判定。
+String _recoveryArtifactKey(ChatMessage m) =>
+    stripInjectionMarkers(m.content ?? '')
+        .replaceAll(RegExp(r'\s+'), '')
+        .trim();
+
+/// 覆盖判定所需的最小长度：短文本（如「好的」）被判据误伤的概率过高，
+/// 宁可留着重复也不丢内容（重试失败时 partial 可能是该轮唯一回复）。
+const int _kRecoveryArtifactMinCoverChars = 16;
+
+/// 丢弃「内部恢复载体」中**已被同会话其他消息覆盖**的行。
+///
+/// Hermes 在请求失败 / 中断后会写回三个内部标记，webui 自己也把它们当内部状态
+/// （`api/streaming.py` 注释「Skip _partial markers…」、`api/models.py` 注释
+/// 「appending those rows makes … show duplicated process prose after cancel」）：
+///
+/// | 标记 | role | 含义 | 客户端表现 |
+/// |---|---|---|---|
+/// | `_partial` | assistant | 中断时的**部分回复快照**；webui 组装客户端内容行时会把
+/// `_partial_tool_calls` 与 `tool_calls` 一并展开（`api/routes.py`） | 该轮已显示完毕的
+/// 正文 + 整轮工具卡**被整段再放一遍**（主人现象：「轮次完成后重播该轮」） |
+/// | `_recovered` | user | 中断恢复时写回的**用户消息副本** | 用户气泡显示两次 |
+/// | `_error` | assistant | 错误载体（`**Error:** …`） | **保留**：它不是「已显示内容」的
+/// 重播源，且往往是错误的唯一可见面 |
+///
+/// **判据取「内容已被覆盖」而非无条件丢弃** —— 否则重试也失败时会把该轮唯一回复一起丢掉。
+/// 覆盖池只收**非**载体消息，避免两个载体互相「覆盖」而都留下。
+List<ChatMessage> dropRecoveryArtifacts(List<ChatMessage> messages) {
+  if (messages.length < 2) {
+    return messages;
+  }
+  final pool = <String>[];
+  for (final m in messages) {
+    if (m.isPartialArtifact || m.isRecoveredArtifact) {
+      continue;
+    }
+    final key = _recoveryArtifactKey(m);
+    if (key.length >= _kRecoveryArtifactMinCoverChars) {
+      pool.add(key);
+    }
+  }
+  if (pool.isEmpty) {
+    return messages;
+  }
+  final result = <ChatMessage>[];
+  for (final m in messages) {
+    if (m.isPartialArtifact || m.isRecoveredArtifact) {
+      final key = _recoveryArtifactKey(m);
+      final covered =
+          key.length >= _kRecoveryArtifactMinCoverChars &&
+          pool.any((c) => c.contains(key));
+      if (covered) {
+        continue;
+      }
+    }
+    result.add(m);
+  }
+  return result;
 }

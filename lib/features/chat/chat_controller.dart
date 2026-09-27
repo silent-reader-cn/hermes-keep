@@ -3252,6 +3252,8 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     // 那条路径已折叠，这条原先没有，于是回合完成瞬间会冒出第二个「裸标记」气泡
     //（主人现象：消息显示两次、第二条没做渲染）。三条 return 都基于 loaded，
     // 故在入口折叠一次即可全覆盖。
+    // 内部恢复载体先退场，再折叠同源两形态（两条装配路径都必须调，见 #172 教训）。
+    loaded = dropRecoveryArtifacts(loaded);
     loaded = dedupeServerUserMessages(loaded);
     if (loaded.isEmpty) return List<ChatMessage>.from(current);
     if (current.isEmpty) return loaded;
