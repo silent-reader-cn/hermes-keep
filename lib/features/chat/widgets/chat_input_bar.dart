@@ -377,7 +377,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final isSending = phase == ChatPhase.sending;
     if (!widget.enabled || isSending || isStreaming) return false;
     // #156：压缩期间不接受新回合（回车 / Ctrl+Enter 一并拦截）。
-    if (ref.read(chatControllerProvider(widget.sessionId)).isCompressingContext) {
+    if (ref
+        .read(chatControllerProvider(widget.sessionId))
+        .isCompressingContext) {
       return false;
     }
     final pending = ref.read(pendingSelectionsProvider(widget.sessionId));
@@ -720,6 +722,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     _bindPrefillListener(widget.sessionId);
     _bindAutoOpenListener(widget.sessionId);
     final l10n = AppLocalizations.of(context);
+    // #163 宽屏输入栏收紧：字段 17→15pt、最少 1 行起（内容多了自动长）、
+    // 图标 22→18、chip 11.5→10.5。窄屏（手机）保持原样，逐像素不变。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     final phase = ref.watch(chatPhaseProvider(widget.sessionId));
     final isStreaming =
         phase == ChatPhase.streaming ||
@@ -743,9 +748,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     // 禁用、输入框提示 —— 压缩会重写 transcript（插摘要锚点 + 裁剪轮次），
     // 此时发出新回合会与服务端压缩线程互相覆盖（服务端不拦，客户端自守）。
     final isCompressing = ref.watch(
-      chatControllerProvider(
-        widget.sessionId,
-      ).select((s) => s.isCompressingContext),
+      chatControllerProvider(widget.sessionId)
+          .select((s) => s.isCompressingContext),
     );
     final sendMode = ref.watch(chatSendShortcutSettingsProvider).mode;
     // 两段式输入栏开关（设置 → 对话；默认关闭=经典单行）。
@@ -801,7 +805,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                             ? const CupertinoActivityIndicator()
                             : Icon(
                                 CupertinoIcons.plus_circle,
-                                size: 22,
+                                size: isWide ? 18 : 22,
                                 color: LightSurfaces.resolve(
                                   context,
                                   LightSurfaces.textSecondary,
@@ -820,7 +824,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           padding: EdgeInsets.zero,
                           child: Icon(
                             CupertinoIcons.bookmark,
-                            size: 22,
+                            size: isWide ? 18 : 22,
                             color: LightSurfaces.resolve(
                               context,
                               LightSurfaces.textSecondary,
@@ -922,6 +926,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                               ),
                               // 行数策略（主人定版）：经典模式保留自适应 max4 软上限
                               // （不收回单行）；ctrlEnter 模式多行不封顶。
+                              // #163：宽屏字段 17（主题默认）→ 15。
+                              style: isWide
+                                  ? const TextStyle(fontSize: 15)
+                                  : null,
                               minLines: 1,
                               maxLines: multiline ? null : 4,
                               contextMenuBuilder: (context, editableTextState) {
@@ -990,9 +998,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           label: l10n.stopGenerating,
                           onPressed: _stop,
                           padding: EdgeInsets.zero,
-                          child: const Icon(
+                          child: Icon(
                             CupertinoIcons.stop_circle,
-                            size: 22,
+                            size: isWide ? 18 : 22,
                             color: CupertinoColors.systemRed,
                           ),
                         ),
@@ -1003,9 +1011,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                               ? _submit
                               : null,
                           padding: EdgeInsets.zero,
-                          child: const Icon(
+                          child: Icon(
                             CupertinoIcons.arrow_right_circle,
-                            size: 22,
+                            size: isWide ? 18 : 22,
                             color: CupertinoColors.activeBlue,
                           ),
                         ),
@@ -1021,9 +1029,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                               ? _submit
                               : null,
                           padding: EdgeInsets.zero,
-                          child: const Icon(
+                          child: Icon(
                             CupertinoIcons.arrow_up_circle,
-                            size: 22,
+                            size: isWide ? 18 : 22,
                             color: CupertinoColors.activeBlue,
                           ),
                         ),
@@ -1046,6 +1054,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     ChatSendShortcutMode sendMode,
     bool isCompressing,
   ) {
+    // #163：宽屏收紧（图标 22→18、字段 15pt）；窄屏不变。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1147,10 +1157,16 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                               ? l10n.steerPromptPlaceholder
                               : l10n.sendMessagePlaceholder)),
               enabled: !isSending && !_uploading && interactive,
-              minLines: 2,
+              // #163：宽屏最少 1 行起（空输入不再白占一行），内容多了自动长。
+              minLines: isWide ? 1 : 2,
               maxLines: 8,
               keyboardType: TextInputType.multiline,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              // #163：宽屏字段文字 17（主题默认）→ 15，与「正文 13.5 / 侧栏 12.5」
+              // 的阶梯对齐（CupertinoTextField 会与主题 style merge，字体族不受影响）。
+              style: isWide ? const TextStyle(fontSize: 15) : null,
+              padding: isWide
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 7)
+                  : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               contextMenuBuilder: (context, editableTextState) {
                 final buttonItems = editableTextState.contextMenuButtonItems
                     .map((item) {
@@ -1199,7 +1215,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   ? const CupertinoActivityIndicator()
                   : Icon(
                       CupertinoIcons.plus_circle,
-                      size: 22,
+                      size: isWide ? 18 : 22,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -1218,7 +1234,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 padding: EdgeInsets.zero,
                 child: Icon(
                   CupertinoIcons.bookmark,
-                  size: 22,
+                  size: isWide ? 18 : 22,
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
@@ -1267,6 +1283,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     bool canSendWithPending,
     bool isCompressing,
   ) {
+    // #163：宽屏图标 22→18。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     return [
       if (isStreaming) ...[
         AccessibleButton(
@@ -1274,9 +1292,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           label: l10n.stopGenerating,
           onPressed: _stop,
           padding: EdgeInsets.zero,
-          child: const Icon(
+          child: Icon(
             CupertinoIcons.stop_circle,
-            size: 22,
+            size: isWide ? 18 : 22,
             color: CupertinoColors.systemRed,
           ),
         ),
@@ -1287,9 +1305,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ? _submit
               : null,
           padding: EdgeInsets.zero,
-          child: const Icon(
+          child: Icon(
             CupertinoIcons.arrow_right_circle,
-            size: 22,
+            size: isWide ? 18 : 22,
             color: CupertinoColors.activeBlue,
           ),
         ),
@@ -1299,13 +1317,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           label: l10n.sendMessage,
           // #156：压缩期间禁用发送（输入仍可编辑，回车也会被拦）。
           onPressed:
-              (interactive && !isCompressing && (_hasText || canSendWithPending))
+              (interactive &&
+                  !isCompressing &&
+                  (_hasText || canSendWithPending))
               ? _submit
               : null,
           padding: EdgeInsets.zero,
-          child: const Icon(
+          child: Icon(
             CupertinoIcons.arrow_up_circle,
-            size: 22,
+            size: isWide ? 18 : 22,
             color: CupertinoColors.activeBlue,
           ),
         ),

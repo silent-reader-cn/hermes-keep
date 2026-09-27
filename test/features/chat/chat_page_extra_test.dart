@@ -61,7 +61,9 @@ void main() {
       // 面板未展开：截断预览（前 40 字 + '…'）不在树中
       expect(find.text(_outlinePreview(contentA)), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('chat-title-outline-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('chat-title-outline-trigger')),
+      );
       await tester.pump();
 
       // 大纲行预览为「前 40 字 + …」，消息本体更长 → 该文本只属于大纲面板
@@ -69,7 +71,9 @@ void main() {
       expect(find.text(_outlinePreview(contentB)), findsOneWidget);
 
       // 再次点击标题 → 收起（_dismissOutline + setState）
-      await tester.tap(find.byKey(const ValueKey('chat-title-outline-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('chat-title-outline-trigger')),
+      );
       await tester.pump();
       expect(find.text(_outlinePreview(contentA)), findsNothing);
       expect(find.text(_outlinePreview(contentB)), findsNothing);
@@ -81,7 +85,9 @@ void main() {
       final api = _FakeChatApi()..sessionResult = outlineSession();
       await _pumpPage(tester, api);
 
-      await tester.tap(find.byKey(const ValueKey('chat-title-outline-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('chat-title-outline-trigger')),
+      );
       await tester.pump();
       expect(find.text(_outlinePreview(contentB)), findsOneWidget);
 
@@ -99,7 +105,9 @@ void main() {
       final api = _FakeChatApi()..sessionResult = outlineSession();
       await _pumpPage(tester, api);
 
-      await tester.tap(find.byKey(const ValueKey('chat-title-outline-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('chat-title-outline-trigger')),
+      );
       await tester.pump();
       expect(find.text(_outlinePreview(contentA)), findsOneWidget);
 
@@ -126,7 +134,9 @@ void main() {
         };
       await _pumpPage(tester, api);
 
-      await tester.tap(find.byKey(const ValueKey('chat-title-outline-trigger')));
+      await tester.tap(
+        find.byKey(const ValueKey('chat-title-outline-trigger')),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -141,9 +151,7 @@ void main() {
   // B. Windows 项目文件夹入口（_openProjectFolder / openSessionProjectFolder）
   // ---------------------------------------------------------------------------
   group('Windows 会话项目文件夹入口', () {
-    testWidgets('会话带 workspace → 头部出现文件夹按钮；缺失目录走 notice 提示', (
-      tester,
-    ) async {
+    testWidgets('会话带 workspace → 头部出现文件夹按钮；本机无该目录时落到内置工作区页', (tester) async {
       final api = _FakeChatApi()
         ..sessionResult = {
           'session': {
@@ -153,7 +161,7 @@ void main() {
             'messages': const [],
           },
         };
-      await _pumpPage(tester, api);
+      await _pumpRouted(tester, api);
 
       expect(
         find.byKey(const ValueKey('chat-open-project-folder')),
@@ -162,13 +170,12 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('chat-open-project-folder')));
       await _settleRealIo(tester);
+      await tester.pumpAndSettle();
 
-      // 目录不存在 → 绝不静默失败，以 notice 提示路径
-      expect(find.textContaining('项目文件夹不存在'), findsOneWidget);
-      expect(
-        tester.widget<Text>(find.textContaining('项目文件夹不存在')).data,
-        contains(r'C:\__hermes_missing_dir_for_test__'),
-      );
+      // #163 新分流：本机没有这个目录 → 直接进内置工作区文件页
+      //（旧行为是只弹一句「项目文件夹不存在」把路走死）。
+      expect(find.text('工作区页:s1'), findsOneWidget);
+      expect(find.textContaining('项目文件夹不存在'), findsNothing);
 
       await _unmount(tester);
     }, skip: !_isWindowsDesktop);
@@ -184,14 +191,15 @@ void main() {
         };
       await _pumpPage(tester, api);
 
-      expect(find.byKey(const ValueKey('chat-open-project-folder')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('chat-open-project-folder')),
+        findsNothing,
+      );
 
       await _unmount(tester);
     }, skip: !_isWindowsDesktop);
 
-    testWidgets('三点菜单内亦有「打开项目文件夹」项，点击同样提示路径缺失', (
-      tester,
-    ) async {
+    testWidgets('三点菜单内亦有「打开项目文件夹」项，点击同样落到内置工作区页', (tester) async {
       final api = _FakeChatApi()
         ..sessionResult = {
           'session': {
@@ -213,8 +221,10 @@ void main() {
         find.byKey(const ValueKey('chat-action-open-project-folder')),
       );
       await _settleRealIo(tester);
+      await tester.pumpAndSettle();
 
-      expect(find.textContaining('项目文件夹不存在'), findsOneWidget);
+      // #163：菜单入口与顶栏图标同一分流 —— 本机无该目录 → 内置工作区文件页。
+      expect(find.text('工作区页:s1'), findsOneWidget);
 
       await _unmount(tester);
     }, skip: !_isWindowsDesktop);
@@ -274,9 +284,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('压缩：留空主题确认 → focusTopic 空串仍走压缩（全量压缩）', (
-      tester,
-    ) async {
+    testWidgets('压缩：留空主题确认 → focusTopic 空串仍走压缩（全量压缩）', (tester) async {
       final api = _FakeChatApi()..sessionResult = plainSession();
       await _pumpRouted(tester, api);
 
@@ -314,9 +322,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('暗色模式压缩对话框 → 走 CupertinoTextField 默认装饰与占位样式', (
-      tester,
-    ) async {
+    testWidgets('暗色模式压缩对话框 → 走 CupertinoTextField 默认装饰与占位样式', (tester) async {
       final api = _FakeChatApi()..sessionResult = plainSession();
       await _pumpRouted(tester, api, brightness: Brightness.dark);
 
@@ -379,9 +385,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('重试上一轮：菜单点击 → retrySession 并把原文回填输入框', (
-      tester,
-    ) async {
+    testWidgets('重试上一轮：菜单点击 → retrySession 并把原文回填输入框', (tester) async {
       final api = _FakeChatApi()..sessionResult = plainSession();
       await _pumpRouted(tester, api);
 
@@ -512,9 +516,7 @@ void main() {
         ..sessionResult = {
           'session': {'session_id': 's1', 'messages': const []},
         }
-        ..startChatError = NetworkException(
-          NetworkExceptionKind.cannotConnect,
-        );
+        ..startChatError = NetworkException(NetworkExceptionKind.cannotConnect);
       await _pumpPage(tester, api);
       final container = _containerOf(tester);
 
@@ -570,10 +572,7 @@ void main() {
       expect(find.byKey(const ValueKey('chat-stop-button')), findsOneWidget);
 
       final notifier = container.read(chatControllerProvider('s1').notifier);
-      await notifier.send(
-        '排队一',
-        behavior: StreamingSendBehavior.queue,
-      );
+      await notifier.send('排队一', behavior: StreamingSendBehavior.queue);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
@@ -624,9 +623,7 @@ void main() {
         'session': {'session_id': 's1', 'messages': const []},
       };
 
-    testWidgets('expires_at 已过期 → 立即超时收卡并提示（_handleTimeout）', (
-      tester,
-    ) async {
+    testWidgets('expires_at 已过期 → 立即超时收卡并提示（_handleTimeout）', (tester) async {
       final api = baseApi();
       await _pumpPage(tester, api);
       final container = _containerOf(tester);
@@ -644,7 +641,10 @@ void main() {
       expect(find.text('过期澄清'), findsNothing);
       // _handleTimeout → handleClarificationTimeout → setNotice('澄清已超时')
       expect(
-        container.read(chatControllerProvider('s1')).pendingAction.clarificationPrompt,
+        container
+            .read(chatControllerProvider('s1'))
+            .pendingAction
+            .clarificationPrompt,
         isNull,
       );
 
@@ -657,8 +657,7 @@ void main() {
       final api = baseApi();
       await _pumpPage(tester, api);
 
-      final requestedAt =
-          (DateTime.now().millisecondsSinceEpoch / 1000) - 1;
+      final requestedAt = (DateTime.now().millisecondsSinceEpoch / 1000) - 1;
       await emitClarify(tester, api, {
         'question': '走 requested_at 分支',
         'choices_offered': <String>[],
@@ -712,7 +711,10 @@ void main() {
 
       // 推进 1s → Timer.periodic 触发一次，rem 仍 >0 → 仅刷新剩余秒数
       await tester.pump(const Duration(seconds: 1));
-      expect(find.byKey(const ValueKey('chat-prompt-clarify-countdown')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('chat-prompt-clarify-countdown')),
+        findsOneWidget,
+      );
       expect(find.text('正常倒计时'), findsOneWidget);
 
       await _unmount(tester);
@@ -724,8 +726,7 @@ void main() {
       final container = _containerOf(tester);
 
       // expires_at = now + 0.5s：ceil(0.5)=1 → 计时器启动（不立即超时）
-      final expiresAt =
-          (DateTime.now().millisecondsSinceEpoch / 1000) + 0.5;
+      final expiresAt = (DateTime.now().millisecondsSinceEpoch / 1000) + 0.5;
       await emitClarify(tester, api, {
         'question': '跨过目标的澄清',
         'choices_offered': <String>[],
@@ -743,7 +744,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(
-        container.read(chatControllerProvider('s1')).pendingAction.clarificationPrompt,
+        container
+            .read(chatControllerProvider('s1'))
+            .pendingAction
+            .clarificationPrompt,
         isNull,
       );
       expect(find.text('需要澄清'), findsNothing);
@@ -751,9 +755,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('父级状态更新触发 didUpdateWidget → 澄清 id 未变则不重启计时', (
-      tester,
-    ) async {
+    testWidgets('父级状态更新触发 didUpdateWidget → 澄清 id 未变则不重启计时', (tester) async {
       final api = baseApi();
       await _pumpPage(tester, api);
       final container = _containerOf(tester);
@@ -787,7 +789,10 @@ void main() {
       // 仍是同一条卡片、同一计时（未重建）
       expect(find.text('重绘不重启'), findsOneWidget);
       expect(find.text('03:20'), findsOneWidget);
-      expect(find.byKey(const ValueKey('chat-prompt-clarify-input')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('chat-prompt-clarify-input')),
+        findsOneWidget,
+      );
 
       await _unmount(tester);
     });
@@ -839,9 +844,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('暗色模式重命名对话框 → 走 CupertinoTextField 默认装饰与占位样式', (
-      tester,
-    ) async {
+    testWidgets('暗色模式重命名对话框 → 走 CupertinoTextField 默认装饰与占位样式', (tester) async {
       final api = _FakeChatApi()..sessionResult = titledSession();
       await _pumpRouted(tester, api, brightness: Brightness.dark);
 
@@ -962,16 +965,10 @@ void main() {
   // J. 新会话 URL 替换 + 生命周期 resumed 监听
   // ---------------------------------------------------------------------------
   group('新会话与生命周期', () {
-    testWidgets('新会话首条消息后 sessionId 非空 → go 替换为 /chat/<newId>', (
-      tester,
-    ) async {
+    testWidgets('新会话首条消息后 sessionId 非空 → go 替换为 /chat/<newId>', (tester) async {
       final api = _FakeChatApi()
         ..sessionResult = {
-          'session': {
-            'session_id': '',
-            'title': '新会话',
-            'messages': const [],
-          },
+          'session': {'session_id': '', 'title': '新会话', 'messages': const []},
         };
       final router = await _pumpNewSessionRoute(tester, api);
       expect(router.state.uri.path, '/chat');

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/popover_dropdown.dart';
@@ -21,10 +22,7 @@ import '../chat_providers.dart';
 /// 3. 工作区失效：红字「工作区已失效」，描边偏红；判定条件为 roots 列表非空且找不到该 path；
 /// 4. 悬停：描边加深一档，无阴影不变形。
 class ComposerMetaChips extends ConsumerStatefulWidget {
-  const ComposerMetaChips({
-    super.key,
-    required this.sessionId,
-  });
+  const ComposerMetaChips({super.key, required this.sessionId});
 
   final String sessionId;
 
@@ -32,11 +30,7 @@ class ComposerMetaChips extends ConsumerStatefulWidget {
   ConsumerState<ComposerMetaChips> createState() => _ComposerMetaChipsState();
 }
 
-enum _ActiveMenuType {
-  none,
-  workspace,
-  model,
-}
+enum _ActiveMenuType { none, workspace, model }
 
 class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
   OverlayEntry? _activeMenuEntry;
@@ -314,7 +308,8 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
     // 工作区失效判定：roots 列表非空且其中找不到该 path
     final hasWorkspace =
         currentWorkspace != null && currentWorkspace.trim().isNotEmpty;
-    final isWorkspaceUnavailable = hasWorkspace &&
+    final isWorkspaceUnavailable =
+        hasWorkspace &&
         roots != null &&
         roots.isNotEmpty &&
         !roots.any((r) => r.path == currentWorkspace);
@@ -325,14 +320,15 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
     final workspaceDisplayValue = isWorkspaceUnavailable
         ? l10n.composerWorkspaceUnavailable
         : hasWorkspace
-            ? ((matchRoot?.name != null && matchRoot!.name!.trim().isNotEmpty)
-                ? matchRoot.name!
-                : currentWorkspace)
-            : l10n.composerNoWorkspace;
+        ? ((matchRoot?.name != null && matchRoot!.name!.trim().isNotEmpty)
+              ? matchRoot.name!
+              : currentWorkspace)
+        : l10n.composerNoWorkspace;
 
     final hasModel = currentModel != null && currentModel.trim().isNotEmpty;
-    final modelDisplayValue =
-        hasModel ? currentModel : l10n.composerDefaultModel;
+    final modelDisplayValue = hasModel
+        ? currentModel
+        : l10n.composerDefaultModel;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -370,7 +366,9 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
                 key: const ValueKey('composer-model-chip'),
                 triggerKey: _modelKey,
                 icon: CupertinoIcons.sparkles,
-                keyName: showKeyName && hasModel ? l10n.composerModelLabel : null,
+                keyName: showKeyName && hasModel
+                    ? l10n.composerModelLabel
+                    : null,
                 value: modelDisplayValue,
                 isDashed: !hasModel,
                 isError: false,
@@ -418,6 +416,11 @@ class _MetaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
+    // #163：宽屏 chip 收一档（11.5 → 10.5、图标 11 → 10），与输入栏收紧同批；
+    // 窄屏保持原尺寸逐像素不变。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+    final chipFontSize = isWide ? 10.5 : 11.5;
+    final chipIconSize = isWide ? 10.0 : 11.0;
 
     // 面色
     final surfaceColor = LightSurfaces.resolve(
@@ -473,17 +476,13 @@ class _MetaChip extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(
-          icon,
-          size: 11,
-          color: isError ? valueColor : keyColor,
-        ),
+        Icon(icon, size: chipIconSize, color: isError ? valueColor : keyColor),
         if (keyName != null) ...[
           const SizedBox(width: 5),
           Text(
             keyName!,
-            style: const TextStyle(
-              fontSize: 11.5,
+            style: TextStyle(
+              fontSize: chipFontSize,
               fontWeight: FontWeight.w400,
               color: keyColor,
             ),
@@ -494,7 +493,7 @@ class _MetaChip extends StatelessWidget {
           child: Text(
             value,
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: chipFontSize,
               fontWeight: valueWeight,
               color: valueColor,
             ),
@@ -538,10 +537,7 @@ class _MetaChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: surfaceColor,
           borderRadius: BorderRadius.circular(_radius),
-          border: Border.all(
-            color: borderColor,
-            width: 0.5,
-          ),
+          border: Border.all(color: borderColor, width: 0.5),
         ),
         child: content,
       );

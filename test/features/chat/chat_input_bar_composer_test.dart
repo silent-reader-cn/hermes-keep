@@ -373,7 +373,9 @@ void main() {
 
   group('ChatInputBar 上下文窗口指示器位置与排列顺序（todo #1）', () {
     testWidgets('经典单行布局：[＋] [书签] [上下文圆环] [输入框] [发送] 水平从左到右排列', (tester) async {
-      SharedPreferences.setMockInitialValues({ComposerTwoPaneController.keyTwoPane: false});
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: false,
+      });
       final chatApi = FakeChatApi();
       chatApi.sessionResult = {
         'session': {'session_id': 's1', 'messages': const []},
@@ -570,14 +572,8 @@ void main() {
       await _pumpComposer(tester, chatApi: chatApi, apiClient: client);
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(
-        find.byKey(const ValueKey('chat-attach-button')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('perf-monitor-panel')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('chat-attach-button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('perf-monitor-panel')), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-send-button')), findsOneWidget);
 
       await _unmount(tester);
@@ -717,11 +713,7 @@ void main() {
         baseUrl: 'http://test.local:30002',
         dio: failingDio,
       );
-      await _pumpComposer(
-        tester,
-        chatApi: chatApi,
-        apiClient: failingClient,
-      );
+      await _pumpComposer(tester, chatApi: chatApi, apiClient: failingClient);
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.byKey(const ValueKey('perf-monitor-panel')), findsNothing);
       SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -769,9 +761,100 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    testWidgets('阈值着色：≥85% 红色，≥75% 橙色，正常 secondaryLabel', (
-      tester,
-    ) async {
+    // ---------------------------------------------------------------------
+    // #163 宽屏栏位档位（顶栏发丝线 / 标题 15 / 输入字段 15+单行起）
+    // ---------------------------------------------------------------------
+    testWidgets('#163 宽屏：顶栏含 0.5 发丝线且标题 15pt、字段 15pt 单行起', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      // 注意：resetPhysicalSize 不复位 DPR，同文件后续用例会看到被改小的
+      // 视口 ⇒ 这里整屏复位（`reset`），避免用例间串味。
+      addTearDown(tester.view.reset);
+
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'title': '宽屏栏位校验',
+          'messages': const [],
+        },
+      };
+
+      await _pumpComposer(
+        tester,
+        chatApi: chatApi,
+        apiClient: _buildHealthClient(),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 顶栏：带 0.5px 底部分割线 ⇒ 总高 44.5（与侧栏品牌栏同高同线）。
+      final navBar = tester.widget<CupertinoNavigationBar>(
+        find.byType(CupertinoNavigationBar),
+      );
+      expect(navBar.bottom, isNotNull);
+      expect(tester.getSize(find.byType(CupertinoNavigationBar)).height, 44.5);
+      // 标题 17 → 15（＝侧栏品牌名同号）。
+      final title = tester.widget<Text>(find.text('宽屏栏位校验'));
+      expect(title.style?.fontSize, 15.0);
+
+      // 输入字段：15pt（原主题默认 17）、最少 1 行起。
+      final field = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('chat-input-field')),
+      );
+      expect(field.minLines, 1);
+      expect(field.style?.fontSize, 15.0);
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('#163 窄屏：顶栏不加线、标题与字段走原档位（逐像素不变）', (tester) async {
+      // flutter_test 默认逻辑宽 800（< 900）= 窄屏分支；显式固定，免受同文件
+      // 其他用例改过的 viewport 影响。
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      SharedPreferences.setMockInitialValues({
+        ComposerTwoPaneController.keyTwoPane: true,
+      });
+      final chatApi = FakeChatApi();
+      chatApi.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'title': '窄屏栏位校验',
+          'messages': const [],
+        },
+      };
+
+      await _pumpComposer(
+        tester,
+        chatApi: chatApi,
+        apiClient: _buildHealthClient(),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final navBar = tester.widget<CupertinoNavigationBar>(
+        find.byType(CupertinoNavigationBar),
+      );
+      expect(navBar.bottom, isNull);
+      final title = tester.widget<Text>(find.text('窄屏栏位校验'));
+      expect(title.style, isNull);
+
+      final field = tester.widget<CupertinoTextField>(
+        find.byKey(const ValueKey('chat-input-field')),
+      );
+      expect(field.minLines, 2);
+      expect(field.style, isNull);
+
+      await _unmount(tester);
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    testWidgets('阈值着色：≥85% 红色，≥75% 橙色，正常 secondaryLabel', (tester) async {
       SharedPreferences.setMockInitialValues({
         ComposerTwoPaneController.keyTwoPane: true,
         kShowPerfMonitorKey: true,
@@ -867,8 +950,5 @@ ApiClient _buildHealthClient({
       return ResponseBody.fromString('{}', 200);
     },
   );
-  return ApiClient(
-    baseUrl: 'http://test.local:30002',
-    dio: dio,
-  );
+  return ApiClient(baseUrl: 'http://test.local:30002', dio: dio);
 }

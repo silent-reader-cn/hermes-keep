@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
@@ -239,24 +240,46 @@ class _ChatPageState extends ConsumerState<ChatPage>
     });
     final state = ref.watch(chatControllerProvider(widget.sessionId));
     final queued = ref.watch(queuedCountProvider(widget.sessionId));
-    // Windows 桌面「打开项目文件夹」按钮可见性：仅 Windows + 会话带 workspace。
+    // #163 宽屏顶栏改版：标题左对齐、右侧图标收一档、底部分割线与侧栏品牌栏对齐。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+    // 「打开项目文件夹」入口可见性：宽屏常驻（不再限 Windows —— 非 Windows 或
+    // 本机没有该目录时回落到内置工作区文件页）；窄屏保持 Windows 桌面老口径。
+    final hasWorkspace = state.workspace?.isNotEmpty ?? false;
     final showProjectFolder =
-        !kIsWeb && Platform.isWindows && (state.workspace?.isNotEmpty ?? false);
+        hasWorkspace && (isWide || (!kIsWeb && Platform.isWindows));
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     final content = CupertinoPageScaffold(
       backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
         leading: const AppBackButton(),
+        // #163：宽屏补 0.5px 发丝线，与左侧品牌栏下方那条对齐（同色同高）。
+        bottom: isWide ? const _NavBarHairline() : null,
         middle: GestureDetector(
           key: const ValueKey('chat-title-outline-trigger'),
           onTap: _toggleOutline,
           behavior: HitTestBehavior.opaque,
-          child: Container(
+          child: SizedBox(
             key: _titleAnchorKey,
+            // #163：宽屏撑满 middle 槽后按 start 排列 = 标题左对齐（长中文标题
+            // 不再被居中挤成省略号）；窄屏保持居中，逐像素不变。
+            width: isWide ? double.infinity : null,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: isWide
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.center,
               children: [
-                Text(state.displayTitle, overflow: TextOverflow.ellipsis),
+                Text(
+                  state.displayTitle,
+                  overflow: TextOverflow.ellipsis,
+                  // #163：宽屏标题 17 → 15（＝侧栏品牌名同号）。
+                  style: isWide
+                      ? const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        )
+                      : null,
+                ),
                 if (state.parentSessionId != null)
                   CupertinoButton(
                     key: const ValueKey('chat-branch-badge'),
@@ -310,9 +333,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 onPressed: () => unawaited(
                   _openProjectFolder(context, ref, state.workspace!),
                 ),
-                child: const Icon(CupertinoIcons.folder),
+                child: Icon(CupertinoIcons.folder, size: isWide ? 18 : null),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: isWide ? 12 : 14),
             ],
             KeyedSubtree(
               key: _actionsKey,
@@ -327,7 +350,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   state,
                   _actionsKey,
                 ),
-                child: const Icon(CupertinoIcons.ellipsis),
+                child: Icon(CupertinoIcons.ellipsis, size: isWide ? 18 : null),
               ),
             ),
           ],
@@ -447,10 +470,14 @@ Future<void> _showParentSessionDialog(
   );
 }
 
-/// Windows：在资源管理器中打开会话项目文件夹（头部按钮与三点菜单共用）。
+/// 打开会话项目文件夹（顶栏图标 / ⋯ 菜单共用入口）。
 ///
-/// 内置 sidecar 的 agent 与本机同文件系统，workspace 即本地绝对路径；
-/// 目录不存在（远端路径/已删除）时以 notice 提示，绝不静默失败。
+/// 分流（#163 主人拍板）：
+/// - **本机确实有该目录 + Windows 桌面** → 用文件资源管理器打开；
+/// - 其余情况（非 Windows、远端路径、目录已被删）→ 直接进**内置工作区文件页**，
+///   不再只弹一句「目录不存在」把路走死。
+///
+/// 内置 sidecar 的 agent 与本机同文件系统，故本机路径判定用真实磁盘检查。
 Future<void> openSessionProjectFolder(
   BuildContext context,
   WidgetRef ref,
@@ -460,11 +487,14 @@ Future<void> openSessionProjectFolder(
   final l10n = AppLocalizations.of(context);
   final notifier = ref.read(chatControllerProvider(sessionId).notifier);
   try {
-    if (!await FileSystemEntity.isDirectory(path)) {
-      notifier.setNotice(l10n.projectFolderMissing(path));
+    final isWindowsDesktop = !kIsWeb && Platform.isWindows;
+    final existsLocally = await FileSystemEntity.isDirectory(path);
+    if (isWindowsDesktop && existsLocally) {
+      await Process.run('explorer', [path]);
       return;
     }
-    await Process.run('explorer', [path]);
+    if (!context.mounted) return;
+    await context.push('/workspace/$sessionId');
   } catch (e) {
     notifier.setNotice(l10n.openProjectFolderFailed(e.toString()));
   }
@@ -1515,7 +1545,6 @@ class _QueuedBanner extends StatelessWidget {
   }
 }
 
-
 /// 轻量自动消失通知 toast（selected-context-spec §5.2，复制提示分型）。
 ///
 /// - 2800ms 后自动 [onDismiss]（`Timer` 在 `State` 内持有，`dispose` 取消）。
@@ -1766,6 +1795,35 @@ class _SteerNoticeToast extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 顶栏底部发丝分割线（0.5px）。
+///
+/// #163：宽屏下聊天顶栏与左侧品牌栏同高 44，但此前只有品牌栏下沿有线，
+/// 两栏顶边不在同一视觉轴。这里补上同色同高的 0.5px，`bottom` 槽会把它
+/// 计入导航栏总高（44 + 0.5），因此两栏的线严格落在同一 y。
+class _NavBarHairline extends StatelessWidget implements PreferredSizeWidget {
+  const _NavBarHairline();
+
+  static const double hairlineHeight = 0.5;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(hairlineHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: hairlineHeight,
+      width: double.infinity,
+      child: ColoredBox(
+        color: LightSurfaces.resolve(
+          context,
+          LightSurfaces.divider,
+          dark: CupertinoColors.separator,
+        ),
       ),
     );
   }
