@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/models/session.dart';
 import 'package:hermes_ui/core/models/workspace.dart';
 import 'package:hermes_ui/features/session_list/session_list_providers.dart';
@@ -83,6 +84,29 @@ class FakeSessionListApi implements SessionListApi {
   /// `moveSession` 抛出的异常。
   Object? moveError;
 
+  /// 变更调用闸门（#174）：**先**在测试里 `gate(id)` 预注册，再启动操作，
+  /// 调用一到该条即挂起 —— 于是「已发出 / 未发出」的边界完全确定，
+  /// 不依赖微任务时序。留空时完全不挂起（对既有用例零影响）。
+  final Map<String, Completer<void>> gates = {};
+
+  /// 这些会话 id 的变更在闸门放行后抛 `ApiException`（模拟部分失败）。
+  final Set<String> failingIds = {};
+
+  /// 预注册 / 取用某个 id 的闸门（同一 id 始终同一实例）。
+  Completer<void> gate(String id) => gates.putIfAbsent(id, Completer<void>.new);
+
+  /// 清空全部闸门（同一 id 需要做第二轮操作时调用）。
+  void resetGates() => gates.clear();
+
+  /// 记录后、判错前：等闸门 → 按 [failingIds] 抛错。
+  Future<void> _waitGateAndMaybeFail(String sessionId) async {
+    final g = gates[sessionId];
+    if (g != null) await g.future;
+    if (failingIds.contains(sessionId)) {
+      throw HttpException(500, 'fake failure');
+    }
+  }
+
   @override
   Future<SessionsResponse> fetchSessions({
     bool includeArchived = false,
@@ -163,6 +187,7 @@ class FakeSessionListApi implements SessionListApi {
     required bool archived,
   }) async {
     archiveCalls.add('$sessionId:$archived');
+    await _waitGateAndMaybeFail(sessionId);
     final error = archiveError;
     if (error != null) throw error;
     return const SessionMutationResponse(ok: true);
@@ -171,6 +196,7 @@ class FakeSessionListApi implements SessionListApi {
   @override
   Future<SessionMutationResponse> deleteSession(String sessionId) async {
     deleteCalls.add(sessionId);
+    await _waitGateAndMaybeFail(sessionId);
     final error = deleteError;
     if (error != null) throw error;
     return const SessionMutationResponse(ok: true);
@@ -182,6 +208,7 @@ class FakeSessionListApi implements SessionListApi {
     String? projectId,
   }) async {
     moveCalls.add('$sessionId:${projectId ?? 'null'}');
+    await _waitGateAndMaybeFail(sessionId);
     final error = moveError;
     if (error != null) throw error;
     return const SessionMutationResponse(ok: true);

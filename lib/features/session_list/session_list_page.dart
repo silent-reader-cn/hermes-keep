@@ -98,6 +98,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   bool _suppressNextTap = false;
   final GlobalKey _fabKey = GlobalKey();
 
+  /// #174：批量操作完成后的轻量结果提示（仅全成功时出现），2 秒后自动消失。
+  String? _batchResultNotice;
+  Timer? _batchResultTimer;
+
   @override
   void initState() {
     super.initState();
@@ -107,6 +111,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   @override
   void dispose() {
     _fabLongPressTimer?.cancel();
+    _batchResultTimer?.cancel();
     _hideFabWorkspaceOverlay();
     _searchDebounce?.cancel();
     _searchController.dispose();
@@ -240,6 +245,44 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               ),
             // 桌面侧栏场景隐藏 FAB（新建入口在头部右上角，见
             // [SessionListHeaderDelegate.actions]）。
+            // #174：批量操作完成后的结果提示（仅全成功；2s 自动消失）。
+            if (_batchResultNotice != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 96,
+                child: IgnorePointer(
+                  child: Center(
+                    child: Container(
+                      key: const ValueKey('batch-result-notice'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.black.withValues(alpha: 0.82),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: CupertinoColors.black.withValues(alpha: 0.2),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        _batchResultNotice!,
+                        style: const TextStyle(
+                          color: CupertinoColors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             if (widget.showFab)
               Positioned(
                 right: 20,
@@ -443,9 +486,15 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   /// 底部批量操作栏（多选模式）：选中计数 + 全选 / 归档 / 删除 / 移动项目。
+  ///
+  /// #174：批量操作在途时本栏**原地**切换为进度形态 ——
+  /// 「归档中 2/3」+ 转圈 + 细进度条，且全部按钮置灰
+  /// （既给出反馈，也防连点触发第二批请求）。
   Widget _buildBatchBar(SessionListState state) {
     final l10n = AppLocalizations.of(context);
     final controller = ref.read(sessionListControllerProvider.notifier);
+    final progress = state.batchProgress;
+    final busy = progress != null;
     final count = state.selectedSessionIds.length;
     return Container(
       decoration: BoxDecoration(
@@ -469,62 +518,133 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Text(
-                  l10n.selectedCount(count),
-                  style: const TextStyle(fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              CupertinoButton(
-                key: const ValueKey('batch-select-all'),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                onPressed: controller.selectAllInSection,
-                child: Text(
-                  l10n.selectAll,
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ),
-              CupertinoButton(
-                key: const ValueKey('batch-archive'),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                onPressed: count == 0
-                    ? null
-                    : () => unawaited(_confirmBatchArchive(context)),
-                child: Text(l10n.archive, style: const TextStyle(fontSize: 14)),
-              ),
-              CupertinoButton(
-                key: const ValueKey('batch-delete'),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                onPressed: count == 0
-                    ? null
-                    : () => unawaited(_confirmBatchDelete(context)),
-                child: Text(
-                  l10n.delete,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: LightSurfaces.resolve(
-                      context,
-                      statusRedText.resolveFrom(context),
-                      dark: CupertinoColors.systemRed,
+              Row(
+                children: [
+                  if (busy) ...[
+                    const CupertinoActivityIndicator(radius: 6),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      busy
+                          ? _batchProgressLabel(l10n, progress)
+                          : l10n.selectedCount(count),
+                      key: const ValueKey('batch-bar-label'),
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
+                  CupertinoButton(
+                    key: const ValueKey('batch-select-all'),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    onPressed: busy ? null : controller.selectAllInSection,
+                    child: Text(
+                      l10n.selectAll,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  CupertinoButton(
+                    key: const ValueKey('batch-archive'),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    onPressed: count == 0 || busy
+                        ? null
+                        : () => unawaited(_confirmBatchArchive(context)),
+                    child: Text(
+                      l10n.archive,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  CupertinoButton(
+                    key: const ValueKey('batch-delete'),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    onPressed: count == 0 || busy
+                        ? null
+                        : () => unawaited(_confirmBatchDelete(context)),
+                    child: Text(
+                      l10n.delete,
+                      // #174：只在**可点**时涂红；禁用态交给 CupertinoButton
+                      // 的统一灰（否则「删除」在置灰状态下仍是红的，看起来还能点）。
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: count == 0 || busy
+                            ? null
+                            : LightSurfaces.resolve(
+                                context,
+                                statusRedText.resolveFrom(context),
+                                dark: CupertinoColors.systemRed,
+                              ),
+                      ),
+                    ),
+                  ),
+                  CupertinoButton(
+                    key: const ValueKey('batch-move'),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    onPressed: count == 0 || busy
+                        ? null
+                        : () => unawaited(_batchMoveToProject(context)),
+                    child: Text(
+                      l10n.batchMoveProject,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
               ),
-              CupertinoButton(
-                key: const ValueKey('batch-move'),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                onPressed: count == 0
-                    ? null
-                    : () => unawaited(_batchMoveToProject(context)),
-                child: Text(
-                  l10n.batchMoveProject,
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ),
+              if (busy) ...[
+                const SizedBox(height: 8),
+                _buildBatchProgressBar(progress),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 批量进度文案（#174）：controller 只给结构化进度，文案在 l10n 组装。
+  String _batchProgressLabel(
+    AppLocalizations l10n,
+    BatchOperationProgress progress,
+  ) {
+    switch (progress.kind) {
+      case BatchOperationKind.archive:
+        return l10n.batchProgressArchive(progress.done, progress.total);
+      case BatchOperationKind.unarchive:
+        return l10n.batchProgressUnarchive(progress.done, progress.total);
+      case BatchOperationKind.delete:
+        return l10n.batchProgressDelete(progress.done, progress.total);
+      case BatchOperationKind.move:
+        return l10n.batchProgressMove(progress.done, progress.total);
+    }
+  }
+
+  /// 批量进度条（#174）：3px 细条，蓝色已走段从左侧生长；自绘（禁 Material 混入）。
+  ///
+  /// 注：fill 必须显式 `heightFactor: 1` —— 无 child 的 [ColoredBox] 在 loose 约束下
+  /// 尺寸为 0，会渲染成「看不见的进度」（真机目检才发现，纯文本测试抓不到）。
+  /// 两个 key 供像素级守卫断言（`batch-progress-fill` / `batch-progress-track`）。
+  Widget _buildBatchProgressBar(BatchOperationProgress progress) {
+    final fill = CupertinoColors.activeBlue.resolveFrom(context);
+    final track = LightSurfaces.resolve(
+      context,
+      const Color(0xFFE5E5EA),
+      dark: const Color(0xFF3A3A3C),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: Container(
+        key: const ValueKey('batch-progress-track'),
+        height: 3,
+        alignment: Alignment.centerLeft,
+        color: track,
+        child: FractionallySizedBox(
+          widthFactor: progress.fraction,
+          heightFactor: 1,
+          child: ColoredBox(
+            key: const ValueKey('batch-progress-fill'),
+            color: fill,
           ),
         ),
       ),
@@ -1541,9 +1661,11 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       ),
     );
     if (confirmed == true && context.mounted) {
-      await ref
+      final result = await ref
           .read(sessionListControllerProvider.notifier)
           .batchArchive(archived: true);
+      if (!context.mounted) return;
+      _reportBatchResult(result, BatchOperationKind.archive);
     }
   }
 
@@ -1578,16 +1700,22 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       ),
     );
     if (confirmed == true && context.mounted) {
-      await ref.read(sessionListControllerProvider.notifier).batchDelete();
+      final result = await ref
+          .read(sessionListControllerProvider.notifier)
+          .batchDelete();
+      if (!context.mounted) return;
+      _reportBatchResult(result, BatchOperationKind.delete);
     }
   }
 
   Future<void> _batchMoveToProject(BuildContext context) async {
     final projectId = await showProjectPicker(context);
     if (projectId == null || !context.mounted) return;
-    await ref
+    final result = await ref
         .read(sessionListControllerProvider.notifier)
         .batchMove(projectId.isEmpty ? null : projectId);
+    if (!context.mounted) return;
+    _reportBatchResult(result, BatchOperationKind.move);
   }
 
   Future<void> _moveToProject(
@@ -1599,6 +1727,28 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     await ref
         .read(sessionListControllerProvider.notifier)
         .moveToProject(session, projectId.isEmpty ? null : projectId);
+  }
+
+  /// 批量操作完成后的轻量结果反馈（#174）。
+  ///
+  /// 只在**全成功**时提示：有失败项时既有的 actionError 弹窗已给出原因与条数，
+  /// 再叠一层等于重复噪音。停留 2 秒后自动消失（对齐 App 既有的退出提示口径）。
+  void _reportBatchResult(BatchMutationResult result, BatchOperationKind kind) {
+    if (result.failed > 0 || result.succeeded == 0) return;
+    final l10n = AppLocalizations.of(context);
+    final message = switch (kind) {
+      BatchOperationKind.archive => l10n.batchResultArchive(result.succeeded),
+      BatchOperationKind.unarchive =>
+        l10n.batchResultUnarchive(result.succeeded),
+      BatchOperationKind.delete => l10n.batchResultDelete(result.succeeded),
+      BatchOperationKind.move => l10n.batchResultMove(result.succeeded),
+    };
+    _batchResultTimer?.cancel();
+    setState(() => _batchResultNotice = message);
+    _batchResultTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      setState(() => _batchResultNotice = null);
+    });
   }
 
   Future<void> _showActionError(BuildContext context, String message) async {

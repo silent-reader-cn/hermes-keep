@@ -216,6 +216,7 @@ class SessionListState {
     this.archivedCount,
     this.selectedSessionIds = const {},
     this.isSelectionMode = false,
+    this.batchProgress,
     this.lastRefreshAt,
     this.lastAttemptAt,
     this.refreshing = false,
@@ -258,6 +259,11 @@ class SessionListState {
 
   /// 是否处于多选模式（长按行进入）。
   final bool isSelectionMode;
+
+  /// 批量操作进行中的进度（#174）；null = 当前没有批量操作在跑。
+  ///
+  /// 唯一真相：UI 的进度文案/按钮禁用与 controller 的重入门闩都读它。
+  final BatchOperationProgress? batchProgress;
 
   /// 最近一次成功刷新时间（UTC）。
   final DateTime? lastRefreshAt;
@@ -359,6 +365,7 @@ class SessionListState {
     int? Function()? archivedCount,
     Set<String>? selectedSessionIds,
     bool? isSelectionMode,
+    BatchOperationProgress? Function()? batchProgress,
     DateTime? Function()? lastRefreshAt,
     DateTime? Function()? lastAttemptAt,
     bool? refreshing,
@@ -382,6 +389,9 @@ class SessionListState {
           : this.archivedCount,
       selectedSessionIds: selectedSessionIds ?? this.selectedSessionIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
+      batchProgress: batchProgress != null
+          ? batchProgress()
+          : this.batchProgress,
       lastRefreshAt: lastRefreshAt != null
           ? lastRefreshAt()
           : this.lastRefreshAt,
@@ -398,6 +408,46 @@ class SessionListState {
   String toString() =>
       'SessionListState(sessions: ${sessions.length}, visibleCount: $visibleCount, '
       'searchQuery: $searchQuery, searchResults: ${searchResults?.length})';
+}
+
+/// 批量变更动作类型（#174）。
+///
+/// 只给结构化枚举、不带文案：进度与结果文案由 UI 层按语言翻译
+/// （`AppLocalizations`），controller 不持有 l10n。
+enum BatchOperationKind { archive, unarchive, delete, move }
+
+/// 批量操作**进行中**的进度快照（#174）。
+///
+/// 非 null 即代表「有一批批量操作正在跑」：
+/// - UI 据此把批量栏换成「归档中 2/3」+ 转圈，并禁用全部批量按钮；
+/// - controller 据此做**重入门闩**（连点不得发起第二批请求）。
+///
+/// [done] 是「已处理」条数（成功 + 失败），保证任何一条都推进进度、
+/// 不会因为某一项失败而卡住不动。
+class BatchOperationProgress {
+  const BatchOperationProgress({
+    required this.kind,
+    required this.done,
+    required this.total,
+  });
+
+  final BatchOperationKind kind;
+
+  /// 已处理条数（含失败）。
+  final int done;
+
+  /// 本批总条数。
+  final int total;
+
+  /// 进度比例（0~1；[total] 为 0 时按 0 处理）。
+  double get fraction => total == 0 ? 0 : (done / total).clamp(0.0, 1.0);
+
+  /// 推进一条。
+  BatchOperationProgress advance() =>
+      BatchOperationProgress(kind: kind, done: done + 1, total: total);
+
+  @override
+  String toString() => 'BatchOperationProgress(${kind.name}, $done/$total)';
 }
 
 /// 批量操作结果统计。
@@ -1157,11 +1207,22 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   /// 批量归档选中的会话（[archived] 为 false 时 = 恢复归档）；
   /// 成功项从当前视图移除，失败项计入 [BatchMutationResult.failed]
   /// 并设置 [SessionListState.actionError]。操作结束清空勾选。
+  ///
+  /// #174：过程中逐条推进 [SessionListState.batchProgress]（UI 据此显示
+  /// 「归档中 2/3」并禁用批量栏），且在途期间**拒绝重入** —— 连点不得
+  /// 发起第二批请求。
   Future<BatchMutationResult> batchArchive({bool archived = true}) async {
     final current = state.valueOrNull;
     if (current == null) return const BatchMutationResult();
+    if (current.batchProgress != null) return const BatchMutationResult();
     final ids = current.selectedSessionIds.toList();
     if (ids.isEmpty) return const BatchMutationResult();
+    final kind = archived
+        ? BatchOperationKind.archive
+        : BatchOperationKind.unarchive;
+    await _setBatchProgress(
+      BatchOperationProgress(kind: kind, done: 0, total: ids.length),
+    );
     var succeeded = 0;
     var failed = 0;
     final successIds = <String>[];
@@ -1173,7 +1234,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       } on ApiException {
         failed++;
       }
+      await _advanceBatchProgress();
     }
+    await _setBatchProgress(null);
     await _applyBatchChanges(successIds: successIds, removeFromLists: true);
     if (failed > 0) {
       await _setActionError('批量${archived ? '归档' : '恢复'}：$failed 个会话操作失败');
@@ -1182,11 +1245,21 @@ class SessionListController extends AsyncNotifier<SessionListState> {
   }
 
   /// 批量删除选中的会话；成功项从列表移除，清空勾选。
+  ///
+  /// #174：同 [batchArchive] —— 逐条进度 + 在途拒绝重入。
   Future<BatchMutationResult> batchDelete() async {
     final current = state.valueOrNull;
     if (current == null) return const BatchMutationResult();
+    if (current.batchProgress != null) return const BatchMutationResult();
     final ids = current.selectedSessionIds.toList();
     if (ids.isEmpty) return const BatchMutationResult();
+    await _setBatchProgress(
+      BatchOperationProgress(
+        kind: BatchOperationKind.delete,
+        done: 0,
+        total: ids.length,
+      ),
+    );
     var succeeded = 0;
     var failed = 0;
     final successIds = <String>[];
@@ -1198,7 +1271,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       } on ApiException {
         failed++;
       }
+      await _advanceBatchProgress();
     }
+    await _setBatchProgress(null);
     await _applyBatchChanges(successIds: successIds, removeFromLists: true);
     if (failed > 0) {
       await _setActionError('批量删除：$failed 个会话失败');
@@ -1208,11 +1283,21 @@ class SessionListController extends AsyncNotifier<SessionListState> {
 
   /// 批量把选中的会话移动到 [projectId]（null = 移出项目）；
   /// 成功项本地刷新 projectId，清空勾选。
+  ///
+  /// #174：同 [batchArchive] —— 逐条进度 + 在途拒绝重入。
   Future<BatchMutationResult> batchMove(String? projectId) async {
     final current = state.valueOrNull;
     if (current == null) return const BatchMutationResult();
+    if (current.batchProgress != null) return const BatchMutationResult();
     final ids = current.selectedSessionIds.toList();
     if (ids.isEmpty) return const BatchMutationResult();
+    await _setBatchProgress(
+      BatchOperationProgress(
+        kind: BatchOperationKind.move,
+        done: 0,
+        total: ids.length,
+      ),
+    );
     var succeeded = 0;
     var failed = 0;
     final successIds = <String>[];
@@ -1224,7 +1309,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
       } on ApiException {
         failed++;
       }
+      await _advanceBatchProgress();
     }
+    await _setBatchProgress(null);
     await _applyBatchChanges(
       successIds: successIds,
       projectId: projectId,
@@ -1760,6 +1847,23 @@ class SessionListController extends AsyncNotifier<SessionListState> {
     );
   }
 
+  /// 写入 / 清空批量进度（#174；state 缺失时静默无操作）。
+  Future<void> _setBatchProgress(BatchOperationProgress? value) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(current.copyWith(batchProgress: () => value));
+  }
+
+  /// 推进当前批量进度一条（#174；无进度在途时静默无操作）。
+  Future<void> _advanceBatchProgress() async {
+    final current = state.valueOrNull;
+    final progress = current?.batchProgress;
+    if (current == null || progress == null) return;
+    state = AsyncData(
+      current.copyWith(batchProgress: () => progress.advance()),
+    );
+  }
+
   /// 批量操作收尾：对成功项执行本地更新（移除列表项或刷新 projectId），
   /// 并清空勾选退出多选模式（失败项保留在列表中，由 actionError 提示）。
   Future<void> _applyBatchChanges({
@@ -1783,6 +1887,9 @@ class SessionListController extends AsyncNotifier<SessionListState> {
               : s,
       ];
     } else {
+      // 无本地变更时也必须清掉批量进度（#174）：进度是「在途」的唯一判据，
+      // 遗留会让批量栏永久禁用。
+      state = AsyncData(current.copyWith(batchProgress: () => null));
       return;
     }
     state = AsyncData(
@@ -1794,6 +1901,7 @@ class SessionListController extends AsyncNotifier<SessionListState> {
         archivedSessions: apply(current.archivedSessions),
         selectedSessionIds: const {},
         isSelectionMode: false,
+        batchProgress: () => null,
       ),
     );
   }

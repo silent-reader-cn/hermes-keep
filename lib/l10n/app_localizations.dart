@@ -175,6 +175,29 @@ class AppLocalizations {
   String confirmBatchDeletePrompt(int count) => isEnglish
       ? 'Delete selected $count sessions? This action cannot be undone.'
       : '删除选中的 $count 个会话？此操作不可撤销。';
+
+  /// 批量操作**进行中**的进度标签（#174）。
+  ///
+  /// controller 只给结构化进度（[BatchOperationKind] + done/total），
+  /// 文案在这里按语言组装 —— 依赖方向保持「l10n 不依赖 feature 层」。
+  String batchProgressArchive(int done, int total) =>
+      isEnglish ? 'Archiving $done/$total' : '归档中 $done/$total';
+  String batchProgressUnarchive(int done, int total) =>
+      isEnglish ? 'Restoring $done/$total' : '恢复中 $done/$total';
+  String batchProgressDelete(int done, int total) =>
+      isEnglish ? 'Deleting $done/$total' : '删除中 $done/$total';
+  String batchProgressMove(int done, int total) =>
+      isEnglish ? 'Moving $done/$total' : '移动中 $done/$total';
+
+  /// 批量操作**完成后**的结果提示（#174；仅全成功时展示，失败走 actionError 弹窗）。
+  String batchResultArchive(int count) =>
+      isEnglish ? 'Archived $count sessions' : '已归档 $count 个会话';
+  String batchResultUnarchive(int count) =>
+      isEnglish ? 'Restored $count sessions' : '已恢复 $count 个会话';
+  String batchResultDelete(int count) =>
+      isEnglish ? 'Deleted $count sessions' : '已删除 $count 个会话';
+  String batchResultMove(int count) =>
+      isEnglish ? 'Moved $count sessions' : '已移动 $count 个会话';
   String get noMore => isEnglish ? 'No more' : '没有更多了';
   String get noMatchingSessionsFound =>
       isEnglish ? 'No matching sessions found' : '未找到相关会话';

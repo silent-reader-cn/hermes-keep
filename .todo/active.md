@@ -1754,3 +1754,205 @@ webui 上游「同一行两投影都输出」的行为未修（`api/models.py` �
 ### 遗留（服务端侧）
 webui 的 sidecar display-owner 逻辑（`_sidecar_has_terminal_partial_error`）只在它自己的合并路径生效，
 App 读的另一条路径仍会拿到载体行。客户端现已挡死；是否去 `D:\hermes-webui` 根治由主人定。
+
+---
+
+## #174 多选批量「归档 / 删除 / 移动项目」全程无进度提示（用户干等）+ 操作期按钮可重复触发
+
+**分类**：问题（反馈缺失 + 并发风险）　**状态**：设计案已出，**待主人挑档**（未动码）　**发现**：2026-09-27（主人报告）
+
+### 现象（主人原话）
+「多选后点击归档或者删除 没有进度提示 用户只能干等 用户体验差」
+
+### 复现
+1. 会话列表长按进入多选 → 勾选 ≥2 条（多则全选几十条）。
+2. 点底部批量栏「归档」或「删除」→ 确认。
+
+### 现状 vs 预期
+| | 现状 | 预期 |
+|---|---|---|
+| 过程 | **零反馈**：无文案、无进度、无转圈；界面看起来「没反应」 | 能看出在跑、跑到第几条 |
+| 操作期 | 按钮**不禁用**，可连点 → 同一批会话并发两轮请求 | 操作期禁用，防重复批次 |
+| 完成 | **静默**：全成功无任何提示（栏直接消失）；只有失败才弹窗 | 有结果反馈（成功 N / 失败 M） |
+
+### 位置（源码行号）
+| 角色 | 文件 | 行 |
+|---|---|---|
+| 批量栏 UI | `lib/features/session_list/session_list_page.dart` | `_buildBatchBar` 445-532 |
+| 归档确认入口 | 同文件 | `_confirmBatchArchive` 1521-1548 |
+| 删除确认入口 | 同文件 | `_confirmBatchDelete` 1550-1583 |
+| 移动项目入口 | 同文件 | `_batchMoveToProject` 1585-1591 |
+| 控制器批量实现 | `lib/features/session_list/session_list_providers.dart` | `batchArchive` 1160 / `batchDelete` 1185 / `batchMove` 1211 |
+| 收尾（唯一一次 state 写入） | 同文件 | `_applyBatchChanges` 1765-1799 |
+
+### 根因（代码取证）
+三个批量方法都是 **`for (final id in ids) { await _api.xxx(...) }` 串行逐条请求**，
+循环体内**一次 state 都不更新**，只在循环结束后调一次 `_applyBatchChanges` 清空勾选。
+⇒ 界面在整个过程中**没有任何可观测点**：N 条 = N 次网络往返，弱网下打十几秒完全无响应感。
+佐证：三处 `BatchMutationResult` 的进度信息（succeeded/failed）**只在最终返回值里**，从未进入 state，
+UI 拿到后也直接丢弃。
+
+### 同类体检（全仓扫描，结论：这是唯一缺口）
+以「串行批量循环」+「busy/loading 状态」两条判据扫全仓：
+- **同病三处**：`batchArchive` / `batchDelete` / `batchMove`（同一个批量栏的四个按钮里占三个；第四个「全选」是纯本地操作）。
+- **其余 feature 均已有忙碌惯例**，session_list 是唯一没有的：
+  | 处 | 惯例 |
+  |---|---|
+  | `tasks_providers.dart:35` | `busyJobIds` + `isBusy(jobId)` |
+  | `workspace_providers.dart:130` | `busyPaths` + `isBusy(path)` |
+  | `skills_providers.dart:33` | `busySkillNames` + `isBusy(name)` |
+  | `kanban_page.dart:814` | `_busyStatus` |
+  | `onboarding_page.dart:67` | `_busy` + 按钮禁用 + 转圈 |
+  | `add_workspace_sheet.dart:37` | `_submitting` |
+- **kanban 批量动作**（`KanbanBulkAction` / `KanbanBulkActionEnvelope`）：仅模型层忠实移植，**UI 未接线**，不构成同类入口。
+  ⇒ 修复面 = 会话列表批量栏这一处，**不必外扩**。
+
+### 设计案（已出图，待主人挑档）
+- 源稿：`sketches/batch-progress-design-proposal.html`（按真实 token 绘制：page `#F2F2F7` / card `#FFF` /
+  divider `#CCD0DA` / 蓝 `#007AFF` / 红 `#FF3B30`；多选态顶部按真界面画「大标题『会话』+ 右上角 ×」）
+- 预览图（本地工件，未入库）：`.shots/batch-progress-design-20260927-final.png`（三档 × 明暗两态）
+
+| 档 | 做法 | 优点 | 代价 |
+|---|---|---|---|
+| **A（柚子推荐）** | 批量栏原地变身：「归档中 2/3」+ 转圈 + 右侧按钮置灰 | 就在按下处给答案、不打断、不新增层级、改动面最小 | 进度字较小 |
+| B | 遮罩 + 居中模态卡（图标 + 「正在删除 3/20」+ 进度条 + 取消） | 最明确、天然防重复点击 | 阻断浏览，1～3 条这种秒级批量显重 |
+| C | 批量栏上方浮层胶囊（非阻断，完成后转「已归档 N 个」停留 2s） | 不阻断、带完成确认 | 多一层浮层定位与淡出时序 |
+
+**三档共同加固（不论选哪档都要做，且都是真缺陷）**：
+1. 操作期禁用批量栏全部按钮（现可连点 → 并发两批）；
+2. 完成后给结果反馈（现在全成功是静默的）；
+3. 三个入口口径一致（移动项目与归档/删除同病同修）。
+
+**可选提速（不动 UI，待主人一并定）**：串行 N 次往返 → 并发上限 4 的池 + 完成数回调；
+代价是服务端瞬时压力上升、失败语义要跟着改。
+
+### 验收（落码后）
+- [ ] 操作进行中可见进度（文案含 `当前/总数`），按钮不可再点
+- [ ] 完成有结果反馈；失败项数仍走 `actionError` 既有弹窗
+- [ ] 归档 / 删除 / 移动项目三处口径一致
+- [ ] `analyze` 零告警 + 相关守卫用例 + 全量回归；失败路径 RED 校验（禁空转）
+- [ ] 主人真机复验
+
+### #174 交付实现（2026-09-27，主人拍板档 A）
+
+**方案**：批量栏原地进度（档 A）+ 结果反馈。核心判断 —— 「进度」与「文案」分层：
+controller 只给**结构化进度**（kind + done/total），**文案在 UI 层按语言组装**（保持
+「l10n 不依赖 feature 层」的依赖方向）。
+
+| # | 文件 | 改动 |
+|---|---|---|
+| 1 | `session_list_providers.dart` | 新增 `BatchOperationKind`（archive/unarchive/delete/move）与 `BatchOperationProgress`（kind/done/total + `fraction`/`advance`）；`SessionListState` 增 `batchProgress`（含 copyWith 置空通道）；三个批量方法：**在途门闩**（`batchProgress != null` 即拒绝重入）→ 起始写进度 → **循环内逐条 `_advanceBatchProgress()`** → 收尾清进度；`_applyBatchChanges` 两个出口都兜底清进度（防遗留把批量栏永久锁死） |
+| 2 | `app_localizations.dart` | 进度 4 条（归档中/恢复中/删除中/移动中 + `done/total`）+ 结果 4 条（已归档/已恢复/已删除/已移动 N 个会话），中英双语 |
+| 3 | `session_list_page.dart` | 批量栏在途切进度形态：「归档中 1/2」+ `CupertinoActivityIndicator` + 自绘 3px 进度条（禁 Material），**四个按钮全部置灰**（含全选）；完成后底部轻提示（复用既有退出提示样式与 2s 口径，key `batch-result-notice`）；`_reportBatchResult` 仅在**全成功**时提示（失败走既有 actionError 弹窗，避免双重噪音） |
+| 4 | `test/helpers/fake_session_list_api.dart` | 新增通用**闸门**能力（`gate(id)` / `resetGates()` / `failingIds`）：预注册后该条调用即挂起 ⇒ 「已发出/未发出」边界确定，不依赖微任务时序；留空时对既有用例零影响 |
+| 5 | `session_list_batch_progress_test.dart`（新增 6 例） | 逐条推进并收尾清空 / 在途重入被拒 / 失败条同样推进 + actionError / 删除与移动各自 kind / 空勾选不残留 / 恢复归档上报 unarchive |
+| 6 | `session_list_batch_bar_progress_test.dart`（新增 3 例） | 在途文案 + 转圈 + 四按钮禁用 + 逐条推进 / 空闲态文案与可点性回归 / 走真实 UI 路径完成的轻提示出现并在 2s 后消失 |
+
+**RED 校验（三条，均精确命中，非空转）**：
+- 摘掉循环内 `_advanceBatchProgress()`（3 处）⇒ 两条进度用例红（`Expected: <1> Actual: <0>`），其余 4 条绿；
+- 摘掉重入门闩（3 处）⇒ 仅「重入被拒」红（`Expected: ['s1:true'] Actual: ['s1:true','s1:true']`），其余绿 —— **这正是主人在真机上连点会遇到的形态**；
+- 摘掉批量栏 busy 禁用 ⇒ 仅「在途按钮全禁用」红（`Expected: null Actual: <Closure …selectAllInSection>`），其余绿。
+
+**验收**：`analyze` 零告警；`test/features/session_list` + `test/app` 域 **548 例全绿**；全量见提交信息。
+**未纳入本轮（有意）**：失败/结果文案在 controller 侧仍是硬编码中文（英文模式会漏），
+根治需把 `actionError` 从字符串改为结构化（kind + failed）→ 属独立一轮；本轮只把**新文案**
+走 l10n，未扩大改动面。
+**待主人真机复验**：多选若干条点归档/删除 —— 批量栏应显示「归档中 N/M」并逐条推进、按钮置灰不可连点，
+完成后底部出现「已归档 N 个会话」并在 2 秒后消失。
+
+### #174 真渲染目检补修（文本测试抓不到的两处）
+
+按「设计稿=契约逐条兑现」出真渲染图核对时发现两处**纯文本断言抓不到**的偏差（均已修 + 补像素级守卫）：
+
+| # | 缺陷 | 修法 | 守卫 |
+|---|---|---|---|
+| 1 | 进度条**蓝色已走段看不见** —— `FractionallySizedBox` 内的 `ColoredBox` 无 child，在 loose 约束下宽高均为 0，只剩灰轨道 | fill 补 `heightFactor: 1`（给 tight 约束） | 断言 `batch-progress-fill` 高度 == 3 且宽度 ≈ 轨道 × done/total；RED 命中 `Expected: <3> Actual: <0.0>` |
+| 2 | 「删除」禁用态**仍是红色**（看起来还能点）—— 文字颜色是硬编码的，CupertinoButton 的禁用灰只作用于未指定颜色的 child | 改为**仅可点时涂红**，禁用交回统一灰 | 断言在途时 `style.color == null`、空闲时可点非 null；RED 命中两条 |
+
+**要点**：这两类缺陷（尺寸为 0 的装饰件、被硬编码颜色抵消的禁用态）在文本快照里完全不可见 ——
+必须**放进真实界面渲染目检**才抓得到，也正是「UI 类改动必须出真渲染图」这条纪律的价值所在。
+真渲染取证件（本地工件，未入库）：`.shots/batch-progress-live-{light,dark}.png`。
+
+---
+
+## #175 选中态重设计落地（主人拍板 L2 · 浅色中性灰底 + 蓝前景）
+
+**分类**：方向（视觉语言统一）　**状态**：L2 已拍板，**落码中**（隔离 worktree `D:/worktrees/hermes-selection-l2`，分支 `feat/selection-l2`，基线 `a2af127`）　**发现**：2026-09-27（主人反馈「选中态」+ 挑档）
+
+### 拍板结论（2026-09-27）
+主人选 **L2**：**中性灰底 + 蓝前景（字/图标转 #005FB8）**。理由（本喵给主人的论据，主人认可）：
+灰底给「块面」（可点、已选），蓝色只出现在文字与图标上 —— 背景始终无彩度就不会脏，
+同时蓝字保住「这里是我的位置」的指引；**与暗色档同一套逻辑**（暗色同样是「中性底 + 蓝字」），
+从此不会再出现「一头好看一头难看」。
+
+被否掉的候选：现用 `#E0ECFF` 淡蓝底（浅色下饱和度拉满、像白纸贴便利贴，且与灰阶体系并置「脏边」）、
+L1 纯中性灰（图标只 #8A8A90→#5A5A5F，几乎看不出）、L3 极淡蓝底（治标）、L4 深色药丸（离 iOS 列表语言最远）、
+L5 无底仅蓝字（看不见可点区域）。
+
+### 规格表（数值即契约；浅色档，暗色档一律不动）
+| 态 | 浅色 | 暗色（不变） |
+|---|---|---|
+| hover | 底 `rgba(120,120,128,.10)` · 前景不变 | 底 `rgba(120,120,128,.16)` · 前景不变 |
+| 选中 | 底 `rgba(120,120,128,.16)` · 前景字/图标 `#005FB8` | 底 `#0A84FF` 12% · 前景 `#0A84FF` |
+| 当前 | 同上 + 内描边 `rgba(0,95,184,.28)`（1px 圆角内） | 同上 + 内描边 `rgba(10,132,255,.34)` |
+
+形状：圆角 7 · 行左右内缩 6（白卡行内缩 4）· 过渡 120ms。
+
+### 落点（既有 10 处浅色值一并换 L2，把「只被设计过暗色」的欠账补齐）
+| # | 处 | 文件 |
+|---|---|---|
+| 1 | 侧栏顶部工具行 | `lib/app/shell/sidebar_utility_toolbar.dart:76-79` |
+| 2 | 侧栏二级工具 | `lib/app/shell/sidebar_secondary_tools.dart:61` |
+| 3 | 侧栏底部工具列表 | `lib/app/shell/sidebar_tools_list.dart:55` |
+| 4 | 会话行（含 hover / 当前态内描边） | `lib/features/session_list/session_list_page.dart:2188-2250` |
+| 5 | 上下文弹层项 | `lib/features/chat/widgets/context_window_popover.dart:1278`（+1197/1205 分隔） |
+| 6 | 输入栏 chips | `lib/features/chat/widgets/composer_meta_chips.dart:737-749` |
+| 7 | 诊断分段 | `lib/features/diagnostics/diagnostics_page.dart:339/354` |
+| 8 | Git 分支树 | `lib/features/git/git_branch_tree.dart:257/417` |
+
+token 落点：`lib/app/theme/light_surfaces.dart`（新增三态 token；`#005FB8` 已有 `userDetail` 同值，按语义决定复用或新增名）。
+
+### 验收
+- [ ] 三态（hover / 选中 / 当前）在**真实界面**逐处可辨，且「选中 vs hover」只差蓝字、一眼可分
+- [ ] 暗色档**逐字节不动**（比对渲染图）
+- [ ] 窄屏（<900）逐像素不变
+- [ ] `analyze` 零告警 + 守卫用例（RED 校验）+ 全量回归
+- [ ] 真渲染图（宽 + 窄、明 + 暗）给主人复验
+- [ ] 主人真机复验
+
+### 源稿（本地活档）
+`sketches/selection-style-proposal.html`（三态定义 + 四档候选）·
+`sketches/selection-light-mode-proposal.html`（浅色五档 + L2 规格表）·
+`sketches/selection-l1-l2-in-ui.html`（L1/L2 放进四个真实界面 · 真图标版）·
+取证件 `.shots/sel-icons-*.png` / `.shots/sel-light-*.png` / `.shots/sel-ui-*.png`
+
+---
+
+## #176 宽屏 13 页全局重设计：决策项改以「设计稿」形式呈给主人
+
+**分类**：方向（宽屏全局重设计）　**状态**：设计案已成稿；**主人要求决策项以设计稿形式给**（不接受文字表逐条读）　**发现**：2026-09-27
+
+### 背景（会话被误删，产物完好）
+原讨论会话已删，但产物齐全：`sketches/wide-pages-redesign-proposal.html`（59.5KB，§0 决策表 / §1 全局规则 G1-G5 /
+§2 逐页 P1-P10 / §3 弹窗 D1-D2 / §4 右键菜单 D3-D4 / §5 五批落码顺序）+ 分节图 `.shots/prop-01..07-*.png`。
+
+体检结论：13 个功能页里**只有聊天 / 会话列表 / 引导有宽屏分支**，其余全是「手机单列横向拉伸到 960pt」。
+三件症状：① 行太长（一行 100+ 字符）② 卡片变横幅（该 3 列的拉成 1 列 960 宽）③ 二级页整页跳走（列表↔详情丢上下文）。
+骨架三句：**文字型限宽居中 · 工具型铺满多列 · 详情拆成右栏**。
+
+### 主人要求（本条约定的交付形态）
+**19 条决策项（G1-G5 + P1-P10 + D1-D4）不再以文字表格提交，改为「设计稿」形式**：
+每条画成可直视的对比（现状 → 改后），画在真实 token / 真图标上，让主人**看图点头**而非读表。
+
+### 分批（对齐 §5 落码顺序）
+| 稿 | 内容 | 对应落码批 |
+|---|---|---|
+| 决策稿 1 | G1-G5 全局规则（容器三档 / 内边距 / hover 焦点态 / 滚动条 / 二级页形态） | 批 1 |
+| 决策稿 2 | P1-P10 逐页（每页一组现状 vs 推荐） | 批 2-4 |
+| 决策稿 3 | D1-D4 弹窗四档 + 右键菜单密排 | 批 5 |
+
+### 待办
+- [ ] 决策稿 1（G 组）出稿 → 主人逐条点头 → 落码批 1
+- [ ] 决策稿 2（逐页）出稿
+- [ ] 决策稿 3（弹窗菜单）出稿
+- [ ] 按 §5 五批推进，每批出**真渲染图**（宽 + 窄）复验，过测过图才提交
