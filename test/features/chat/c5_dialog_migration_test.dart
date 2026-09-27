@@ -372,24 +372,23 @@ void main() {
       );
     }
 
-    test('C5 只动这四个文件（别的 feature 里的弹窗调用点不在本片范围）', () {
-      // 本片文件级分区：任一其它文件出现 showHermesDialog 即说明越界改动
-      // （5A 样板 download_confirm_dialog.dart 与基础设施除外）。
-      final allowed = <String>{
-        'lib/app/widgets/hermes_dialog.dart',
-        'lib/features/downloads/download_confirm_dialog.dart',
-        ..._kMigratedFiles.keys,
-      };
-      final offenders = <String>[];
-      for (final entity in Directory('lib').listSync(recursive: true)) {
-        if (entity is! File || !entity.path.endsWith('.dart')) continue;
-        final path = entity.path.replaceAll('\\', '/');
-        if (allowed.contains(path)) continue;
-        if (entity.readAsStringSync().contains('showHermesDialog<')) {
-          offenders.add(path);
-        }
+    // 【五路合成后改钉 2026-09-27】原断言扫**全仓**找「越界」—— 只在隔离期有意义（那时
+    // 只有本片改过）。五路合成后其它片也各迁了一批，全仓扫描必然误报。越界风险由
+    // 「worktree 隔离 + 文件级分区」在**流程上**保证；这里改为正向断言**本片分区完备**。
+    test('本片分区完备：C5 四文件的旧调用已清零且新调用在场', () {
+      for (final path in _kMigratedFiles.keys) {
+        final source = File(path).readAsStringSync();
+        expect(
+          'showCupertinoDialog'.allMatches(source),
+          isEmpty,
+          reason: '$path 仍有旧调用',
+        );
+        expect(
+          source.contains('showHermesDialog<'),
+          isTrue,
+          reason: '$path 缺新调用',
+        );
       }
-      expect(offenders, isEmpty, reason: 'C5 之外的 lib 文件被改动了: $offenders');
     });
   });
 
