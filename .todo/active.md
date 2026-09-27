@@ -2130,3 +2130,23 @@ RED 校验 2 组（窄屏不变 / hover 只宽屏，均精确命中）；像素�
 
 **环境实锤（已回写 skill `parallel-subagent-project-governance` §47）**：本批 worktree 的全量**稳定 1 例假失败**（`file_preview_body_extra_test` 的 PDF 分支 → `Found 0 widgets with key [<'preview-pdf'>]`），根因是**预热漏了 `.dart_tool/lib/`** —— `pdfium.dll`(7.2MB)/`sqlite3.dll`(1.7MB) 的真实落点在那儿，而 `hooks_runner/` 下只有 `.lock` + `link/`（链接式缓存，跨目录失效）。
 判据链：主仓同测试通过 -> 把批 1 apply 到主仓后仍通过 => **非回归，属环境**。子代理自报的「+5180 全绿」据此**失真**（实测 `+5179 -1`，它看漏了 `-1`）。batch2/batch3 的 worktree 已补 `.dart_tool/lib/` 并**验证通过**（`+51 All tests passed!`）。
+
+
+### 批次 2 / 批次 3 已交付（`8c8bdac` / `1cc8e6a`，三批合并态主仓全量 **5205 通过 / 69 skipped**）
+
+**批次 3（`1cc8e6a`）**：P1 设置（8 section 长卷 -> 左 220 三组导航 + 右限宽居中，只渲染当前分类）· P6 记忆（分段 -> 左 220 分区导航 + 正文字号走 `markdownBodyFontSizeFor` 13.5/15）· 新增共享件 `features/shared/wide_nav_rail.dart` + 3 个 l10n 分组名 getter。
+
+**批次 2（`8c8bdac`）**：P7 统计（指标 4 列 x 2 行 Bento + 图表两列）· P8 看板（**只改字号**：标题 15->14、描述/评论走宽屏档；**列宽 280 两处一字未动**）· P5 下载（单列 -> 两列网格，`IntrinsicHeight` 等高）。
+
+**Leader 复验（两批均独立跑过，不采信自报）**：analyze 零告警 · 全量各自 5149/5152 全绿（与自报一致）· RED 校验（批 2 三组、批 3 两组）· 窄屏**逐字节 IDENTICAL**（批 2 八张 sha256；批 3 三十二张切片）· 看板标题字号像素取证（墨迹 420->391，比值 0.931 ≈ 14/15）。
+
+**Leader 亲自补的缺口（批次 3）**：记忆页只改了正文、**h1-h6 沿用 flutter_markdown 包默认标题（实测 h1=27.0）** => 宽屏下「正文 13.5 正常、标题巨大」。修法：把 `markdown_styles.dart` 的私有 `_headingSize` 改为公开 `headingSize`（单一事实来源），记忆页 h1-h6 全部从 body 派生（18.5/16.5/14.5）。守卫 2 例 + RED 校验（移除派生 -> `Expected <18.5> / Actual <27.0>`）。
+
+**Leader 自省（同日两次同类错，已回写 skill）**：
+① 曾据**目测缩略图**判定「设置/记忆右内容没居中（左留白 4 / 右 18）」并发纠偏 => **错**：shell 侧栏真值 **320**（`adaptive_shell.dart:23`），误记 220，把「卡片自身 16 内边距」读成「偏右」。子代理逐像素反驳（16.5/17.0、30.5/31.0，Delta=0.5；1600 宽咬合 335/335 Delta=0）后本喵独立复测确认其正确。
+② 检查「字号有没有做」时的 grep 早于子代理定稿（它 19:00 定稿、本喵 18:5x 查），据此差点误报「没做」=> 并把旧图当终态图发给了主人。
+**判据**：发纠偏前先查代码真值（不靠记忆）；要量就在原始 PNG 上量（不看缩略图）；查「做没做」要连 mtime 一起看。
+
+**技术债（下一笔单独处理，不混入这两笔）**：批 2/3 因基线早于批 1，用局部常量顶替（3 处 `TODO(批 1)`：memory_page / settings_page / wide_nav_rail）。
+**两个陷阱**：`layout_tokens` 的 `kReadingMaxWidth=760` 与设置页 744 / 记忆页 720 **不是同值**；批 2/3 用 `Center` 而 `ReadingWidthBox` 用 `Align(topCenter)` => **垂直对齐不等价**（内容矮时会变）。
+处理原则：只做**无行为变化**的部分（`kWideNavRailWidth` 搬进 tokens）；替换容器前先做行为（像素）对比。
