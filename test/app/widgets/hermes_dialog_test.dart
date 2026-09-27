@@ -545,14 +545,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     }
 
-    testWidgets('宽屏 1280：560 卡片（不 push 整页）+ 字段横排', (tester) async {
+    testWidgets('宽屏 1280：push 整页 TasksEditPage + 字段横排', (tester) async {
       await pumpTasksPage(tester, _kWide);
       await tapCreate(tester);
 
-      // 整页形态不再出现 —— 宽屏改弹卡片。
-      expect(find.byType(TasksEditPage), findsNothing);
-      expect(find.byType(HermesDialogCard), findsOneWidget);
-      expect(tester.getSize(find.byKey(kHermesDialogCardKey)).width, 560.0);
+      // 形态：**宽窄屏一律整页** —— 批 5A 曾把宽屏改成 560 卡片弹窗（D1 样板），
+      // 主人 2026-09-27 复验后拍板「定时任务还是整页」，故回退；D2 的横排保留。
+      expect(find.byType(TasksEditPage), findsOneWidget);
+      expect(find.byType(HermesDialogCard), findsNothing);
 
       // 横排：label 与控件同一行（窄屏是上下两行）。
       final label = tester.getRect(find.text('名称'));
@@ -562,16 +562,16 @@ void main() {
       expect(label.center.dy, closeTo(field.center.dy, 0.5));
       expect(field.left - label.left, greaterThanOrEqualTo(kFormLabelWidth));
 
-      // 底栏两个动作都在。
-      expect(find.byKey(const ValueKey('tasks-form-cancel')), findsOneWidget);
+      // 整页的保存钮在导航栏（key 落在该按钮上）；取消走导航栏返回 ⇒ 无 tasks-form-cancel。
       expect(find.byKey(const ValueKey('tasks-form-save')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tasks-form-cancel')), findsNothing);
     });
 
     testWidgets('宽屏：必填为空时保存禁用，填齐后可用', (tester) async {
       await pumpTasksPage(tester, _kWide);
       await tapCreate(tester);
 
-      // 宽屏卡片底栏的保存钮是自绘 `CupertinoButton`（key 落在按钮上）。
+      // 整页形态下的保存钮（key 落在该按钮上；批 5A 的卡片底栏已随形态回退一并移除）。
       CupertinoButton saveAction() => tester.widget<CupertinoButton>(
         find.byKey(const ValueKey('tasks-form-save')),
       );

@@ -513,121 +513,15 @@ class _TasksPageState extends ConsumerState<TasksPage> {
   Future<void> _onRefresh() =>
       ref.read(tasksControllerProvider.notifier).refresh();
 
-  /// 新建 / 编辑定时任务。
+  /// 新建 / 编辑定时任务 —— **一律 push 整页 [TasksEditPage]**（宽窄屏一致）。
   ///
-  /// - **窄屏（<900）逐像素不变**：仍 push 整页 [TasksEditPage]（`HermesPageRoute`）；
-  /// - **宽屏（>=900）**：改弹 560 居中卡片（`HermesDialogKind.form`）——
-  ///   批 5A · D1「表单 560」+ D2「左 label 88 / 右控件横排」样板。
-  ///   改造前宽屏把表单拉成 1248 宽的整页横幅、label 压在控件上方占两行高，
-  ///   一次性输入却要跨屏扫视（对照图见 `.shots/dialogs/{before,after}/`）。
+  /// 注：批 5A 曾把宽屏改成 560 卡片弹窗（D1 样板），主人 2026-09-27 复验后判定
+  /// 「定时任务还是整页」，故此处回退。**D2 的横排保留** —— [TasksEditPage] 内部
+  /// 用的就是 [_TaskFormFields]（宽屏自动横排，窄屏竖排）。
   void _openEditor(BuildContext context, {CronJob? job}) {
-    if (!isWideLayout(context)) {
-      Navigator.of(context).push(
-        HermesPageRoute<void>(builder: (_) => TasksEditPage(job: job)),
-      );
-      return;
-    }
-    unawaited(_showEditorDialog(context, job));
-  }
-
-  /// 宽屏任务表单弹窗（560 卡片）：字段组与窄屏整页共用 [_TaskFormFields]，
-  /// 差别只有「卡片底栏的取消 / 保存」和「横排 vs 竖排」。
-  ///
-  /// 状态都活在本方法作用域里：输入控件的值在 controller，保存钮的可用态靠
-  /// [showHermesDialog] 的 `rebuildOn`（[ValueNotifier]）驱动卡片重建 ——
-  /// 窄屏整页那条路径仍用 `setState` + 导航栏保存钮，两者互不影响。
-  Future<void> _showEditorDialog(BuildContext context, CronJob? job) async {
-    final l10n = AppLocalizations.of(context);
-    final isEdit = job != null;
-    final nameController = TextEditingController(text: job?.name ?? '');
-    final scheduleController = TextEditingController(
-      text: job?.editableScheduleText ?? '',
+    Navigator.of(context).push(
+      HermesPageRoute<void>(builder: (_) => TasksEditPage(job: job)),
     );
-    final promptController = TextEditingController(text: job?.prompt ?? '');
-    var toastNotifications = job?.toastNotifications ?? true;
-    var saving = false;
-    // 卡片重建信号：输入变化 / 开关 / 保存中都要重算底栏可用态。
-    final changes = ValueNotifier<int>(0);
-
-    bool canSave() =>
-        !saving &&
-        scheduleController.text.trim().isNotEmpty &&
-        promptController.text.trim().isNotEmpty;
-
-    Future<void> runSave(BuildContext dialogContext) async {
-      saving = true;
-      changes.value++;
-      final controller = ref.read(tasksControllerProvider.notifier);
-      final ok = isEdit
-          ? await controller.save(
-              job,
-              name: nameController.text,
-              schedule: scheduleController.text.trim(),
-              prompt: promptController.text.trim(),
-              toastNotifications: toastNotifications,
-            )
-          : await controller.create(
-              name: nameController.text,
-              schedule: scheduleController.text.trim(),
-              prompt: promptController.text.trim(),
-              toastNotifications: toastNotifications,
-            );
-      if (ok) {
-        if (dialogContext.mounted) {
-          Navigator.of(dialogContext).pop();
-        }
-        // 弹窗已关，作用域即将 dispose —— 不再触碰 [changes]。
-        return;
-      }
-      saving = false;
-      changes.value++;
-    }
-
-    try {
-      await showHermesDialog<void>(
-        context,
-        kind: HermesDialogKind.form,
-        rebuildOn: changes,
-        title: (_) => Text(isEdit ? l10n.editTask : l10n.newTask),
-        // 左右/下内边距由卡片自身给（20 = Cupertino `_kDialogEdgePadding`），
-        // 这里只补标题与首个字段之间的 14 —— 再叠一层 20 会让字段缩到 378 宽、
-        // 与 D2 稿面（560 − 2×18 − 88 − 12 ≈ 424）差出一档。
-        content: (_) => Padding(
-          padding: const EdgeInsets.only(top: 14),
-          child: _TaskFormFields(
-            nameController: nameController,
-            scheduleController: scheduleController,
-            promptController: promptController,
-            toastNotifications: toastNotifications,
-            onChanged: () => changes.value++,
-            onToastChanged: (value) {
-              toastNotifications = value;
-              changes.value++;
-            },
-          ),
-        ),
-        actions: [
-          HermesDialogAction(
-            key: const ValueKey('tasks-form-cancel'),
-            builder: (_) => Text(l10n.cancel),
-            onPressed: (dialogContext) => Navigator.of(dialogContext).pop(),
-          ),
-          HermesDialogAction(
-            key: const ValueKey('tasks-form-save'),
-            isDefaultAction: true,
-            builder: (_) => Text(isEdit ? l10n.save : l10n.create),
-            // 可用态每次卡片重建时求值（`rebuildOn: changes` 驱动）。
-            enabled: canSave,
-            onPressed: (dialogContext) => unawaited(runSave(dialogContext)),
-          ),
-        ],
-      );
-    } finally {
-      nameController.dispose();
-      scheduleController.dispose();
-      promptController.dispose();
-      changes.dispose();
-    }
   }
 
   void _showRowActions(BuildContext context, CronJob job, GlobalKey anchorKey) {

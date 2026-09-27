@@ -1465,6 +1465,15 @@ class AppLocalizations {
       isEnglish ? '$count selected' : '已选择 $count 条';
   String get diagnosticsDetailsTitle => isEnglish ? 'Log Details' : '日志详情';
 
+  // ── 批 5 补齐（主人 2026-09-27 指示「l10n 肯定是要补齐的」）──
+  // 宽屏左栏「筛选」导航用的级别名与组标题，此前在 diagnostics_page.dart 里就地写死。
+  String get diagnosticsLevelVerbose => isEnglish ? 'Verbose' : '详细';
+  String get diagnosticsLevelDebug => isEnglish ? 'Debug' : '调试';
+  String get diagnosticsLevelInfo => isEnglish ? 'Info' : '信息';
+  String get diagnosticsLevelWarn => isEnglish ? 'Warn' : '警告';
+  String get diagnosticsLevelError => isEnglish ? 'Error' : '错误';
+  String get diagnosticsGroupTimeRange => isEnglish ? 'Time Range' : '时间范围';
+
   String get bgKeepalivePersistentHint => isEnglish
       ? 'When enabled, an ongoing notification displays the number of active sessions'
       : '开启后常驻通知显示进行中会话数';

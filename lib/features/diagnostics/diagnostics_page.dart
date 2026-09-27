@@ -47,34 +47,25 @@ String _timeFilterLabel(AppLocalizations l10n, DiagnosticsTimeFilter filter) {
 
 /// 五级日志的显示名称（宽屏左栏「级别」项用）。
 ///
-/// 为什么不进 ARB：批 4C 的文件级分区只允许动本页两个文件（`lib/l10n/**` 不在
-/// 其中），而 [DiagnosticsLogLevel.label] 是全大写英文常量（VERBOSE/DEBUG/…），
-/// 直接当中文界面里的名称不合适。语言判据走 [AppLocalizations.isEnglish]，
-/// 与全仓 l10n 口径一致 —— ARB 补齐后这两张表直接换成 l10n getter。
-const Map<DiagnosticsLogLevel, String> _kLevelNameZh =
-    <DiagnosticsLogLevel, String>{
-      DiagnosticsLogLevel.verbose: '详细',
-      DiagnosticsLogLevel.debug: '调试',
-      DiagnosticsLogLevel.info: '信息',
-      DiagnosticsLogLevel.warn: '警告',
-      DiagnosticsLogLevel.error: '错误',
-    };
-
-const Map<DiagnosticsLogLevel, String> _kLevelNameEn =
-    <DiagnosticsLogLevel, String>{
-      DiagnosticsLogLevel.verbose: 'Verbose',
-      DiagnosticsLogLevel.debug: 'Debug',
-      DiagnosticsLogLevel.info: 'Info',
-      DiagnosticsLogLevel.warn: 'Warning',
-      DiagnosticsLogLevel.error: 'Error',
-    };
-
-String _levelName(AppLocalizations l10n, DiagnosticsLogLevel level) =>
-    (l10n.isEnglish ? _kLevelNameEn : _kLevelNameZh)[level] ?? level.label;
-
+/// 批 5 起走 l10n（主人指示「l10n 肯定是要补齐的」），不再就地写死中英双表；
+/// 语言分流由 [AppLocalizations] 统一承担，与全仓口径一致。
+String _levelName(AppLocalizations l10n, DiagnosticsLogLevel level) {
+  switch (level) {
+    case DiagnosticsLogLevel.verbose:
+      return l10n.diagnosticsLevelVerbose;
+    case DiagnosticsLogLevel.debug:
+      return l10n.diagnosticsLevelDebug;
+    case DiagnosticsLogLevel.info:
+      return l10n.diagnosticsLevelInfo;
+    case DiagnosticsLogLevel.warn:
+      return l10n.diagnosticsLevelWarn;
+    case DiagnosticsLogLevel.error:
+      return l10n.diagnosticsLevelError;
+  }
+}
 /// 宽屏左栏「时间范围」组标题（同上，ARB 未提供）。
 String _timeRangeGroupLabel(AppLocalizations l10n) =>
-    l10n.isEnglish ? 'Time Range' : '时间范围';
+    l10n.diagnosticsGroupTimeRange;
 
 /// 左栏行文案色（浅色设计稿 `#3A3A3C`；与共享骨架
 /// `features/shared/wide_nav_rail.dart` 的 `_kNavRowLabel` 同值 —— 那份是私有
