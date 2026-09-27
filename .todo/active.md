@@ -1557,3 +1557,17 @@ Future<void> resumeCompressionIfRunning();
 **方法论沉淀**：像素级「接缝/断线」类反馈，量法 = 逐行扫「长连续亮段」并打印其逻辑 x 起止 ——
 一眼看出「左止 319.5 / 右起 329」。注意扫描函数**必须处理延伸到图像边缘的段**
 （首版漏了尾部 flush，把整幅连续线误报成「无长线」，差点得出反结论）。
+
+### 追加（2026-09-27 第四轮）：截图工装演示数据加厚（`#169`）
+
+**主人反馈**：渲染图里「聊天正文太少、没有性能监控面板、上下文指示器没有值」，看不出效果；并要求**窄屏也渲一份**做受影响比对。
+
+| 项 | 处置 |
+|---|---|
+| 正文 | 新增 `demoChatSessionJson()`：4 条消息两轮问答，assistant 正文含 h2/h3 + 列表 + **表格** + 代码块（zh/en 双套） |
+| 上下文指示器 | 会话 JSON 补 `context_length` 200000 / `last_prompt_tokens` 124000 / `input_tokens` / `output_tokens` / `estimated_cost` / `message_count` ⇒ 环上显示 **62%**（此前空「·」） |
+| 性能监控面板 | 新增 `test/helpers/fake_system_health.dart`（Dio adapter 注入固定 `/api/system/health`；`systemHealth()` 是 extension，子类覆写无效）+ `kShowPerfMonitorKey=true` |
+| 窄屏比对 | 宽/窄聊天截图**共用同一份数据**，按同内容比对窄屏是否受影响（代码侧另有 isWide 护栏测试双验） |
+
+产物：`.shots/demo-rich-wide-chat-dark.png`、`.shots/demo-rich-phone-chat-dark.png`。
+验收：analyze 零告警；全量 5095 通过 / 8 skipped。
