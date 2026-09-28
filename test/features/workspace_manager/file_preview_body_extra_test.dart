@@ -252,14 +252,48 @@ Future<WidgetRef> captureRef(
   return captured;
 }
 
-/// 让真实文件 IO（临时文件写入/删除）在 widget 测试里推进完成。
-Future<void> settleRealIo(WidgetTester tester, {int rounds = 4}) async {
-  for (var i = 0; i < rounds; i++) {
+/// 轮询推进真实文件 IO（临时文件写入/删除），直到 [predicate] 成立。
+///
+/// 取代固定轮次预算的旧写法（原 `settleRealIo(rounds: n)`）：真实 IO 何时落地是
+/// 环境相关的，固定轮次在**重负载**下（多进程并发验收 / CI 争抢 CPU）会偶发不够 ——
+/// `writeAsBytes` 还没落地就断言 `preview-pdf`，报
+/// `Found 0 widgets with key [<'preview-pdf'>]: []`（该例在并发跑全量时多次偶发；
+/// 自造单进程 CPU 负载下不能稳定复现，属概率型 flaky）。
+/// 信号驱动后等待时长随环境自适应；超时也不再退化成「找不到控件」这种误导性断言
+/// 失败，而是抛出带现场快照的可判因失败。
+///
+/// 约定：[predicate] 必须能在**两种终态**（成功 / 确定性失败）下都成立，否则真失败
+/// 时要白等满 [timeout]；由调用方的 `expect` 区分两种终态。
+Future<void> settleUntil(
+  WidgetTester tester,
+  bool Function() predicate, {
+  Duration timeout = const Duration(seconds: 15),
+  String Function()? diagnose,
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!predicate()) {
+    if (DateTime.now().isAfter(deadline)) {
+      final where = diagnose == null ? '' : '；现场 ${diagnose()}';
+      fail('settleUntil 超时：${timeout.inSeconds}s 内条件始终不成立$where');
+    }
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pump(const Duration(milliseconds: 10));
   }
+}
+
+/// 加载失败兜底已渲染（`_loadError` / `errorBannerBuilder` 分支）—— 此时再等也
+/// 不会出现成功态控件，可作为「确定性失败」终态信号（兜底视图恒带 preview-retry）。
+bool hasPreviewFailure() =>
+    find.byKey(const ValueKey('preview-retry')).evaluate().isNotEmpty;
+
+/// [settleUntil] 超时诊断：把「还在加载 / 已失败 / 临时文件落了几个」一次说清，
+/// 便于直接判因（是 IO 没落地、还是 pdfium 加载失败、还是加载链真卡住）。
+String previewStateSnapshot({required Set<String> tempBefore}) {
+  final loading = find.byType(CupertinoActivityIndicator).evaluate().isNotEmpty;
+  return 'loading=$loading failed=${hasPreviewFailure()} '
+      '新增临时文件=${previewTempPaths().difference(tempBefore).length}';
 }
 
 /// `_ResolvedFilePreviewSource.loadBytes` 会碰真实文件系统（`File.exists()`），
@@ -900,17 +934,19 @@ void main() {
           source: FilePreviewSource.workspaceFile('s1', 'movie.mp4'),
         ),
       );
-      // 落盘临时文件是真实 IO，需要 runAsync 才能推进。
-      // 轮次给足：全量并发跑时 CPU 争抢会让默认 4 轮（80ms）不够，_load() 未收尾
-      // 会让下面「有控件 or 有兜底」双断言假失败（单跑恒绿）。
-      await settleRealIo(tester, rounds: 12);
+      // 落盘临时文件是真实 IO，需要 runAsync 才能推进；等到「进播放器 or 失败兜底」
+      // 任一**终态**（信号驱动，不设固定轮次：固定轮次在 CPU 争抢下会偶发不够，
+      // `_load()` 未收尾就断言 → 下面双断言假失败）。
+      final videoControls = find.byKey(const ValueKey('preview-video-controls'));
+      await settleUntil(
+        tester,
+        () => videoControls.evaluate().isNotEmpty || hasPreviewFailure(),
+        diagnose: () => previewStateSnapshot(tempBefore: before),
+      );
 
       expect(find.text('无法预览该文件'), findsNothing);
-      final hasControls = find
-          .byKey(const ValueKey('preview-video-controls'))
-          .evaluate()
-          .isNotEmpty;
-      final hasFallback = find.text('加载失败').evaluate().isNotEmpty;
+      final hasControls = videoControls.evaluate().isNotEmpty;
+      final hasFallback = hasPreviewFailure();
       expect(hasControls || hasFallback, isTrue);
 
       // 收尾：清理本用例产生的临时文件（Player() 构造失败时源文件不会自清理，
@@ -934,6 +970,7 @@ void main() {
       tester,
     ) async {
       final before = previewTempPaths();
+      final pdfFinder = find.byKey(const ValueKey('preview-pdf'));
       final api = FakeWorkspaceApi()
         ..downloadBytes = Uint8List.fromList(const [0x25, 0x50, 0x44, 0x46]);
       await pumpBody(
@@ -944,17 +981,29 @@ void main() {
           source: FilePreviewSource.workspaceFile('s1', 'doc.pdf'),
         ),
       );
-      await settleRealIo(tester);
+      // 落盘临时文件是真实 IO，需要 runAsync 才能推进。**信号驱动**等待「渲染出
+      // preview-pdf 或已进失败兜底」这一终态，替代原来的固定轮次预算：固定预算在重负载
+      // 下偶发不够（writeAsBytes 尚未落地就断言），报
+      // `Found 0 widgets with key [<'preview-pdf'>]`。
+      await settleUntil(
+        tester,
+        () => pdfFinder.evaluate().isNotEmpty || hasPreviewFailure(),
+        diagnose: () => previewStateSnapshot(tempBefore: before),
+      );
 
-      expect(find.byKey(const ValueKey('preview-pdf')), findsOneWidget);
+      expect(pdfFinder, findsOneWidget);
       expect(api.downloadCalls, ['s1|doc.pdf']);
       final created = previewTempPaths().difference(before);
       expect(created, hasLength(1), reason: 'PDF 字节必须先落盘再交给 pdfrx');
       expect(created.single, endsWith('.pdf'));
 
-      // 组件销毁 → dispose 内异步删除临时文件。
+      // 组件销毁 → dispose 内异步删除临时文件；同样等信号，不留固定轮次预算。
       await tester.pumpWidget(const SizedBox.shrink());
-      await settleRealIo(tester, rounds: 3);
+      await settleUntil(
+        tester,
+        () => previewTempPaths().difference(before).isEmpty,
+        diagnose: () => '残留 ${previewTempPaths().difference(before)}',
+      );
       expect(previewTempPaths().difference(before), isEmpty);
     });
 
