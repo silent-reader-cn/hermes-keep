@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
 import '../../core/utils/accessibility.dart';
@@ -272,7 +273,9 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
                 child: Text(
                   board.name ?? board.slug ?? l10n.unnamedBoard,
                   style: TextStyle(
-                    fontSize: 14,
+                    // TODO(type): 项名误落 14（梯子上项名是 kFontItemTitle 15）；
+                    // 值不变 ⇒ 同值位取正文档 kFontBody。
+                    fontSize: kFontBody,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                     color: isLight
                         ? (selected
@@ -391,12 +394,17 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(l10n.kanbanEmptyContent, style: const TextStyle(fontSize: 17)),
+            // 空状态标题：17 在梯子上仅 kFontPageTitle 同值（导航栏标题档），
+            // 梯子缺「空状态/错误标题」档 —— 同档共 4 处（空状态 x2 / 错误标题 x2）。
+            Text(
+              l10n.kanbanEmptyContent,
+              style: const TextStyle(fontSize: kFontPageTitle),
+            ),
             const SizedBox(height: 6),
             Text(
               l10n.clickPlusToCreateFirstCard,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -429,12 +437,15 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(l10n.noKanbanBoards, style: const TextStyle(fontSize: 17)),
+            Text(
+              l10n.noKanbanBoards,
+              style: const TextStyle(fontSize: kFontPageTitle),
+            ),
             const SizedBox(height: 6),
             Text(
               l10n.createBoardOnServerPrompt,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -469,14 +480,17 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: kFontItemTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -574,7 +588,7 @@ class _KanbanColumnView extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: kFontItemTitle,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -582,7 +596,9 @@ class _KanbanColumnView extends StatelessWidget {
                 Text(
                   '${cards.length}',
                   style: TextStyle(
-                    fontSize: 13,
+                    // TODO(type): 列计数误落 13（梯子上计数档是 kFontMicro 11）；
+                    // 值不变 ⇒ 同值位取 kFontLabel。
+                    fontSize: kFontLabel,
                     color: LightSurfaces.resolve(
                       context,
                       LightSurfaces.textSecondary,
@@ -602,7 +618,7 @@ class _KanbanColumnView extends StatelessWidget {
                       child: Text(
                         l10n.noCards,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: kFontLabel,
                           color: LightSurfaces.resolve(
                             context,
                             LightSurfaces.textSecondary,
@@ -704,7 +720,10 @@ class _KanbanCardTile extends StatelessWidget {
                 style: TextStyle(
                   // 宽屏字号档：标题 15 → 14（窄屏维持 15，逐像素不变），
                   // 与正文档（见下方 markdownBodyFontSizeFor）保持「标题 > 正文」。
-                  fontSize: isWide ? 14 : 15,
+                  // 卡片标题＝项名（kFontItemTitle 15）；宽屏 14 是 P8 拍板的「宽屏缩一档」，
+                  // 梯子上无该档 ⇒ 14 位同值只取 kFontBody。
+                  // TODO(type): 宜做成 kFontItemTitleFor(context)，或把宽屏档收回 15。
+                  fontSize: isWide ? kFontBody : kFontItemTitle,
                   fontWeight: FontWeight.w500,
                   color: _usesLightSurfaces(context)
                       ? CupertinoColors.label.resolveFrom(context)
@@ -732,7 +751,7 @@ class _KanbanCardTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: kFontCaption,
                         color: LightSurfaces.resolve(
                           context,
                           LightSurfaces.textSecondary,
@@ -788,7 +807,7 @@ class _KanbanCardTile extends StatelessWidget {
                 ? l10n.parentsDependency(parents)
                 : l10n.childrenDependency(children),
             style: TextStyle(
-              fontSize: 11,
+              fontSize: kFontMicro,
               // Full-strength label: white on the dark tint is 10.44:1.
               color: CupertinoColors.label.resolveFrom(context),
             ),
@@ -977,7 +996,9 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 14,
+                // TODO(type): 字段名误落 14（梯子上字段名是 kFontLabel 13）；
+                // 值不变 ⇒ 同值位取 kFontBody。
+                fontSize: kFontBody,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -1022,7 +1043,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   ? const CupertinoActivityIndicator(radius: 8)
                   : Text(
                       kanbanStatusTitle(status, context),
-                      style: const TextStyle(fontSize: 13),
+                      style: const TextStyle(fontSize: kFontButton),
                     ),
             ),
           ),
@@ -1075,7 +1096,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             child: Text(
               l10n.noComments,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: kFontBody,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -1100,7 +1121,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   Text(
                     _commentMeta(comment),
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: kFontCaption,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -1236,7 +1257,10 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: kFontItemTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
@@ -1245,7 +1269,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
                   : (error?.toString() ?? l10n.unknownError),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -1321,7 +1345,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
             Text(
               l10n.boardPrefix(currentBoard.name ?? currentBoard.slug ?? ''),
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -1356,7 +1380,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
           Text(
             l10n.initialStatus,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -1425,7 +1449,7 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
         Text(
           label,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: kFontLabel,
             color: LightSurfaces.resolve(
               context,
               LightSurfaces.textSecondary,

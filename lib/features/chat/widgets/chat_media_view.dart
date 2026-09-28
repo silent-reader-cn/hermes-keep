@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -169,7 +170,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: kFontLabel,
                           fontWeight: FontWeight.w500,
                           color: LightSurfaces.resolve(
                             context,
@@ -204,7 +205,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
                 child: Text(
                   l10n.chatAutoLoadTapToLoad,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: kFontButton,
                     color: CupertinoColors.white,
                     fontWeight: FontWeight.w500,
                   ),
@@ -722,6 +723,7 @@ class AttachmentLightbox extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: CupertinoColors.white,
+                    // TODO(type): 未进梯子
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -733,7 +735,7 @@ class AttachmentLightbox extends StatelessWidget {
                 style: const TextStyle(
                   // Inverse media preview on black: #8E8E93 is 6.440674:1; theme-independent.
                   color: CupertinoColors.systemGrey,
-                  fontSize: 14,
+                  fontSize: kFontBody,
                 ),
               ),
             ],
@@ -761,7 +763,7 @@ class AttachmentLightbox extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: CupertinoColors.white,
-                  fontSize: 14,
+                  fontSize: kFontBody,
                 ),
               )
             : null,
@@ -826,7 +828,7 @@ class _AttachmentDownloadButton extends ConsumerWidget {
           label,
           style: compact
               ? const TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontCaption,
                   fontWeight: FontWeight.w600,
                   color: CupertinoColors.white,
                 )
@@ -1019,7 +1021,7 @@ class _AttachmentDownloadButton extends ConsumerWidget {
           Text(
             l10n.dl53CannotDownload,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: kFontCaption,
               // Inverse media preview on black: #8E8E93 is 6.440674:1; theme-independent.
               color: CupertinoColors.systemGrey,
             ),
@@ -1344,7 +1346,7 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
                     Text(
                       l10n.imageLoadFailed,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: kFontLabel,
                         fontWeight: FontWeight.w500,
                         color: LightSurfaces.resolve(
                           context,
@@ -1359,7 +1361,7 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: kFontMicro,
                           color: LightSurfaces.resolve(
                             context,
                             LightSurfaces.textSecondary,
@@ -1396,7 +1398,7 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
                   child: Text(
                     l10n.imageReload,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: kFontButton,
                       color: CupertinoColors.label.resolveFrom(context),
                     ),
                   ),
@@ -1440,7 +1442,7 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
                   child: Text(
                     l10n.imageDownloadOriginal,
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: kFontMicro,
                       color: CupertinoColors.white,
                     ),
                   ),
@@ -1553,7 +1555,7 @@ class ChatAttachmentChipView extends StatelessWidget {
             child: Text(
               name,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, color: fgColor),
+              style: TextStyle(fontSize: kFontCaption, color: fgColor),
             ),
           ),
         ],

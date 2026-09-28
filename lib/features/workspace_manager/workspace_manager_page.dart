@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/workspace.dart';
@@ -154,7 +155,7 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
           footer: Text(
             l10n.removeWorkspaceFooter,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: kFontCaption,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -202,14 +203,14 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -251,14 +252,14 @@ class _WorkspaceManagerPageState extends ConsumerState<WorkspaceManagerPage> {
             const SizedBox(height: 12),
             Text(
               l10n.noWorkspacesYet,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
               l10n.addWorkspaceHint,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -598,6 +599,7 @@ class _WorkspaceRowState extends State<_WorkspaceRow> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
+                        // TODO(type): 16 未进梯子；语义＝工作区项名（kFontItemTitle 15），值保留。
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -609,7 +611,7 @@ class _WorkspaceRowState extends State<_WorkspaceRow> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: kFontCaption,
                           color: LightSurfaces.resolve(
                             context,
                             LightSurfaces.textSecondary,
@@ -695,7 +697,7 @@ class _CurrentBadge extends StatelessWidget {
       child: Text(
         AppLocalizations.of(context).currentWorkspaceBadge,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: kFontMicro,
           color: statusBlueText.resolveFrom(context),
         ),
       ),

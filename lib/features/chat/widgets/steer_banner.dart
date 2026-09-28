@@ -1,3 +1,4 @@
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../../../app/theme/light_surfaces.dart';
@@ -63,7 +64,7 @@ class SteerBanner extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 fontWeight: FontWeight.w500,
                 color: LightSurfaces.resolve(
                   context,
@@ -136,7 +137,7 @@ class QueuedBanner extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: kFontCaption,
                     fontWeight: FontWeight.w500,
                     color: LightSurfaces.resolve(
                       context,
@@ -153,7 +154,7 @@ class QueuedBanner extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: kFontMicro,
                         color: LightSurfaces.resolve(
                           context,
                           LightSurfaces.textSecondary,
@@ -179,7 +180,7 @@ class QueuedBanner extends StatelessWidget {
             child: Text(
               '$count',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: kFontMicro,
                 fontWeight: FontWeight.w600,
                 color: LightSurfaces.resolve(
                   context,

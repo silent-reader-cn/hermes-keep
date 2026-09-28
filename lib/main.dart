@@ -12,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app/app.dart';
 import 'app/theme/cupertino_theme.dart';
+import 'app/theme/typography_tokens.dart';
 import 'core/api/cookie_store.dart';
 import 'core/cache/app_database.dart';
 import 'core/cache/cache_providers.dart';
@@ -151,7 +152,7 @@ class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
                   displayText,
                   style: TextStyle(
                     fontFamily: kAppFontFamily,
-                    fontSize: 13,
+                    fontSize: kFontLabel,
                     fontWeight: FontWeight.w500,
                     color: primaryTextColor,
                     decoration: TextDecoration.none,
@@ -175,7 +176,7 @@ class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
                         _expanded ? '收起' : '详情',
                         style: TextStyle(
                           fontFamily: kAppFontFamily,
-                          fontSize: 12,
+                          fontSize: kFontCaption,
                           color: blueColor,
                           fontWeight: FontWeight.w500,
                         ),
@@ -207,7 +208,7 @@ class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
                   _retried ? '已重试' : '重试',
                   style: const TextStyle(
                     fontFamily: kAppFontFamily,
-                    fontSize: 12,
+                    fontSize: kFontCaption,
                     color: CupertinoColors.white,
                     fontWeight: FontWeight.w600,
                   ),
@@ -238,7 +239,7 @@ class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
                         '异常详情',
                         style: TextStyle(
                           fontFamily: kAppFontFamily,
-                          fontSize: 12,
+                          fontSize: kFontCaption,
                           fontWeight: FontWeight.w600,
                           color: secondaryTextColor,
                           decoration: TextDecoration.none,
@@ -266,7 +267,7 @@ class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
                               _copied ? '已复制' : '复制详情',
                               style: TextStyle(
                                 fontFamily: kAppFontFamily,
-                                fontSize: 11,
+                                fontSize: kFontMicro,
                                 color: _copied ? greenColor : blueColor,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -284,7 +285,7 @@ class _RecoverableErrorCardState extends State<RecoverableErrorCard> {
                         detailsText,
                         style: TextStyle(
                           fontFamily: 'monospace',
-                          fontSize: 11,
+                          fontSize: kFontCode,
                           height: 1.4,
                           color: primaryTextColor,
                           decoration: TextDecoration.none,

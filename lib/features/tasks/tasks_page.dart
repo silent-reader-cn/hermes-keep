@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../app/widgets/hermes_dialog.dart';
@@ -393,7 +394,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               Text(
                 l10n.taskOutput,
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: kFontPageTitle,
                   fontWeight: FontWeight.w600,
                   color: labelColor,
                 ),
@@ -405,7 +406,8 @@ class _TasksPageState extends ConsumerState<TasksPage> {
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 13, color: secondaryLabelColor),
+                    // TODO(type): 面板副标题属注解档 kFontCaption(12)，现值 13（按「值不动」保留）。
+                    style: TextStyle(fontSize: kFontLabel, color: secondaryLabelColor),
                   ),
                 ),
               ],
@@ -439,14 +441,16 @@ class _TasksPageState extends ConsumerState<TasksPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              // TODO(type): 错误态标题属内容区标题档 kFontItemTitle(15)，现值 17（值不动）。
+              style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                // TODO(type): 说明文字属注解档 kFontCaption(12)，现值 13（值不动）。
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -481,12 +485,14 @@ class _TasksPageState extends ConsumerState<TasksPage> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(l10n.noTasks, style: const TextStyle(fontSize: 17)),
+            // TODO(type): 空态标题属内容区标题档 kFontItemTitle(15)，现值 17（值不动）。
+            Text(l10n.noTasks, style: const TextStyle(fontSize: kFontItemTitle)),
             const SizedBox(height: 6),
             Text(
               l10n.createTaskPrompt,
               style: TextStyle(
-                fontSize: 13,
+                // TODO(type): 空态提示属注解档 kFontCaption(12)，现值 13（值不动）。
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -692,7 +698,9 @@ class _WideTaskRailGroupLabel extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 10,
+          // TODO(type): 栏内分组标题属分组档 kFontSectionTitle(13)，现值 10 仅侧栏专档同值；
+          // 与骨架 wide_nav_rail 同款取值，是否随之统一到 13 待主人拍板（值不动）。
+          fontSize: kFontSidebarSub,
           fontWeight: FontWeight.w600,
           color: LightSurfaces.resolve(
             context,
@@ -804,7 +812,8 @@ class _WideTaskRailRowState extends State<_WideTaskRailRow> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 13,
+                                // 宽屏左栏行 = 栏内导航行档 kFontNavItem；内容区项名档 kFontItemTitle(15) 不适用本容器。
+                                fontSize: kFontNavItem,
                                 fontWeight: FontWeight.w600,
                                 color: labelFg,
                               ),
@@ -813,7 +822,8 @@ class _WideTaskRailRowState extends State<_WideTaskRailRow> {
                           const SizedBox(width: 6),
                           Text(
                             taskStatusLabel(widget.job, context),
-                            style: TextStyle(fontSize: 11, color: statusColor),
+                            // TODO(type): 状态标签属注解档 kFontCaption(12)，现值 11（与窄屏行 12 同语义两值，值不动）。
+                            style: TextStyle(fontSize: kFontMicro, color: statusColor),
                           ),
                         ],
                       ),
@@ -823,7 +833,7 @@ class _WideTaskRailRowState extends State<_WideTaskRailRow> {
                           subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: secondaryFg),
+                          style: TextStyle(fontSize: kFontCaption, color: secondaryFg),
                         ),
                       ],
                     ],
@@ -940,7 +950,8 @@ class _TaskRowState extends State<_TaskRow> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 17,
+                          // TODO(type): 行名属内容区项名档 kFontItemTitle(15)，现值 17（与宽屏左栏行 13 同语义两值，值不动）。
+                          fontSize: kFontPageTitle,
                           color: CupertinoColors.label.resolveFrom(context),
                         ),
                       ),
@@ -948,7 +959,8 @@ class _TaskRowState extends State<_TaskRow> {
                     const SizedBox(width: 8),
                     Text(
                       taskStatusLabel(widget.job, context),
-                      style: TextStyle(fontSize: 12, color: statusColor),
+                      // 状态标签档 kFontCaption（宽屏左栏行为 11，同语义两值待收口）。
+                      style: TextStyle(fontSize: kFontCaption, color: statusColor),
                     ),
                   ],
                 ),
@@ -959,7 +971,8 @@ class _TaskRowState extends State<_TaskRow> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13,
+                      // TODO(type): 副标题属注解档 kFontCaption(12)，现值 13（与宽屏左栏行 12 同语义两值，值不动）。
+                      fontSize: kFontLabel,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -1089,7 +1102,8 @@ class _TaskOutputBody extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(
                     l10n.noOutput,
-                    style: TextStyle(fontSize: 15, color: secondaryLabelColor),
+                    // TODO(type): 空态说明文字误用项名档 kFontItemTitle(15)；说明档为 kFontCaption(12)（值不动）。
+                    style: TextStyle(fontSize: kFontItemTitle, color: secondaryLabelColor),
                   ),
                 ],
               ),
@@ -1124,7 +1138,8 @@ class _TaskOutputBody extends StatelessWidget {
                         child: Text(
                           item.filename ?? l10n.outputItemTitle(index + 1),
                           style: TextStyle(
-                            fontSize: 14,
+                            // TODO(type): 输出条目名（名字）误用正文档 kFontBody(14)；项名档为 kFontItemTitle(15)（值不动）。
+                            fontSize: kFontBody,
                             fontWeight: FontWeight.w600,
                             color: labelColor,
                           ),
@@ -1147,7 +1162,8 @@ class _TaskOutputBody extends StatelessWidget {
                         maxLines: 10,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 13,
+                          // TODO(type): 等宽过程日志应为 kFontCode(12)（现值 13，且未设等宽字族；值不动）。
+                          fontSize: kFontLabel,
                           height: 1.4,
                           color: labelColor,
                         ),
@@ -1203,7 +1219,7 @@ class _TaskOutputSheet extends StatelessWidget {
                 child: Text(
                   l10n.taskOutput,
                   style: TextStyle(
-                    fontSize: 17,
+                    fontSize: kFontPageTitle,
                     fontWeight: FontWeight.w600,
                     color: labelColor,
                   ),
@@ -1513,7 +1529,7 @@ class _TaskFormField extends StatelessWidget {
       label: Text(
         label,
         style: TextStyle(
-          fontSize: 13,
+          fontSize: kFontLabel,
           color: LightSurfaces.resolve(
             context,
             LightSurfaces.textSecondary,

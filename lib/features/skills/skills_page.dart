@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../app/widgets/reading_width_box.dart';
@@ -213,7 +214,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               Text(
                 l10n.noMoreSkillDetails,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontLabel,
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
@@ -225,7 +226,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
               Text(
                 description,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: kFontItemTitle,
                   color: CupertinoColors.label.resolveFrom(context),
                 ),
               ),
@@ -379,14 +380,18 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              // TODO(type): 空态标题 17 —— 「空态标题=kFontItemTitle(15)」口径待 Leader 定夺。
+              style: const TextStyle(
+                fontSize: kFontItemTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -427,7 +432,8 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             const SizedBox(height: 12),
             Text(
               isSearchMode ? l10n.noMatchingSkillsFound : l10n.noSkills,
-              style: const TextStyle(fontSize: 17),
+              // TODO(type): 空态标题 17 —— 「空态标题=kFontItemTitle(15)」口径待 Leader 定夺。
+              style: const TextStyle(fontSize: kFontItemTitle),
             ),
             const SizedBox(height: 6),
             Text(
@@ -435,7 +441,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
                   ? l10n.tryAnotherKeyword
                   : l10n.serverSkillsWillShowHere,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -602,7 +608,8 @@ class _SkillRow extends ConsumerWidget {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 17,
+                                // TODO(type): 列表项名却为 17（宜 kFontItemTitle 15）—— 值不动，待 Leader 定夺。
+                                fontSize: kFontPageTitle,
                                 fontWeight: FontWeight.w600,
                                 color: disabled
                                     ? LightSurfaces.resolve(
@@ -639,7 +646,7 @@ class _SkillRow extends ConsumerWidget {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: kFontLabel,
                             color: LightSurfaces.resolve(
                               context,
                               LightSurfaces.textSecondary,
@@ -718,6 +725,8 @@ class _WideSkillRailGroupLabel extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
+          // TODO(type): 未进梯子（值 10）。
+          // 同款 wide_nav_rail 分组标签已挂 kFontSectionTitle(13)，两栏并排口径待统一。
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: LightSurfaces.resolve(
@@ -818,7 +827,7 @@ class _WideSkillRailRow extends ConsumerWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: kFontNavItem,
                           fontWeight: FontWeight.w600,
                           color: nameFg,
                         ),
@@ -829,7 +838,7 @@ class _WideSkillRailRow extends ConsumerWidget {
                           description,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: descFg),
+                          style: TextStyle(fontSize: kFontCaption, color: descFg),
                         ),
                       ],
                     ],
@@ -922,7 +931,7 @@ class _DetailLine extends StatelessWidget {
           ),
         ],
       ),
-      style: const TextStyle(fontSize: 13),
+      style: const TextStyle(fontSize: kFontLabel),
     );
   }
 }
@@ -948,7 +957,7 @@ class _Badge extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: kFontMicro,
           fontWeight: FontWeight.w500,
           color: CupertinoColors.label.resolveFrom(context),
         ),

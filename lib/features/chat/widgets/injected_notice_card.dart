@@ -1,3 +1,4 @@
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show SelectableText;
 
@@ -96,7 +97,7 @@ class InjectedNoticeCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: kFontMicro,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.04 * 11,
                           color: accent,
@@ -138,7 +139,7 @@ class InjectedNoticeCard extends StatelessWidget {
                           style: TextStyle(
                             fontFamily: 'monospace',
                             fontFamilyFallback: const ['MiSans'],
-                            fontSize: 12,
+                            fontSize: kFontCode,
                             height: 1.5,
                             color: labelColor,
                           ),
@@ -228,7 +229,7 @@ class _ToggleButton extends StatelessWidget {
           border: Border.all(color: separator),
           borderRadius: BorderRadius.circular(5),
         ),
-        child: Text(label, style: TextStyle(fontSize: 11, color: textColor)),
+        child: Text(label, style: TextStyle(fontSize: kFontButton, color: textColor)),
       ),
     );
   }

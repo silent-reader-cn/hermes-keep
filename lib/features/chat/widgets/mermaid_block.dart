@@ -1,5 +1,6 @@
 library;
 
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Scrollbar, SelectableText;
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -68,6 +69,7 @@ const core.MermaidTheme kMermaidDarkTheme = core.MermaidTheme(
   titleColor: core.Color(0xffffffff),
   edgeLabelBackground: core.Color(0xff2c2c2e),
   fontFamily: '"trebuchet ms", verdana, arial, sans-serif',
+  // TODO(type): 未进梯子
   fontSize: 16,
 );
 
@@ -110,7 +112,8 @@ class _CodeBlockFallbackState extends State<CodeBlockFallback> {
     final textStyle =
         styleSheet?.code ??
         TextStyle(
-          fontSize: 13,
+          // TODO(type): 等宽无 13 档，宜 kFontCode(12)
+          fontSize: kFontLabel,
           height: 1.4,
           fontFamily: 'monospace',
           color: CupertinoColors.label.resolveFrom(context),
@@ -273,7 +276,7 @@ class _MermaidCodeBlockState extends ConsumerState<MermaidCodeBlock> {
                   Text(
                     fullscreenLabel,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: kFontCaption,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,

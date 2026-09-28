@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show FileSystemEntity, Platform;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, mapEquals;
@@ -278,7 +279,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   // #163：宽屏标题 17 → 15（＝侧栏品牌名同号）。
                   style: isWide
                       ? const TextStyle(
-                          fontSize: 15,
+                          fontSize: kFontItemTitle,
                           fontWeight: FontWeight.w600,
                         )
                       : null,
@@ -308,7 +309,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         Text(
                           l10n.branchBadge,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: kFontCaption,
                             color: LightSurfaces.resolve(
                               context,
                               LightSurfaces.textSecondary,
@@ -1101,7 +1102,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
             Text(
               l10n.approvalNeeded,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontSectionTitle,
                 fontWeight: FontWeight.w600,
                 color: LightSurfaces.resolve(
                   context,
@@ -1115,7 +1116,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
               Text(
                 question,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: kFontBody,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -1173,7 +1174,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
               Text(
                 l10n.clarificationNeeded,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontSectionTitle,
                   fontWeight: FontWeight.w600,
                   color: CupertinoColors.systemIndigo,
                 ),
@@ -1184,7 +1185,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
                   key: const ValueKey('chat-prompt-clarify-countdown'),
                   countdownStr,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: kFontLabel,
                     fontWeight: FontWeight.w600,
                     color: isUrgent
                         ? statusOrangeText.resolveFrom(context)
@@ -1223,7 +1224,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
               Text(
                 question,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: kFontBody,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -1266,9 +1267,9 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
 
                       controller: _textController,
                       placeholder: l10n.clarifyInputPlaceholder,
-                      style: const TextStyle(fontSize: 13),
+                      style: const TextStyle(fontSize: kFontLabel),
                       placeholderStyle: TextStyle(
-                        fontSize: 13,
+                        fontSize: kFontLabel,
                         color: LightSurfaces.resolve(
                           context,
                           LightSurfaces.placeholder,
@@ -1292,7 +1293,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
                     child: Text(
                       l10n.clarifySend,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: kFontButton,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -1304,7 +1305,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
             Text(
               l10n.clarifyHint,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontCaption,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -1332,7 +1333,7 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
         onPressed: onPressed,
         child: Text(
           choice,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          style: const TextStyle(fontSize: kFontButton, fontWeight: FontWeight.w500),
         ),
       ),
     );
@@ -1387,7 +1388,7 @@ class _OfflineCacheBanner extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontCaption,
                 color: LightSurfaces.resolve(
                   context,
                   statusBlueText.resolveFrom(context),
@@ -1404,7 +1405,7 @@ class _OfflineCacheBanner extends StatelessWidget {
             child: Text(
               l10n.retry,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontButton,
                 fontWeight: FontWeight.w600,
                 color: LightSurfaces.resolve(
                   context,
@@ -1479,7 +1480,7 @@ class _ErrorBanner extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontCaption,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -1533,7 +1534,7 @@ class _QueuedBanner extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: kFontCaption,
           color: LightSurfaces.resolve(
             context,
             statusOrangeText.resolveFrom(context),
@@ -1668,7 +1669,7 @@ class _TransientNoticeToastState extends State<_TransientNoticeToast> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontCaption,
                   fontWeight: FontWeight.w500,
                   color: textColor,
                 ),
@@ -1770,7 +1771,7 @@ class _SteerNoticeToast extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontCaption,
                   fontWeight: FontWeight.w500,
                   color: textColor,
                 ),

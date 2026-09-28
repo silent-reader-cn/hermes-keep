@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../app/theme/typography_tokens.dart';
 import '../../../app/widgets/hermes_dialog.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/models/saved_prompt.dart';
@@ -250,7 +251,7 @@ class _SavedPromptsPanelState extends ConsumerState<SavedPromptsPanel> {
                     LightSurfaces.textSecondary,
                     dark: CupertinoColors.secondaryLabel,
                   ),
-                  fontSize: 13,
+                  fontSize: kFontLabel,
                 ),
               ),
               trailing: CupertinoButton(
@@ -398,7 +399,11 @@ class SavedPromptsSheet extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               l10n.savedPromptsTitle,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              // TODO(type): 未进梯子（弹层标题 16）。
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             Container(

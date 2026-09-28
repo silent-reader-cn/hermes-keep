@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -364,7 +365,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                         padding: const EdgeInsets.all(4),
                         child: Text(
                           l10n.noWorkspacesAvailableHint,
-                          style: TextStyle(fontSize: 11, color: secondary),
+                          style: TextStyle(fontSize: kFontMicro, color: secondary),
                         ),
                       ),
                     ],
@@ -599,7 +600,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                   child: Text(
                     tokensLabel,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: kFontBody,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -663,7 +664,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
               children: [
                 Text(
                   l10n.contextWindowCurrentModel,
-                  style: TextStyle(fontSize: 12, color: secondary),
+                  style: TextStyle(fontSize: kFontCaption, color: secondary),
                 ),
                 const SizedBox(height: 6),
                 Row(
@@ -704,7 +705,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                           ? l10n.contextWindowFollowServerDefault
                                           : currentModel,
                                       style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: kFontLabel,
                                         fontWeight: FontWeight.w500,
                                         color: CupertinoColors.label
                                             .resolveFrom(context),
@@ -770,7 +771,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                           ? l10n.notSet
                                           : reasoningEffort,
                                       style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: kFontLabel,
                                         fontWeight: FontWeight.w500,
                                         color: CupertinoColors.label
                                             .resolveFrom(context),
@@ -814,7 +815,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                   children: [
                     Text(
                       l10n.workspace,
-                      style: TextStyle(fontSize: 12, color: secondary),
+                      style: TextStyle(fontSize: kFontCaption, color: secondary),
                     ),
                     const Spacer(),
                     if (_savingWorkspace)
@@ -836,7 +837,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                           _manualInputExpanded
                               ? l10n.cancel
                               : l10n.manualInputWorkspace,
-                          style: const TextStyle(fontSize: 12),
+                          style: const TextStyle(fontSize: kFontButton),
                         ),
                       ),
                   ],
@@ -872,7 +873,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                               child: Text(
                                 currentWorkspaceLabel,
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: kFontLabel,
                                   fontWeight: FontWeight.w500,
                                   color: CupertinoColors.label.resolveFrom(
                                     context,
@@ -912,9 +913,9 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                             horizontal: 10,
                             vertical: 8,
                           ),
-                          style: const TextStyle(fontSize: 13),
+                          style: const TextStyle(fontSize: kFontLabel),
                           placeholderStyle: TextStyle(
-                            fontSize: 13,
+                            fontSize: kFontLabel,
                             color: secondary,
                           ),
                           decoration: BoxDecoration(
@@ -942,7 +943,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                             : _saveManualWorkspace,
                         child: Text(
                           l10n.save,
-                          style: const TextStyle(fontSize: 13),
+                          style: const TextStyle(fontSize: kFontButton),
                         ),
                       ),
                     ],
@@ -977,7 +978,7 @@ class _InfoRow extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: kFontCaption,
             color: LightSurfaces.resolve(
               context,
               LightSurfaces.textSecondary,
@@ -988,7 +989,7 @@ class _InfoRow extends StatelessWidget {
         const Spacer(),
         Text(
           value,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          style: const TextStyle(fontSize: kFontCaption, fontWeight: FontWeight.w500),
         ),
       ],
     );
@@ -1274,7 +1275,7 @@ class _ModelRow extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontNavItem,
                 color: selected
                     ? LightSurfaces.resolve(
                         context,
@@ -1331,7 +1332,7 @@ class _WorkspaceRow extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontNavItem,
                   color: selected
                       ? LightSurfaces.resolve(
                           context,
@@ -1389,7 +1390,7 @@ class _ReasoningRow extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontNavItem,
                   color: selected
                       ? LightSurfaces.resolve(
                           context,

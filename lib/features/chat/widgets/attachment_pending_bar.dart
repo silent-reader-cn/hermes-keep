@@ -1,3 +1,4 @@
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,7 +47,7 @@ class AttachmentPendingBar extends ConsumerWidget {
                     .clear(),
                 child: Text(
                   l10n.clear,
-                  style: TextStyle(fontSize: 12, color: secondary),
+                  style: TextStyle(fontSize: kFontButton, color: secondary),
                 ),
               ),
             ),
@@ -160,7 +161,8 @@ class _AttachmentThumb extends StatelessWidget {
                           attachment.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10.5, height: 1.3),
+                          // TODO(type): 10.5 仅侧栏专档有档，宜 kFontMicro(11)
+                          style: const TextStyle(fontSize: kFontSidebarBadge, height: 1.3),
                         ),
                       ),
                     ),

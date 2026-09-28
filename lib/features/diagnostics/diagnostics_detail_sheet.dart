@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
@@ -111,7 +112,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
                     child: Text(
                       entry.level.label,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: kFontCaption,
                         fontWeight: FontWeight.bold,
                         color: color,
                       ),
@@ -134,7 +135,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
                     child: Text(
                       entry.tag,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: kFontCaption,
                         fontWeight: FontWeight.w600,
                         color: LightSurfaces.resolve(
                           context,
@@ -149,7 +150,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
                     Text(
                       '${entry.durationMs}ms',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: kFontCaption,
                         color: LightSurfaces.resolve(
                           context,
                           LightSurfaces.textSecondary,
@@ -164,7 +165,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
               Text(
                 formatLogTimestamp(entry.timestamp),
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontLabel,
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
@@ -177,7 +178,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
                 Text(
                   'Error: ${entry.errorKind}',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: kFontLabel,
                     fontWeight: FontWeight.w600,
                     color: statusRedText.resolveFrom(context),
                   ),
@@ -192,7 +193,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
         Text(
           l10n.info,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             fontWeight: FontWeight.bold,
             color: LightSurfaces.resolve(
               context,
@@ -218,7 +219,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
           ),
           child: Text(
             entry.message,
-            style: const TextStyle(fontSize: 14, fontFamily: 'monospace'),
+            style: const TextStyle(fontSize: kFontCode, fontFamily: 'monospace'),
           ),
         ),
         const SizedBox(height: 16),
@@ -228,7 +229,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
           Text(
             l10n.description,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: kFontBody,
               fontWeight: FontWeight.bold,
               color: LightSurfaces.resolve(
                 context,
@@ -254,7 +255,7 @@ class DiagnosticsDetailBody extends StatelessWidget {
             ),
             child: Text(
               entry.detailsJson,
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+              style: const TextStyle(fontSize: kFontCode, fontFamily: 'monospace'),
             ),
           ),
         ],

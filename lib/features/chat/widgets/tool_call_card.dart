@@ -1,3 +1,4 @@
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../../../app/theme/light_surfaces.dart';
@@ -176,7 +177,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                         TextSpan(
                           text: l10n.localizeToolName(call.displayName),
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: kFontLabel,
                             fontWeight: FontWeight.w600,
                             color: accentColor,
                           ),
@@ -185,7 +186,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                           TextSpan(
                             text: ' \u2014 $summary',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: kFontCaption,
                               fontWeight: FontWeight.w400,
                               color: LightSurfaces.resolve(
                                 context,
@@ -204,7 +205,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   Text(
                     '${call.duration!.toStringAsFixed(1)}s',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: kFontMicro,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -264,7 +265,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   Text(
                     AppLocalizations.of(context).runningIndicator,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: kFontMicro,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -297,7 +298,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                 Text(
                   AppLocalizations.of(context).runningIndicator,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: kFontMicro,
                     color: LightSurfaces.resolve(
                       context,
                       LightSurfaces.textSecondary,
@@ -341,7 +342,7 @@ class _MonospaceText extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontSize: 12,
+        fontSize: kFontCode,
         fontFamily: monospaced ? 'monospace' : null,
         color: CupertinoColors.label.resolveFrom(context),
         height: 1.35,
@@ -430,7 +431,7 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
     final failed = group.hasFailedTool;
     final running = !group.isComplete;
     final titleStyle = TextStyle(
-      fontSize: 12,
+      fontSize: kFontCaption,
       fontWeight: FontWeight.w600,
       color: CupertinoColors.label.resolveFrom(context),
     );
@@ -520,7 +521,7 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                   Text(
                     l10n.toolFailedStatus,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: kFontMicro,
                       color: LightSurfaces.resolve(
                         context,
                         statusRedText.resolveFrom(context),
@@ -532,7 +533,7 @@ class _ToolCallGroupCardState extends State<ToolCallGroupCard> {
                   Text(
                     l10n.toolRunningStatus,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: kFontMicro,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -883,7 +884,7 @@ class _ThinkingRowState extends State<_ThinkingRow> {
                 Text(
                   l10n.thinkingLabel,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: kFontSectionTitle,
                     fontWeight: FontWeight.w600,
                     color: CupertinoColors.label.resolveFrom(context),
                   ),
@@ -894,7 +895,7 @@ class _ThinkingRowState extends State<_ThinkingRow> {
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: secondary),
+                    style: TextStyle(fontSize: kFontCaption, color: secondary),
                   ),
                 ),
                 Icon(
@@ -912,7 +913,7 @@ class _ThinkingRowState extends State<_ThinkingRow> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 text,
-                style: const TextStyle(fontSize: 12, height: 1.4),
+                style: const TextStyle(fontSize: kFontCaption, height: 1.4),
               ),
             ),
         ],

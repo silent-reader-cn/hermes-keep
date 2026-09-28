@@ -10,6 +10,7 @@ import '../../core/utils/accessibility.dart';
 import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../app/shell/android_back_interceptor.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
@@ -478,6 +479,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
+                  // TODO(type): 13.5 未进梯子；语义＝文件名（kFontItemTitle 15），值保留。
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -565,7 +567,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             label,
             key: const ValueKey('workspace-wide-preview-empty'),
             style: TextStyle(
-              fontSize: 15,
+              fontSize: kFontItemTitle,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -605,14 +607,17 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           const SizedBox(height: 12),
           Text(
             l10n.loadFailed,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              fontSize: kFontItemTitle,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             _errorMessage(error),
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               color: statusRedText.resolveFrom(context),
             ),
           ),
@@ -659,13 +664,13 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
             ),
           ),
           const SizedBox(height: 12),
-          Text(l10n.noFiles, style: const TextStyle(fontSize: 17)),
+          Text(l10n.noFiles, style: const TextStyle(fontSize: kFontItemTitle)),
           const SizedBox(height: 6),
           Text(
             state.displayPath,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -973,7 +978,7 @@ class _PathHeader extends StatelessWidget {
               Text(
                 l10n.locationLabel,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontCaption,
                   fontWeight: FontWeight.w600,
                   color: LightSurfaces.resolve(
                     context,
@@ -988,7 +993,7 @@ class _PathHeader extends StatelessWidget {
                   displayPath,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
+                  style: const TextStyle(fontSize: kFontCaption),
                 ),
               ),
             ],
@@ -1024,7 +1029,7 @@ class _PathHeader extends StatelessWidget {
                     Text(
                       l10n.rootDir,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: kFontButton,
                         color: isDark
                             ? null
                             : (isAtRoot
@@ -1062,7 +1067,7 @@ class _PathHeader extends StatelessWidget {
                     Text(
                       l10n.parentDir,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: kFontButton,
                         color: isDark
                             ? null
                             : (isAtRoot
@@ -1121,7 +1126,7 @@ class _PathHeader extends StatelessWidget {
                           child: Text(
                             crumbs[i].title,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: kFontNavItem,
                               color: isDark
                                   ? null
                                   : (crumbs[i].path == crumbs.last.path
@@ -1149,7 +1154,7 @@ class _PathHeader extends StatelessWidget {
                 Text(
                   l10n.loadingIndicator,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: kFontLabel,
                     color: LightSurfaces.resolve(
                       context,
                       LightSurfaces.textSecondary,
@@ -1177,7 +1182,7 @@ class _PathHeader extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: kFontCaption,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -1193,7 +1198,7 @@ class _PathHeader extends StatelessWidget {
                   child: Text(
                     l10n.retry,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: kFontButton,
                       color: isDark ? null : LightSurfaces.userDetail,
                     ),
                   ),
@@ -1274,6 +1279,7 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
+                      // TODO(type): 16 未进梯子；语义＝文件树项名（kFontItemTitle 15），值保留。
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                       color: widget.selected ? selectedFg : null,
@@ -1286,7 +1292,7 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: kFontCaption,
                         color: LightSurfaces.resolve(
                           context,
                           LightSurfaces.textSecondary,

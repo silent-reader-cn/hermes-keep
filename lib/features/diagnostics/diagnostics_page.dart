@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
@@ -560,7 +561,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                 child: Text(
                   l10n.diagnosticsDetailsTitle,
                   style: const TextStyle(
-                    fontSize: 17,
+                    fontSize: kFontPageTitle,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -584,7 +585,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                           const SizedBox(width: 2),
                           Text(
                             backLabel,
-                            style: TextStyle(fontSize: 16, color: actionColor),
+                            style: TextStyle(fontSize: 16, color: actionColor),  // TODO(type): 未进梯子（16，按钮文案；梯子无 16 档）
                           ),
                         ],
                       ),
@@ -598,7 +599,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                           unawaited(copyDiagnosticsEntry(context, entry)),
                       child: Text(
                         l10n.copy,
-                        style: TextStyle(fontSize: 16, color: actionColor),
+                        style: TextStyle(fontSize: 16, color: actionColor),  // TODO(type): 未进梯子（16，按钮文案；梯子无 16 档）
                       ),
                     ),
                   ],
@@ -655,7 +656,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
           subtitle: Text(
             l10n.diagnosticsEnabledDesc,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: kFontCaption,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -770,7 +771,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
           Text(
             '${filteredLogs.length} / ${allLogs.length}',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: kFontCaption,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -797,7 +798,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                 Text(
                   l10n.diagnosticsExport,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: kFontButton,
                     color: isLight && allLogs.isNotEmpty
                         ? LightSurfaces.userDetail
                         : null,
@@ -826,7 +827,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                 Text(
                   l10n.diagnosticsClear,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: kFontButton,
                     color: isLight && allLogs.isNotEmpty
                         ? LightSurfaces.userDetail
                         : null,
@@ -888,7 +889,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                   ? l10n.cancel
                   : l10n.selectAll,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: kFontButton,
                 color: isLight ? LightSurfaces.menuAction : null,
               ),
             ),
@@ -903,7 +904,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                 : () => unawaited(_copySelectedLogs(filteredLogs, selectedIds)),
             child: Text(
               l10n.diagnosticsCopySelected,
-              style: const TextStyle(fontSize: 14),
+              style: const TextStyle(fontSize: kFontButton),
             ),
           ),
         ],
@@ -948,7 +949,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
         child: Text(
           level.code,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: kFontCaption,
             fontWeight: FontWeight.bold,
             color: isSelected ? color : unselectedText,
           ),
@@ -1000,7 +1001,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: kFontCaption,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             color: isSelected ? activeColor : unselectedText,
           ),
@@ -1036,7 +1037,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
             Text(
               l10n.diagnosticsEmptyDisabled,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: kFontBody,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -1054,7 +1055,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
         child: Text(
           l10n.diagnosticsEmptyNoLogs,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             color: LightSurfaces.resolve(
               context,
               LightSurfaces.textSecondary,
@@ -1070,7 +1071,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
         child: Text(
           l10n.diagnosticsEmptyNoMatch,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             color: LightSurfaces.resolve(
               context,
               LightSurfaces.textSecondary,
@@ -1215,7 +1216,7 @@ class _DiagnosticsRailRow extends StatelessWidget {
                       child: Text(
                         letter!,
                         style: TextStyle(
-                          fontSize: 10.5,
+                          fontSize: 10.5,  // TODO(type): 未进梯子（10.5，左栏级别字母）
                           fontWeight: FontWeight.bold,
                           color: selected
                               ? (levelColor ?? unselectedText)
@@ -1232,14 +1233,14 @@ class _DiagnosticsRailRow extends StatelessWidget {
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12.5, color: labelFg),
+                      style: TextStyle(fontSize: 12.5, color: labelFg),  // TODO(type): 未进梯子（12.5，左栏行名）
                     ),
                   ),
                   if (count != null) ...[
                     const SizedBox(width: 6),
                     Text(
                       '$count',
-                      style: TextStyle(fontSize: 11.5, color: countFg),
+                      style: TextStyle(fontSize: 11.5, color: countFg),  // TODO(type): 未进梯子（11.5，左栏计数）
                     ),
                   ],
                 ],
@@ -1332,7 +1333,7 @@ class _DiagnosticsLogRow extends StatelessWidget {
               child: Text(
                 entry.level.code,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: kFontMicro,
                   fontWeight: FontWeight.bold,
                   color: color,
                 ),
@@ -1362,7 +1363,7 @@ class _DiagnosticsLogRow extends StatelessWidget {
                         child: Text(
                           entry.tag,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: kFontMicro,
                             fontWeight: FontWeight.w600,
                             color: LightSurfaces.resolve(
                               context,
@@ -1376,7 +1377,7 @@ class _DiagnosticsLogRow extends StatelessWidget {
                       Text(
                         formatLogTimeOnly(entry.timestamp),
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: kFontMicro,
                           color: LightSurfaces.resolve(
                             context,
                             LightSurfaces.textSecondary,
@@ -1389,7 +1390,7 @@ class _DiagnosticsLogRow extends StatelessWidget {
                         Text(
                           '${entry.durationMs}ms',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: kFontMicro,
                             color: LightSurfaces.resolve(
                               context,
                               LightSurfaces.textSecondary,
@@ -1403,7 +1404,7 @@ class _DiagnosticsLogRow extends StatelessWidget {
                         Text(
                           entry.errorKind!,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: kFontMicro,
                             fontWeight: FontWeight.w600,
                             color: statusRedText.resolveFrom(context),
                           ),
@@ -1417,7 +1418,7 @@ class _DiagnosticsLogRow extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: kFontLabel,
                       fontFamily: 'monospace',
                     ),
                   ),

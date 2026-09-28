@@ -1,10 +1,9 @@
 import 'dart:async';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/hermes_dialog.dart';
@@ -18,19 +17,14 @@ import 'onboarding_providers.dart';
 import 'widgets/builtin_tab.dart';
 import 'widgets/onboarding_field_style.dart';
 import 'widgets/wide_dual_pane.dart';
-
 /// 引导页 Tab 枚举（形态 A 两段：内置服务 | 连接服务器）。
 enum OnboardingTab { builtin, remote }
-
 /// 健康检查状态（提交按钮阶段一触发，随后刷新认证模式）。
 enum _HealthState { idle, checking, ok, failed }
-
 /// 认证模式（由 GET /api/auth/status 决定）。
 enum _AuthState { checking, notRequired, required }
-
 /// 密码验证进行状态（提交按钮阶段二触发）。
 enum _LoginState { idle, verifying, ok, failed }
-
 /// 单页「连接服务器」页（替代原三步向导）。
 ///
 /// 结构与交互（提交按钮单入口，两阶段事件流）：
@@ -48,17 +42,14 @@ enum _LoginState { idle, verifying, ok, failed }
 /// 后端 hermes-webui 只认密码（无用户名），保存连接时 username 恒为 null。
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
-
   @override
   ConsumerState<OnboardingPage> createState() => _OnboardingPageState();
 }
-
 class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final _urlController = TextEditingController();
   final _passwordController = TextEditingController();
   // 仅保留密码框焦点节点：阶段一结束后自动聚焦密码框（不再注册失焦监听）。
   final _passwordFocusNode = FocusNode();
-
   _HealthState _health = _HealthState.idle;
   String _healthMessage = '';
   _AuthState _auth = _AuthState.checking;
@@ -66,16 +57,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   String _loginMessage = '';
   // 提交按钮 loading / 防重入锁：阶段一检查、阶段二验证、保存共用。
   bool _busy = false;
-
   // 默认选中记忆上次选择（shared_preferences 键 onboarding_last_tab，无记录→内置）
   OnboardingTab _currentTab = OnboardingTab.builtin;
-
   @override
   void initState() {
     super.initState();
     unawaited(_loadSavedTab());
   }
-
   Future<void> _loadSavedTab() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -89,12 +77,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       // 忽略持久化异常
     }
   }
-
   void _onTabChanged(OnboardingTab tab) {
     setState(() => _currentTab = tab);
     unawaited(_saveTabPreference(tab));
   }
-
   Future<void> _saveTabPreference(OnboardingTab tab) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -103,7 +89,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       // 忽略持久化异常
     }
   }
-
   @override
   void dispose() {
     _passwordFocusNode.dispose();
@@ -111,13 +96,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     _passwordController.dispose();
     super.dispose();
   }
-
   /// 根据已填 URL 构建 onboarding API 客户端（测试经 factory Provider 注入 fake）。
   OnboardingServerApi _buildClient() {
     final factory = ref.read(onboardingApiFactoryProvider);
     return factory(_urlController.text.trim(), const []);
   }
-
   String? _validateUrl(String raw) {
     final l10n = AppLocalizations.of(context);
     final url = raw.trim();
@@ -130,11 +113,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     }
     return null;
   }
-
   // ---------------------------------------------------------------------------
   // 提交按钮统一入口（两阶段）
   // ---------------------------------------------------------------------------
-
   /// 提交入口：按当前认证阶段分流到「阶段一检查」或「阶段二验密保存」。
   Future<void> _onSubmit() async {
     if (_busy) return;
@@ -147,7 +128,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       await _checkConnection();
     }
   }
-
   /// 阶段一：格式校验 → GET /health → GET /api/auth/status（顺序保持）。
   ///
   /// 有问题一律弹窗提示具体原因（格式/网络/非 Hermes 区分）+ 就地红字；
@@ -216,7 +196,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       await _showErrorDialog(l10n.connectionFailed, l10n.cannotConnectToServer);
     }
   }
-
   /// 查询服务端认证模式（auth_enabled）；失败按需认证处理（保守）。
   Future<void> _resolveAuth() async {
     try {
@@ -246,7 +225,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       });
     }
   }
-
   /// 阶段二：POST /api/auth/login 校验 → 通过则保存并跳转；失败弹窗 + 就地红字并存。
   Future<void> _verifyPasswordAndSave() async {
     final l10n = AppLocalizations.of(context);
@@ -293,16 +271,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       );
     }
   }
-
   // ---------------------------------------------------------------------------
   // 保存 + 完成
   // ---------------------------------------------------------------------------
-
   /// 保存连接（upsert + setActive）并跳转会话列表 `/`。
   Future<void> _saveConnection() async {
     final l10n = AppLocalizations.of(context);
     setState(() => _busy = true);
-
     final url = _urlController.text.trim();
     final host = Uri.tryParse(url)?.host;
     final connection = ServerConnection(
@@ -316,7 +291,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       customHeaders: const {},
       createdAt: DateTime.now().toUtc(),
     );
-
     try {
       final saved = await ref
           .read(connectionsProvider.notifier)
@@ -330,7 +304,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       await _showErrorDialog(l10n.connectionFailed, '$error');
     }
   }
-
   /// 错误弹窗（对齐 #19 确认框模式；红色正文）。
   ///
   /// 批 5 · C4：D1 四档宽「确认框 380」—— 宽屏不再出现 270 窄条；窄屏
@@ -351,7 +324,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       content: (_) => Text(
         message,
         style: TextStyle(
-          fontSize: 14,
+          fontSize: kFontBody,
           color: statusRedText.resolveFrom(context),
         ),
       ),
@@ -368,11 +341,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       ],
     );
   }
-
   // ---------------------------------------------------------------------------
   // UI
   // ---------------------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -382,7 +353,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     // 「分段控件」类用例只能假红（本页既有的 bundledWebuiAvailable 覆写即同款思路）。
     final useBuiltinPane =
         ref.watch(sidecarFileSystemProvider).isWindows && isBundled;
-
     // 停用回退（风险②）：active 从 builtin 被清 → 停留内置 Tab
     if (useBuiltinPane) {
       ref.listen<ServerConnection?>(activeConnectionProvider, (
@@ -398,7 +368,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         }
       });
     }
-
     if (!useBuiltinPane) {
       // 形态 B（非 Windows / dev 无内置包）：现状远程表单逐像素不变
       return CupertinoPageScaffold(
@@ -437,7 +406,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         ),
       );
     }
-
     // 形态 A（Windows 打包版）：标题下 CupertinoSlidingSegmentedControl 两段「内置服务 | 连接服务器」
     return CupertinoPageScaffold(
       backgroundColor: CupertinoTheme.brightnessOf(context) == Brightness.light
@@ -458,7 +426,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       child: SafeArea(child: WideDualPane(child: _buildFormA(l10n))),
     );
   }
-
   Widget _buildFormA(AppLocalizations l10n) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,6 +434,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 4),
           child: Text(
             l10n.connectYourHermesServer,
+            // TODO(type): 未进梯子（表单页标题，梯子无 28）
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
         ),
@@ -508,7 +476,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       ],
     );
   }
-
   Widget _buildRemoteFormA(AppLocalizations l10n) {
     return ListView(
       shrinkWrap: true,
@@ -517,7 +484,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         Text(
           l10n.inputServerAddressHint,
           style: TextStyle(
-            fontSize: 15,
+            fontSize: kFontCaption,
             color: LightSurfaces.resolve(
               context,
               LightSurfaces.textSecondary,
@@ -547,7 +514,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       ],
     );
   }
-
   Widget _buildSubmitButton(AppLocalizations l10n) {
     return CupertinoButton.filled(
       color: CupertinoTheme.brightnessOf(context) == Brightness.light
@@ -564,7 +530,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           : Text(l10n.connectAndSave),
     );
   }
-
   Widget _buildWideForm(AppLocalizations l10n) {
     return ListView(
       shrinkWrap: true,
@@ -576,7 +541,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       ],
     );
   }
-
   Widget _buildForm() {
     final l10n = AppLocalizations.of(context);
     return ListView(
@@ -584,18 +548,18 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       children: _buildFormFields(l10n),
     );
   }
-
   List<Widget> _buildFormFields(AppLocalizations l10n) {
     return [
       Text(
         l10n.connectYourHermesServer,
+        // TODO(type): 未进梯子（表单页标题，梯子无 28）
         style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
       ),
       const SizedBox(height: 8),
       Text(
         l10n.inputServerAddressHint,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: kFontCaption,
           color: LightSurfaces.resolve(
             context,
             LightSurfaces.textSecondary,
@@ -622,7 +586,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       ],
     ];
   }
-
   /// URL 下方的健康检查状态（成功绿勾 / 失败红文案 / 检查中进度）。
   Widget _buildHealthStatus() {
     final l10n = AppLocalizations.of(context);
@@ -637,7 +600,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             Text(
               l10n.checking,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: kFontBody,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -651,7 +614,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         return Text(
           l10n.connectionSuccessfulWithCheck,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             color: statusGreenText.resolveFrom(context),
             fontWeight: FontWeight.w600,
           ),
@@ -660,13 +623,12 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         return Text(
           '❌ $_healthMessage',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             color: statusRedText.resolveFrom(context),
           ),
         );
     }
   }
-
   /// 认证区：仅在健康检查通过后展示（检测中 / 无需密码 / 需密码+输入框）。
   Widget _buildAuthSection() {
     final l10n = AppLocalizations.of(context);
@@ -679,7 +641,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             Text(
               l10n.detectingServerAuth,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: kFontBody,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -702,7 +664,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               child: Text(
                 l10n.serverNoPasswordRequired,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: kFontBody,
                   color: statusGreenText.resolveFrom(context),
                   fontWeight: FontWeight.w600,
                 ),
@@ -717,7 +679,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             Text(
               l10n.serverPasswordRequired,
               style: TextStyle(
-                fontSize: 15,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -742,7 +704,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         );
     }
   }
-
   /// 密码框下方的验证状态（验证中 / 密码正确 / 错误原因）。
   Widget _buildPasswordStatus() {
     final l10n = AppLocalizations.of(context);
@@ -757,7 +718,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             Text(
               l10n.verifyingPassword,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: kFontBody,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -771,7 +732,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         return Text(
           _loginMessage,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             color: statusGreenText.resolveFrom(context),
             fontWeight: FontWeight.w600,
           ),
@@ -780,7 +741,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         return Text(
           '❌ $_loginMessage',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             color: statusRedText.resolveFrom(context),
           ),
         );

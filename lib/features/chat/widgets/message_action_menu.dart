@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -90,7 +91,7 @@ Future<String?> _showMessageActionSheet(
       title: Text(
         l10n.messageActions,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: kFontItemTitle,
           color: isLight ? LightSurfaces.textSecondary : null,
         ),
       ),

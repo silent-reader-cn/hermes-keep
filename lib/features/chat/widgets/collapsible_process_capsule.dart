@@ -1,3 +1,4 @@
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../../../app/theme/light_surfaces.dart';
@@ -86,7 +87,7 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
     final effectiveExpanded = widget.isExpanded ?? _expanded;
 
     final titleStyle = TextStyle(
-      fontSize: 13,
+      fontSize: kFontSectionTitle,
       fontWeight: FontWeight.w400,
       color: LightSurfaces.resolve(
         context,
@@ -172,7 +173,7 @@ class _CollapsibleProcessCapsuleState extends State<CollapsibleProcessCapsule> {
                                   Text(
                                     trailingDuration,
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: kFontMicro,
                                       color: LightSurfaces.resolve(
                                         context,
                                         LightSurfaces.textSecondary,

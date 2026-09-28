@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -229,7 +231,7 @@ class InsightsPage extends ConsumerWidget {
                       _peakDay(response)!.sessions ?? 0,
                     ),
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: kFontLabel,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -247,7 +249,7 @@ class InsightsPage extends ConsumerWidget {
                       _peakHour(response)!.sessions ?? 0,
                     ),
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: kFontLabel,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -453,7 +455,7 @@ class InsightsPage extends ConsumerWidget {
     return Text(
       title,
       style: TextStyle(
-        fontSize: 13,
+        fontSize: kFontSectionTitle,
         color: LightSurfaces.resolve(
           context,
           LightSurfaces.textSecondary,
@@ -488,7 +490,7 @@ class InsightsPage extends ConsumerWidget {
           Text(
             title,
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 12.5,  // TODO(type): 未进梯子（12.5 是壳侧栏专档值，内容区卡片标题借用）
               fontWeight: FontWeight.w600,
               color: CupertinoColors.label.resolveFrom(context),
             ),
@@ -572,11 +574,12 @@ class InsightsPage extends ConsumerWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: kFontCaption,
                     color: CupertinoColors.label.resolveFrom(context),
                   ),
                 ),
                 const SizedBox(height: 2),
+                // TODO(type): 未进梯子（10.5 是侧栏徽标专档值，内容区活动行数值）。
                 Text(value, style: TextStyle(fontSize: 10.5, color: secondary)),
               ],
             ),
@@ -639,7 +642,7 @@ class InsightsPage extends ConsumerWidget {
             context,
           ).insightsSourceFooter(response.periodDays ?? timeframe.serverDays),
           style: TextStyle(
-            fontSize: 12,
+            fontSize: kFontCaption,
             color: LightSurfaces.resolve(
               context,
               LightSurfaces.textSecondary,
@@ -673,14 +676,14 @@ class InsightsPage extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage(context, error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -723,14 +726,14 @@ class InsightsPage extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               l10n.noInsights,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: kFontPageTitle, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
               l10n.insightsWillShowHere,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -863,7 +866,7 @@ class _MetricTile extends StatelessWidget {
       title: Text(title),
       trailing: Text(
         value,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -918,6 +921,7 @@ class _WideMetricCell extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  // TODO(type): 未进梯子（11.5 是侧栏状态专档值，内容区指标名借用）。
                   style: TextStyle(fontSize: 11.5, color: secondary),
                 ),
               ),
@@ -929,7 +933,7 @@ class _WideMetricCell extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 21,
+              fontSize: 21,  // TODO(type): 未进梯子（宽屏指标大数据字；不为进梯子改数字）
               fontWeight: FontWeight.w600,
               letterSpacing: -0.3,
               color: CupertinoColors.label.resolveFrom(context),
@@ -966,7 +970,7 @@ class _ModelBreakdownTile extends StatelessWidget {
           : Text(
               '$share%',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: kFontBody,
                 fontWeight: FontWeight.w600,
                 color: LightSurfaces.resolve(
                   context,
@@ -1096,7 +1100,7 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
       child: Text(
         _shortDate(date),
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 10,  // TODO(type): 未进梯子（10 是侧栏副标题专档值，内容区图表轴标签）
           color: LightSurfaces.resolve(
             context,
             LightSurfaces.textSecondary,
@@ -1195,10 +1199,10 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 13)),
+          Text(label, style: const TextStyle(fontSize: kFontLabel)),
           Text(
             value,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: kFontLabel, fontWeight: FontWeight.w600),
           ),
         ],
       ),

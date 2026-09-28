@@ -1,10 +1,9 @@
 import 'dart:async';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/connections/connection_providers.dart';
@@ -16,37 +15,28 @@ import '../../core/utils/uuid.dart';
 import '../../l10n/app_localizations.dart';
 import 'widgets/onboarding_field_style.dart';
 import 'widgets/wide_dual_pane.dart';
-
 /// 安装步骤定义。
 enum InstallStageKey { prereqs, agent, agentDeps, llmConfig }
-
 /// 步骤执行状态。
 enum StageStatus { pending, running, success, failed }
-
 /// 引导页整体运行阶段。
 enum GuidePhase { idle, installing, failed, configuringModel, done }
-
 /// Windows 本机一键安装部署引导页。
 class InstallGuidePage extends ConsumerStatefulWidget {
   const InstallGuidePage({super.key});
-
   @override
   ConsumerState<InstallGuidePage> createState() => _InstallGuidePageState();
 }
-
 class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
   GuidePhase _phase = GuidePhase.idle;
   String _failureReason = '';
   InstallStageKey? _failedStage;
-
   final Map<InstallStageKey, StageStatus> _stageStatuses = {
     for (final k in InstallStageKey.values) k: StageStatus.pending,
   };
-
   final List<String> _logs = [];
   final ScrollController _logScrollController = ScrollController();
   bool _showLogs = true;
-
   // 模型配置表单状态
   LlmProviderOption _selectedProvider =
       LlmProviderOption.builtinProviders.first;
@@ -55,7 +45,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
   late final TextEditingController _modelController;
   bool _savingModel = false;
   String? _modelFormError;
-
   @override
   void initState() {
     super.initState();
@@ -67,7 +56,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       text: _selectedProvider.defaultModel,
     );
   }
-
   @override
   void dispose() {
     _logScrollController.dispose();
@@ -76,7 +64,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
     _modelController.dispose();
     super.dispose();
   }
-
   void _appendLog(String line) {
     if (!mounted) return;
     setState(() {
@@ -92,7 +79,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       }
     });
   }
-
   String _getStageTitle(InstallStageKey stage, AppLocalizations l10n) {
     switch (stage) {
       case InstallStageKey.prereqs:
@@ -105,7 +91,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         return l10n.installGuideStageModel;
     }
   }
-
   String _getStageDescription(InstallStageKey stage, AppLocalizations l10n) {
     switch (stage) {
       case InstallStageKey.prereqs:
@@ -118,21 +103,17 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         return l10n.installGuideStageModelDesc;
     }
   }
-
   // ---------------------------------------------------------------------------
   // 安装流程调度
   // ---------------------------------------------------------------------------
-
   Future<void> _startOrResumeInstallation([InstallStageKey? fromStage]) async {
     setState(() {
       _phase = GuidePhase.installing;
       _failureReason = '';
       _failedStage = null;
     });
-
     final stages = InstallStageKey.values;
     final startIndex = fromStage != null ? stages.indexOf(fromStage) : 0;
-
     for (var i = startIndex; i < stages.length; i++) {
       final stage = stages[i];
       if (stage == InstallStageKey.llmConfig) {
@@ -142,11 +123,9 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         });
         return;
       }
-
       setState(() {
         _stageStatuses[stage] = StageStatus.running;
       });
-
       final success = await _executeStage(stage);
       if (!success) {
         setState(() {
@@ -156,20 +135,16 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         });
         return;
       }
-
       setState(() {
         _stageStatuses[stage] = StageStatus.success;
       });
     }
-
     setState(() {
       _phase = GuidePhase.configuringModel;
     });
   }
-
   Future<bool> _executeStage(InstallStageKey stage) async {
     final psInstaller = ref.read(powershellInstallerProvider);
-
     try {
       switch (stage) {
         case InstallStageKey.prereqs:
@@ -183,7 +158,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             }
           }
           return true;
-
         case InstallStageKey.agent:
           _appendLog('===> [2/4] 拉取与安装 Hermes Agent 源码 ...');
           await for (final event in psInstaller.runStage('agent')) {
@@ -194,7 +168,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             }
           }
           return true;
-
         case InstallStageKey.agentDeps:
           _appendLog('===> [3/4] 安装 Agent Python 虚拟环境及依赖 ...');
           await for (final event in psInstaller.runStage('deps')) {
@@ -205,7 +178,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             }
           }
           return true;
-
         case InstallStageKey.llmConfig:
           return true;
       }
@@ -215,7 +187,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       return false;
     }
   }
-
   void _handleInstallerEvent(InstallerEvent event) {
     if (event.message != null && event.message!.isNotEmpty) {
       _appendLog('[${event.stage ?? 'info'}] ${event.message}');
@@ -223,18 +194,15 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       _appendLog(event.raw);
     }
   }
-
   // ---------------------------------------------------------------------------
   // 模型配置与连接保存
   // ---------------------------------------------------------------------------
-
   Future<void> _submitModelConfigAndComplete({bool skip = false}) async {
     final l10n = AppLocalizations.of(context);
     setState(() {
       _savingModel = true;
       _modelFormError = null;
     });
-
     if (!skip && _selectedProvider.requiresApiKey) {
       final key = _apiKeyController.text.trim();
       if (key.isEmpty) {
@@ -245,7 +213,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         return;
       }
     }
-
     try {
       if (!skip) {
         final api = ref.read(llmOnboardingApiProvider);
@@ -262,12 +229,10 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         );
         _appendLog('模型配置已保存');
       }
-
       setState(() {
         _stageStatuses[InstallStageKey.llmConfig] = StageStatus.success;
         _phase = GuidePhase.done;
       });
-
       // 写入并激活 ServerConnection (http://127.0.0.1:8787)
       const localUrl = 'http://127.0.0.1:8787';
       final connection = ServerConnection(
@@ -279,12 +244,10 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         customHeaders: const {},
         createdAt: DateTime.now().toUtc(),
       );
-
       final saved = await ref
           .read(connectionsProvider.notifier)
           .upsert(connection);
       await ref.read(activeConnectionProvider.notifier).setActive(saved.id);
-
       if (!mounted) return;
       context.go('/');
     } catch (e) {
@@ -296,7 +259,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       _appendLog('保存配置失败: $e');
     }
   }
-
   void _showProviderPicker() {
     unawaited(
       showCupertinoModalPopup<void>(
@@ -327,6 +289,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                       Text(
                         p.name,
                         style: TextStyle(
+                          // TODO(type): 未进梯子（服务商名，宜 kFontItemTitle 15）
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color:
@@ -339,7 +302,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                       Text(
                         p.description,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: kFontCaption,
                           color: LightSurfaces.resolve(
                             context,
                             statusGreyText.resolveFrom(ctx),
@@ -372,16 +335,13 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   // ---------------------------------------------------------------------------
   // UI 构建
   // ---------------------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isWindows = ref.read(installDetectorProvider).isWindows;
-
     return CupertinoPageScaffold(
       backgroundColor: CupertinoTheme.brightnessOf(context) == Brightness.light
           ? LightSurfaces.page
@@ -410,7 +370,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   Widget _buildNonWindowsPlaceholder(AppLocalizations l10n) {
     return Center(
       child: Padding(
@@ -431,6 +390,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             Text(
               l10n.installGuideWindowsOnly,
               textAlign: TextAlign.center,
+              // TODO(type): 未进梯子（非 Windows 占位大标题，宜 kFontPageTitle 17）
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
@@ -446,7 +406,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   Widget _buildMainContent(AppLocalizations l10n) {
     return WideDualPane(
       wideChild: ListView(
@@ -499,20 +458,20 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   Widget _buildHeader(AppLocalizations l10n) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           l10n.installGuideTitle,
+          // TODO(type): 未进梯子（页头大标题，梯子无 24）
           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(
           l10n.installGuideSubtitle,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             color: LightSurfaces.resolve(
               context,
               LightSurfaces.textSecondary,
@@ -523,14 +482,12 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ],
     );
   }
-
   Widget _buildProgressBar() {
     final completedCount = _stageStatuses.values
         .where((s) => s == StageStatus.success)
         .length;
     final total = InstallStageKey.values.length;
     final progress = (completedCount / total).clamp(0.0, 1.0);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -540,7 +497,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             Text(
               '进度: $completedCount / $total 步骤',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontCaption,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -551,7 +508,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             Text(
               '${(progress * 100).toInt()}%',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontCaption,
                 fontWeight: FontWeight.bold,
                 color: LightSurfaces.resolve(
                   context,
@@ -589,7 +546,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ],
     );
   }
-
   Widget _buildStageList(AppLocalizations l10n) {
     return Container(
       decoration: BoxDecoration(
@@ -626,12 +582,10 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   Widget _buildStageTile(InstallStageKey stage, AppLocalizations l10n) {
     final status = _stageStatuses[stage] ?? StageStatus.pending;
     final title = _getStageTitle(stage, l10n);
     final desc = _getStageDescription(stage, l10n);
-
     Widget trailingIcon;
     switch (status) {
       case StageStatus.pending:
@@ -663,7 +617,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         );
         break;
     }
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
@@ -677,7 +630,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: kFontItemTitle,
                     fontWeight: status == StageStatus.running
                         ? FontWeight.bold
                         : FontWeight.w500,
@@ -687,7 +640,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                 Text(
                   desc,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: kFontCaption,
                     color: LightSurfaces.resolve(
                       context,
                       LightSurfaces.textSecondary,
@@ -702,7 +655,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   Widget _buildErrorCard(AppLocalizations l10n) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -735,7 +687,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
               Text(
                 '步骤失败: ${_failedStage != null ? _getStageTitle(_failedStage!, l10n) : ""}',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: kFontItemTitle,
                   fontWeight: FontWeight.bold,
                   color: statusRedText.resolveFrom(context),
                 ),
@@ -746,7 +698,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           Text(
             _failureReason,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               color: statusRedText.resolveFrom(context),
             ),
           ),
@@ -761,7 +713,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
               child: Text(
                 l10n.installGuideRetryStage,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontButton,
                   color: CupertinoColors.white,
                 ),
               ),
@@ -771,7 +723,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   Widget _buildModelConfigForm(AppLocalizations l10n) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -796,13 +747,14 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         children: [
           Text(
             l10n.installGuideStageModel,
+            // TODO(type): 未进梯子（表单分组标题，梯子无 18）
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
             l10n.installGuideStageModelDesc,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -813,7 +765,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           const SizedBox(height: 16),
           Text(
             l10n.installGuideSelectProvider,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: kFontLabel, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           _buildProviderSelector(),
@@ -821,7 +773,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           if (_selectedProvider.requiresApiKey) ...[
             Text(
               l10n.installGuideApiKey,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: kFontLabel, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             CupertinoTextField(
@@ -837,7 +789,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           ],
           Text(
             l10n.installGuideBaseUrl,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: kFontLabel, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
           CupertinoTextField(
@@ -851,7 +803,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           const SizedBox(height: 12),
           Text(
             l10n.installGuideModelName,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: kFontLabel, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
           CupertinoTextField(
@@ -867,7 +819,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
             Text(
               '❌ $_modelFormError',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -876,7 +828,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   Widget _buildProviderSelector() {
     return GestureDetector(
       key: const ValueKey('install-guide-provider-dropdown'),
@@ -903,7 +854,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                   Text(
                     _selectedProvider.name,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: kFontItemTitle,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -911,7 +862,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                   Text(
                     _selectedProvider.description,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: kFontCaption,
                       color: LightSurfaces.resolve(
                         context,
                         LightSurfaces.textSecondary,
@@ -936,7 +887,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   // The terminal remains an inverse surface in both themes. Its grey/green
   // content is readable on the fixed dark background; do not apply light grey.
   Widget _buildLogConsole(AppLocalizations l10n) {
@@ -972,7 +922,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                     Text(
                       l10n.installGuideLogs,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: kFontCaption,
                         color: CupertinoColors.systemGrey,
                         fontWeight: FontWeight.bold,
                       ),
@@ -993,7 +943,8 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                       child: Text(
                         l10n.installGuideCopyLogs,
                         style: TextStyle(
-                          fontSize: 12,
+                          // TODO(type): 按钮文字用了说明档 12，应 kFontButton 13；本批保持原值
+                          fontSize: kFontButton,
                           color:
                               CupertinoTheme.brightnessOf(context) ==
                                   Brightness.light
@@ -1013,7 +964,8 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                             ? l10n.installGuideHideLogs
                             : l10n.installGuideShowLogs,
                         style: TextStyle(
-                          fontSize: 12,
+                          // TODO(type): 按钮文字用了说明档 12，应 kFontButton 13；本批保持原值
+                          fontSize: kFontButton,
                           color:
                               CupertinoTheme.brightnessOf(context) ==
                                   Brightness.light
@@ -1036,7 +988,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                   ? const Text(
                       '等待安装启动...',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: kFontCode,
                         color: CupertinoColors.systemGrey,
                         fontFamily: 'monospace',
                       ),
@@ -1048,7 +1000,8 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                         return Text(
                           _logs[idx],
                           style: const TextStyle(
-                            fontSize: 11,
+                            // TODO(type): 等宽日志行用 11，语义应 kFontCode 12；本批保持原值
+                            fontSize: kFontCode,
                             color: CupertinoColors.systemGreen,
                             fontFamily: 'monospace',
                           ),
@@ -1060,7 +1013,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
       ),
     );
   }
-
   Widget _buildBottomBar(AppLocalizations l10n) {
     if (_phase == GuidePhase.configuringModel) {
       return Padding(
@@ -1099,7 +1051,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
               child: Text(
                 l10n.installGuideSkipModelConfig,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontButton,
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
@@ -1112,7 +1064,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         ),
       );
     }
-
     if (_phase == GuidePhase.idle) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -1129,7 +1080,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         ),
       );
     }
-
     if (_phase == GuidePhase.installing) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -1153,7 +1103,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         ),
       );
     }
-
     if (_phase == GuidePhase.done) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -1169,7 +1118,6 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         ),
       );
     }
-
     return const SizedBox.shrink();
   }
 }

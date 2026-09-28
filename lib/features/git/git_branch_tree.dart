@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../core/models/git_workspace.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -113,7 +114,8 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                   ),
                   child: Text(
                     '${l10n.localBranches} (${localList.length})',
-                    style: const TextStyle(fontSize: 11),
+                    // TODO(type): 分段 tab 语义应 kFontNavItem(13)；现值 11 等值挂 kFontMicro（值不动）。
+                    style: const TextStyle(fontSize: kFontMicro),
                   ),
                 ),
                 GitBranchMode.remote: Padding(
@@ -123,7 +125,8 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                   ),
                   child: Text(
                     '${l10n.remoteBranches} (${remoteList.length})',
-                    style: const TextStyle(fontSize: 11),
+                    // TODO(type): 分段 tab 语义应 kFontNavItem(13)；现值 11 等值挂 kFontMicro（值不动）。
+                    style: const TextStyle(fontSize: kFontMicro),
                   ),
                 ),
               },
@@ -232,7 +235,8 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                     Text(
                       branch.name ?? l10n.unknownBranch,
                       style: TextStyle(
-                        fontSize: 14,
+                        // TODO(type): 错用 (b)——14 写「名字」（应 kFontItemTitle 15），值不动。
+                        fontSize: kFontBody,
                         fontWeight: isCurrent
                             ? FontWeight.w700
                             : FontWeight.w600,
@@ -263,6 +267,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                         child: Text(
                           l10n.currentBranchBadge,
                           style: TextStyle(
+                            // TODO(type): 9.5 未进梯子（徽标语义 → kFontMicro 11）。
                             fontSize: 9.5,
                             fontWeight: FontWeight.bold,
                             color: statusBlueText.resolveFrom(context),
@@ -301,6 +306,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                             Text(
                               upstream,
                               style: TextStyle(
+                                // TODO(type): 9.5 未进梯子（chip 注解语义 → kFontCaption 12）。
                                 fontSize: 9.5,
                                 color: isDark
                                     ? secondaryText.resolveFrom(context)
@@ -314,7 +320,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                       Text(
                         '↑$ahead',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: kFontMicro,
                           fontWeight: FontWeight.w600,
                           color: statusGreenText.resolveFrom(context),
                         ),
@@ -323,7 +329,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                       Text(
                         '↓$behind',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: kFontMicro,
                           fontWeight: FontWeight.w600,
                           color: statusOrangeText.resolveFrom(context),
                         ),
@@ -357,7 +363,8 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           shortSha,
                           style: TextStyle(
                             fontFamily: 'monospace',
-                            fontSize: 10.5,
+                            // TODO(type): 10.5 未进梯子（等宽内容 → kFontCode 12）。
+                            fontSize: kFontCode,
                             color: isDark
                                 ? secondaryText.resolveFrom(context)
                                 : LightSurfaces.textSecondary,
@@ -373,6 +380,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
+                            // TODO(type): 11.5 未进梯子（提交信息＝列表项名 → kFontItemTitle 15）。
                             fontSize: 11.5,
                             color: isDark
                                 ? secondaryText.resolveFrom(context)
@@ -386,6 +394,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                       Text(
                         updatedRelative,
                         style: TextStyle(
+                          // TODO(type): 10.5 未进梯子（时间戳 → kFontCaption 12）。
                           fontSize: 10.5,
                           color: isDark
                               ? secondaryText.resolveFrom(context)
@@ -426,7 +435,8 @@ class _GitBranchTreeState extends State<GitBranchTree> {
               child: Text(
                 l10n.checkoutBranchAction,
                 style: TextStyle(
-                  fontSize: 12,
+                  // TODO(type): 错用——动作文字应 kFontButton(13)；现值 12 等值挂 kFontCaption。
+                  fontSize: kFontButton,
                   fontWeight: FontWeight.w600,
                   color: isDark
                       ? CupertinoColors.activeBlue.resolveFrom(context)
@@ -449,7 +459,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
         child: Text(
           l10n.noBranches,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: kFontLabel,
             color: isDark
                 ? secondaryText.resolveFrom(context)
                 : LightSurfaces.textSecondary,
@@ -474,7 +484,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
             child: Text(
               widget.errorMessage ?? l10n.loadFailed,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontCaption,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -487,7 +497,8 @@ class _GitBranchTreeState extends State<GitBranchTree> {
               child: Text(
                 l10n.retry,
                 style: TextStyle(
-                  fontSize: 12,
+                  // TODO(type): 错用——动作文字应 kFontButton(13)；现值 12 等值挂 kFontCaption。
+                  fontSize: kFontButton,
                   color: CupertinoTheme.brightnessOf(context) == Brightness.dark
                       ? null
                       : (widget.isActionRunning

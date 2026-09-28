@@ -1,3 +1,4 @@
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,7 +49,7 @@ class SelectionChipPanel extends ConsumerWidget {
                     child: Text(
                       l10n.clear,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: kFontButton,
                         color: LightSurfaces.resolve(
                           context,
                           LightSurfaces.textSecondary,
@@ -129,7 +130,7 @@ class _SelectionChipCard extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: kFontMicro,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.04 * 11,
                                 color: LightSurfaces.resolve(
@@ -172,7 +173,8 @@ class _SelectionChipCard extends ConsumerWidget {
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12.5,
+                    // TODO(type): 12.5 仅侧栏专档有档，宜 kFontCaption(12)
+                    fontSize: kFontSidebarMeta,
                     height: 1.45,
                     color: secondary,
                   ),

@@ -1,5 +1,6 @@
 library;
 
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,7 +30,7 @@ import 'mermaid_block.dart';
 /// 3. 标题收敛为气泡内协调的层级阶梯（20/18/16/15…），不再用 27pt 起步。
 
 /// 会话列表/聊天通用：15pt body 基线（MiSans Regular 400）。
-const double kMarkdownBodyFontSize = 15.0;
+const double kMarkdownBodyFontSize = kFontReadingBody;  // = 15.0（令牌见 typography_tokens.dart）
 
 /// 宽屏正文基准：13.5pt。
 ///
@@ -175,7 +176,8 @@ MarkdownStyleSheet buildAssistantMarkdownStyleSheet(
     ),
     blockquote: _body(color: label, size: body, height: line),
     code: TextStyle(
-      fontSize: 13,
+      // TODO(type): 等宽无 13 档，宜 kFontCode(12)
+      fontSize: kFontLabel,
       height: line,
       fontFamily: 'monospace',
       fontFamilyFallback: const [kAppFontFamily],
@@ -263,7 +265,8 @@ MarkdownStyleSheet buildUserMarkdownStyleSheet(
     ),
     blockquote: _body(color: white, size: body, height: line),
     code: TextStyle(
-      fontSize: 13,
+      // TODO(type): 等宽无 13 档，宜 kFontCode(12)
+      fontSize: kFontLabel,
       height: line,
       fontFamily: 'monospace',
       color: white,
@@ -379,7 +382,8 @@ class InlineCodeElementBuilder extends MarkdownElementBuilder {
           preferredStyle ??
           textStyle ??
           TextStyle(
-            fontSize: 13,
+            // TODO(type): 等宽无 13 档，宜 kFontCode(12)
+            fontSize: kFontLabel,
             height: 1.4,
             fontFamily: 'monospace',
             color: CupertinoColors.label.resolveFrom(context),
@@ -557,7 +561,8 @@ Map<String, MarkdownElementBuilder> createAssistantMarkdownBuilders(
         ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
         : null,
     codeTextStyle: TextStyle(
-      fontSize: 13,
+      // TODO(type): 等宽无 13 档，宜 kFontCode(12)
+      fontSize: kFontLabel,
       height: 1.4,
       fontFamily: 'monospace',
       color: label,
@@ -587,7 +592,8 @@ Map<String, MarkdownElementBuilder> createUserMarkdownBuilders(
       dark: CupertinoColors.white.withValues(alpha: 0.22),
     ),
     codeTextStyle: const TextStyle(
-      fontSize: 13,
+      // TODO(type): 等宽无 13 档，宜 kFontCode(12)
+      fontSize: kFontLabel,
       height: 1.4,
       fontFamily: 'monospace',
       color: CupertinoColors.white,

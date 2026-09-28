@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../l10n/app_localizations.dart';
 import '../settings/settings_surfaces.dart';
 import 'workspace_manager_providers.dart';
@@ -143,7 +144,7 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
                             _inlineError!,
                             key: const ValueKey('workspace-add-error'),
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: kFontLabel,
                               color: statusRedText.resolveFrom(context),
                             ),
                           ),
@@ -199,7 +200,7 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               child: Text(
                 l10n.cancel,
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: kFontPageTitle,
                   color: isDark
                       ? CupertinoColors.systemBlue.resolveFrom(context)
                       : statusBlueText.resolveFrom(context),
@@ -213,7 +214,7 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 17,
+                  fontSize: kFontPageTitle,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -225,7 +226,7 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               child: Text(
                 l10n.addWorkspaceButton,
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: kFontPageTitle,
                   fontWeight: FontWeight.w600,
                   color: accent,
                 ),
@@ -261,14 +262,14 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               controller: _pathController,
               placeholder: l10n.workspacePathHint,
               placeholderStyle: TextStyle(
-                fontSize: 17,
+                fontSize: kFontPageTitle,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.placeholder,
                   dark: CupertinoColors.placeholderText,
                 ),
               ),
-              style: const TextStyle(fontSize: 17),
+              style: const TextStyle(fontSize: kFontPageTitle),
               autocorrect: false,
               decoration: const BoxDecoration(
                 color: CupertinoColors.transparent,
@@ -298,14 +299,14 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
               controller: _nameController,
               placeholder: l10n.workspaceNamePlaceholder,
               placeholderStyle: TextStyle(
-                fontSize: 17,
+                fontSize: kFontPageTitle,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.placeholder,
                   dark: CupertinoColors.placeholderText,
                 ),
               ),
-              style: const TextStyle(fontSize: 17),
+              style: const TextStyle(fontSize: kFontPageTitle),
               autocorrect: false,
               decoration: const BoxDecoration(
                 color: CupertinoColors.transparent,
@@ -321,7 +322,7 @@ class _AddWorkspaceSheetState extends ConsumerState<AddWorkspaceSheet> {
                 Expanded(
                   child: Text(
                     l10n.createDirectoryIfMissing,
-                    style: const TextStyle(fontSize: 17),
+                    style: const TextStyle(fontSize: kFontPageTitle),
                   ),
                 ),
                 SettingsSurfaces.toggle(
@@ -357,7 +358,7 @@ class _LabeledFieldRow extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 15,
+              fontSize: kFontItemTitle,
               fontWeight: FontWeight.w600,
               color: LightSurfaces.resolve(
                 context,
@@ -435,7 +436,7 @@ class _SuggestionList extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: kFontItemTitle,
                   color:
                       CupertinoTheme.brightnessOf(context) == Brightness.light
                       ? LightSurfaces.userDetail

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -304,7 +305,8 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
     final cpuColor = _thresholdColor(data.cpu.percent, context);
     final memColor = _thresholdColor(data.memory.percent, context);
 
-    const baseStyle = TextStyle(fontSize: 11.5);
+    // TODO(type): 11.5 仅侧栏专档有档，宜 kFontMicro(11)
+    const baseStyle = TextStyle(fontSize: kFontSidebarStatus);
 
     final fullSpan = TextSpan(
       style: baseStyle.copyWith(color: secondaryColor),
@@ -404,7 +406,8 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
           width: 36,
           child: Text(
             label,
-            style: TextStyle(fontSize: 10, color: secondaryColor),
+            // TODO(type): 10 仅侧栏专档有档，宜 kFontMicro(11)
+            style: TextStyle(fontSize: kFontSidebarSub, color: secondaryColor),
           ),
         ),
         SizedBox(
@@ -413,7 +416,8 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
             alignment: Alignment.centerRight,
             child: Text(
               '${percent.toStringAsFixed(0)}%',
-              style: TextStyle(fontSize: 10, color: valueColor),
+              // TODO(type): 10 仅侧栏专档有档，宜 kFontMicro(11)
+              style: TextStyle(fontSize: kFontSidebarSub, color: valueColor),
             ),
           ),
         ),
@@ -449,7 +453,8 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
           width: 36,
           child: Text(
             label,
-            style: TextStyle(fontSize: 10, color: secondaryColor),
+            // TODO(type): 10 仅侧栏专档有档，宜 kFontMicro(11)
+            style: TextStyle(fontSize: kFontSidebarSub, color: secondaryColor),
           ),
         ),
         SizedBox(
@@ -458,7 +463,8 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
             alignment: Alignment.centerRight,
             child: Text(
               '${percent.toStringAsFixed(0)}%',
-              style: TextStyle(fontSize: 10, color: valueColor),
+              // TODO(type): 10 仅侧栏专档有档，宜 kFontMicro(11)
+              style: TextStyle(fontSize: kFontSidebarSub, color: valueColor),
             ),
           ),
         ),
@@ -472,7 +478,8 @@ class _PerfMonitorPanelState extends ConsumerState<PerfMonitorPanel>
               alignment: Alignment.centerRight,
               child: Text(
                 '${_formatBytes(usedBytes)}/${_formatBytes(totalBytes)}',
-                style: TextStyle(fontSize: 10, color: secondaryColor),
+                // TODO(type): 10 仅侧栏专档有档，宜 kFontMicro(11)
+                style: TextStyle(fontSize: kFontSidebarSub, color: secondaryColor),
                 maxLines: 1,
               ),
             ),

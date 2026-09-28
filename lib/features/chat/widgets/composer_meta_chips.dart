@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -227,7 +228,7 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
                         padding: const EdgeInsets.all(8),
                         child: Text(
                           l10n.noWorkspacesAvailableHint,
-                          style: TextStyle(fontSize: 11, color: secondary),
+                          style: TextStyle(fontSize: kFontMicro, color: secondary),
                         ),
                       ),
                     ],
@@ -419,6 +420,8 @@ class _MetaChip extends StatelessWidget {
     // #163：宽屏 chip 收一档（11.5 → 10.5、图标 11 → 10），与输入栏收紧同批；
     // 窄屏保持原尺寸逐像素不变。
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+    // TODO(type): chipFontSize 是绕开令牌的宽窄分流魔数（10.5/11.5 在梯子里
+    // 只有侧栏专档）；令牌文件建议改成 kFontXxxFor(context)，值待主人裁。
     final chipFontSize = isWide ? 10.5 : 11.5;
     final chipIconSize = isWide ? 10.0 : 11.0;
 
@@ -733,7 +736,7 @@ class _ModelRow extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontNavItem,
                 color: selected
                     ? LightSurfaces.resolve(
                         context,
@@ -790,7 +793,7 @@ class _WorkspaceRow extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontNavItem,
                   color: selected
                       ? LightSurfaces.resolve(
                           context,

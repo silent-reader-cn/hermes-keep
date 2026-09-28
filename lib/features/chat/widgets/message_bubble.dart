@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -495,7 +496,7 @@ class _AssistantContent extends StatelessWidget {
             Text(
               metaSpans.join(' · '),
               style: TextStyle(
-                fontSize: 11,
+                fontSize: kFontMicro,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -588,7 +589,7 @@ class _NoticeCard extends StatelessWidget {
                 message.content ?? '',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontLabel,
                   color: CupertinoColors.label.resolveFrom(context),
                 ),
               ),

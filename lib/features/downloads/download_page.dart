@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../app/widgets/hermes_dialog.dart';
 import '../../core/platform/external_opener.dart';
 import '../../l10n/app_localizations.dart';
@@ -419,7 +420,8 @@ class DownloadPage extends ConsumerWidget {
                 child: Text(
                   l10n.downloadClear,
                   style: TextStyle(
-                    fontSize: 14,
+                    // TODO(type): 按钮文字 14 —— 同页卡片按钮文字为 12，两值并存待 Leader 定夺。
+                    fontSize: kFontButton,
                     color: isLight
                         ? LightSurfaces.userDetail
                         : CupertinoTheme.of(context).primaryColor,
@@ -509,6 +511,7 @@ class DownloadPage extends ConsumerWidget {
           Text(
             l10n.downloadsEmpty,
             style: TextStyle(
+              // TODO(type): 未进梯子（空态标题 16；同批 skills 空态标题为 17）。
               fontSize: 16,
               color: LightSurfaces.resolve(
                 context,
@@ -628,7 +631,7 @@ class _DownloadTaskCard extends ConsumerWidget {
             child: Text(
               l10n.cancel,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontButton,
                 color: CupertinoColors.label.resolveFrom(context),
               ),
             ),
@@ -668,7 +671,7 @@ class _DownloadTaskCard extends ConsumerWidget {
               child: Text(
                 l10n.downloadOpen,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontButton,
                   color: CupertinoColors.white,
                 ),
               ),
@@ -735,7 +738,7 @@ class _DownloadTaskCard extends ConsumerWidget {
               child: Text(
                 l10n.downloadRedownload,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontButton,
                   color: CupertinoColors.white,
                 ),
               ),
@@ -779,7 +782,7 @@ class _DownloadTaskCard extends ConsumerWidget {
             child: Text(
               l10n.downloadRetry,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: kFontButton,
                 color: CupertinoColors.white,
               ),
             ),
@@ -853,7 +856,7 @@ class _DownloadTaskCard extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: kFontItemTitle,
                         fontWeight: FontWeight.w600,
                         color: CupertinoColors.label.resolveFrom(context),
                       ),
@@ -863,7 +866,7 @@ class _DownloadTaskCard extends ConsumerWidget {
                       statusText,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: statusColor),
+                      style: TextStyle(fontSize: kFontCaption, color: statusColor),
                     ),
                   ],
                 ),

@@ -8,6 +8,7 @@ import '../../core/utils/accessibility.dart';
 import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../app/widgets/app_scrollbar.dart';
 import '../../l10n/app_localizations.dart';
@@ -308,7 +309,8 @@ class _GitPageState extends ConsumerState<GitPage> {
               l10n.preview,
               key: const ValueKey('git-wide-diff-empty'),
               style: TextStyle(
-                fontSize: 15,
+                // TODO(type): 错用 (a)——15 写「说明文字」（应 kFontCaption/Body），值不动。
+                fontSize: kFontItemTitle,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -347,6 +349,7 @@ class _GitPageState extends ConsumerState<GitPage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
+                      // TODO(type): 12.5 未进梯子（diff 栏路径 → kFontCode 12）。
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                     ),
@@ -386,7 +389,8 @@ class _GitPageState extends ConsumerState<GitPage> {
                 softWrap: false,
                 style: const TextStyle(
                   fontFamily: 'monospace',
-                  fontSize: 11,
+                  // TODO(type): 等宽 diff 应 kFontCode(12)；值 11 属既有口径，保持不动。
+                  fontSize: kFontCode,
                   height: 1.4,
                 ),
               ),
@@ -405,7 +409,7 @@ class _GitPageState extends ConsumerState<GitPage> {
         l10n.tooManyChangedFilesWarning,
         textAlign: TextAlign.center,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: kFontCaption,
           color: LightSurfaces.resolve(
             context,
             LightSurfaces.textSecondary,
@@ -712,14 +716,18 @@ class _GitPageState extends ConsumerState<GitPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              // TODO(type): 空态/错误标题语义应 kFontItemTitle(15)；值 17 不动。
+              style: const TextStyle(
+                fontSize: kFontItemTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -759,14 +767,18 @@ class _GitPageState extends ConsumerState<GitPage> {
             const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              // TODO(type): 空态标题语义应 kFontItemTitle(15)；值 17 不动。
+              style: const TextStyle(
+                fontSize: kFontPageTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               detail,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -917,7 +929,7 @@ class _FileTile extends StatelessWidget {
             child: Text(
               file.staged == true ? l10n.unstageAction : l10n.stageAction,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontButton,
                 color: isDark
                     ? null
                     : (isActionRunning
@@ -1080,7 +1092,8 @@ class _DiffExpansion extends StatelessWidget {
         gitDiffText(state, l10n),
         style: const TextStyle(
           fontFamily: 'monospace',
-          fontSize: 11,
+          // TODO(type): 等宽 diff 应 kFontCode(12)；值 11 属既有口径，保持不动。
+          fontSize: kFontCode,
           height: 1.4,
         ),
       ),
@@ -1107,13 +1120,14 @@ class _CleanWorkspacePlaceholder extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             l10n.workspaceClean,
+            // TODO(type): 16 未进梯子（空态标题应与同文件 17 档统一，语义 → kFontItemTitle 15）。
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
             l10n.noPendingChanges,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -1181,7 +1195,7 @@ class _ActionBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 text,
-                style: TextStyle(fontSize: 13, color: textColor),
+                style: TextStyle(fontSize: kFontLabel, color: textColor),
               ),
             ),
             AccessibleButton(

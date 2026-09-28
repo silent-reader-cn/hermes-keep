@@ -118,6 +118,7 @@ class ContextWindowIndicator extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
+                // TODO(type): 未进梯子
                 fontSize: 7,
                 fontWeight: FontWeight.w600,
                 color: textColor,

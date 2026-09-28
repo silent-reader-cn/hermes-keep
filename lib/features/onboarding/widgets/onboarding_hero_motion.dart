@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-
 import 'package:flutter/cupertino.dart';
-
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../l10n/app_localizations.dart';
-
 /// A quiet, staggered brand entrance followed by a twelve-second breath.
 ///
 /// Only the wide brand pane mounts this widget. Reduced motion renders the
@@ -15,14 +13,11 @@ import '../../../l10n/app_localizations.dart';
 class OnboardingHeroMotion extends StatefulWidget {
   /// Creates the brand composition using the surrounding page's palette.
   const OnboardingHeroMotion({super.key, required this.isDark});
-
   /// Whether to draw the graphite rather than the paper-colored halo.
   final bool isDark;
-
   @override
   State<OnboardingHeroMotion> createState() => _OnboardingHeroMotionState();
 }
-
 class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
     with TickerProviderStateMixin {
   static const _entranceDuration = Duration(milliseconds: 1200);
@@ -31,11 +26,9 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
   static const _settleCurve = Cubic(0.16, 1, 0.3, 1);
   static const _typeCurve = Cubic(0.22, 1, 0.36, 1);
   static const _revealCurve = Cubic(0.22, 0.68, 0.28, 1);
-
   AnimationController? _entranceController;
   AnimationController? _ambientController;
   bool? _disableAnimations;
-
   Animation<double> _haloOpacity = const AlwaysStoppedAnimation(1);
   Animation<double> _logoOpacity = const AlwaysStoppedAnimation(1);
   Animation<double> _logoScale = const AlwaysStoppedAnimation(1);
@@ -45,13 +38,11 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
   Animation<Offset> _sloganOffset = const AlwaysStoppedAnimation(Offset.zero);
   Animation<double> _breath = const AlwaysStoppedAnimation(0);
   Animation<double> _logoBreath = const AlwaysStoppedAnimation(1);
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final disableAnimations = MediaQuery.disableAnimationsOf(context);
     if (_disableAnimations == disableAnimations) return;
-
     final alreadyPresented = _disableAnimations != null;
     _disableAnimations = disableAnimations;
     if (disableAnimations) {
@@ -67,7 +58,6 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
       _logoBreath = const AlwaysStoppedAnimation(1);
       return;
     }
-
     final entrance = _entranceController = AnimationController(
       vsync: this,
       duration: _entranceDuration,
@@ -77,7 +67,6 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
       vsync: this,
       duration: _ambientDuration,
     );
-
     // 0–600 ms: light; 100–760 ms: icon; 280–960 ms: typography;
     // 620–1200 ms: slogan. The text is never driven by the ambient controller.
     _haloOpacity = entrance.drive(
@@ -106,7 +95,6 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
     _breath = ambient.drive(CurveTween(curve: const _BreathCurve()));
     _logoBreath = _breath.drive(Tween(begin: 1.0, end: 1.01));
     entrance.addStatusListener(_onEntranceStatus);
-
     if (alreadyPresented) {
       // Turning Reduce Motion off resumes the atmosphere without hiding text.
       unawaited(ambient.repeat(reverse: true));
@@ -114,31 +102,26 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
       unawaited(entrance.forward());
     }
   }
-
   void _onEntranceStatus(AnimationStatus status) {
     if (status == AnimationStatus.completed) {
       unawaited(_ambientController!.repeat(reverse: true));
     }
   }
-
   void _disposeControllers() {
     _entranceController?.dispose();
     _ambientController?.dispose();
     _entranceController = null;
     _ambientController = null;
   }
-
   @override
   void dispose() {
     _disposeControllers();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final titleColor = CupertinoColors.label.resolveFrom(context);
-
     return RepaintBoundary(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
@@ -224,7 +207,7 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
                         'Hermes',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 34,
+                          fontSize: kFontLargeTitle,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 2.5 - 3 * _titleProgress.value,
                           color: titleColor,
@@ -246,7 +229,7 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
                         l10n.onboardingBrandSlogan,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: kFontCaption,
                           height: 1.4,
                           color: LightSurfaces.resolve(
                             context,
@@ -265,7 +248,6 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
       ),
     );
   }
-
   // The logo tile is part of the decorative hero; its black/white H is legible.
   Widget _buildFallbackLogo(BuildContext context) {
     return Container(
@@ -285,6 +267,7 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
         child: Text(
           'H',
           style: TextStyle(
+            // TODO(type): 未进梯子（装饰性字标，随 logo 缩放）
             fontSize: 44,
             fontWeight: FontWeight.bold,
             color: widget.isDark
@@ -296,15 +279,12 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
     );
   }
 }
-
 /// A half-cosine inhale; reversing it gives a breath with no velocity seams.
 class _BreathCurve extends Curve {
   const _BreathCurve();
-
   @override
   double transformInternal(double t) => (1 - math.cos(math.pi * t)) / 2;
 }
-
 // The halo, orbit and guide lines are non-interactive brand decoration.
 // Keep their palette and motion independent of readable form surfaces.
 class _HaloPainter extends CustomPainter {
@@ -333,10 +313,8 @@ class _HaloPainter extends CustomPainter {
         ? const Color(0x998CA4BC)
         : const Color(0x80778CA1);
   }
-
   final bool isDark;
   final Animation<double> breath;
-
   static const _orbit = Rect.fromLTRB(-96, -96, 96, 96);
   static const _accentPoint = Offset(66.88, -68.87);
   final _glowPaint = Paint();
@@ -359,7 +337,6 @@ class _HaloPainter extends CustomPainter {
     ..lineTo(0, -104)
     ..moveTo(0, 104)
     ..lineTo(0, 112);
-
   @override
   void paint(Canvas canvas, Size size) {
     final phase = breath.value;
@@ -367,13 +344,11 @@ class _HaloPainter extends CustomPainter {
     canvas.save();
     canvas.translate(size.width / 2, size.height / 2);
     canvas.scale(fit);
-
     canvas.save();
     canvas.translate(-3 + 6 * phase, -2 * phase);
     canvas.scale(1 + 0.025 * phase);
     canvas.drawCircle(Offset.zero, 110, _glowPaint);
     canvas.restore();
-
     canvas.drawPath(_registrationMarks, _guidePaint);
     canvas.drawCircle(Offset.zero, 76, _ringPaint);
     canvas.save();
@@ -385,7 +360,6 @@ class _HaloPainter extends CustomPainter {
     canvas.restore();
     canvas.restore();
   }
-
   @override
   bool shouldRepaint(covariant _HaloPainter oldDelegate) =>
       isDark != oldDelegate.isDark || breath != oldDelegate.breath;

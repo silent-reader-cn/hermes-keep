@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -280,7 +281,7 @@ class _OutlineRow extends StatelessWidget {
               child: Text(
                 '${entry.index}',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: kFontMicro,
                   fontWeight: FontWeight.w600,
                   color: selected
                       ? activeBlue
@@ -301,7 +302,7 @@ class _OutlineRow extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 color: labelColor,
               ),

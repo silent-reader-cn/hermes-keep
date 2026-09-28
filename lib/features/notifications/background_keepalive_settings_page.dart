@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
@@ -81,7 +82,7 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
             l10n.bgKeepAliveSection,
             style: isLight
                 ? const TextStyle(
-                    fontSize: 13,
+                    fontSize: kFontSectionTitle,
                     color: LightSurfaces.textSecondary,
                   )
                 : null,
@@ -225,7 +226,7 @@ class BackgroundKeepAliveSection extends ConsumerWidget {
             l10n.bgHyperOsGuidanceTitle,
             style: isLight
                 ? const TextStyle(
-                    fontSize: 13,
+                    fontSize: kFontSectionTitle,
                     color: LightSurfaces.textSecondary,
                   )
                 : null,

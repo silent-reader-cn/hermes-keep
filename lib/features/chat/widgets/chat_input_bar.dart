@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -658,7 +659,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 child: Text(
                   AppLocalizations.of(popoverContext).savedPromptsTitle,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: kFontItemTitle,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -932,7 +933,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                               // （不收回单行）；ctrlEnter 模式多行不封顶。
                               // #163：宽屏字段 17（主题默认）→ 15。
                               style: isWide
-                                  ? const TextStyle(fontSize: 15)
+                                  ? const TextStyle(fontSize: kFontReadingBody)
                                   : null,
                               minLines: 1,
                               maxLines: multiline ? null : 4,
@@ -1167,7 +1168,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               keyboardType: TextInputType.multiline,
               // #163：宽屏字段文字 17（主题默认）→ 15，与「正文 13.5 / 侧栏 12.5」
               // 的阶梯对齐（CupertinoTextField 会与主题 style merge，字体族不受影响）。
-              style: isWide ? const TextStyle(fontSize: 15) : null,
+              style: isWide ? const TextStyle(fontSize: kFontReadingBody) : null,
               padding: isWide
                   ? const EdgeInsets.symmetric(horizontal: 12, vertical: 7)
                   : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

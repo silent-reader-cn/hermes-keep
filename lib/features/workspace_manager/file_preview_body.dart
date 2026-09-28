@@ -14,6 +14,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/theme/typography_tokens.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/models/workspace.dart';
@@ -791,7 +792,10 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
           Text(
             widget.fileName.isNotEmpty ? widget.fileName : l10n.unnamedFile,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              fontSize: kFontItemTitle,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 4),
           _buildMediaMetaLine(l10n),
@@ -875,7 +879,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
                   SelectableText(
                     block.text!,
                     style: const TextStyle(
-                      fontSize: 17,
+                      fontSize: kFontPageTitle,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -883,7 +887,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
                 ] else ...[
                   SelectableText(
                     block.text!,
-                    style: const TextStyle(fontSize: 14, height: 1.5),
+                    style: const TextStyle(fontSize: kFontBody, height: 1.5),
                   ),
                   const SizedBox(height: 8),
                 ],
@@ -1002,7 +1006,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
                       child: Text(
                         l10n.previewOfficeSlide(doc.slides[i].index),
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: kFontCaption,
                           fontWeight: FontWeight.w600,
                           color: LightSurfaces.resolve(
                             context,
@@ -1016,7 +1020,10 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
                     for (final line in doc.slides[i].lines) ...[
                       SelectableText(
                         line,
-                        style: const TextStyle(fontSize: 14, height: 1.5),
+                        style: const TextStyle(
+                          fontSize: kFontBody,
+                          height: 1.5,
+                        ),
                       ),
                       const SizedBox(height: 4),
                     ],
@@ -1044,7 +1051,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
             Text(
               l10n.previewOfficeLegacyHint,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontCaption,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -1055,7 +1062,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
             const SizedBox(height: 12),
             SelectableText(
               doc.legacyText,
-              style: const TextStyle(fontSize: 14, height: 1.5),
+              style: const TextStyle(fontSize: kFontBody, height: 1.5),
             ),
           ],
         ),
@@ -1085,7 +1092,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
                   child: SelectableText(
                     cell,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: kFontBody,
                       fontWeight: i == 0 ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
@@ -1103,7 +1110,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
       _formatFileSize(size),
       textAlign: TextAlign.center,
       style: TextStyle(
-        fontSize: 12,
+        fontSize: kFontCaption,
         color: LightSurfaces.resolve(
           context,
           LightSurfaces.textSecondary,
@@ -1158,7 +1165,8 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
               key: const ValueKey('preview-text'),
               style: const TextStyle(
                 fontFamily: 'monospace',
-                fontSize: 13,
+                // TODO(type): 13 未进梯子；语义＝等宽代码内容（kFontCode 12），值保留。
+                fontSize: kFontCode,
                 height: 1.5,
               ),
             ),
@@ -1178,7 +1186,7 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
     return Text(
       parts.join(' · '),
       style: TextStyle(
-        fontSize: 12,
+        fontSize: kFontCaption,
         color: LightSurfaces.resolve(
           context,
           LightSurfaces.textSecondary,
@@ -1208,14 +1216,17 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
             const SizedBox(height: 12),
             Text(
               l10n.previewUnavailable,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: kFontItemTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               l10n.previewUnavailableHint,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -1267,14 +1278,17 @@ class _FilePreviewBodyState extends ConsumerState<FilePreviewBody> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: kFontItemTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -1420,7 +1434,7 @@ class _MediaControlsState extends State<_MediaControls> {
               Text(
                 _formatDuration(_position),
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontCaption,
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
@@ -1431,7 +1445,7 @@ class _MediaControlsState extends State<_MediaControls> {
               Text(
                 _formatDuration(_duration),
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontCaption,
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/light_surfaces.dart';
@@ -365,13 +366,14 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
         ],
         Text(
           l10n.onboardingBuiltinTitle,
+          // TODO(type): 未进梯子（Tab 页标题，宜 kFontPageTitle 17）
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(
           l10n.onboardingBuiltinSubtitle,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: kFontBody,
             color: LightSurfaces.resolve(
               context,
               LightSurfaces.textSecondary,
@@ -442,7 +444,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                 child: Text(
                   l10n.agentGateNotDetectedTitle,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: kFontItemTitle,
                     fontWeight: FontWeight.w600,
                     color: statusOrangeText.resolveFrom(context),
                   ),
@@ -454,7 +456,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
           Text(
             l10n.agentGateNotDetectedDesc,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,
@@ -484,7 +486,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                     child: Text(
                       l10n.agentGateViewInstallGuide,
                       style: const TextStyle(
-                        fontSize: 14,
+                        // TODO(type): 按钮文字用了正文档 14，应 kFontButton 13；本批保持原值
+                        fontSize: kFontButton,
                         fontWeight: FontWeight.w600,
                         color: CupertinoColors.white,
                       ),
@@ -512,7 +515,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                     child: Text(
                       l10n.agentGateRecheckDone,
                       style: TextStyle(
-                        fontSize: 14,
+                        // TODO(type): 按钮文字用了正文档 14，应 kFontButton 13；本批保持原值
+                        fontSize: kFontButton,
                         fontWeight: FontWeight.w600,
                         color: CupertinoColors.label.resolveFrom(context),
                       ),
@@ -619,7 +623,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 13,
+          fontSize: kFontLabel,
           fontWeight: FontWeight.w600,
           color: textColor,
         ),
@@ -660,7 +664,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
               '❌ $failureMsg',
               key: const ValueKey('onboarding-builtin-error-text'),
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
                 fontWeight: FontWeight.w500,
               ),
@@ -676,7 +680,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
             child: Text(
               l10n.onboardingRetry,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontButton,
                 fontWeight: FontWeight.w600,
                 color: statusBlueText.resolveFrom(context),
               ),
@@ -754,7 +758,8 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                 Text(
                   l10n.onboardingAdvancedSettings,
                   style: TextStyle(
-                    fontSize: 14,
+                    // TODO(type): 内容区行名用了侧栏档 14，宜 kFontItemTitle 15；本批保持原值
+                    fontSize: kFontItemTitle,
                     fontWeight: FontWeight.w500,
                     color: LightSurfaces.resolve(
                       context,
@@ -816,7 +821,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                   _portError!,
                   style: TextStyle(
                     color: statusRedText.resolveFrom(context),
-                    fontSize: 12,
+                    fontSize: kFontCaption,
                   ),
                 )
               : null,
@@ -856,7 +861,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                   _hostError!,
                   style: TextStyle(
                     color: statusRedText.resolveFrom(context),
-                    fontSize: 12,
+                    fontSize: kFontCaption,
                   ),
                 )
               : null,
@@ -904,7 +909,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                 LightSurfaces.textSecondary,
                 dark: secondaryText,
               ),
-              fontSize: 12,
+              fontSize: kFontCaption,
             ),
           ),
           trailing: SettingsSurfaces.toggle(
@@ -941,7 +946,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
               _passwordError!,
               style: TextStyle(
                 color: statusRedText.resolveFrom(context),
-                fontSize: 12,
+                fontSize: kFontCaption,
               ),
             )
           : null,
