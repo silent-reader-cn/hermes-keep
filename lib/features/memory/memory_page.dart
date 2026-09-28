@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -234,7 +236,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                           ),
                           child: Text(
                             l10n.memoryNotesTitle,
-                            style: const TextStyle(fontSize: 13),
+                            style: const TextStyle(fontSize: kFontNavItem),
                           ),
                         ),
                         _MemoryTab.user: Padding(
@@ -245,7 +247,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                           ),
                           child: Text(
                             l10n.memoryUserTitle,
-                            style: const TextStyle(fontSize: 13),
+                            style: const TextStyle(fontSize: kFontNavItem),
                           ),
                         ),
                         _MemoryTab.soul: Padding(
@@ -256,7 +258,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                           ),
                           child: Text(
                             l10n.memorySoulTitle,
-                            style: const TextStyle(fontSize: 13),
+                            style: const TextStyle(fontSize: kFontNavItem),
                           ),
                         ),
                         if (hasProject)
@@ -268,7 +270,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                             ),
                             child: Text(
                               l10n.projectContextTitle,
-                              style: const TextStyle(fontSize: 13),
+                              style: const TextStyle(fontSize: kFontNavItem),
                             ),
                           ),
                       },
@@ -518,14 +520,14 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage(context, error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontCaption,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -564,7 +566,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(l10n.noMemory, style: const TextStyle(fontSize: 17)),
+            Text(l10n.noMemory, style: const TextStyle(fontSize: kFontItemTitle)),
             const SizedBox(height: 6),
             Text(
               l10n.noMemoryContentYet,
@@ -638,7 +640,7 @@ String _memorySectionEmptyMessage(BuildContext context, MemorySection section) {
 }
 
 const TextStyle _metaStyle = TextStyle(
-  fontSize: 12,
+  fontSize: kFontCaption,
   fontWeight: FontWeight.w400,
 );
 
@@ -687,7 +689,7 @@ class _MemorySectionHeader extends StatelessWidget {
                     _memorySectionTitle(context, section),
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: kFontItemTitle,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -769,7 +771,7 @@ class _MemorySectionEditBody extends StatelessWidget {
             placeholder: _memorySectionEmptyMessage(context, section),
             autofocus: true,
             enabled: !isSaving,
-            style: const TextStyle(fontSize: 15, height: 1.4),
+            style: const TextStyle(fontSize: kFontReadingBody, height: 1.4),
             padding: const EdgeInsets.all(12),
             decoration: isLight
                 ? BoxDecoration(
@@ -793,7 +795,7 @@ class _MemorySectionEditBody extends StatelessWidget {
             Text(
               error!,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontCaption,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -1020,7 +1022,7 @@ class _ProjectContextHeader extends StatelessWidget {
                     l10n.projectContextTitle,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: kFontItemTitle,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1078,7 +1080,7 @@ class _ProjectContextFooter extends StatelessWidget {
           Text(
             detail!,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               fontWeight: FontWeight.w400,
               color: footerColor,
             ),
@@ -1088,7 +1090,7 @@ class _ProjectContextFooter extends StatelessWidget {
           Text(
             l10n.projectContextShadowedWarning,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: kFontLabel,
               fontWeight: FontWeight.w400,
               color: footerColor,
             ),

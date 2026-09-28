@@ -1668,6 +1668,27 @@ void main() {
     );
   });
 
+  // 设置 · 服务器分组 —— 字号语义审计的目检入口（表单标签 / 按钮 / 内置服务提示）
+  shotPair('设置 · 服务器', (tester, brightness) async {
+    final settingsApi = FakeSettingsApi();
+    await capturePage(
+      tester,
+      name: 'settings-server',
+      location: '/settings',
+      brightness: brightness,
+      interact: (t) async {
+        // 宽屏下设置页是「左分类导航 + 右内容」，要点进分组才能看到该组控件。
+        await t.tap(find.text('服务器').first);
+        await t.pumpAndSettle();
+      },
+      overrides: [
+        settingsApiFactoryProvider.overrideWithValue((_) => settingsApi),
+        appVersionProvider.overrideWith((ref) async => '0.1.51+57'),
+        updateCheckerServiceProvider.overrideWithValue(_DemoUpdateChecker()),
+      ],
+    );
+  });
+
   // -------------------------------------------------------------------------
   // 2. 记忆（默认落「项目上下文」长 markdown + 补充「我的笔记」分区）
   // -------------------------------------------------------------------------

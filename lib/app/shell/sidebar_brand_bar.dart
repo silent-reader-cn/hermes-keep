@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -116,7 +117,7 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                           controller: _searchController,
                           placeholder: l10n.searchSessions,
                           autofocus: true,
-                          style: const TextStyle(fontSize: 15.0),
+                          style: const TextStyle(fontSize: kFontItemTitle),
                           decoration: isLight
                               ? BoxDecoration(
                                   color: LightSurfaces.card,
@@ -139,7 +140,7 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                                   color: LightSurfaces.placeholder,
                                 )
                               : TextStyle(
-                                  fontSize: 15.0,
+                                  fontSize: kFontItemTitle,
                                   color: CupertinoColors.placeholderText
                                       .resolveFrom(context),
                                   decoration: TextDecoration.none,
@@ -163,7 +164,7 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                             // #161：回到设计稿口径（12.5）—— #153 曾把侧栏字号统一
                             // 抬到 15，主人实测「比设计稿大一圈」，此处回调。
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: kFontSidebarMeta,
                               fontWeight: FontWeight.w600,
                               color: LightSurfaces.resolve(
                                 context,
@@ -181,7 +182,7 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 // 设计稿 .brand .sub2 = 10。
-                                fontSize: 10.0,
+                                fontSize: kFontSidebarSub,
                                 height: 1.25,
                                 color: LightSurfaces.resolve(
                                   context,
@@ -242,7 +243,7 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
                   onPressed: _toggleSearch,
                   child: Text(
                     l10n.cancel,
-                    style: TextStyle(fontSize: 15.0, color: activeFg),
+                    style: TextStyle(fontSize: kFontItemTitle, color: activeFg),
                   ),
                 ),
               ],

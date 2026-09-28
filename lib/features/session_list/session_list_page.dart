@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -276,7 +277,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                         _batchResultNotice!,
                         style: const TextStyle(
                           color: CupertinoColors.white,
-                          fontSize: 14,
+                          fontSize: kFontSidebarTitle,
                           fontWeight: FontWeight.w500,
                           decoration: TextDecoration.none,
                         ),
@@ -533,7 +534,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             text,
             // #174：只在可点时涂色；禁用交回 CupertinoButton 的统一灰。
             style: TextStyle(
-              fontSize: 14,
+              fontSize: kFontSidebarTitle,
               color: onPressed == null ? null : tint,
             ),
           ),
@@ -556,7 +557,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
               Text(
                 text,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: kFontCaption,
                   color: enabled ? tint : null,
                 ),
               ),
@@ -569,14 +570,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final label = Text(
       busy ? _batchProgressLabel(l10n, progress) : l10n.selectedCount(count),
       key: const ValueKey('batch-bar-label'),
-      style: const TextStyle(fontSize: 14),
+      style: const TextStyle(fontSize: kFontSidebarTitle),
       overflow: TextOverflow.ellipsis,
     );
     final selectAll = CupertinoButton(
       key: const ValueKey('batch-select-all'),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       onPressed: busy ? null : controller.selectAllInSection,
-      child: Text(l10n.selectAll, style: const TextStyle(fontSize: 14)),
+      child: Text(l10n.selectAll, style: const TextStyle(fontSize: kFontSidebarTitle)),
     );
     final archive = slot(
       key: const ValueKey('batch-archive'),
@@ -1015,7 +1016,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                   _sectionTitle(context, section.title),
                   style: TextStyle(
                     // #161：回到设计稿口径（11）。#153 曾上调到 13。
-                    fontSize: 11.0,
+                    fontSize: kFontMicro,
                     fontWeight: FontWeight.bold,
                     color: secondaryColor,
                   ),
@@ -1034,7 +1035,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                     '${section.sessions.length}',
                     style: TextStyle(
                       // #161：随侧栏整体回调（设计稿 .grp-h .ct = 10）。
-                      fontSize: 10.5,
+                      // TODO(type): 10.5 未进梯子，待统一到 kFontMicro(11)。
+                      fontSize: kFontMicro,
                       fontWeight: FontWeight.w600,
                       color: secondaryColor,
                     ),
@@ -1106,14 +1108,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage(error),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: statusRedText.resolveFrom(context),
               ),
             ),
@@ -1184,14 +1186,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 17),
+              style: const TextStyle(fontSize: kFontItemTitle),
             ),
             const SizedBox(height: 6),
             Text(
               subtitle,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: kFontLabel,
                 color: LightSurfaces.resolve(
                   context,
                   LightSurfaces.textSecondary,
@@ -2141,7 +2143,7 @@ class _SessionRowState extends State<_SessionRow> {
                             // L2：选中/当前行文字转 #005FB8（其余情形 color 为
                             // null ⇒ 继承主题 label，与改动前一致）。
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: 12.5,  // TODO(type): 未进梯子（壳侧栏副标题的基准值）
                               color: l2Selection
                                   ? _l2Foreground(context)
                                   : null,
@@ -2153,7 +2155,7 @@ class _SessionRowState extends State<_SessionRow> {
                           child: _highlightedSpan(
                             context,
                             _displayTitle(context, widget.session),
-                            style: const TextStyle(fontSize: 17),
+                            style: const TextStyle(fontSize: kFontItemTitle),
                           ),
                         ),
                       // #151：紧凑模式右侧槽，按优先级三态（右对齐）：
@@ -2183,7 +2185,7 @@ class _SessionRowState extends State<_SessionRow> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 10.5,
+                            fontSize: kFontMicro,
                             color: secondaryColor,
                           ),
                         ),
@@ -2201,7 +2203,7 @@ class _SessionRowState extends State<_SessionRow> {
                               context,
                               metadata,
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: kFontLabel,
                                 color: secondaryColor,
                               ),
                             ),
@@ -2490,7 +2492,7 @@ class _SessionFilterSheet extends ConsumerWidget {
     // 宽屏居中盒与窄屏全宽两条路径均在 ConstrainedBox 内部裁切，确保不掉角。
     const sheetRadius = BorderRadius.vertical(top: Radius.circular(16));
     final headerStyle = TextStyle(
-      fontSize: 12,
+      fontSize: kFontCaption,
       fontWeight: FontWeight.w600,
       color: LightSurfaces.resolve(
         context,
@@ -2549,7 +2551,7 @@ class _SessionFilterSheet extends ConsumerWidget {
                           child: Text(
                             l10n.filterSessions,
                             style: const TextStyle(
-                              fontSize: 17,
+                              fontSize: kFontPageTitle,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -2607,7 +2609,7 @@ class _SessionFilterSheet extends ConsumerWidget {
                                   l10n.showSubagentSessions,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 15),
+                                  style: const TextStyle(fontSize: kFontItemTitle),
                                 ),
                                 trailing: SettingsSurfaces.toggle(
                                   context,
@@ -2846,7 +2848,7 @@ class _SheetOptionRow extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: kFontItemTitle,
           color: CupertinoColors.label.resolveFrom(context),
         ),
       ),
@@ -2913,7 +2915,7 @@ class _SheetCheckboxRow extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: kFontItemTitle,
           color: CupertinoColors.label.resolveFrom(context),
         ),
       ),
@@ -3267,7 +3269,7 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: kFontMicro,
                   fontWeight: FontWeight.w600,
                   color: CupertinoColors.white,
                 ),
@@ -3299,7 +3301,7 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: kFontMicro,
                   fontWeight: FontWeight.w500,
                   color: isDark ? CupertinoColors.white : CupertinoColors.black,
                 ),

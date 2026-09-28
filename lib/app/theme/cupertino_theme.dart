@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 /// Hermes 默认全局字体族名（MiSans）。
 const String kAppFontFamily = 'MiSans';
@@ -27,21 +28,21 @@ CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
       textStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 17,
+        fontSize: kFontPageTitle,
         color: CupertinoColors.label,
       ),
       // 操作项（按钮等）
       actionTextStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 17,
+        fontSize: kFontPageTitle,
         color: Color(0xFF007AFF),
       ),
       // 底部标签栏 10pt
       tabLabelTextStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 10,
+        fontSize: 10,  // TODO(type): 未进梯子（Cupertino tabLabel 契约）
         letterSpacing: -0.24,
         color: CupertinoColors.inactiveGray,
       ),
@@ -49,14 +50,14 @@ CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
       navActionTextStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 17,
+        fontSize: kFontPageTitle,
         color: Color(0xFF007AFF),
       ),
       // 导航栏标题 17pt 半粗
       navTitleTextStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 17,
+        fontSize: kFontPageTitle,
         fontWeight: FontWeight.w600,
         color: CupertinoColors.label,
       ),
@@ -64,7 +65,7 @@ CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
       navLargeTitleTextStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 34,
+        fontSize: kFontLargeTitle,
         fontWeight: FontWeight.bold,
         color: CupertinoColors.label,
       ),
@@ -72,7 +73,7 @@ CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
       pickerTextStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 21,
+        fontSize: 21,  // TODO(type): 未进梯子（Cupertino title1 契约）
         color: CupertinoColors.label,
       ),
     ),

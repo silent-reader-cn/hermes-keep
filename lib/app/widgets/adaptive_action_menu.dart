@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -153,7 +154,7 @@ class ActionMenuRow extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: kFontBody,
                 color: color,
                 fontWeight: isDefault ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -163,7 +164,7 @@ class ActionMenuRow extends StatelessWidget {
             const SizedBox(width: 12),
             Text(
               shortcut!.label,
-              style: TextStyle(fontSize: 11, color: shortcutColor),
+              style: TextStyle(fontSize: kFontMicro, color: shortcutColor),
             ),
           ],
         ],
@@ -392,7 +393,7 @@ class AdaptiveActionMenu {
                         // CupertinoColors.secondaryLabel 会冻结在浅色主题值，
                         // 深色弹层底上黑字 50% 透明几乎不可见）。
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: kFontLabel,
                           fontWeight: FontWeight.w600,
                           color: LightSurfaces.resolve(
                             context,

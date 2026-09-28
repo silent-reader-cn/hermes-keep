@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -235,7 +236,7 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
                 '再按一次退出应用',
                 style: TextStyle(
                   color: CupertinoColors.white,
-                  fontSize: 14,
+                  fontSize: kFontSidebarTitle,
                   fontWeight: FontWeight.w500,
                   decoration: TextDecoration.none,
                 ),

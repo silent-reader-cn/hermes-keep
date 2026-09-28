@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import '../theme/light_surfaces.dart';
 
@@ -71,7 +72,7 @@ class _SidebarHoverTipState extends State<SidebarHoverTip> {
                   widget.message,
                   maxLines: 1,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: kFontSidebarStatus,
                     color: isLight
                         ? CupertinoColors.white
                         : CupertinoColors.label,

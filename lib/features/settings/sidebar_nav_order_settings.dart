@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -99,7 +100,7 @@ class _ZoneLabel extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 12.5,
+          fontSize: kFontSectionTitle,
           fontWeight: FontWeight.w600,
           color: isLight
               ? CupertinoColors.secondaryLabel.resolveFrom(context)

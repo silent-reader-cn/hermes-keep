@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -80,7 +81,7 @@ class _ScheduledSessionDisclosureState
               Text(
                 widget.title,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontLabel,
                   fontWeight: FontWeight.normal,
                   color: secondaryLabelColor,
                 ),
@@ -110,7 +111,7 @@ class _ScheduledSessionDisclosureState
                   child: Text(
                     '$count',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: kFontMicro,
                       fontWeight: FontWeight.w600,
                       color: secondaryLabelColor,
                     ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
@@ -299,7 +300,7 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
                     LightSurfaces.textSecondary,
                     dark: CupertinoColors.secondaryLabel,
                   ),
-                  fontSize: 13,
+                  fontSize: kFontCaption,
                 ),
               ),
             ),
@@ -332,7 +333,7 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
                     _hostError!,
                     style: TextStyle(
                       color: statusRedText.resolveFrom(context),
-                      fontSize: 12,
+                      fontSize: kFontCaption,
                     ),
                   )
                 : null,
@@ -358,7 +359,7 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
                     _portError!,
                     style: TextStyle(
                       color: statusRedText.resolveFrom(context),
-                      fontSize: 12,
+                      fontSize: kFontCaption,
                     ),
                   )
                 : null,
@@ -416,7 +417,7 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
               _passwordError!,
               style: TextStyle(
                 color: statusRedText.resolveFrom(context),
-                fontSize: 12,
+                fontSize: kFontCaption,
               ),
             )
           : null,
@@ -537,7 +538,7 @@ class _WebuiSidecarSectionState extends ConsumerState<WebuiSidecarSection> {
                       LightSurfaces.textSecondary,
                       dark: CupertinoColors.secondaryLabel,
                     ),
-                fontSize: 12,
+                fontSize: kFontCaption,
               ),
             )
           : null,

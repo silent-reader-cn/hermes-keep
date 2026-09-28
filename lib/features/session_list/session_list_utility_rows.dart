@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/light_surfaces.dart';
@@ -184,7 +185,7 @@ class SessionListUtilityRows extends ConsumerWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: kFontCaption,
                 fontWeight: FontWeight.w500,
                 color: CupertinoColors.label.resolveFrom(context),
               ),

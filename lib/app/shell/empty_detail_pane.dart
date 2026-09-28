@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -45,7 +46,7 @@ class EmptyDetailPane extends ConsumerWidget {
                 l10n.isEnglish ? 'Select a Chat' : '选择会话',
                 style: TextStyle(
                   // #163 方案 B：20 → 17（＝导航栏标题同号）。
-                  fontSize: 17.0,
+                  fontSize: kFontPageTitle,
                   fontWeight: FontWeight.w600,
                   color: CupertinoColors.label.resolveFrom(context),
                 ),
@@ -58,7 +59,7 @@ class EmptyDetailPane extends ConsumerWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   // #163 方案 B：14 → 13（＝侧栏元数据同号）。
-                  fontSize: 13.0,
+                  fontSize: kFontLabel,
                   color: LightSurfaces.resolve(
                     context,
                     LightSurfaces.textSecondary,
@@ -95,7 +96,7 @@ class EmptyDetailPane extends ConsumerWidget {
                     Text(
                       l10n.newSession,
                       // #163 方案 B：按钮文字 15（＝工具行与正文同族的层级）。
-                      style: const TextStyle(fontSize: 15.0),
+                      style: const TextStyle(fontSize: kFontItemTitle),
                     ),
                   ],
                 ),

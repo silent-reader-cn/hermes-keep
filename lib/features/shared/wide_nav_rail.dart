@@ -10,6 +10,7 @@
 library;
 
 import 'package:flutter/cupertino.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/layout_tokens.dart';
@@ -69,7 +70,7 @@ class WideNavRailGroupLabel extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: kFontSectionTitle,
           fontWeight: FontWeight.w600,
           color: LightSurfaces.resolve(
             context,
@@ -160,7 +161,7 @@ class WideNavRailRow extends StatelessWidget {
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12.5, color: labelFg),
+                      style: TextStyle(fontSize: kFontNavItem, color: labelFg),
                     ),
                   ),
                 ],

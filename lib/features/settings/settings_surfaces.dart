@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 
@@ -52,7 +53,7 @@ abstract final class SettingsSurfaces {
           ? null
           : DefaultTextStyle.merge(
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: kFontSectionTitle,
                 fontWeight: FontWeight.w500,
                 color: LightSurfaces.textSecondary,
               ),

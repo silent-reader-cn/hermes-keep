@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -280,7 +281,7 @@ class SidebarStatusBar extends ConsumerWidget {
       child: DefaultTextStyle(
         style: TextStyle(
           fontFamily: 'MiSans',
-          fontSize: 11.5,
+          fontSize: kFontSidebarStatus,
           color: textColor ?? defaultText,
         ),
         child: child,

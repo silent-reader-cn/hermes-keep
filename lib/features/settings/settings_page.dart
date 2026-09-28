@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -1332,7 +1333,7 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
                     )
                   : Text(
                       l10n.pushTestButton,
-                      style: const TextStyle(fontSize: 14),
+                      style: const TextStyle(fontSize: kFontButton),
                     ),
             ),
           ),
@@ -1441,7 +1442,7 @@ class _ServerSection extends ConsumerWidget {
                     ? l10n.disableConnection
                     : l10n.enableConnection,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: kFontButton,
                   color: connection.enabled
                       ? LightSurfaces.resolve(
                           context,
@@ -1857,7 +1858,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
                           Text(
                             l10n.serverNameLabel,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: kFontLabel,
                               fontWeight: FontWeight.w500,
                               color: LightSurfaces.resolve(
                                 context,
@@ -1884,7 +1885,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
                           Text(
                             l10n.serverUrlLabel,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: kFontLabel,
                               fontWeight: FontWeight.w500,
                               color: LightSurfaces.resolve(
                                 context,
@@ -1912,7 +1913,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
                           Text(
                             l10n.serverUrlExampleHint,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: kFontCaption,
                               color: LightSurfaces.resolve(
                                 context,
                                 LightSurfaces.textSecondary,
@@ -1924,7 +1925,7 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
                           Text(
                             l10n.serverPasswordLabel,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: kFontLabel,
                               fontWeight: FontWeight.w500,
                               color: LightSurfaces.resolve(
                                 context,
@@ -2234,7 +2235,7 @@ class _ModelPickerPage extends ConsumerWidget {
                           child: Text(
                             currentState.refreshError!,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: kFontCaption,
                               color: LightSurfaces.resolve(
                                 context,
                                 statusRedText.resolveFrom(context),

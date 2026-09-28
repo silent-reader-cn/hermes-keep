@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 /// 会话列表页头部（替换 `CupertinoSliverNavigationBar` 的大标题模式）。
 ///
@@ -119,7 +120,7 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
       child: Text(
         title,
         style: TextStyle(
-          fontSize: 17,
+          fontSize: kFontPageTitle,
           fontWeight: FontWeight.w600,
           color: labelColor,
         ),
@@ -136,7 +137,7 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
       child: Text(
         title,
         style: TextStyle(
-          fontSize: 34,
+          fontSize: kFontLargeTitle,
           fontWeight: FontWeight.w700,
           color: labelColor,
         ),
@@ -233,7 +234,7 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
         text: TextSpan(
           text: title,
           style: TextStyle(
-            fontSize: 34,
+            fontSize: kFontLargeTitle,
             fontWeight: FontWeight.w700,
             color: labelColor,
           ),
@@ -248,7 +249,7 @@ class SessionListHeaderDelegate extends SliverPersistentHeaderDelegate {
         text: TextSpan(
           text: title,
           style: TextStyle(
-            fontSize: 17,
+            fontSize: kFontPageTitle,
             fontWeight: FontWeight.w600,
             color: labelColor,
           ),

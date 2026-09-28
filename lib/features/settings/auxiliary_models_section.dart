@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -116,7 +117,7 @@ class AuxiliaryModelsSection extends ConsumerWidget {
           Flexible(child: Text(displayLabel, overflow: TextOverflow.ellipsis)),
           if (taskRow.apiKeySet) ...[
             const SizedBox(width: 6),
-            const Text('🔑', style: TextStyle(fontSize: 12)),
+            const Text('🔑', style: TextStyle(fontSize: kFontCaption)),  // TODO(type): emoji 当图标，宜换 Icon
           ],
         ],
       ),

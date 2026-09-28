@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 
@@ -188,7 +189,7 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
         text: TextSpan(
           text: title,
           style: TextStyle(
-            fontSize: 34,
+            fontSize: kFontLargeTitle,
             fontWeight: FontWeight.w700,
             color: labelColor,
           ),
@@ -202,7 +203,7 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
         text: TextSpan(
           text: title,
           style: TextStyle(
-            fontSize: 17,
+            fontSize: kFontPageTitle,
             fontWeight: FontWeight.w600,
             color: labelColor,
           ),
@@ -267,7 +268,7 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
                       child: Text(
                         title,
                         style: TextStyle(
-                          fontSize: 17,
+                          fontSize: kFontPageTitle,
                           fontWeight: FontWeight.w600,
                           color: labelColor,
                         ),
@@ -293,7 +294,7 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
                           child: Text(
                             title,
                             style: TextStyle(
-                              fontSize: 17,
+                              fontSize: kFontPageTitle,
                               fontWeight: FontWeight.w600,
                               color: labelColor,
                             ),
@@ -327,7 +328,7 @@ class LargeTitleSliverHeaderDelegate extends SliverPersistentHeaderDelegate {
                   child: Text(
                     title,
                     style: TextStyle(
-                      fontSize: 34,
+                      fontSize: kFontLargeTitle,
                       fontWeight: FontWeight.w700,
                       color: labelColor,
                     ),

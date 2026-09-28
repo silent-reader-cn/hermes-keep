@@ -43,6 +43,7 @@
 library;
 
 import 'dart:math' as math;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 
@@ -599,7 +600,7 @@ class HermesFormRow extends StatelessWidget {
 const TextStyle _kDialogTitleStyle = TextStyle(
   fontFamily: 'CupertinoSystemText',
   inherit: false,
-  fontSize: 17.0,
+  fontSize: kFontPageTitle,
   fontWeight: FontWeight.w600,
   height: 1.3,
   letterSpacing: -0.5,
@@ -610,7 +611,7 @@ const TextStyle _kDialogTitleStyle = TextStyle(
 const TextStyle _kDialogContentStyle = TextStyle(
   fontFamily: 'CupertinoSystemText',
   inherit: false,
-  fontSize: 13.0,
+  fontSize: kFontLabel,
   fontWeight: FontWeight.w400,
   height: 1.35,
   letterSpacing: -0.2,
@@ -624,7 +625,7 @@ const double _kDialogActionMinHeight = 45.0;
 const TextStyle _kDialogActionStyle = TextStyle(
   fontFamily: 'CupertinoSystemText',
   inherit: false,
-  fontSize: 16.8,
+  fontSize: 16.8,  // TODO(type): 未进梯子
   fontWeight: FontWeight.w400,
   textBaseline: TextBaseline.alphabetic,
 );
