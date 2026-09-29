@@ -49,7 +49,8 @@ class WideNavRail extends StatelessWidget {
         ),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        // 必须 max：分栏线是 Container 的右边框，min 会让它只到内容底部（实测现象）。
+        mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
       ),

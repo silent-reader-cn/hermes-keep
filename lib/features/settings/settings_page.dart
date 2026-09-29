@@ -118,7 +118,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
             // 宽屏（≥900）：左 220 分类导航 + 右内容限宽 744 居中，
             // 只渲染当前分类对应的 section。
-            if (isWide) SliverToBoxAdapter(child: _buildWideBody(context)),
+            if (isWide)
+              SliverFillRemaining(
+                // hasScrollBody: false —— 让宽屏主体撑满视口剩余高度，
+                // 否则 Row 只按内容高度、rail 的分栏线到不了底（实测现象）。
+                hasScrollBody: false,
+                child: _buildWideBody(context),
+              ),
           ],
         ),
       ),
@@ -129,7 +135,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget _buildWideBody(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         WideNavRail(
           key: const ValueKey('settings-nav-rail'),
@@ -150,7 +156,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ],
         ),
         Expanded(
-          child: Center(
+          child: Align(
+            alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 maxWidth: _kSettingsContentMaxWidth,

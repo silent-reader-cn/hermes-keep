@@ -101,10 +101,20 @@ abstract final class SettingsSurfaces {
     );
   }
 
+  /// 设置项名：统一到项名档 [kFontItemTitle]（不继承主题 17pt）。
+  static Widget _primary(Widget child) => DefaultTextStyle.merge(
+        style: const TextStyle(fontSize: kFontItemTitle),
+        child: child,
+      );
+
+  /// 说明 / 附加信息：统一到注解档（原先继承主题 17pt，在宽屏右侧显得过大）。
   static Widget? _secondary(Widget? child) => child == null
       ? null
       : DefaultTextStyle.merge(
-          style: const TextStyle(color: LightSurfaces.textSecondary),
+          style: const TextStyle(
+            fontSize: kFontCaption,
+            color: LightSurfaces.textSecondary,
+          ),
           child: child,
         );
 
@@ -113,7 +123,8 @@ abstract final class SettingsSurfaces {
     CupertinoListTile original,
   ) => CupertinoListTile(
     key: original.key,
-    title: original.title,
+    // 设置项名统一到项名档（原先继承主题 17pt —— 主人反馈宽屏右侧「太大」）。
+    title: _primary(original.title),
     subtitle: _secondary(original.subtitle),
     additionalInfo: _secondary(original.additionalInfo),
     leading: original.leading,
@@ -128,9 +139,9 @@ abstract final class SettingsSurfaces {
 
   static Widget? _trailing(BuildContext context, Widget? original) {
     if (original is CupertinoListTileChevron) {
-      return Icon(
+      return const Icon(
         CupertinoIcons.right_chevron,
-        size: CupertinoTheme.of(context).textTheme.textStyle.fontSize,
+        size: kFontItemTitle,
         color: LightSurfaces.textSecondary,
       );
     }

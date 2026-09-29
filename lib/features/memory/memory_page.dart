@@ -194,7 +194,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     // 宽屏（≥900）：顶部分段控件 → 左 220 分区导航；正文维持既有 720 限宽居中。
     if (isWide) {
       return [
-        SliverToBoxAdapter(
+        // hasScrollBody: false —— 撑满视口剩余高度，否则 Row 按内容高度、rail 分栏线到不了底。
+        SliverFillRemaining(
+          hasScrollBody: false,
           child: _buildWideBody(context, response, activeTab, hasProject),
         ),
       ];
@@ -295,7 +297,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   ) {
     final l10n = AppLocalizations.of(context);
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         WideNavRail(
           key: const ValueKey('memory-nav-rail'),
@@ -319,7 +321,8 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
           ],
         ),
         Expanded(
-          child: Center(
+          child: Align(
+            alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 maxWidth: _kMemoryContentMaxWidth,
