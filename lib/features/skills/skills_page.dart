@@ -727,7 +727,7 @@ class _WideSkillRailGroupLabel extends StatelessWidget {
         style: TextStyle(
           // TODO(type): 未进梯子（值 10）。
           // 同款 wide_nav_rail 分组标签已挂 kFontSectionTitle(13)，两栏并排口径待统一。
-          fontSize: 10,
+          fontSize: kFontSectionTitle,
           fontWeight: FontWeight.w600,
           color: LightSurfaces.resolve(
             context,

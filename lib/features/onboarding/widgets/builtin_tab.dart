@@ -367,7 +367,7 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
         Text(
           l10n.onboardingBuiltinTitle,
           // TODO(type): 未进梯子（Tab 页标题，宜 kFontPageTitle 17）
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: kFontPageTitleMd, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(

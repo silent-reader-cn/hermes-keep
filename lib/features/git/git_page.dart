@@ -350,7 +350,7 @@ class _GitPageState extends ConsumerState<GitPage> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       // TODO(type): 12.5 未进梯子（diff 栏路径 → kFontCode 12）。
-                      fontSize: 12.5,
+                      fontSize: kFontCode,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1121,7 +1121,7 @@ class _CleanWorkspacePlaceholder extends StatelessWidget {
           Text(
             l10n.workspaceClean,
             // TODO(type): 16 未进梯子（空态标题应与同文件 17 档统一，语义 → kFontItemTitle 15）。
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(

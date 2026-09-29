@@ -512,7 +512,7 @@ class DownloadPage extends ConsumerWidget {
             l10n.downloadsEmpty,
             style: TextStyle(
               // TODO(type): 未进梯子（空态标题 16；同批 skills 空态标题为 17）。
-              fontSize: 16,
+              fontSize: kFontItemTitle,
               color: LightSurfaces.resolve(
                 context,
                 LightSurfaces.textSecondary,

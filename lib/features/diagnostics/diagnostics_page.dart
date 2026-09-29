@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import '../../app/theme/layout_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
@@ -585,7 +585,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                           const SizedBox(width: 2),
                           Text(
                             backLabel,
-                            style: TextStyle(fontSize: 16, color: actionColor),  // TODO(type): 未进梯子（16，按钮文案；梯子无 16 档）
+                            style: TextStyle(fontSize: kFontButton, color: actionColor),
                           ),
                         ],
                       ),
@@ -599,7 +599,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
                           unawaited(copyDiagnosticsEntry(context, entry)),
                       child: Text(
                         l10n.copy,
-                        style: TextStyle(fontSize: 16, color: actionColor),  // TODO(type): 未进梯子（16，按钮文案；梯子无 16 档）
+                        style: TextStyle(fontSize: kFontButton, color: actionColor),
                       ),
                     ),
                   ],
@@ -1216,7 +1216,7 @@ class _DiagnosticsRailRow extends StatelessWidget {
                       child: Text(
                         letter!,
                         style: TextStyle(
-                          fontSize: 10.5,  // TODO(type): 未进梯子（10.5，左栏级别字母）
+                          fontSize: kFontMicro,
                           fontWeight: FontWeight.bold,
                           color: selected
                               ? (levelColor ?? unselectedText)
@@ -1233,14 +1233,14 @@ class _DiagnosticsRailRow extends StatelessWidget {
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12.5, color: labelFg),  // TODO(type): 未进梯子（12.5，左栏行名）
+                      style: TextStyle(fontSize: kFontNavItem, color: labelFg),
                     ),
                   ),
                   if (count != null) ...[
                     const SizedBox(width: 6),
                     Text(
                       '$count',
-                      style: TextStyle(fontSize: 11.5, color: countFg),  // TODO(type): 未进梯子（11.5，左栏计数）
+                      style: TextStyle(fontSize: kFontMicro, color: countFg),
                     ),
                   ],
                 ],

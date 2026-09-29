@@ -165,3 +165,53 @@ const double kFontSidebarBadge = 10.5;
 
 /// 侧栏状态行 / 悬停提示。值 11.5。
 const double kFontSidebarStatus = 11.5;
+// ─────────────────────────────────────────────────────────────────────────
+// 大标题族（引导页 / 安装指南 / 分栏页面标题）
+//
+// 引导与安装这类「单页流程」用比 [kFontPageTitle](17) 更大的标题做层级锚点，
+// 这是既有设计（28 表单页标题 / 24 安装指南页头 / 20 Tab 页标题 / 18 分组大标题），
+// 统一具名以免散落。
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 引导页 / 表单页大标题。值 28。
+const double kFontPageTitleXl = 28.0;
+
+/// 安装指南页头大标题。值 24。
+const double kFontPageTitleLg = 24.0;
+
+/// Tab 页标题（内置服务等）。值 20。
+const double kFontPageTitleMd = 20.0;
+
+/// 分组大标题（表单分组 / 占位大标题）。值 18。
+const double kFontSectionTitleLg = 18.0;
+
+/// 指标大数据字（洞察页数值）。值 21。
+///
+/// 单独一档的理由：它是**强调数字**，不是项名也不是标题；借 [kFontItemTitle]
+/// 或 [kFontBody] 会造成「数字与文字同档」而失去强调。
+const double kFontMetric = 21.0;
+
+// ─────────────────────────────────────────────────────────────────────────
+// 特殊用途值（装饰 / 系统契约 —— **不可越界使用**）
+//
+// 下面这些**不属于内容排版梯子**，而是外部契约或纯装饰，具名只为「唯一出口」，
+// 任何新代码都不该拿它们去排正文。
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 极小装饰字（环形进度内的百分比）。值 7。
+const double kFontTiny = 7.0;
+
+/// 引导页 hero 装饰字标（品牌字母）。值 44。
+const double kFontHeroMark = 44.0;
+
+/// Cupertino 底部标签栏契约值。值 10 —— **不可改**（框架默认）。
+const double kFontThemeTabLabel = 10.0;
+
+/// Cupertino 滚轮选择器契约值。值 21 —— **不可改**（框架默认）。
+const double kFontThemePicker = 21.0;
+
+/// Cupertino 弹窗动作文字契约值。值 16.8 —— **不可改**（等价框架 `_kCupertinoDialogActionStyle`）。
+const double kFontDialogAction = 16.8;
+
+/// mermaid 图表的主题字号（第三方渲染器参数）。值 16 —— **不可改**（与自身主题配套）。
+const double kFontMermaidTheme = 16.0;

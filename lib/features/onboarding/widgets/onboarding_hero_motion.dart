@@ -268,7 +268,7 @@ class _OnboardingHeroMotionState extends State<OnboardingHeroMotion>
           'H',
           style: TextStyle(
             // TODO(type): 未进梯子（装饰性字标，随 logo 缩放）
-            fontSize: 44,
+            fontSize: kFontHeroMark,
             fontWeight: FontWeight.bold,
             color: widget.isDark
                 ? CupertinoColors.white

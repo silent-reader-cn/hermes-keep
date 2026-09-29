@@ -290,7 +290,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
                         p.name,
                         style: TextStyle(
                           // TODO(type): 未进梯子（服务商名，宜 kFontItemTitle 15）
-                          fontSize: 16,
+                          fontSize: kFontItemTitle,
                           fontWeight: FontWeight.bold,
                           color:
                               CupertinoTheme.brightnessOf(ctx) ==
@@ -391,7 +391,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
               l10n.installGuideWindowsOnly,
               textAlign: TextAlign.center,
               // TODO(type): 未进梯子（非 Windows 占位大标题，宜 kFontPageTitle 17）
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: kFontSectionTitleLg, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
             CupertinoButton.filled(
@@ -465,7 +465,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
         Text(
           l10n.installGuideTitle,
           // TODO(type): 未进梯子（页头大标题，梯子无 24）
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: kFontPageTitleLg, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(
@@ -748,7 +748,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           Text(
             l10n.installGuideStageModel,
             // TODO(type): 未进梯子（表单分组标题，梯子无 18）
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: kFontSectionTitleLg, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(

@@ -600,7 +600,7 @@ class _WorkspaceRowState extends State<_WorkspaceRow> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         // TODO(type): 16 未进梯子；语义＝工作区项名（kFontItemTitle 15），值保留。
-                        fontSize: 16,
+                        fontSize: kFontItemTitle,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

@@ -480,7 +480,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   // TODO(type): 13.5 未进梯子；语义＝文件名（kFontItemTitle 15），值保留。
-                  fontSize: 13.5,
+                  fontSize: kFontItemTitle,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1280,7 +1280,7 @@ class _WorkspaceEntryRowState extends State<_WorkspaceEntryRow> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       // TODO(type): 16 未进梯子；语义＝文件树项名（kFontItemTitle 15），值保留。
-                      fontSize: 16,
+                      fontSize: kFontItemTitle,
                       fontWeight: FontWeight.w500,
                       color: widget.selected ? selectedFg : null,
                     ),

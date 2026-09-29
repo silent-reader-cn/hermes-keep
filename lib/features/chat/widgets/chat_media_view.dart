@@ -724,7 +724,7 @@ class AttachmentLightbox extends StatelessWidget {
                   style: const TextStyle(
                     color: CupertinoColors.white,
                     // TODO(type): 未进梯子
-                    fontSize: 16,
+                    fontSize: kFontItemTitle,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

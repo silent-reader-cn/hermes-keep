@@ -2143,7 +2143,7 @@ class _SessionRowState extends State<_SessionRow> {
                             // L2：选中/当前行文字转 #005FB8（其余情形 color 为
                             // null ⇒ 继承主题 label，与改动前一致）。
                             style: TextStyle(
-                              fontSize: 12.5,  // TODO(type): 未进梯子（壳侧栏副标题的基准值）
+                              fontSize: kFontSidebarMeta,
                               color: l2Selection
                                   ? _l2Foreground(context)
                                   : null,

@@ -268,7 +268,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           l10n.currentBranchBadge,
                           style: TextStyle(
                             // TODO(type): 9.5 未进梯子（徽标语义 → kFontMicro 11）。
-                            fontSize: 9.5,
+                            fontSize: kFontMicro,
                             fontWeight: FontWeight.bold,
                             color: statusBlueText.resolveFrom(context),
                           ),
@@ -307,7 +307,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                               upstream,
                               style: TextStyle(
                                 // TODO(type): 9.5 未进梯子（chip 注解语义 → kFontCaption 12）。
-                                fontSize: 9.5,
+                                fontSize: kFontMicro,
                                 color: isDark
                                     ? secondaryText.resolveFrom(context)
                                     : LightSurfaces.textSecondary,
@@ -381,7 +381,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             // TODO(type): 11.5 未进梯子（提交信息＝列表项名 → kFontItemTitle 15）。
-                            fontSize: 11.5,
+                            fontSize: kFontItemTitle,
                             color: isDark
                                 ? secondaryText.resolveFrom(context)
                                 : LightSurfaces.textSecondary,
@@ -395,7 +395,7 @@ class _GitBranchTreeState extends State<GitBranchTree> {
                         updatedRelative,
                         style: TextStyle(
                           // TODO(type): 10.5 未进梯子（时间戳 → kFontCaption 12）。
-                          fontSize: 10.5,
+                          fontSize: kFontCaption,
                           color: isDark
                               ? secondaryText.resolveFrom(context)
                               : LightSurfaces.textSecondary,

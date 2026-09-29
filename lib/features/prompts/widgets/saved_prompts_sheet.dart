@@ -401,7 +401,7 @@ class SavedPromptsSheet extends StatelessWidget {
               l10n.savedPromptsTitle,
               // TODO(type): 未进梯子（弹层标题 16）。
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: kFontItemTitle,
                 fontWeight: FontWeight.w600,
               ),
             ),

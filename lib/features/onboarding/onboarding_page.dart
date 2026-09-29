@@ -435,7 +435,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           child: Text(
             l10n.connectYourHermesServer,
             // TODO(type): 未进梯子（表单页标题，梯子无 28）
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: kFontPageTitleXl, fontWeight: FontWeight.bold),
           ),
         ),
         Padding(
@@ -553,7 +553,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       Text(
         l10n.connectYourHermesServer,
         // TODO(type): 未进梯子（表单页标题，梯子无 28）
-        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: kFontPageTitleXl, fontWeight: FontWeight.bold),
       ),
       const SizedBox(height: 8),
       Text(

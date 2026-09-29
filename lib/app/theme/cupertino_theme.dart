@@ -42,7 +42,7 @@ CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
       tabLabelTextStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 10,  // TODO(type): 未进梯子（Cupertino tabLabel 契约）
+        fontSize: kFontThemeTabLabel,  // TODO(type): 未进梯子（Cupertino tabLabel 契约）
         letterSpacing: -0.24,
         color: CupertinoColors.inactiveGray,
       ),
@@ -73,7 +73,7 @@ CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
       pickerTextStyle: TextStyle(
         inherit: false,
         fontFamily: kAppFontFamily,
-        fontSize: 21,  // TODO(type): 未进梯子（Cupertino title1 契约）
+        fontSize: kFontThemePicker,  // TODO(type): 未进梯子（Cupertino title1 契约）
         color: CupertinoColors.label,
       ),
     ),

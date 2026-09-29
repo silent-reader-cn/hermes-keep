@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 
@@ -119,7 +120,7 @@ class ContextWindowIndicator extends StatelessWidget {
               label,
               style: TextStyle(
                 // TODO(type): 未进梯子
-                fontSize: 7,
+                fontSize: kFontTiny,
                 fontWeight: FontWeight.w600,
                 color: textColor,
                 decoration: TextDecoration.none,

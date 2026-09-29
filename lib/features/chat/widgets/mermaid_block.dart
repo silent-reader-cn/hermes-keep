@@ -70,7 +70,7 @@ const core.MermaidTheme kMermaidDarkTheme = core.MermaidTheme(
   edgeLabelBackground: core.Color(0xff2c2c2e),
   fontFamily: '"trebuchet ms", verdana, arial, sans-serif',
   // TODO(type): 未进梯子
-  fontSize: 16,
+  fontSize: kFontMermaidTheme,
 );
 
 /// 根据当前上下文解析 Mermaid 主题。

@@ -625,7 +625,7 @@ const double _kDialogActionMinHeight = 45.0;
 const TextStyle _kDialogActionStyle = TextStyle(
   fontFamily: 'CupertinoSystemText',
   inherit: false,
-  fontSize: 16.8,  // TODO(type): 未进梯子
+  fontSize: kFontDialogAction,  // TODO(type): 未进梯子
   fontWeight: FontWeight.w400,
   textBaseline: TextBaseline.alphabetic,
 );
