@@ -2254,3 +2254,32 @@ return MediaQuery(
 4. D3 快捷键列 / D4 键盘入口是否保留（Leader 按「按推荐做」交付，提交信息里列了可回退符号）。
 
 **进行中**：PDF flaky（worktree `hermes-pdfflake` / `fix/pdf-flaky`），任务书已含实测真因「pump 预算 3s 实钟不够 => 落盘后等首帧偶发超时」与同仓正确手法（`waitUntil` 信号驱动）。
+
+
+### 字号全面语义化收口（2026-09-28~29，三笔提交 + 0.1.65 双包）
+
+主人指令：「我们是不是要统一一下各个层级的字体大小，为各个页面建一套语义化的字体大小统一系统」+「统一以后要逐个检查各个字体在页面上的使用是否符合语义 是否有错用乱用的情况」+「这些不在梯子上的值你逐个确认视觉效果 根据你的推荐调整及语义化吧」。
+
+**成果**：全仓 `fontSize: 数字` 字面量 **451 → 0**（100% token 化）。
+
+**唯一出口** `lib/app/theme/typography_tokens.dart`：
+- 内容区 13 档：pageTitle17 / largeTitle34 / sectionTitle13 / itemTitle15 / body14 / readingBody15 / label13 / caption12 / micro11 / code12 / button13 / navItem13
+- 侧栏专档 5 档（独立口径，值皆为主人逐轮实测调过）：sidebarTitle14 / sidebarMeta12.5 / sidebarBadge10.5 / sidebarSub10 / sidebarStatus11.5
+- 大标题族 5 档：pageTitleXl28 / pageTitleLg24 / pageTitleMd20 / sectionTitleLg18 / metric21
+- 装饰与契约 5 档（**不可越界使用**）：tiny7 / heroMark44 / themeTabLabel10 / themePicker21 / dialogAction16.8 / mermaidTheme16
+- 文件头写明「选令牌看文字角色」判据与三类常见错用
+
+**执行方式**：Leader 亲自做 4 域（settings/memory/session_list/app 层，97 处）+ 9 路手工隔离 worktree 并行子代理做其余 11 域（chat 103 / onboarding+notifications 60 / diagnostics 32 / git 27 / kanban 22 / tasks 18 / insights 18 / workspace* 52 / skills/downloads/prompts/main 29）+ Leader 三类语义统一。
+
+**推翻的口径**：子代理严守 Leader 给的「值一律不动」铁律，共同指出它会制造「同语义两个值」——与「统一」目标冲突。Leader 裁定改为**语义优先**：零散漂移统一到语义档；注释写明「主人实测调过」的历史设计稿口径保留原值。三类统一：空态/错误态标题 14 处（pageTitle17→itemTitle15）、按钮文字 25 处（原 11/12/13/14 四值→button13）、等宽内容 9 处（→code12），另 8 处表单字段名/说明按子代理留的 TODO 归位。
+
+**教训（已回写 skill）**：
+1. **改值必须重拍 `test/golden` 下全部金照测试文件** —— 只拍 `golden_screens_test` 会漏掉 `golden_onboarding_wide_test`（被全量当场抓出）。
+2. **`flutter build windows` 可能重写 `generated_plugin_registrant.cc` 从而覆盖 irondash 补丁** —— 本轮实测：全量构建覆盖了（补丁丢失）、增量构建没有。**没有这条复查就会打出并装上「启动即崩」的 exe**。流程：build → **复查内容判据** → 丢了就重跑补丁 + 重编 → 再复查。
+3. **行号定位极脆**（本轮失败四次：import 增删/注释增删都会偏移）⇒ 一律用**锚点字符串或值+上下文**匹配。
+4. **import 风格要统一**：Leader 加 `package:hermes_ui/...` 而子代理加相对路径 ⇒ 7 处 duplicate_import；清理时一度删掉只有 `package:` 写法的两文件（49 issue）。
+5. 判据写错造出假结论再犯一次：`grep -c "// #include <irondash"` 返回 0 时**不等于补丁丢了**，要用 `grep -n "irondash\|super_native"` 看**是否注释态**。
+
+**发布 `0.1.65`**：APK `HermesUI-0.1.65-arm64.apk` 92,067,385 B（sha256 `766ce815…`，**验包 9 个原生库齐全含 `libsuper_native_extensions.so`**）；Windows `HermesUI-0.1.65-x64-setup.exe` 45,464,606 B（**基于补丁在位的新 exe 重打**：exe 21:46 → 包 21:50）。本机 Windows 已装 0.1.64（`f3b64f7` 时点），0.1.65 待主人确认后覆盖安装。
+
+**剩余未决**：令牌文件注释里标了「不可越界使用」的契约档；`13` 曾同时承载「分组标题/表单标签」两类语义（同值异义，审计时靠容器判定）。
