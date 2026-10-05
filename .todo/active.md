@@ -2283,3 +2283,27 @@ return MediaQuery(
 **发布 `0.1.65`**：APK `HermesUI-0.1.65-arm64.apk` 92,067,385 B（sha256 `766ce815…`，**验包 9 个原生库齐全含 `libsuper_native_extensions.so`**）；Windows `HermesUI-0.1.65-x64-setup.exe` 45,464,606 B（**基于补丁在位的新 exe 重打**：exe 21:46 → 包 21:50）。本机 Windows 已装 0.1.64（`f3b64f7` 时点），0.1.65 待主人确认后覆盖安装。
 
 **剩余未决**：令牌文件注释里标了「不可越界使用」的契约档；`13` 曾同时承载「分组标题/表单标签」两类语义（同值异义，审计时靠容器判定）。
+
+
+### 宽屏两缺陷修复 + 0.1.66 双包（2026-09-29 报 · 2026-10-06 交付）
+
+主人报告两条（真机观察，非推测）：
+1. **宽屏下设置/记忆页的页面内左栏分栏线没有垂直到底**，而最左壳侧栏的线是到底的；
+2. **设置页最右侧内容「组件布局和字体与左侧分栏和最左侧边栏格格不入」→ 追加「最右侧内容太大」**。
+
+**① 分栏线根因链（批 3 引入，三环节叠加，只修一处无效）**：分栏线是 `WideNavRail` 里 `Container` 的 `Border(right:)` ⇒ 线高=容器高；容器高由 `Column(mainAxisSize: min)` 决定 ⇒ 只到内容底；外层 `SliverToBoxAdapter` 给松高度约束、`Row` 又用 `CrossAxisAlignment.start` ⇒ 无一层提供视口高度。
+**修法四处配合**：`Column(min)→max` · `Row(start)→stretch` · `SliverToBoxAdapter→SliverFillRemaining(hasScrollBody: false)` · 右栏 `Center→Align(topCenter)`（否则 stretch 后内容被垂直居中跑位）。设置/记忆两页同改。
+
+**② 右侧过大根因**：`CupertinoListTile` 的 title/subtitle **默认继承主题 17pt**、行高约 50，而左侧导航 13pt/行高 32 ⇒ 尺度差两档。
+**修法**：在统一封装 `SettingsSurfaces._tile` 归一化（**一处生效全设置页**）—— title → `kFontItemTitle`(15)、subtitle/additionalInfo → `kFontCaption`(12)、右箭头图标跟随 15。中途 `_primary` 写成可空返回导致 `Widget? can't be assigned to Widget` 编译失败（title 是非空参数），已改非空签名。
+
+**提交** `2304bf1`；金照重拍 `settings_light.png`；全量 **5415 通过 / 150 skipped / 0 失败**。坑位已回写 `hermex-flutter-codebase/references/wide-screen-layout-pitfalls.md`（含根因链、四处修法对照表、取证顺序）。
+
+**发布 `0.1.66`**（`0.1.66+72`，bump `2067d50`）：
+- APK `HermesUI-0.1.66-arm64.apk` **92,067,381 B**（sha256 `60e61820…`，**验包 9 个原生库齐全含 `libsuper_native_extensions.so`**）
+- Windows `HermesUI-0.1.66-x64-setup.exe` **45,489,966 B**（sha256 `b31c2ba2…`，**exe 冒烟 PASS 存活 12s 无崩溃** ← 这轮终于取到了这条硬判据，因为主人已退出旧实例）
+- **本机已升级**：sha256 逐字节一致 + 已拉起（PID 26368）
+
+**环境事实（本轮发现）**：① **`flutter build` 之间有「启动锁」** —— 两个构建同时起会**串行**（后一个 `Waiting for another flutter command to release the startup lock`），不是真并行；② **会话时间跨度很大**（09-29 开工 → 10-06 交付），凡时间戳判断都要先 `date` 校准，别拿记忆里的日期当事实；③ **`process_manage` 工具在本会话后段不可用**，改用「轮询查文件大小/时间戳」的方式跟进后台进程（文件大小稳定即写入完成）。
+
+**遗留**：`hermex-flutter-codebase` skill 本体已达 **101K / 100K 上限**（patch 被拒才改写进 references）⇒ 需要瘦身（拆分/搬移 references）。
