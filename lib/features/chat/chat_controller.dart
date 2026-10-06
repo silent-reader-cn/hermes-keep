@@ -142,6 +142,86 @@ class ChatController extends FamilyNotifier<ChatState, String> {
   /// resumed 后直接铺全文并重新校准看门狗基线。
   bool _appPaused = false;
 
+  // -------------------------------------------------------------------------
+  // 应用层活性守卫（tag: chat_apply）私有状态
+  //
+  // 背景（真实线上故障）：现有自愈链只看「传输活动 / 相位标志」——只要 SSE 帧
+  // 还在到，`_recordTransportActivity` 就一直新鲜，transport-stale 永不触发；
+  // 相位仍是 streaming，死区兜底也不触发。于是「一直在收帧但永不落账 / 永不
+  // 渲染」的静默冻结对既有看门狗完全隐形（日志零 ERROR、零 transport error、
+  // 对该会话零 watchdog 告警）。本节守卫的判据是**视图是否前进**，与传输活动
+  // 解耦。
+  // -------------------------------------------------------------------------
+
+  /// G1：本 run（streamId）已见过的最大重放序号；[String] 为其所属 streamId
+  /// （streamId 变化即视为新 run，重置归零）。
+  int _maxSeenSeq = 0;
+  String? _maxSeenSeqStreamId;
+
+  /// G2/G3：本连接（`_connectStream` 起）以来视图签名是否增长过。
+  bool _viewAdvancedSinceConnect = false;
+
+  /// G3：本连接内去重游标是否发生过位移（位移 = 去重仍在推进 = 未「卡住」）。
+  bool _dedupCursorMovedSinceConnect = false;
+
+  /// G5：最近一次**内容帧**到达时刻。含随后被序号闸门 / 去重丢弃的帧；心跳不算。
+  DateTime? _lastContentFrameAt;
+
+  /// G5：最近一次视图签名变化时刻。
+  DateTime? _lastViewAdvanceAt;
+
+  /// G5：视图签名快照与就绪标记（首个 tick 只做基线，不判定）。
+  String _lastViewSignature = '';
+  bool _viewSignatureReady = false;
+
+  /// G5：告警冷却 / 升级观察截止 / 升级观察所属 streamId / 本回合触发次数。
+  DateTime? _viewLivenessCooldownUntil;
+  DateTime? _viewLivenessEscalationDeadline;
+  String? _viewLivenessEscalationStreamId;
+  int _viewLivenessTriggerCount = 0;
+
+  /// G2：连续被序号闸门丢弃的内容帧数（任一内容帧通过闸门即清零）。
+  int _gateDroppedStreak = 0;
+
+  /// G3：连续被去重吞掉的内容帧数（text / reasoning；有帧落账即清零）。
+  int _dedupSwallowStreak = 0;
+
+  /// 观测性计数（chat_apply）：闸门丢弃总数 / 去重吞帧总数 / 管线再武装次数。
+  int _replayGateDropTotal = 0;
+  int _dedupSwallowTotal = 0;
+  int _pipelineRearmCount = 0;
+
+  /// G4 再武装 WARN 节流窗口起点。
+  DateTime? _pipelineRearmWarnAt;
+
+  /// G2：序号闸门连续丢弃多少内容帧后自愈（仅 replayAfterSeq > 0 时）。
+  static const int _kReplayGateSelfHealStreak = 200;
+
+  /// G3：去重连续吞掉多少 text/reasoning 帧后自愈。
+  static const int _kDedupSwallowSelfHealStreak = 64;
+
+  /// chat_apply DEBUG 节流：第 1 次 + 每 N 次。
+  static const int _kApplyLogEvery = 200;
+
+  /// G5：视图签名静止多久判定为「静默冻结」。
+  static const Duration _kViewLivenessWindow = Duration(seconds: 25);
+
+  /// G5：内容帧新鲜窗口 —— 超出即认为「没有内容帧在到」，守卫天然不适用
+  /// （长工具调用/纯心跳期不得以「时间长」为主判据误伤）。
+  static const Duration _kContentFreshWindow = Duration(seconds: 5);
+
+  /// G5：告警冷却。
+  static const Duration _kViewLivenessCooldown = Duration(seconds: 60);
+
+  /// G5：告警后视图仍不前进 → 升级为全量重连重建的观察期。
+  static const Duration _kViewEscalationDelay = Duration(seconds: 10);
+
+  /// G5：单回合最多触发次数。
+  static const int _kViewLivenessMaxPerTurn = 3;
+
+  /// G4：管线再武装 WARN 节流窗口。
+  static const Duration _kPipelineRearmWarnWindow = Duration(seconds: 5);
+
   /// 回合实时活动（#120 实况通知/灵动岛）：最近一次上报的活动、detail 与标题。
   ///
   /// **标题必须进去重键**（#144）：岛的最大字号位承载会话身份（B 案），若去重只看
@@ -246,6 +326,24 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _stallGuardCooldownUntil = null;
     _deadZoneCooldownUntil = null;
     _awaitingServerContent = false;
+    _maxSeenSeq = 0;
+    _maxSeenSeqStreamId = null;
+    _viewAdvancedSinceConnect = false;
+    _dedupCursorMovedSinceConnect = false;
+    _lastContentFrameAt = null;
+    _lastViewAdvanceAt = null;
+    _lastViewSignature = '';
+    _viewSignatureReady = false;
+    _viewLivenessCooldownUntil = null;
+    _viewLivenessEscalationDeadline = null;
+    _viewLivenessEscalationStreamId = null;
+    _viewLivenessTriggerCount = 0;
+    _gateDroppedStreak = 0;
+    _dedupSwallowStreak = 0;
+    _replayGateDropTotal = 0;
+    _dedupSwallowTotal = 0;
+    _pipelineRearmCount = 0;
+    _pipelineRearmWarnAt = null;
     _cancelRecoverySentinel();
     _cancelResumeProbeRetry();
     _lastContextPollTime = null;
@@ -1597,6 +1695,13 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     _timelineSequence = 0;
     _replayRebuildTimeline = false;
     _prefillSince = null;
+    // 应用层守卫（chat_apply）：新回合即新 run —— 序号游标按 streamId 归零，
+    // 视图活性触发次数与基线也重置（单回合最多触发 _kViewLivenessMaxPerTurn 次）。
+    _noteStreamRunForSeq(streamId);
+    _viewLivenessTriggerCount = 0;
+    _viewLivenessEscalationDeadline = null;
+    _viewLivenessEscalationStreamId = null;
+    _lastViewAdvanceAt = _now();
     // 兜底防线：本轮只清 liveTimelinePoints，不清 live 工具/思考缓冲。若上一轮
     // 收尾走的是漏清路径（或未来新加路径漏清），残留会被本轮时间线继承成
     // 「孤儿堆」整堆挂到末尾（见 `_finishStream` 注释）。正常路径下这里恒为空，
@@ -1690,10 +1795,21 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       api.stopStream(streamId);
       _streamConnected = false;
     }
+    // 应用层守卫（chat_apply）：run 身份切换即重置序号游标与连接级视图活性标记。
+    _noteStreamRunForSeq(streamId);
+    _viewAdvancedSinceConnect = false;
+    _dedupCursorMovedSinceConnect = false;
     final useReplay = replayAfterSeq != null || fullReconnect;
-    final effectiveReplayAfterSeq =
+    final requestedReplayAfterSeq =
         replayAfterSeq ??
         (fullReconnect ? _replayAfterSeq(state.stream.lastEventId) : 0);
+    // G1：陈旧游标防护。lastEventID 可能来自上一回合残留 / 被覆写的本地断点，
+    // 指向本 run 从未见过的序号 —— 服务端只会回放「游标之后」，中间内容永远
+    // 补不回来（静默冻结）。归 0 走全量重放，由 §5.6 内容级去重兜住重复。
+    final effectiveReplayAfterSeq = _sanitizeAfterSeq(
+      requestedReplayAfterSeq,
+      context: 'connectStream',
+    );
     state = state.copyWith(
       // 旧时间线断点保留（见 _replayRebuildTimeline 语义）：重放帧对已展示
       // 内容不再向尾部叠加重复断点，成簇卡片的放大源被切断。
@@ -1706,6 +1822,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         clearLastEventId: true,
       ),
     );
+    // 视图签名基线：本连接起点的「已渲染视图」快照，供 G2/G3 判「从未增长」。
+    _lastViewSignature = _viewSignature();
+    _viewSignatureReady = true;
+    _lastViewAdvanceAt = _now();
     // 重放是否需要逐帧重建时间线：仅「断点为空的恢复场景」（如重启后 resume，
     // 断点丢失但内容已在服务端占位行中）需要；正常 live 重连时断点仍在，
     // 重放帧全命中时若再补点，会把已展示段重复叠加到时间线尾部（卡簇）。
@@ -1716,11 +1836,14 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     unawaited(
       api.startStream(
         streamId,
-        replayAfterSeq: replayAfterSeq,
+        replayAfterSeq: replayAfterSeq == null ? null : effectiveReplayAfterSeq,
         onEvent: _handleSseEvent,
         onEventId: (id) {
           if (_disposed) return;
           _resetReconnectBackoff();
+          // G1：记录本 run 已见最大序号（游标健全性判据）。
+          final seq = _replayAfterSeq(id);
+          if (seq > _maxSeenSeq) _maxSeenSeq = seq;
           state = state.copyWith(
             stream: state.stream.copyWith(lastEventId: id),
           );
@@ -1770,25 +1893,33 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     if (_disposed) return;
     _recordTransportActivity();
     _resetReconnectBackoff();
+    // G5 基线：任何**内容帧**都算「对端在推」，即使随后被序号闸门 / 去重丢弃
+    // ——「在收内容」与「视图前进」是两件事，静默冻结正是后者停摆而前者照旧。
+    // 心跳**不算**：它只是传输保活，若算进来，长工具调用期间（只有心跳）会被
+    // 误判成「在收内容但视图不动」而误伤。
+    final isContentFrame = _isContentFrame(event);
+    if (isContentFrame) {
+      _lastContentFrameAt = _now();
+    }
     final stream = state.stream;
-    if (stream.isReplayConnection && stream.replayAfterSeq > 0) {
+    if (isContentFrame &&
+        stream.isReplayConnection &&
+        stream.replayAfterSeq > 0) {
       final currentSeq = _replayAfterSeq(stream.lastEventId);
       if (currentSeq > 0 && currentSeq <= stream.replayAfterSeq) {
         // 重连回放帧：seq <= replayAfterSeq 说明断线前已处理过，
         // 幂等忽略内容帧（token / interim / reasoning / tool / steer），
         // 避免重复推流和 UI 闪动。心跳与终结事件仍正常分发。
-        switch (event) {
-          case TokenSseEvent() ||
-              InterimAssistantSseEvent() ||
-              ReasoningSseEvent() ||
-              ToolStartedSseEvent() ||
-              ToolCompletedSseEvent() ||
-              PendingSteerLeftoverSseEvent():
-            return;
-          default:
-            break;
-        }
+        _onReplayGateDrop(
+          seq: currentSeq,
+          replayAfterSeq: stream.replayAfterSeq,
+        );
+        return;
       }
+    }
+    if (isContentFrame) {
+      // 内容帧通过闸门 → 闸门丢弃连击中断。
+      _gateDroppedStreak = 0;
     }
     switch (event) {
       case TokenSseEvent(:final text):
@@ -1900,9 +2031,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
             contentful: true,
           );
         }
+        // chat_apply 观测 + G3 计数（游标零前进的吞帧才可能构成「卡住」）。
+        _observeDedupSwallow(
+          kind: 'text',
+          cursor: prevCursor,
+          newCursor: deduped.newCursor,
+          matchedPrefixLength: stream.matchedPrefixLength,
+        );
         return false;
       }
     }
+    // 有帧真正落账 → 去重吞帧连击中断（G3 只关心连续吞帧）。
+    _dedupSwallowStreak = 0;
     // 时间线断点：在「事件到达」时记录（而非 flush 时），保证与真实事件顺序一致；
     // start 取缓冲全量（content + 待合并 + 待揭示），使切片与最终 content 对齐。
     //
@@ -2331,9 +2471,18 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         if (_replayRebuildTimeline) {
           _ensureTimelinePoint(LiveSegmentKind.thinking, prevCursor);
         }
+        // chat_apply 观测 + G3 计数。
+        _observeDedupSwallow(
+          kind: 'reasoning',
+          cursor: prevCursor,
+          newCursor: deduped.newCursor,
+          matchedPrefixLength: stream.matchedReasoningLength,
+        );
         return false;
       }
     }
+    // 有帧真正落账 → 去重吞帧连击中断。
+    _dedupSwallowStreak = 0;
     // 与工具事件一致：reasoning 先到时也立即锚定空流式气泡（思考中指示器兜底）。
     _ensureStreamingAssistantMessage();
     // 时间线断点：事件到达时记录（对齐真实顺序）；start 含待 flush 块长度。
@@ -2514,11 +2663,30 @@ class ChatController extends FamilyNotifier<ChatState, String> {
           isReplayConnection: deduped.stillReplay,
         ),
       );
-      if (append.isEmpty) return false;
+      if (append.isEmpty) {
+        // chat_apply 观测（interim 不计入 G3：G3 只盯 text/reasoning 帧）。
+        _observeDedupSwallow(
+          kind: 'interim',
+          cursor: stream.matchedPrefixLength,
+          newCursor: deduped.newCursor,
+          matchedPrefixLength: stream.matchedPrefixLength,
+          textOrReasoning: false,
+        );
+        return false;
+      }
       // replay 直连：直接拼接不加分隔符。
     } else {
       // 1. 整段包含：已展示内容已包含本快照全量 → 吞掉（语义同 replay 分支兜底）
-      if (currentContent.contains(text)) return false;
+      if (currentContent.contains(text)) {
+        _observeDedupSwallow(
+          kind: 'interim-contains',
+          cursor: stream.matchedPrefixLength,
+          newCursor: stream.matchedPrefixLength,
+          matchedPrefixLength: stream.matchedPrefixLength,
+          textOrReasoning: false,
+        );
+        return false;
+      }
 
       // 2. 快照前缀重叠：currentContent 后缀与 text 前缀最大重叠（overlap >= 2 时只追加残余）
       var overlap = 0;
@@ -2535,7 +2703,16 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       if (overlap >= 2) {
         append = text.substring(overlap);
         // 3. 短片段防误判：残余 append 去空白后为空 → 吞掉
-        if (append.trim().isEmpty) return false;
+        if (append.trim().isEmpty) {
+          _observeDedupSwallow(
+            kind: 'interim-fragment',
+            cursor: stream.matchedPrefixLength,
+            newCursor: stream.matchedPrefixLength,
+            matchedPrefixLength: stream.matchedPrefixLength,
+            textOrReasoning: false,
+          );
+          return false;
+        }
       } else {
         // 4. 未命中任何去重 → 维持现状新段落
         append = currentContent.isEmpty ? text : '\n\n$text';
@@ -2543,6 +2720,7 @@ class ChatController extends FamilyNotifier<ChatState, String> {
     }
     // interim 独立新段落或快照残余拼接：需建 text 断点；start 由
     // _appendToStreamingMessage 内部按缓冲全量取，保证段边界对齐最终 content。
+    _dedupSwallowStreak = 0;
     _appendToStreamingMessage(append, establishPoint: true);
     _markProgress();
     return true;
@@ -4262,7 +4440,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         return;
       }
       if (status.replayAvailable == true) {
-        final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+        final afterSeq = _sanitizeAfterSeq(
+          _replayAfterSeq(state.stream.lastEventId),
+          context: 'reconnectIfNeeded',
+        );
         state = state.copyWith(
           stream: state.stream.copyWith(
             isSuspended: false,
@@ -4316,7 +4497,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         );
       }
     }
-    final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+    final afterSeq = _sanitizeAfterSeq(
+      _replayAfterSeq(state.stream.lastEventId),
+      context: 'loadMessagesAndResume',
+    );
     if (afterSeq > 0) {
       _connectStream(streamId, replayAfterSeq: afterSeq);
     } else {
@@ -4375,7 +4559,10 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       );
       return;
     }
-    final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+    final afterSeq = _sanitizeAfterSeq(
+      _replayAfterSeq(state.stream.lastEventId),
+      context: 'forceReconnect',
+    );
 
     // afterSeq == 0 全量重连限频（T2 冷却保护，防重连风暴放大器）
     if (afterSeq == 0) {
@@ -4446,7 +4633,332 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       _pollContextWindowIfNeeded();
       unawaited(_runStallGuardIfNeeded());
       _recoverOrphanedStreamingPhaseIfNeeded();
+      // 应用层活性守卫族（chat_apply）：G4 管线再武装 → G5 视图活性看门狗。
+      // 二者都不依赖传输活动（那正是「收帧但永不落账」能被既有看门狗漏掉的原因）。
+      _rearmStreamingPipelineIfNeeded();
+      _checkApplyViewLiveness();
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // 应用层活性守卫族（tag: chat_apply）
+  //
+  // 与既有自愈链的分工：既有链看**传输活动 / 相位标志**（transport-stale、
+  // 死区兜底、resume 探活）；本族看**视图是否前进**。真实线上故障里帧一直在到、
+  // 相位仍是 streaming，前者全绿 —— 只有后者能看见「一动不动」。
+  // -------------------------------------------------------------------------
+
+  /// 内容帧判定（token / interim / reasoning / tool / steer）。
+  ///
+  /// **心跳不算**：心跳只是传输保活、不代表有内容；若算进来，长工具调用期间
+  /// （只有心跳）会被判成「在收内容但视图不动」而误伤。
+  static bool _isContentFrame(SseEvent event) => switch (event) {
+    TokenSseEvent() ||
+    InterimAssistantSseEvent() ||
+    ReasoningSseEvent() ||
+    ToolStartedSseEvent() ||
+    ToolCompletedSseEvent() ||
+    PendingSteerLeftoverSseEvent() => true,
+    _ => false,
+  };
+
+  /// G1 接线：run（streamId）切换即视为新 run，最大已见序号归零。
+  void _noteStreamRunForSeq(String streamId) {
+    if (_maxSeenSeqStreamId == streamId) return;
+    _maxSeenSeqStreamId = streamId;
+    _maxSeenSeq = 0;
+  }
+
+  /// G1：序号游标健全性。
+  ///
+  /// afterSeq 是本 run 之外的历史残留（上一回合的 lastEventID / 被覆写的本地断点）
+  /// 时，服务端只会回放「游标之后」——中间那段内容永远补不回来，界面静默冻结。
+  /// 判据：afterSeq > 本 run 已见最大 seq（且本 run 确有 seq）→ 陈旧游标，归 0
+  /// 走全量重放，由 §5.6 内容级去重兜住重复。
+  int _sanitizeAfterSeq(int afterSeq, {required String context}) {
+    if (afterSeq <= 0) return 0;
+    // 只在「同一 run」内比较：跨 run 的 _maxSeenSeq 无意义。
+    if (_maxSeenSeq <= 0 ||
+        _maxSeenSeqStreamId != state.stream.activeStreamId) {
+      return afterSeq;
+    }
+    if (afterSeq <= _maxSeenSeq) return afterSeq;
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'chat_apply',
+      message:
+          'G1 序号游标健全性：afterSeq($afterSeq) 超过本 run 已见最大 seq'
+          '($_maxSeenSeq) → 陈旧游标，归 0 全量重放'
+          '（来源: $context, streamId: ${state.stream.activeStreamId}, '
+          'sessionId: ${state.sessionId}）',
+    );
+    return 0;
+  }
+
+  /// 序号闸门丢弃一帧：节流 DEBUG（第 1 次 + 每 [_kApplyLogEvery] 次）→ G2 自愈。
+  void _onReplayGateDrop({required int seq, required int replayAfterSeq}) {
+    _gateDroppedStreak++;
+    _replayGateDropTotal++;
+    if (_replayGateDropTotal == 1 ||
+        _replayGateDropTotal % _kApplyLogEvery == 0) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'chat_apply',
+        message:
+            'chat_apply 重放序号闸门丢弃内容帧（累计 $_replayGateDropTotal，'
+            '连续 $_gateDroppedStreak）：seq=$seq, '
+            'replayAfterSeq=$replayAfterSeq, '
+            'streamId: ${state.stream.activeStreamId}, '
+            'sessionId: ${state.sessionId}',
+      );
+    }
+    if (replayAfterSeq <= 0) return;
+    // G2：仅 replayAfterSeq > 0（排除合法的 after_seq=0 全量重放）时，连续丢弃
+    // 且**本连接视图签名从未增长** ⇒ 闸门把没落账的内容也当成「已处理过」丢了。
+    if (_gateDroppedStreak >= _kReplayGateSelfHealStreak &&
+        !_viewAdvancedSinceConnect) {
+      _selfHealReplayGate(seq: seq, replayAfterSeq: replayAfterSeq);
+    }
+  }
+
+  /// G2：打开闸门（isReplayConnection=false、replayAfterSeq=0、三个匹配游标归 0）。
+  void _selfHealReplayGate({required int seq, required int replayAfterSeq}) {
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'chat_apply',
+      message:
+          'G2 序号闸门自愈：连续丢弃 $_gateDroppedStreak 个内容帧、本连接视图签名'
+          '从未增长 → 打开闸门（isReplayConnection=false, replayAfterSeq=0, '
+          'matchedPrefixLength/matchedReasoningLength/replayToolMatchIndex 归 0）；'
+          '本次连接累计丢弃 $_replayGateDropTotal 帧'
+          '（seq=$seq, replayAfterSeq=$replayAfterSeq, '
+          'streamId: ${state.stream.activeStreamId}, '
+          'sessionId: ${state.sessionId}）',
+    );
+    _gateDroppedStreak = 0;
+    _dedupSwallowStreak = 0;
+    state = state.copyWith(
+      stream: state.stream.copyWith(
+        isReplayConnection: false,
+        replayAfterSeq: 0,
+        matchedPrefixLength: 0,
+        matchedReasoningLength: 0,
+        replayToolMatchIndex: 0,
+      ),
+    );
+  }
+
+  /// 去重吞帧观测（节流 DEBUG）+ G3 计数。
+  ///
+  /// [textOrReasoning] 为 false 时只观测不计数（G3 只盯 text / reasoning 帧）。
+  void _observeDedupSwallow({
+    required String kind,
+    required int cursor,
+    required int newCursor,
+    required int matchedPrefixLength,
+    bool textOrReasoning = true,
+  }) {
+    _dedupSwallowTotal++;
+    if (_dedupSwallowTotal == 1 || _dedupSwallowTotal % _kApplyLogEvery == 0) {
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.debug,
+        tag: 'chat_apply',
+        message:
+            'chat_apply 去重吞帧（$kind，累计 $_dedupSwallowTotal，'
+            '连续 text/reasoning $_dedupSwallowStreak 帧）：'
+            '游标 $cursor → $newCursor, '
+            'matchedPrefixLength=$matchedPrefixLength, '
+            'matchedReasoningLength=${state.stream.matchedReasoningLength}, '
+            'streamId: ${state.stream.activeStreamId}, '
+            'sessionId: ${state.sessionId}',
+      );
+    }
+    if (!textOrReasoning) return;
+    if (newCursor != cursor) {
+      // 游标有位移 = 去重仍在推进（合法全量重放的常态）→ 不构成「卡住」。
+      _dedupCursorMovedSinceConnect = true;
+    }
+    _dedupSwallowStreak++;
+    if (_dedupSwallowStreak >= _kDedupSwallowSelfHealStreak &&
+        !_viewAdvancedSinceConnect &&
+        !_dedupCursorMovedSinceConnect) {
+      _selfHealDedupCursor();
+    }
+  }
+
+  /// G3：三个匹配游标归 0。
+  void _selfHealDedupCursor() {
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'chat_apply',
+      message:
+          'G3 去重游标自愈：连续吞掉 $_dedupSwallowStreak 个 text/reasoning 帧、'
+          '游标零前进且本连接视图签名从未增长 → 三个匹配游标归 0'
+          '（streamId: ${state.stream.activeStreamId}, '
+          'sessionId: ${state.sessionId}）',
+    );
+    _dedupSwallowStreak = 0;
+    state = state.copyWith(
+      stream: state.stream.copyWith(
+        matchedPrefixLength: 0,
+        matchedReasoningLength: 0,
+        replayToolMatchIndex: 0,
+      ),
+    );
+  }
+
+  /// 视图签名：代表「主人眼睛里的界面」的一组数。
+  ///
+  /// 正文分量取**已渲染**的消息内容长度（不含仍躺在 merge / reveal 缓冲里的
+  /// 待吐文本）—— 否则「缓冲积压但一个词都没吐出来」会被误判成「视图前进」。
+  String _viewSignature() {
+    final contentLength = _streamingViewContentLength();
+    return '$contentLength|'
+        '${state.liveToolCalls.length}|'
+        '${state.completedToolCallGroups.length}|'
+        '${state.liveReasoningText.length}|'
+        '${state.completedReasoningGroups.length}|'
+        '${state.liveTimelinePoints.length}|'
+        '${state.isRevealQueueEmpty ? 1 : 0}';
+  }
+
+  /// streaming 气泡已渲染正文长度（视图签名的正文分量）。
+  int _streamingViewContentLength() {
+    final id = state.stream.streamingAssistantMessageId;
+    if (id == null) return 0;
+    for (final message in state.messages) {
+      if (message.messageId == id) return (message.content ?? '').length;
+    }
+    return 0;
+  }
+
+  /// G4：管线再武装。
+  ///
+  /// 专治「缓冲有积压，但 merge/reveal 定时器都不在了，于是再没有任何人把缓冲
+  /// 写进消息」——定时器被取消（后台/探活/取消路径）后无人重启的静默积压。
+  void _rearmStreamingPipelineIfNeeded() {
+    if (_disposed || _appPaused) return;
+    if (state.phase != ChatPhase.streaming) return;
+    if (state.pendingAssistantTokenChunks.isEmpty && state.isRevealQueueEmpty) {
+      return;
+    }
+    if (_mergeTimer != null || _revealTimer != null) return;
+    final now = _now();
+    final lastWarn = _pipelineRearmWarnAt;
+    if (lastWarn == null ||
+        now.difference(lastWarn) >= _kPipelineRearmWarnWindow) {
+      _pipelineRearmWarnAt = now;
+      _pipelineRearmCount++;
+      DiagnosticsService.instance.log(
+        level: DiagnosticsLogLevel.warn,
+        tag: 'chat_apply',
+        message:
+            'G4 管线再武装：缓冲有积压但 merge/reveal 定时器均已停摆 → '
+            '重新调度 _scheduleMerge + _startRevealTimerIfNeeded'
+            '（第 $_pipelineRearmCount 次, pendingChunks: '
+            '${state.pendingAssistantTokenChunks.length}, '
+            'isRevealQueueEmpty: ${state.isRevealQueueEmpty}, '
+            'streamId: ${state.stream.activeStreamId}, '
+            'sessionId: ${state.sessionId}）',
+      );
+    }
+    _scheduleMerge();
+    _startRevealTimerIfNeeded();
+  }
+
+  /// G5：视图活性看门狗（挂在既有 1s 看门狗 tick 上）。
+  ///
+  /// 触发（全满足）：!_appPaused && phase==streaming && activeStreamId != null
+  /// && 最近 [_kContentFreshWindow] 内**有内容帧到达**（在收）/ 视图签名已静止
+  /// 超过 [_kViewLivenessWindow]（不动）/ 冷却已过 / 本回合未超触发上限。
+  /// 动作：WARN（含签名数值）→ 先 G4 再武装；若再过 [_kViewEscalationDelay]
+  /// 签名仍未前进 → `_connectStream(fullReconnect: true)` 重放重建。
+  void _checkApplyViewLiveness() {
+    if (_disposed || _appPaused) return;
+    final now = _now();
+    final signature = _viewSignature();
+    if (!_viewSignatureReady) {
+      _viewSignatureReady = true;
+      _lastViewSignature = signature;
+      _lastViewAdvanceAt ??= now;
+      return;
+    }
+    if (signature != _lastViewSignature) {
+      _lastViewSignature = signature;
+      _lastViewAdvanceAt = now;
+      _viewAdvancedSinceConnect = true;
+      // 视图动了 → 冻结解除，撤掉升级观察。
+      _viewLivenessEscalationDeadline = null;
+      _viewLivenessEscalationStreamId = null;
+      return;
+    }
+    final deadline = _viewLivenessEscalationDeadline;
+    if (deadline != null) {
+      if (_viewLivenessEscalationStreamId != state.stream.activeStreamId) {
+        _viewLivenessEscalationDeadline = null;
+        _viewLivenessEscalationStreamId = null;
+      } else if (!now.isBefore(deadline)) {
+        _viewLivenessEscalationDeadline = null;
+        _viewLivenessEscalationStreamId = null;
+        final streamId = state.stream.activeStreamId;
+        if (streamId != null) {
+          DiagnosticsService.instance.log(
+            level: DiagnosticsLogLevel.warn,
+            tag: 'chat_apply',
+            message:
+                'G5 视图活性看门狗升级：告警后 '
+                '${_kViewEscalationDelay.inSeconds}s 视图签名仍未前进 → '
+                '全量重连重放重建（streamId: $streamId, 签名: $signature, '
+                'sessionId: ${state.sessionId}）',
+          );
+          _connectStream(streamId, fullReconnect: true);
+        }
+        return;
+      } else {
+        return; // 升级观察期内，等结果
+      }
+    }
+    if (state.phase != ChatPhase.streaming) return;
+    final streamId = state.stream.activeStreamId;
+    if (streamId == null) return;
+    final contentAt = _lastContentFrameAt;
+    if (contentAt == null ||
+        now.difference(contentAt) >= _kContentFreshWindow) {
+      // 没有内容帧在到（长工具调用 / 只有心跳）→ 守卫天然不适用，不误伤。
+      return;
+    }
+    final advanceAt = _lastViewAdvanceAt;
+    if (advanceAt == null ||
+        now.difference(advanceAt) <= _kViewLivenessWindow) {
+      return;
+    }
+    if (_viewLivenessTriggerCount >= _kViewLivenessMaxPerTurn) return;
+    final cooldown = _viewLivenessCooldownUntil;
+    if (cooldown != null && now.isBefore(cooldown)) return;
+    _viewLivenessTriggerCount++;
+    _viewLivenessCooldownUntil = now.add(_kViewLivenessCooldown);
+    // 立即推进基线，避免同一段冻结在下一个 tick 反复告警。
+    _lastViewAdvanceAt = now;
+    _viewLivenessEscalationDeadline = now.add(_kViewEscalationDelay);
+    _viewLivenessEscalationStreamId = streamId;
+    DiagnosticsService.instance.log(
+      level: DiagnosticsLogLevel.warn,
+      tag: 'chat_apply',
+      message:
+          'G5 视图活性看门狗：视图签名 ${now.difference(advanceAt).inSeconds}s '
+          '未前进，但内容帧仍在到（最后内容帧 '
+          '${now.difference(contentAt).inMilliseconds}ms 前）→ 先再武装管线'
+          '（正文 ${_streamingViewContentLength()} 字, '
+          'liveToolCalls: ${state.liveToolCalls.length}, '
+          'completedToolCallGroups: ${state.completedToolCallGroups.length}, '
+          'liveReasoningText: ${state.liveReasoningText.length}, '
+          'completedReasoningGroups: ${state.completedReasoningGroups.length}, '
+          'liveTimelinePoints: ${state.liveTimelinePoints.length}, '
+          'isRevealQueueEmpty: ${state.isRevealQueueEmpty}；'
+          '触发 $_viewLivenessTriggerCount/$_kViewLivenessMaxPerTurn, '
+          'streamId: $streamId, sessionId: ${state.sessionId}）',
+    );
+    _rearmStreamingPipelineIfNeeded();
   }
 
   /// 记录一次用户动作（#127 静默兜底的激活窗口起点）。
@@ -4730,16 +5242,26 @@ class ChatController extends FamilyNotifier<ChatState, String> {
       if (status.active == true) {
         await _loadMessagesAndResume(streamId);
       } else if (status.replayAvailable == true) {
-        final afterSeq = _replayAfterSeq(state.stream.lastEventId);
+        final rawAfterSeq = _replayAfterSeq(state.stream.lastEventId);
+        final afterSeq = _sanitizeAfterSeq(
+          rawAfterSeq,
+          context: 'checkStatusAndReconnect',
+        );
         state = state.copyWith(
           stream: state.stream.copyWith(
             recovery: ActiveStreamRecoveryState.reconnecting,
           ),
         );
-        _connectStream(
-          streamId,
-          replayAfterSeq: afterSeq == 0 ? null : afterSeq,
-        );
+        if (afterSeq > 0) {
+          _connectStream(streamId, replayAfterSeq: afterSeq);
+        } else if (rawAfterSeq > 0) {
+          // G1 触发（陈旧游标归 0）：必须走**全量重放**语义（isReplayConnection
+          // = true + 内容级去重），而不是「无游标的 live 续接」——后者会漏掉
+          // 「游标之后、当前之前」的内容，正是静默冻结的成因。
+          _connectStream(streamId, fullReconnect: true);
+        } else {
+          _connectStream(streamId, replayAfterSeq: null);
+        }
         state = state.copyWith(
           stream: state.stream.copyWith(
             recovery: ActiveStreamRecoveryState.idle,
@@ -5508,7 +6030,20 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         stillReplay: true,
       );
     }
-    if (existingContent.endsWith(token) || existingContent.startsWith(token)) {
+    // 完全重复（**收窄**，补充不变量「吞帧只能吞掉：已展示内容中、游标之后确实
+    // 存在的文本」）：匹配必须**整体落在游标之后**（tailIndex >= cursor）才可吞。
+    //
+    // 旧实现用整段 existingContent 的 `endsWith(token) || startsWith(token)`，
+    // 完全不看游标：
+    //   - `startsWith(token)` 的匹配点永远是下标 0，游标一旦前进（>0）该匹配就
+    //     落在游标**之前** —— 只有「与已展示内容首字同字」的中文单字 token
+    //     （如新到达的「图」而正文以「图」开头）会命中；而游标 == 0 时它与上面的
+    //     `expectedRemainder.startsWith(token)`（第一分支）完全等价，属于死码。
+    //   - `endsWith(token)` 的匹配可以**跨过游标边界**：token 只有一部分在游标
+    //     之后（tailIndex < cursor）时也会被整段吞掉，新文本永久丢失。
+    // 二者都是「静默吞帧 + 游标不前进」的成因，界面因此永不落账。
+    final tailIndex = existingContent.length - token.length;
+    if (tailIndex >= cursor && existingContent.endsWith(token)) {
       // 完全重复。
       return (remainder: '', newCursor: 0, stillReplay: true);
     }
@@ -5701,6 +6236,22 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
   @visibleForTesting
   void setStateForTesting(ChatState newState) => state = newState;
+
+  /// chat_apply 守卫观测点：本 run 已见最大序号（G1 判据）。
+  @visibleForTesting
+  int get maxSeenSeqForTesting => _maxSeenSeq;
+
+  /// chat_apply 守卫观测点：当前视图签名（G5 判据）。
+  @visibleForTesting
+  String get viewSignatureForTesting => _viewSignature();
+
+  /// chat_apply 守卫观测点：连续被序号闸门丢弃的内容帧数（G2 判据）。
+  @visibleForTesting
+  int get gateDroppedStreakForTesting => _gateDroppedStreak;
+
+  /// chat_apply 守卫观测点：连续被去重吞掉的内容帧数（G3 判据）。
+  @visibleForTesting
+  int get dedupSwallowStreakForTesting => _dedupSwallowStreak;
 
   @visibleForTesting
   void recoverOrphanedStreamingPhaseForTesting({
