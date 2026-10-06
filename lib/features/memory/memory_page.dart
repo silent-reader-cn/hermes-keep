@@ -195,10 +195,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     if (isWide) {
       return [
         // hasScrollBody: false —— 撑满视口剩余高度，否则 Row 按内容高度、rail 分栏线到不了底。
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: _buildWideBody(context, response, activeTab, hasProject),
-        ),
+        _buildWideHostSliver(_buildWideBody(context, response, activeTab, hasProject)),
       ];
     }
 
@@ -288,7 +285,28 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     ];
   }
 
-  /// 宽屏主体：左 220 分区导航（四个分区竖排）+ 右正文（维持既有 720 限宽居中）。
+  /// 宽屏主体：左 220 分区导航（四个分区竖排）+ 右正文（维持既有 720 限宽居中）。
+  /// 双栏宿主：把「剩余视口高度」算准后交给两栏（两栏各自内部滚动）。
+  ///
+  /// 刻意**不用** `SliverFillRemaining`：`hasScrollBody: false` 会向子级要
+  /// intrinsic 高度 —— 子级里含 viewport 时直接抛
+  /// `RenderViewport does not support returning intrinsic dimensions`。
+  /// 显式按 `remainingPaintExtent` 定高，既拿到确定剩余高度，又让外层
+  /// `maxScrollExtent` 恰好为 0（下拉刷新靠 overscroll 仍可用）。
+  /// 与 Git / 技能 / 任务 / 工作区四页同一套写法。
+  Widget _buildWideHostSliver(Widget child) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        return SliverToBoxAdapter(
+          child: SizedBox(
+            height: constraints.remainingPaintExtent,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildWideBody(
     BuildContext context,
     MemoryResponse response,
