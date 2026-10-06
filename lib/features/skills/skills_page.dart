@@ -102,7 +102,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
           ],
           // 宽屏（≥900）：左 320 技能列表常驻 + 右详情（正文限宽 744 居中）。
           if (isWideSplit)
-            SliverToBoxAdapter(child: _buildWideSplitBody(groups)),
+            _buildWideHostSliver(_buildWideSplitBody(groups)),
         ],
       ),
     );
@@ -120,10 +120,31 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
   // 窄屏保持手风琴原地展开（上面那条分支），宽窄两套互不影响。
   // -------------------------------------------------------------------------
 
-  /// 宽屏主体：左栏（固定 320，含搜索框）+ 右栏详情（阅读型限宽 744 居中）。
+  /// 宽屏主体：左栏（固定 320，含搜索框）+ 右栏详情（阅读型限宽 744 居中）。
+  /// 双栏宿主：把「剩余视口高度」算准后交给两栏（两栏各自内部滚动）。
+  ///
+  /// 刻意**不用** `SliverFillRemaining`：`hasScrollBody: false` 会向子级要
+  /// intrinsic 高度 —— 子级里含 viewport 时直接抛
+  /// `RenderViewport does not support returning intrinsic dimensions`。
+  /// 显式按 `remainingPaintExtent` 定高，既拿到确定剩余高度，又让外层
+  /// `maxScrollExtent` 恰好为 0（下拉刷新靠 overscroll 仍可用）。
+  /// 见 Git / 工作区两页的同名实现。
+  Widget _buildWideHostSliver(Widget child) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        return SliverToBoxAdapter(
+          child: SizedBox(
+            height: constraints.remainingPaintExtent,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildWideSplitBody(List<SkillGroup> groups) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildSkillRail(groups),
         Expanded(child: _buildSkillDetailPane(_resolveSelectedSkill(groups))),

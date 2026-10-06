@@ -804,7 +804,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                 isCompactSidebar ? 8.0 : 20.0,
                 0.0,
                 isCompactSidebar ? 8.0 : 20.0,
-                isCompactSidebar ? 6.0 : 10.0,
+                // 主人 2026-10-06：组末最后一个会话项下方留白偏大 => 6 -> 2。
+                isCompactSidebar ? 2.0 : 10.0,
               ),
               // #151：项与项之间不要分隔线（主人要求），改 builder 形态。
               sliver: isCompactSidebar
@@ -994,7 +995,8 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(20.0, 14.0, 20.0, 6.0),
+          // 主人 2026-10-06：组间空隙偏大 => 上 14 -> 10，下 6 -> 5（组内节奏不变）。
+          padding: const EdgeInsetsDirectional.fromSTEB(20.0, 10.0, 20.0, 5.0),
           // #155：内容行高度锁定 20px（与「无 + 时」一致），配合上面的占位方案
           // 双保险 —— 组头高度在任何悬停状态下都不变。
           child: SizedBox(

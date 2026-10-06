@@ -151,7 +151,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
           if (!isWideSplit) ..._buildContentSlivers(async, state),
           // 宽屏（≥900）：左 360 列表 + 右「任务输出」常驻。
           if (isWideSplit)
-            SliverToBoxAdapter(child: _buildWideSplitBody(state)),
+            _buildWideHostSliver(_buildWideSplitBody(state)),
         ],
       ),
     );
@@ -298,12 +298,33 @@ class _TasksPageState extends ConsumerState<TasksPage> {
     });
   }
 
-  /// 宽屏主体：左栏（固定 360）+ 右栏「任务输出」常驻面板。
+  /// 宽屏主体：左栏（固定 360）+ 右栏「任务输出」常驻面板。
+  /// 双栏宿主：把「剩余视口高度」算准后交给两栏（两栏各自内部滚动）。
+  ///
+  /// 刻意**不用** `SliverFillRemaining`：`hasScrollBody: false` 会向子级要
+  /// intrinsic 高度 —— 子级里含 viewport 时直接抛
+  /// `RenderViewport does not support returning intrinsic dimensions`。
+  /// 显式按 `remainingPaintExtent` 定高，既拿到确定剩余高度，又让外层
+  /// `maxScrollExtent` 恰好为 0（下拉刷新靠 overscroll 仍可用）。
+  /// 见 Git / 工作区两页的同名实现。
+  Widget _buildWideHostSliver(Widget child) {
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        return SliverToBoxAdapter(
+          child: SizedBox(
+            height: constraints.remainingPaintExtent,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildWideSplitBody(TasksState state) {
     final selected = _resolveSelectedJob(state.jobs);
     _ensureWideOutput(selected);
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildJobRail(state, selected),
         Expanded(child: _buildOutputPane(selected)),
