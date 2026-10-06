@@ -84,7 +84,7 @@ abstract final class SettingsSurfaces {
                     children: [
                       for (var i = 0; i < rows.length; i++) ...[
                         if (i > 0)
-                          const SizedBox(
+                          SizedBox(
                             height: 0.5,
                             width: double.infinity,
                             child: ColoredBox(color: LightSurfaces.divider),

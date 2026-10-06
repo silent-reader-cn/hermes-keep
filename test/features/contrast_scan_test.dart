@@ -87,8 +87,11 @@ import '../helpers/in_memory_secure_storage.dart';
 /// 修复完成后基线条目自然失效（报告不再出现），届时可清空允许名单。
 /// ---------------------------------------------------------------------------
 
-/// 浅色主题背景（systemGroupedBackground #F2F2F7）。
-const Color kLightBackground = Color(0xFFF2F2F7);
+/// 浅色主题背景（页底色令牌 LightSurfaces.page 的默认档）。
+///
+/// 2026-10-06 起页底色用户可调，默认由 iOS 分组灰 #F2F2F7 改为「中性同深」
+/// #F2F2F2（主人拍板）；扫描基准随之更新。
+const Color kLightBackground = Color(0xFFF2F2F2);
 
 /// 深色主题背景（scaffoldBackgroundColor #000000）。
 const Color kDarkBackground = Color(0xFF000000);

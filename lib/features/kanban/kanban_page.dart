@@ -340,7 +340,7 @@ class _KanbanPageState extends ConsumerState<KanbanPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         itemCount: columns.length,
         separatorBuilder: (context, _) => _usesLightSurfaces(context)
-            ? const SizedBox(
+            ? SizedBox(
                 width: 12,
                 child: Center(
                   child: SizedBox(
@@ -919,7 +919,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
       backgroundColor: LightSurfaces.resolve(
         context,
         LightSurfaces.page,
-        dark: CupertinoColors.systemGroupedBackground,
+        dark: LightSurfaces.darkPage,
       ),
       decoration: _kanbanSectionDecoration(context),
       separatorColor: _usesLightSurfaces(context)
@@ -971,7 +971,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
       backgroundColor: LightSurfaces.resolve(
         context,
         LightSurfaces.page,
-        dark: CupertinoColors.systemGroupedBackground,
+        dark: LightSurfaces.darkPage,
       ),
       decoration: _kanbanSectionDecoration(context),
       separatorColor: _usesLightSurfaces(context)
@@ -1052,7 +1052,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
       backgroundColor: LightSurfaces.resolve(
         context,
         LightSurfaces.page,
-        dark: CupertinoColors.systemGroupedBackground,
+        dark: LightSurfaces.darkPage,
       ),
       decoration: _kanbanSectionDecoration(context),
       separatorColor: _usesLightSurfaces(context)
@@ -1078,7 +1078,7 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
       backgroundColor: LightSurfaces.resolve(
         context,
         LightSurfaces.page,
-        dark: CupertinoColors.systemGroupedBackground,
+        dark: LightSurfaces.darkPage,
       ),
       decoration: _kanbanSectionDecoration(context),
       separatorColor: _usesLightSurfaces(context)
@@ -1522,14 +1522,14 @@ Widget _withKanbanLightTheme(BuildContext context, Widget child) {
 
 Border? _kanbanNavigationBorder(BuildContext context) =>
     _usesLightSurfaces(context)
-    ? const Border(bottom: BorderSide(color: LightSurfaces.divider, width: 0))
+    ? Border(bottom: BorderSide(color: LightSurfaces.divider, width: 0))
     : const CupertinoNavigationBar().border;
 
 BoxDecoration? _kanbanSectionDecoration(BuildContext context) =>
     _usesLightSurfaces(context)
-    ? const BoxDecoration(
+    ? BoxDecoration(
         color: LightSurfaces.card,
-        borderRadius: BorderRadius.all(Radius.circular(10)),
+        borderRadius: const BorderRadius.all(Radius.circular(10)),
         // Decorative outline, consistent with the session list cards.
         border: Border.fromBorderSide(
           BorderSide(color: LightSurfaces.cardBorder, width: 0.5),

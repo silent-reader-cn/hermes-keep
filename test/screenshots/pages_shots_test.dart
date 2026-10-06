@@ -1668,6 +1668,27 @@ void main() {
     );
   });
 
+  // 设置 · 页面底色选择器（主人 2026-10-06）：出「外观组新行 + 选择器弹层」两图。
+  // 选择器内是草稿态（点「应用」才全局生效），故这里只截打开态。
+  shotPair('设置 · 页面底色选择器', (tester, brightness) async {
+    final settingsApi = FakeSettingsApi();
+    await capturePage(
+      tester,
+      name: 'settings-page-surface-picker',
+      location: '/settings',
+      brightness: brightness,
+      interact: (t) async {
+        await t.tap(find.byKey(const ValueKey('settings-page-surface')));
+        await t.pumpAndSettle();
+      },
+      overrides: [
+        settingsApiFactoryProvider.overrideWithValue((_) => settingsApi),
+        appVersionProvider.overrideWith((ref) async => '0.1.51+57'),
+        updateCheckerServiceProvider.overrideWithValue(_DemoUpdateChecker()),
+      ],
+    );
+  });
+
   // 设置 · 服务器分组 —— 字号语义审计的目检入口（表单标签 / 按钮 / 内置服务提示）
   shotPair('设置 · 服务器', (tester, brightness) async {
     final settingsApi = FakeSettingsApi();

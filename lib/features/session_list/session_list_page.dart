@@ -873,7 +873,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
                           side:
                               CupertinoTheme.brightnessOf(context) ==
                                   Brightness.light
-                              ? const BorderSide(
+                              ? BorderSide(
                                   color: LightSurfaces.cardBorder,
                                   width: 0.5,
                                   strokeAlign: BorderSide.strokeAlignOutside,
@@ -2487,7 +2487,7 @@ class _SessionFilterSheet extends ConsumerWidget {
     final sheetBg = LightSurfaces.resolve(
       context,
       LightSurfaces.page,
-      dark: CupertinoColors.systemGroupedBackground,
+      dark: LightSurfaces.darkPage,
     );
     final screenHeight = MediaQuery.sizeOf(context).height;
     // 顶部圆角对齐系统 sheet（16pt），内容随圆角裁切干净；

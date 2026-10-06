@@ -14,7 +14,7 @@ import '../../helpers/contrast_utils.dart';
 ///
 /// 背景取自实际承载面：浅色页底 #F2F2F7 / 白卡 #FFFFFF，
 /// 深色纯黑 #000000 / elevation 暗卡 #1C1C1E。
-const _lightSurfaces = [LightSurfaces.page, LightSurfaces.card];
+final _lightSurfaces = [LightSurfaces.page, LightSurfaces.card];
 const _darkSurfaces = [Color(0xFF000000), Color(0xFF1C1C1E)];
 
 const _indicatorTokens = <String, CupertinoDynamicColor>{

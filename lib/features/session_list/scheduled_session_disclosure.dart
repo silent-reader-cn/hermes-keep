@@ -142,7 +142,7 @@ class _ScheduledSessionDisclosureState
         backgroundColor: LightSurfaces.resolve(
           context,
           LightSurfaces.page,
-          dark: CupertinoColors.systemGroupedBackground,
+          dark: LightSurfaces.darkPage,
         ),
         separatorColor: isLight ? LightSurfaces.divider : null,
         decoration: isLight

@@ -110,7 +110,7 @@ class InsightsPage extends ConsumerWidget {
     final sectionBackground = LightSurfaces.resolve(
       context,
       LightSurfaces.page,
-      dark: CupertinoColors.systemGroupedBackground,
+      dark: LightSurfaces.darkPage,
     );
     final sectionSeparator = LightSurfaces.resolve(
       context,

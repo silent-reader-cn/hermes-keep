@@ -289,7 +289,7 @@ void main() {
                     height: 56.0,
                     alignment: Alignment.centerLeft,
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: LightSurfaces.card,
                       border: Border(
                         bottom: BorderSide(

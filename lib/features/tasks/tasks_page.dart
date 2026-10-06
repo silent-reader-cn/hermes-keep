@@ -208,7 +208,7 @@ class _TasksPageState extends ConsumerState<TasksPage> {
         child: CupertinoListSection.insetGrouped(
           backgroundColor: isLight
               ? LightSurfaces.page
-              : CupertinoColors.systemGroupedBackground,
+              : LightSurfaces.darkPage,
           separatorColor: isLight ? LightSurfaces.divider : null,
           decoration: isLight
               ? BoxDecoration(
@@ -1362,7 +1362,7 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
         border: isLight
-            ? const Border(
+            ? Border(
                 bottom: BorderSide(color: LightSurfaces.divider, width: 0.0),
               )
             : const CupertinoNavigationBar().border,

@@ -418,7 +418,7 @@ void main() {
         expect(navBar.backgroundColor, LightSurfaces.page);
         expect(
           navBar.border,
-          const Border(
+          Border(
             bottom: BorderSide(color: LightSurfaces.divider, width: 0.0),
           ),
         );

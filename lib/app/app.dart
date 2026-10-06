@@ -15,6 +15,7 @@ import '../l10n/app_localizations.dart';
 import 'locale/locale_provider.dart';
 import 'router.dart';
 import 'theme/cupertino_theme.dart';
+import 'theme/page_surface.dart';
 import 'theme/theme_provider.dart';
 import 'theme/ui_scale_provider.dart';
 import 'widgets/focus_gated_ticker_mode.dart';
@@ -40,6 +41,11 @@ class HermesApp extends ConsumerWidget {
         .forceHighContrast;
     // HiDPI 界面缩放档位（默认 100% = 逐像素现状）。
     final uiScale = ref.watch(uiScaleProvider);
+    // 页面底色（主人 2026-10-06）：值本身由 [PageSurfaceController] 写进
+    // [LightSurfaces] 的全局令牌，这里只需 watch 到变化、并用 key 让整棵树
+    // 重建 —— 全 App 250 处令牌引用因此不必逐个改成 context-aware。
+    // 默认档（中性同深）在改造前不可达，故此处重建频率等同于用户主动改色。
+    final pageSurface = ref.watch(pageSurfaceProvider);
     final brightness = switch (themeMode) {
       AppThemeMode.light => Brightness.light,
       AppThemeMode.dark => Brightness.dark,
@@ -54,6 +60,9 @@ class HermesApp extends ConsumerWidget {
       child: WindowFocusObserver(
         child: NotificationLifecycleObserver(
           child: CupertinoApp.router(
+          // 底色变化即换 key ⇒ 整棵子树重建，新令牌值立刻生效。
+          // routerConfig 是同一个 GoRouter 实例，路由位置不受影响。
+          key: ValueKey<PageSurfaceState>(pageSurface),
           title: 'Hermes',
           theme: buildCupertinoTheme(brightness),
           routerConfig: router,

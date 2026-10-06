@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 /// Hermes 默认全局字体族名（MiSans）。
@@ -11,9 +12,8 @@ const String kAppFontFamily = 'MiSans';
 /// 全局文字绑定 [kAppFontFamily]（MiSans），提供清晰美观的中文与英文/数字排版体验。
 CupertinoThemeData buildCupertinoTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
-  final scaffold = isDark
-      ? const Color(0xFF000000)
-      : CupertinoColors.systemGroupedBackground;
+  // 浅色跟随用户可调的页底色令牌（LightSurfaces.page）；深色保持纯黑最底层。
+  final scaffold = isDark ? const Color(0xFF000000) : LightSurfaces.page;
   return CupertinoThemeData(
     brightness: brightness,
     primaryColor: const Color(0xFF007AFF),

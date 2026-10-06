@@ -347,7 +347,7 @@ class _SkillsPageState extends ConsumerState<SkillsPage> {
             backgroundColor: LightSurfaces.resolve(
               context,
               LightSurfaces.page,
-              dark: CupertinoColors.systemGroupedBackground,
+              dark: LightSurfaces.darkPage,
             ),
             separatorColor: isLight ? LightSurfaces.divider : null,
             decoration: isLight

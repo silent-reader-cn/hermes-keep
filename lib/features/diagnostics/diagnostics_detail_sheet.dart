@@ -283,7 +283,7 @@ class DiagnosticsDetailSheet extends StatelessWidget {
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
         border: isLight
-            ? const Border(
+            ? Border(
                 bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
               )
             : const Border(

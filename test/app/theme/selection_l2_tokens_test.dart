@@ -48,7 +48,7 @@ void main() {
     });
   });
 
-  group('L2 三态合成口径（真实底色：白卡 + #F2F2F7 侧栏底）', () {
+  group('L2 三态合成口径（真实底色：白卡 + 页底色 LightSurfaces.page）', () {
     test('hover 比选中淡一档（两个实际底都成立），且合成面零色相', () {
       for (final base in [LightSurfaces.card, LightSurfaces.page]) {
         final hover = compositeOver(LightSurfaces.hoverSurface, base);
@@ -75,14 +75,17 @@ void main() {
       }
     });
 
-    test('合成值符合文档口径（白卡 ≈ #E9E9EB / 页面 ≈ #DEDEE4，容差 1/255）', () {
+    test('合成值符合文档口径（白卡 ≈ #E9E9EB / 页面 ≈ #DEDEE0，容差 1/255）', () {
       _expectRgbClose(
         compositeOver(LightSurfaces.selectedSurface, LightSurfaces.card),
         0xE9E9EB,
       );
+      // 页底色自 2026-10-06 起用户可调，默认档由 #F2F2F7 改为 #F2F2F2
+      // （主人拍板「中性同深」）⇒ 选中底叠在页面上的合成值随之由
+      // #DEDEE4 变为 #DEDEE0。白卡侧不变。
       _expectRgbClose(
         compositeOver(LightSurfaces.selectedSurface, LightSurfaces.page),
-        0xDEDEE4,
+        0xDEDEE0,
       );
       _expectRgbClose(
         compositeOver(LightSurfaces.hoverSurface, LightSurfaces.card),

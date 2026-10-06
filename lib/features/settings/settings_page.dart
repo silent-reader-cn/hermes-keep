@@ -26,7 +26,9 @@ import '../../core/update/update_checker_service.dart';
 import '../../core/update/update_providers.dart';
 import '../../core/utils/accessibility.dart';
 import '../../core/utils/uuid.dart';
+import '../../app/theme/page_surface.dart';
 import '../../l10n/app_localizations.dart';
+import 'widgets/page_surface_picker.dart';
 import '../chat/chat_providers.dart';
 import '../chat/chat_session_channel.dart';
 import '../diagnostics/diagnostics_models.dart';
@@ -299,6 +301,9 @@ class _AppearanceSection extends ConsumerWidget {
     final mode = ref.watch(themeModeProvider);
     final localeMode = ref.watch(localeModeProvider);
     final uiScale = ref.watch(uiScaleProvider);
+    // 页面底色（主人 2026-10-06）：此处只读展示当前档，改值走选择器。
+    final surface = ref.watch(pageSurfaceProvider);
+    final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
 
     // #159：显式值（null = 自动）。
 
@@ -366,6 +371,51 @@ class _AppearanceSection extends ConsumerWidget {
                 ),
               ),
             ),
+          ),
+          // 页面底色（主人 2026-10-06）：预设六档 + 自定义，默认「中性同深」。
+          // trailing 展示当前档的色块与档名；点击开选择器（宽屏居中卡片 /
+          // 窄屏贴底 sheet），选择器内为草稿态、点「应用」才全局生效。
+          CupertinoListTile(
+            key: const ValueKey('settings-page-surface'),
+            title: Text(l10n.settingsPageSurface),
+            subtitle: Text(l10n.settingsPageSurfaceDesc),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    // 色块与档名都反映**当前模式**下生效的那一档：浅色取
+                    // LightSurfaces.page，深色取 darkPage（未覆盖时解析为原生
+                    // 分组背景）。浅色令牌直接画在深色主题里会成「亮块混入
+                    // 暗主题」（对比度扫描的硬性红线）。
+                    color: isLight
+                        ? LightSurfaces.page
+                        : CupertinoDynamicColor.resolve(
+                            LightSurfaces.darkPage,
+                            context,
+                          ),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: isLight
+                          ? LightSurfaces.cardBorder
+                          : CupertinoColors.separator.resolveFrom(context),
+                      width: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isLight
+                      ? lightPresetLabel(l10n, surface.lightPreset)
+                      : darkPresetLabel(l10n, surface.darkPreset),
+                ),
+                const SizedBox(width: 4),
+                const Icon(CupertinoIcons.right_chevron, size: 13),
+              ],
+            ),
+            onTap: () => unawaited(showPageSurfacePicker(context)),
           ),
           CupertinoListTile(
             title: Text(l10n.languageSectionTitle),

@@ -458,7 +458,7 @@ void main() {
       expect(
         nav.border,
         light
-            ? const Border(
+            ? Border(
                 bottom: BorderSide(color: LightSurfaces.divider, width: 0),
               )
             : const CupertinoNavigationBar().border,

@@ -231,8 +231,11 @@ void main() {
       }
 
       // ── 级别色逐项核对（选中态才显级别色：默认筛选 = 全集选中）──
-      const tints = {
-        'V': 0xFFF2F2F7,
+      // V（verbose）等级色块底沿用页底色令牌本身；该令牌自 2026-10-06 起
+      // 用户可调（默认由 #F2F2F7 改为「中性同深」#F2F2F2），故取令牌当前值
+      // 而不是写死旧底 —— 否则改默认档就会误报。
+      final tints = {
+        'V': LightSurfaces.page.toARGB32(),
         'D': 0xFFF3F2FF,
         'I': 0xFFE0ECFF,
         'W': 0xFFFFF4E8,

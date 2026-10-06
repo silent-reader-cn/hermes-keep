@@ -377,7 +377,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             : null,
         navigationBar: CupertinoNavigationBar(
           border: CupertinoTheme.brightnessOf(context) == Brightness.light
-              ? const Border(
+              ? Border(
                   bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
                 )
               : const CupertinoNavigationBar().border,
@@ -413,7 +413,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           : null,
       navigationBar: CupertinoNavigationBar(
         border: CupertinoTheme.brightnessOf(context) == Brightness.light
-            ? const Border(
+            ? Border(
                 bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
               )
             : const CupertinoNavigationBar().border,

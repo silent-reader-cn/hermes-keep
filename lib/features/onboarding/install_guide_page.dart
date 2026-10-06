@@ -348,7 +348,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           : null,
       navigationBar: CupertinoNavigationBar(
         border: CupertinoTheme.brightnessOf(context) == Brightness.light
-            ? const Border(
+            ? Border(
                 bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
               )
             : const CupertinoNavigationBar().border,

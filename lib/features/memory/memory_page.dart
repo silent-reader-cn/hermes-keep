@@ -368,7 +368,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     final sectionBg = LightSurfaces.resolve(
       context,
       LightSurfaces.page,
-      dark: CupertinoColors.systemGroupedBackground,
+      dark: LightSurfaces.darkPage,
     );
     final sectionDecoration = isLight
         ? BoxDecoration(

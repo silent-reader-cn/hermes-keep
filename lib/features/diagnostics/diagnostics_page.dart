@@ -264,7 +264,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
         border: isLight
-            ? const Border(
+            ? Border(
                 bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
               )
             : const Border(
@@ -638,7 +638,7 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
       backgroundColor: LightSurfaces.resolve(
         context,
         LightSurfaces.page,
-        dark: CupertinoColors.systemGroupedBackground,
+        dark: LightSurfaces.darkPage,
       ),
       separatorColor: isLight ? LightSurfaces.divider : null,
       decoration: isLight

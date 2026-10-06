@@ -1680,6 +1680,48 @@ class AppLocalizations {
   String get settingsUiScaleDesc =>
       isEnglish ? 'Scales the whole interface; higher values may switch to single-column' : '整体缩放界面；档位越高越可能转为单栏';
 
+  // ---------------------------------------------------------------------------
+  // 页面底色（主人 2026-10-06）：预设六档 + 自定义，默认「中性同深」。
+  // 深浅两态各自独立；深色「跟随系统」= 不覆盖，沿用 Cupertino 原生分组背景。
+  // ---------------------------------------------------------------------------
+  String get settingsPageSurface =>
+      isEnglish ? 'Page Background' : '页面底色';
+  String get settingsPageSurfaceDesc => isEnglish
+      ? 'Surface behind cards and lists'
+      : '卡片与列表背后的页面底色';
+  String get surfaceGroupLight => isEnglish ? 'Light Mode' : '浅色模式';
+  String get surfaceGroupDark => isEnglish ? 'Dark Mode' : '深色模式';
+
+  /// 自定色块的可选位名称（也用作输入区标题）。
+  String get surfaceCustom => isEnglish ? 'Custom' : '自定义';
+  String get surfaceCustomHint => '#RRGGBB';
+  String get surfaceCustomInvalid =>
+      isEnglish ? 'Enter #RRGGBB' : '请输入 #RRGGBB 格式';
+  String get surfaceApply => isEnglish ? 'Apply' : '应用';
+  String get surfaceRestoreDefault =>
+      isEnglish ? 'Restore Default' : '恢复默认';
+  String get surfacePreviewLabel => isEnglish ? 'Preview' : '预览';
+
+  // 浅色预设档名
+  String get surfacePresetIosGrouped =>
+      isEnglish ? 'iOS Grouped Gray' : 'iOS 分组灰';
+  String get surfacePresetNeutral =>
+      isEnglish ? 'Neutral' : '中性同深';
+  String get surfacePresetNeutralDeep =>
+      isEnglish ? 'Neutral Deep' : '中性加深';
+  String get surfacePresetNeutralBright =>
+      isEnglish ? 'Neutral Bright' : '中性提白';
+  String get surfacePresetWarmNeutral =>
+      isEnglish ? 'Warm Neutral' : '暖中性';
+  String get surfacePresetWarmPaper =>
+      isEnglish ? 'Warm Paper' : '暖米白';
+
+  // 深色预设档名
+  String get surfaceDarkSystem => isEnglish ? 'System' : '跟随系统';
+  String get surfaceDarkNeutral => isEnglish ? 'Neutral' : '中性';
+  String get surfaceDarkDeeper => isEnglish ? 'Deeper' : '更深';
+  String get surfaceDarkWarm => isEnglish ? 'Warm' : '暖';
+
   String get languageSectionTitle => isEnglish ? 'Language' : '语言';
   String get languageAuto => isEnglish ? 'Auto' : '自动';
   String get languageZh => '中文';

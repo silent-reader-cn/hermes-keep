@@ -416,9 +416,17 @@ void main() {
       expect(tester.widget<CupertinoSwitch>(switchFinder).value, isTrue);
 
       // 点击切换为关闭
-      // HiDPI（#164）：新增「界面缩放」项让设置页变长，目标控件可能滚出视口 =>
-      // tap 前先滚到它（否则 hitTest 打空，开关状态不变导致断言失败）。
-      await tester.ensureVisible(switchFinder);
+      // 设置页会随新增项变长（#164 界面缩放、页面底色）：目标控件可能落到视口
+      // 之外 ⇒ tap 前必须把它滚进视口，否则 hitTest 打空、开关状态不变。
+      // 用 scrollUntilVisible 显式指定滚动体并滚到「命中为止」——
+      // ensureVisible 只走「最近的可滚动祖先」，滚动量不足以让中心点进入视口
+      // 时仍会打空（实测 800×600 下目标落在 y=630 > 600）。
+      await tester.scrollUntilVisible(
+        switchFinder,
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 

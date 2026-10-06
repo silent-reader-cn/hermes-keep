@@ -86,7 +86,7 @@ class OnboardingBrandPane extends StatelessWidget {
       key: const ValueKey('onboarding-brand-pane'),
       color: isDark
           ? const Color(0xFF0A0A0C)
-          : CupertinoColors.systemGroupedBackground.resolveFrom(context),
+          : LightSurfaces.page,
       child: OnboardingHeroMotion(isDark: isDark),
     );
   }
