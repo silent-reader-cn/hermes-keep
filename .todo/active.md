@@ -2342,3 +2342,23 @@ return MediaQuery(
 - **本机已升级**（sha256 逐字节一致 + 已拉起 PID 3684）
 
 **流程教训**：本轮把「build → 复查补丁 → 丢了就重跑 + 重编」写进**同一条命令**，两次构建（0.1.66/0.1.67）都一次过；而单独跑复查容易被漏。
+
+
+### 六页宽屏宿主写法统一（2026-10-06 主人拍板「按你的推荐统一」· 0.1.68 交付）
+
+**动作**：设置页/记忆页的宽屏宿主从 `SliverFillRemaining(hasScrollBody: false)` 统一为 **`_buildWideHostSliver`**（`SliverLayoutBuilder` + `remainingPaintExtent` 显式定高，与 Git/技能/任务/工作区同款）。
+
+**为什么后者更稳**：`SliverFillRemaining(hasScrollBody: false)` 会向子级要 intrinsic 高度 —— **子级含 viewport 时直接抛** `RenderViewport does not support returning intrinsic dimensions`；按 `remainingPaintExtent` 显式定高既拿到确定剩余高度，又让外层 `maxScrollExtent` 恰好为 0（下拉刷新靠 overscroll 仍可用）。
+
+**体检结论**：诊断页**无需改** —— 它挂在**非 sliver** 的 `SafeArea child:` 里，`Row` 本来就是 `CrossAxisAlignment.stretch`（L417），根因链不适用。
+
+**证据**：**金照零改动 + 全量 5415 通过 / 0 失败** ⇒ 纯内部实现统一，**零像素变化**（重构应有的样子）。
+
+**发布 `0.1.68`**（`0.1.68+74`，提交 `9164297`）：
+- APK `HermesUI-0.1.68-arm64.apk` **92,067,385 B**（sha256 `4a2a7930…`，验包 9 个原生库齐全）
+- Windows `HermesUI-0.1.68-x64-setup.exe` **45,465,635 B**（sha256 `3e9fd78c…`，冒烟 PASS）
+- **本机已升级**（sha256 逐字节一致 + 已拉起）
+
+**⚠️ 本轮踩的坑（已回写 `flutter-windows-release` skill）**：**绝不同时起 Windows 与 Android 两个 build**。两者都跑 `flutter pub get`，而 Flutter 本身有启动锁（后一条打印 `Waiting for another flutter command to release the startup lock...`）⇒ 实际是「排队 + 互相干扰」。后果：`flutter build windows` 在构建期重新生成 `generated_plugin_registrant.cc` 把补丁冲掉，报 **`error C1083: 无法打开包括文件: "irondash_engine_context/irondash_engine_context_plugin_c_api.h"`**，构建直接失败。诊断特征 = 日志里同时出现 `Waiting for another flutter command...` 与 C1083。**正确做法：串行**（起一个 → 等它结束 → 再起下一个）。
+
+> 值得记的一点：这次失败**没有变成坏产物** —— 因为「build 后复查补丁 + exe 冒烟」两道护栏把问题挡在发布之前（失败是构建期报错，不是装了个启动即崩的 exe）。护栏的价值在「自己犯错时」才体现。
