@@ -84,10 +84,14 @@ void main() {
       );
     });
 
-    test('tokensLabel / input / output / threshold', () {
+    test('tokensLabel / window / input / output / threshold', () {
       expect(
         ContextWindowFormatter.tokensLabel(snapshot),
         '54.3K / 200.0K',
+      );
+      expect(
+        ContextWindowFormatter.windowLabel(snapshot),
+        '200.0K',
       );
       expect(
         ContextWindowFormatter.inputTokensLabel(snapshot),
@@ -101,12 +105,29 @@ void main() {
         ContextWindowFormatter.thresholdLabel(snapshot),
         '160.0K (80%)',
       );
+    });
+
+    test('无数据一律返回 null（文案由 UI 层兜底 l10n.unavailable）', () {
+      final empty = ContextWindowSnapshot.fromJson(const {});
+      expect(ContextWindowFormatter.tokensLabel(empty), isNull);
+      expect(ContextWindowFormatter.windowLabel(empty), isNull);
+      expect(ContextWindowFormatter.inputTokensLabel(empty), isNull);
+      expect(ContextWindowFormatter.outputTokensLabel(empty), isNull);
+      expect(ContextWindowFormatter.thresholdLabel(empty), isNull);
+      expect(ContextWindowFormatter.costLabel(empty), isNull);
+      // 阈值 0 / 负数同样视为无数据
       expect(
-        ContextWindowFormatter.tokensLabel(
-          ContextWindowSnapshot.fromJson(const {}),
+        ContextWindowFormatter.thresholdLabel(
+          ContextWindowSnapshot.fromJson({'threshold_tokens': 0}),
         ),
-        'Unavailable',
+        isNull,
       );
+      // 有 used 无 total：tokensLabel 仍为 null，windowLabel 也为 null
+      final partial = ContextWindowSnapshot.fromJson({
+        'last_prompt_tokens': 100,
+      });
+      expect(ContextWindowFormatter.tokensLabel(partial), isNull);
+      expect(ContextWindowFormatter.windowLabel(partial), isNull);
     });
 
     test('formatTokens', () {
@@ -122,7 +143,7 @@ void main() {
         ContextWindowFormatter.costLabel(
           ContextWindowSnapshot.fromJson(const {}),
         ),
-        'Unavailable',
+        isNull,
       );
     });
   });

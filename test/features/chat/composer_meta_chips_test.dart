@@ -3,6 +3,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
+import 'package:hermes_ui/app/widgets/adaptive_action_menu.dart';
+import 'package:hermes_ui/app/widgets/popover_dropdown.dart';
 import 'package:hermes_ui/core/api/api_exception.dart';
 import 'package:hermes_ui/core/models/workspace.dart';
 import 'package:hermes_ui/core/providers/catalog_providers.dart';
@@ -26,12 +29,14 @@ void main() {
   Widget buildTestApp({
     required Widget child,
     List<dynamic> overrides = const [],
+    Brightness brightness = Brightness.light,
   }) {
     return ProviderScope(
       overrides: [
         for (final o in overrides) o,
       ],
       child: CupertinoApp(
+        theme: CupertinoThemeData(brightness: brightness),
         localizationsDelegates: const [
           DefaultWidgetsLocalizations.delegate,
           DefaultCupertinoLocalizations.delegate,
@@ -577,6 +582,273 @@ void main() {
       // 但值依然正常展示
       expect(find.text('MyProject'), findsOneWidget);
       expect(find.text('gpt-4o'), findsOneWidget);
+    });
+  });
+
+  group('浮层家族重排：宽屏（≥900）双行工作区 / 单行模型，窄屏逐像素不变', () {
+    // 宽屏视口（1400×900）：越过 kAdaptiveBreakpoint=900。
+    void useWideViewport(WidgetTester tester) {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+    }
+
+    Widget appWith({
+      required FakeChatApi fakeApi,
+      String? workspace = '/path/to/ws-a',
+      String? model = 'gpt-4o',
+      List<WorkspaceRoot> roots = const [
+        WorkspaceRoot(path: '/path/to/ws-a', name: 'Project A'),
+        WorkspaceRoot(path: '/path/to/ws-b', name: 'Project B'),
+      ],
+      List<String> models = const ['gpt-4o', 'claude-3-5-sonnet'],
+      Brightness brightness = Brightness.light,
+    }) {
+      fakeApi.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'workspace': workspace,
+          'model': model,
+          'messages': const [],
+        },
+      };
+      return buildTestApp(
+        brightness: brightness,
+        overrides: [
+          chatApiProvider.overrideWithValue(fakeApi),
+          workspaceRootsProvider.overrideWith((ref) => roots),
+          availableModelIdsProvider.overrideWith((ref) => models),
+        ],
+        child: const ChatPage(sessionId: 's1'),
+      );
+    }
+
+    testWidgets('① 宽屏工作区项：名称与路径是两个独立文本节点、分占两行且左对齐；② 当前项竖条存在', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(appWith(fakeApi: FakeChatApi()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('composer-workspace-chip')));
+      await tester.pumpAndSettle();
+
+      // 弹层宽 300（宽屏口径）
+      expect(tester.getSize(find.byType(PopoverDropdownCard)).width, 300.0);
+
+      final itemB = find.byKey(
+        const ValueKey('composer-workspace-item-/path/to/ws-b'),
+      );
+      expect(itemB, findsOneWidget);
+
+      final nameB = find.descendant(of: itemB, matching: find.text('Project B'));
+      final pathB = find.descendant(
+        of: itemB,
+        matching: find.text('/path/to/ws-b'),
+      );
+      // 两个独立文本节点同时存在
+      expect(nameB, findsOneWidget);
+      expect(pathB, findsOneWidget);
+      // 各占一行：路径在名称下方
+      expect(
+        tester.getTopLeft(pathB).dy,
+        greaterThan(tester.getTopLeft(nameB).dy),
+        reason: '路径必须是独立的第二行，而不是与名称拼成同一个字符串',
+      );
+      // 与名称左对齐
+      expect(
+        (tester.getTopLeft(pathB).dx - tester.getTopLeft(nameB).dx).abs(),
+        lessThan(0.5),
+      );
+      // 行高 46（变体 A）
+      expect(tester.getSize(itemB).height, 46.0);
+      // 图标
+      expect(
+        find.descendant(of: itemB, matching: find.byIcon(CupertinoIcons.folder)),
+        findsOneWidget,
+      );
+
+      // ② 当前项（ws-a）竖条存在且与行同高居中
+      final bar = find.byKey(const ValueKey('composer-menu-selected-bar'));
+      expect(bar, findsOneWidget);
+      final itemA = find.byKey(
+        const ValueKey('composer-workspace-item-/path/to/ws-a'),
+      );
+      expect(
+        tester.getRect(bar).center.dy,
+        closeTo(tester.getRect(itemA).center.dy, 1.0),
+      );
+      // 竖条只属于当前项
+      expect(
+        find.descendant(of: itemA, matching: bar),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: itemB, matching: bar), findsNothing);
+
+      // 元操作独立成群：分组线 + uturn 图标
+      expect(
+        find.descendant(
+          of: find.byType(PopoverDropdownCard),
+          matching: find.byType(ActionMenuDivider),
+        ),
+        findsOneWidget,
+      );
+      final defaultItem = find.byKey(
+        const ValueKey('composer-workspace-item-default'),
+      );
+      expect(
+        find.descendant(
+          of: defaultItem,
+          matching: find.byIcon(CupertinoIcons.arrow_uturn_left),
+        ),
+        findsOneWidget,
+      );
+      // 元操作行单行 36（无路径副行）
+      expect(tester.getSize(defaultItem).height, 36.0);
+    });
+
+    testWidgets('③ 窄屏（<900）：弹层仍 228 宽、行仍单行拼接串、无图标无竖条', (tester) async {
+      // 默认测试视口 800×600 < 900
+      await tester.pumpWidget(appWith(fakeApi: FakeChatApi()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('composer-workspace-chip')));
+      await tester.pumpAndSettle();
+
+      expect(tester.getSize(find.byType(PopoverDropdownCard)).width, 228.0);
+
+      final itemA = find.byKey(
+        const ValueKey('composer-workspace-item-/path/to/ws-a'),
+      );
+      expect(itemA, findsOneWidget);
+      // 旧结构：名称与路径拼成一个字符串
+      expect(
+        find.descendant(
+          of: itemA,
+          matching: find.text('Project A (/path/to/ws-a)'),
+        ),
+        findsOneWidget,
+      );
+      // 不得出现路径副行 / 行内图标 / 选中竖条 / 分组线
+      expect(
+        find.descendant(of: itemA, matching: find.text('/path/to/ws-a')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: itemA, matching: find.byIcon(CupertinoIcons.folder)),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-menu-selected-bar')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(PopoverDropdownCard),
+          matching: find.byType(ActionMenuDivider),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('④ 宽屏模型项仍单行（无路径副行），图标 sparkles、行高 36；元操作换 uturn', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(appWith(fakeApi: FakeChatApi()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('composer-model-chip')));
+      await tester.pumpAndSettle();
+
+      final modelItem = find.byKey(
+        const ValueKey('composer-model-item-claude-3-5-sonnet'),
+      );
+      expect(modelItem, findsOneWidget);
+      expect(tester.getSize(modelItem).height, 36.0);
+      // 单行：行内只有一个文本节点（无路径副行）
+      expect(
+        find.descendant(of: modelItem, matching: find.byType(Text)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: modelItem,
+          matching: find.byIcon(CupertinoIcons.sparkles),
+        ),
+        findsOneWidget,
+      );
+
+      // 元操作独立成群：分组线 + uturn 图标
+      final defaultItem = find.byKey(
+        const ValueKey('composer-model-item-default'),
+      );
+      expect(
+        find.descendant(
+          of: defaultItem,
+          matching: find.byIcon(CupertinoIcons.arrow_uturn_left),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(PopoverDropdownCard),
+          matching: find.byType(ActionMenuDivider),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('⑤ 宽屏暗色：两态各自定色（名称/竖条 activeBlue、路径 secondaryLabel），走 CupertinoButton 分支不溢出', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(
+        appWith(fakeApi: FakeChatApi(), brightness: Brightness.dark),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('composer-workspace-chip')));
+      await tester.pumpAndSettle();
+
+      final itemA = find.byKey(
+        const ValueKey('composer-workspace-item-/path/to/ws-a'),
+      );
+      expect(itemA, findsOneWidget);
+      expect(tester.getSize(itemA).height, 46.0);
+
+      final nameFinder = find.descendant(
+        of: itemA,
+        matching: find.text('Project A'),
+      );
+      final pathFinder = find.descendant(
+        of: itemA,
+        matching: find.text('/path/to/ws-a'),
+      );
+      final nameText = tester.widget<Text>(nameFinder);
+      final pathText = tester.widget<Text>(pathFinder);
+
+      // 当前项名称：暗色 activeBlue + w600 + kFontBody
+      expect(nameText.style!.color!.toARGB32(), 0xFF0A84FF);
+      expect(nameText.style!.fontWeight, FontWeight.w600);
+      expect(nameText.style!.fontSize, kFontBody);
+      // 路径：次级色（暗色 secondaryLabel）+ kFontCaption
+      expect(
+        pathText.style!.color,
+        CupertinoColors.secondaryLabel.resolveFrom(
+          tester.element(pathFinder),
+        ),
+      );
+      expect(pathText.style!.fontSize, kFontCaption);
+
+      // 竖条同色 activeBlue
+      final bar = find.byKey(const ValueKey('composer-menu-selected-bar'));
+      final barBox = tester.widget<Container>(bar);
+      expect(
+        (barBox.decoration! as BoxDecoration).color!.toARGB32(),
+        0xFF0A84FF,
+      );
     });
   });
 }

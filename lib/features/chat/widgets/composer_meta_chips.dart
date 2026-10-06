@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../app/widgets/adaptive_action_menu.dart' show ActionMenuDivider;
 import '../../../app/widgets/popover_dropdown.dart';
 import '../../../core/models/workspace.dart';
 import '../../../core/providers/catalog_providers.dart';
@@ -89,12 +90,20 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
 
     final rootsAsync = ref.read(workspaceRootsProvider);
     final roots = rootsAsync.valueOrNull ?? const <WorkspaceRoot>[];
-    final rowCount = roots.length + (roots.isEmpty ? 2 : 1);
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
 
     final entry = OverlayEntry(
       builder: (entryContext) => _FloatingMenu(
         anchorRect: anchor,
-        estimatedHeight: _estimateMenuHeight(rowCount),
+        estimatedHeight: isWide
+            ? _estimateMenuHeightWide(
+                twoLineRows: roots.length,
+                singleLineRows: 1,
+                hasDivider: roots.isNotEmpty,
+              )
+            : _estimateMenuHeightNarrow(
+                roots.length + (roots.isEmpty ? 2 : 1),
+              ),
         onDismiss: () {
           _removeMenu();
           if (mounted) setState(() {});
@@ -121,10 +130,17 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
 
     final modelsAsync = ref.read(availableModelIdsProvider);
     final models = modelsAsync.valueOrNull ?? const <String>[];
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     final entry = OverlayEntry(
       builder: (entryContext) => _FloatingMenu(
         anchorRect: anchor,
-        estimatedHeight: _estimateMenuHeight(models.length + 1),
+        estimatedHeight: isWide
+            ? _estimateMenuHeightWide(
+                twoLineRows: 0,
+                singleLineRows: models.length + 1,
+                hasDivider: models.isNotEmpty,
+              )
+            : _estimateMenuHeightNarrow(models.length + 1),
         onDismiss: () {
           _removeMenu();
           if (mounted) setState(() {});
@@ -138,11 +154,33 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
     setState(() {});
   }
 
-  static double _estimateMenuHeight(int rowCount) {
+  /// 窄屏（< [kAdaptiveBreakpoint]）行数估算：单行拼接串，行高按
+  /// `CupertinoListTile` 保底 44 计（与重排前逐像素一致）。
+  static double _estimateMenuHeightNarrow(int rowCount) {
     const rowHeight = 44.0;
     const cardBorder = 2.0;
     const maxMenuHeight = 200.0;
     return math.min<double>(maxMenuHeight, rowCount * rowHeight + cardBorder);
+  }
+
+  /// 宽屏（>= [kAdaptiveBreakpoint]）行数估算：双行工作区行 [_wideWorkspaceRowHeight]、
+  /// 单行行 [_wideSingleRowHeight]，中间可能夹一条 [ActionMenuDivider]。
+  ///
+  /// 之所以不能像窄屏那样「行数 × 一个常数」：宽屏两种行高不同，按 44 固定算会低估
+  /// 双行行、高估单行行，向上展开的定位就会错位。
+  static double _estimateMenuHeightWide({
+    required int twoLineRows,
+    required int singleLineRows,
+    required bool hasDivider,
+  }) {
+    const cardBorder = 2.0;
+    const maxMenuHeight = 200.0;
+    final content =
+        twoLineRows * _wideWorkspaceRowHeight +
+        singleLineRows * _wideSingleRowHeight +
+        (hasDivider ? _wideDividerHeight : 0.0) +
+        cardBorder;
+    return math.min<double>(maxMenuHeight, content);
   }
 
   Future<void> _selectWorkspace(String? path) async {
@@ -175,12 +213,20 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
     final rootsAsync = ref.watch(workspaceRootsProvider);
     final roots = rootsAsync.valueOrNull ?? const <WorkspaceRoot>[];
     final isLoading = rootsAsync.isLoading;
+    // 宽屏专属形态（>= kAdaptiveBreakpoint）：双行工作区项 + 元操作独立成群；
+    // 窄屏走原单行拼接串，逐像素不变。
+    final isWide =
+        MediaQuery.sizeOf(menuContext).width >= kAdaptiveBreakpoint;
 
     final secondary = LightSurfaces.resolve(
       menuContext,
       LightSurfaces.textSecondary,
       dark: CupertinoColors.secondaryLabel,
     );
+
+    // 「跟随会话默认工作区」是否处于当前态（与窄屏判据一字不差）。
+    final followDefaultSelected =
+        currentWorkspace == null || currentWorkspace.trim().isEmpty;
 
     return PopoverDropdownCard(
       child: isLoading
@@ -199,31 +245,57 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
                   children: [
                     if (roots.isNotEmpty) ...[
                       for (final w in roots)
+                        if (isWide)
+                          _WorkspaceRowWide(
+                            key: ValueKey('composer-workspace-item-${w.path}'),
+                            name: _workspaceName(w),
+                            path: w.path ?? '',
+                            selected: currentWorkspace == w.path,
+                            onTap: () => _selectWorkspace(w.path),
+                          )
+                        else
+                          _WorkspaceRow(
+                            key: ValueKey('composer-workspace-item-${w.path}'),
+                            label: _workspaceLabel(w),
+                            selected: currentWorkspace == w.path,
+                            onTap: () => _selectWorkspace(w.path),
+                          ),
+                      // 元操作（跟随默认）与实体工作区分群，各自独立成群。
+                      if (isWide) const ActionMenuDivider(),
+                      if (isWide)
+                        _MenuRowWide(
+                          key: const ValueKey('composer-workspace-item-default'),
+                          icon: CupertinoIcons.arrow_uturn_left,
+                          label: l10n.followSessionDefaultWorkspace,
+                          // 元操作是一句话，不是「一个东西的名字」，故走正文档。
+                          fontSize: kFontBody,
+                          selected: followDefaultSelected,
+                          onTap: () => _selectWorkspace(null),
+                        )
+                      else
                         _WorkspaceRow(
-                          key: ValueKey('composer-workspace-item-${w.path}'),
-                          label: (w.name != null && w.name!.trim().isNotEmpty)
-                              ? '${w.name} (${w.path})'
-                              : (w.path ?? ''),
-                          selected: currentWorkspace == w.path,
-                          onTap: () => _selectWorkspace(w.path),
+                          key: const ValueKey('composer-workspace-item-default'),
+                          label: l10n.followSessionDefaultWorkspace,
+                          selected: followDefaultSelected,
+                          onTap: () => _selectWorkspace(null),
                         ),
-                      _WorkspaceRow(
-                        key: const ValueKey('composer-workspace-item-default'),
-                        label: l10n.followSessionDefaultWorkspace,
-                        selected:
-                            currentWorkspace == null ||
-                            currentWorkspace.trim().isEmpty,
-                        onTap: () => _selectWorkspace(null),
-                      ),
                     ] else ...[
-                      _WorkspaceRow(
-                        key: const ValueKey('composer-workspace-item-default'),
-                        label: l10n.followSessionDefaultWorkspace,
-                        selected:
-                            currentWorkspace == null ||
-                            currentWorkspace.trim().isEmpty,
-                        onTap: () => _selectWorkspace(null),
-                      ),
+                      if (isWide)
+                        _MenuRowWide(
+                          key: const ValueKey('composer-workspace-item-default'),
+                          icon: CupertinoIcons.arrow_uturn_left,
+                          label: l10n.followSessionDefaultWorkspace,
+                          fontSize: kFontBody,
+                          selected: followDefaultSelected,
+                          onTap: () => _selectWorkspace(null),
+                        )
+                      else
+                        _WorkspaceRow(
+                          key: const ValueKey('composer-workspace-item-default'),
+                          label: l10n.followSessionDefaultWorkspace,
+                          selected: followDefaultSelected,
+                          onTap: () => _selectWorkspace(null),
+                        ),
                       Padding(
                         padding: const EdgeInsets.all(8),
                         child: Text(
@@ -247,6 +319,11 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
     final modelsAsync = ref.watch(availableModelIdsProvider);
     final models = modelsAsync.valueOrNull ?? const <String>[];
     final isLoading = modelsAsync.isLoading;
+    // 宽屏（>= kAdaptiveBreakpoint）：模型项仍单行（模型名本身就是全部信息，
+    // 硬拆两行会「上重下空」），只加图标与 36 行高；窄屏逐像素不变。
+    final isWide =
+        MediaQuery.sizeOf(menuContext).width >= kAdaptiveBreakpoint;
+    final followServerSelected = currentModel == null || currentModel.isEmpty;
 
     return PopoverDropdownCard(
       child: isLoading
@@ -264,18 +341,40 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     for (final m in models)
+                      if (isWide)
+                        _MenuRowWide(
+                          key: ValueKey('composer-model-item-$m'),
+                          icon: CupertinoIcons.sparkles,
+                          label: m,
+                          // 模型名是「一个东西的名字」⇒ 列表项名档。
+                          fontSize: kFontItemTitle,
+                          selected: m == currentModel,
+                          onTap: () => _selectModel(m),
+                        )
+                      else
+                        _ModelRow(
+                          key: ValueKey('composer-model-item-$m'),
+                          label: m,
+                          selected: m == currentModel,
+                          onTap: () => _selectModel(m),
+                        ),
+                    if (isWide && models.isNotEmpty) const ActionMenuDivider(),
+                    if (isWide)
+                      _MenuRowWide(
+                        key: const ValueKey('composer-model-item-default'),
+                        icon: CupertinoIcons.arrow_uturn_left,
+                        label: l10n.contextWindowFollowServerDefault,
+                        fontSize: kFontBody,
+                        selected: followServerSelected,
+                        onTap: () => _selectModel(null),
+                      )
+                    else
                       _ModelRow(
-                        key: ValueKey('composer-model-item-$m'),
-                        label: m,
-                        selected: m == currentModel,
-                        onTap: () => _selectModel(m),
+                        key: const ValueKey('composer-model-item-default'),
+                        label: l10n.contextWindowFollowServerDefault,
+                        selected: followServerSelected,
+                        onTap: () => _selectModel(null),
                       ),
-                    _ModelRow(
-                      key: const ValueKey('composer-model-item-default'),
-                      label: l10n.contextWindowFollowServerDefault,
-                      selected: currentModel == null || currentModel.isEmpty,
-                      onTap: () => _selectModel(null),
-                    ),
                   ],
                 ),
               ),
@@ -634,7 +733,6 @@ class _FloatingMenu extends StatelessWidget {
   final VoidCallback onDismiss;
   final Widget child;
 
-  static const double _menuWidth = 228.0;
   static const double _gapAbove = 8.0;
   static const double _gapBelow = 4.0;
   static const double _safeMargin = 8.0;
@@ -646,10 +744,12 @@ class _FloatingMenu extends StatelessWidget {
     final screenWidth = media.size.width;
     final screenHeight = media.size.height;
     final safeTop = media.padding.top + _safeMargin;
+    // 与卡片同源取宽（宽屏 300 / 窄屏 228）——定位宽度与卡片宽度必须一致。
+    final menuWidth = popoverDropdownWidthFor(context);
 
     final maxLeft = math.max(
       _safeMargin,
-      screenWidth - _safeMargin - _menuWidth,
+      screenWidth - _safeMargin - menuWidth,
     );
     final left = anchorRect.left.clamp(_safeMargin, maxLeft).toDouble();
 
@@ -666,7 +766,7 @@ class _FloatingMenu extends StatelessWidget {
       positioned = Positioned(
         left: left,
         bottom: screenHeight - anchorRect.top + _gapAbove,
-        width: _menuWidth,
+        width: menuWidth,
         child: _menuShell(maxHeight: maxHeight),
       );
     } else {
@@ -679,7 +779,7 @@ class _FloatingMenu extends StatelessWidget {
       positioned = Positioned(
         left: left,
         top: downTop,
-        width: _menuWidth,
+        width: menuWidth,
         child: _menuShell(maxHeight: menuHeight),
       );
     }
@@ -817,6 +917,236 @@ class _WorkspaceRow extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 宽屏（>= kAdaptiveBreakpoint）专属行规格
+//
+// 出处：设计稿 `sketches/dialog-family-proposal.html` §2「★ 选择器专项」，
+// 主人拍板【变体 A：双行 + 4px 间距】。工作区项双行（行高 46），模型项与
+// 元操作单行（行高 36），二者同宽同圆角、仍是一家人。
+// 窄屏不使用这些行（窄屏走 `_WorkspaceRow` / `_ModelRow`，逐像素不变）。
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 宽屏双行工作区行高（设计稿「变体 A」）。
+const double _wideWorkspaceRowHeight = 46.0;
+
+/// 宽屏单行行高（模型项 / 元操作行）。
+const double _wideSingleRowHeight = 36.0;
+
+/// 菜单分组线高度（= [ActionMenuDivider] 的 0.5）。
+const double _wideDividerHeight = 0.5;
+
+/// 选中竖条上下内缩（设计稿 `.prow.sel::before` 的 `top/bottom:7px`）。
+const double _selectedBarInset = 7.0;
+
+/// 窄屏行文案：名称与路径拼成单行（保持既有形态逐像素不变）。
+String _workspaceLabel(WorkspaceRoot w) =>
+    (w.name != null && w.name!.trim().isNotEmpty)
+    ? '${w.name} (${w.path})'
+    : (w.path ?? '');
+
+/// 宽屏双行首行文案：只取名称（无名回落为路径）。
+String _workspaceName(WorkspaceRoot w) =>
+    (w.name != null && w.name!.trim().isNotEmpty) ? w.name! : (w.path ?? '');
+
+/// 宽屏菜单行共用外壳：定高 + 前置图标 + 内容 + 选中态竖条。
+///
+/// 「三重锥定」中的左侧竖条画在这里（设计稿 `.prow.sel::before`：左 4 /
+/// 上下各内缩 [_selectedBarInset] / 宽 2 / 圆角 2），颜色与名称蓝字、右侧
+/// checkmark 同源：浅色 [LightSurfaces.selectionForeground]、暗色
+/// [CupertinoColors.activeBlue]（spec：左侧竖条 selectionForeground / 暗 activeBlue）。
+/// 刻意**不加**选中底色——设计稿的宽屏选中态只有「竖条 + 蓝字 + 勾」三样。
+Widget _wideMenuRow(
+  BuildContext context, {
+  required double height,
+  required IconData icon,
+  required bool selected,
+  required VoidCallback onTap,
+  required Widget child,
+}) {
+  final iconColor = LightSurfaces.resolve(
+    context,
+    LightSurfaces.textSecondary,
+    dark: CupertinoColors.secondaryLabel,
+  );
+  final accent = LightSurfaces.resolve(
+    context,
+    LightSurfaces.selectionForeground,
+    dark: CupertinoColors.activeBlue,
+  );
+  final content = Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    child: Row(
+      children: [
+        // 16 宽图标盒 + 10 间距（设计稿 `.prow .ic{width:16px}` / `gap:10px`）。
+        SizedBox(width: 16, child: Icon(icon, size: 14, color: iconColor)),
+        const SizedBox(width: 10),
+        Expanded(child: child),
+        if (selected) ...[
+          const SizedBox(width: 10),
+          Icon(CupertinoIcons.check_mark, size: 16, color: accent),
+        ],
+      ],
+    ),
+  );
+  final tappable = CupertinoTheme.brightnessOf(context) == Brightness.light
+      ? CupertinoListTile(
+          padding: EdgeInsets.zero,
+          // L2 选中态规格（全仓一致）：选中行底 selectedSurface。本行另有
+          // 左竖条 + 蓝字 + 右勾，四重锚定，与侧栏 / 列表的选中态同一套语言。
+          backgroundColor: selected
+              ? LightSurfaces.selectedSurface
+              : LightSurfaces.card,
+          backgroundColorActivated: LightSurfaces.pressed,
+          onTap: onTap,
+          title: content,
+        )
+      : CupertinoButton(
+          padding: EdgeInsets.zero,
+          alignment: Alignment.centerLeft,
+          onPressed: onTap,
+          child: content,
+        );
+  return Semantics(
+    button: true,
+    selected: selected,
+    child: SizedBox(
+      height: height,
+      child: Stack(
+        children: [
+          Positioned.fill(child: tappable),
+          if (selected)
+            Positioned(
+              left: 4,
+              top: _selectedBarInset,
+              bottom: _selectedBarInset,
+              child: Container(
+                key: const ValueKey('composer-menu-selected-bar'),
+                width: 2,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// 宽屏工作区项（双行）：图标 + 名称（[kFontBody]）+ 路径副行（[kFontCaption]，间距 4px）。
+///
+/// 名称与路径是**两个独立文本节点**（不再是 `名称 (路径)` 拼接串），路径因此
+/// 不会被省略号连坐吃掉；两行左对齐、各自超长省略。
+class _WorkspaceRowWide extends StatelessWidget {
+  const _WorkspaceRowWide({
+    super.key,
+    required this.name,
+    required this.path,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String name;
+  final String path;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final nameColor = selected
+        ? LightSurfaces.resolve(
+            context,
+            LightSurfaces.selectionForeground,
+            dark: CupertinoColors.activeBlue,
+          )
+        : CupertinoColors.label.resolveFrom(context);
+    final pathColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
+    return _wideMenuRow(
+      context,
+      height: _wideWorkspaceRowHeight,
+      icon: CupertinoIcons.folder,
+      selected: selected,
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: kFontBody,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: nameColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            path,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: kFontCaption, color: pathColor),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 宽屏单行菜单项（模型项 / 元操作）：图标 + 名称，行高 [_wideSingleRowHeight]。
+///
+/// 模型名本身就是全部信息，硬拆两行会「上重下空」，故模型项保持单行。
+class _MenuRowWide extends StatelessWidget {
+  const _MenuRowWide({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.fontSize,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final double fontSize;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected
+        ? LightSurfaces.resolve(
+            context,
+            LightSurfaces.selectionForeground,
+            dark: CupertinoColors.activeBlue,
+          )
+        : CupertinoColors.label.resolveFrom(context);
+    return _wideMenuRow(
+      context,
+      height: _wideSingleRowHeight,
+      icon: icon,
+      selected: selected,
+      onTap: onTap,
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          color: color,
         ),
       ),
     );

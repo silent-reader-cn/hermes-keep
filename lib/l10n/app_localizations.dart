@@ -363,6 +363,10 @@ class AppLocalizations {
   String get contextWindowOutput => isEnglish ? 'Output' : '输出';
   String get contextWindowThreshold => isEnglish ? 'Threshold' : '阈值';
   String get contextWindowCost => isEnglish ? 'Cost' : '费用';
+  /// 上下文弹层宽屏头部副行：已用 / 上限（设计稿 §3「已用 0 · 上限 1.0M」）。
+  String contextWindowUsageSummary(String used, String limit) => isEnglish
+      ? 'Used $used · Limit $limit'
+      : '已用 $used · 上限 $limit';
   String get compressHint =>
       isEnglish ? 'Compress when usage is high' : '上下文较高时建议压缩';
   String get compressing => isEnglish ? 'Compressing…' : '压缩中…';

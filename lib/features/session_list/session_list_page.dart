@@ -1482,9 +1482,15 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final l10n = AppLocalizations.of(context);
     final controller = ref.read(sessionListControllerProvider.notifier);
     final items = [
+      // 设计稿 §6（sketches/dialog-family-proposal.html）把「消息右键菜单」的
+      // 三件套（14pt 图标 / 语义分组线 / 密排行高）定为全浮层语言：本菜单
+      // 原为零图标零分组的 9 项「一堵墙」，此处按**用户意图**分四族
+      // （会话管理 → 派生整理 → 打开外部视图 → 破坏性动作）。
+      // 窄屏走系统 ActionSheet（无图标/分组概念），故本改动只影响宽屏浮层。
       AdaptiveMenuItem(
         key: const ValueKey('session-action-pin'),
         label: session.pinned == true ? l10n.unpin : l10n.pin,
+        icon: CupertinoIcons.pin,
         onPressed: () => unawaited(
           controller.setPinned(session, !(session.pinned ?? false)),
         ),
@@ -1492,26 +1498,43 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       AdaptiveMenuItem(
         key: const ValueKey('session-action-archive'),
         label: l10n.archive,
+        icon: CupertinoIcons.archivebox,
         onPressed: () => unawaited(controller.setArchived(session, true)),
       ),
+      if (session.archived == true)
+        AdaptiveMenuItem(
+          key: const ValueKey('session-action-unarchive'),
+          label: l10n.unarchive,
+          // 与「归档」同族：图标沿用归档盒（互为反动作），紧随其后。
+          icon: CupertinoIcons.archivebox,
+          onPressed: () => unawaited(controller.setArchived(session, false)),
+        ),
+      // ── 第二族：整理与派生 ──────────────────────────────────────────────
       AdaptiveMenuItem(
-        key: const ValueKey('session-action-branch'),
-        label: l10n.branch,
-        onPressed: () => unawaited(_onBranch(context, controller, session)),
+        key: const ValueKey('session-action-move-project'),
+        label: l10n.moveToProject,
+        icon: CupertinoIcons.square_stack,
+        startsGroup: true,
+        onPressed: () => unawaited(_moveToProject(context, session)),
       ),
       AdaptiveMenuItem(
         key: const ValueKey('session-action-export'),
         label: l10n.export,
+        icon: CupertinoIcons.square_arrow_up,
         onPressed: () => unawaited(_showExportFormat(context, session)),
       ),
       AdaptiveMenuItem(
-        key: const ValueKey('session-action-move-project'),
-        label: l10n.moveToProject,
-        onPressed: () => unawaited(_moveToProject(context, session)),
+        key: const ValueKey('session-action-branch'),
+        label: l10n.branch,
+        icon: CupertinoIcons.arrow_branch,
+        onPressed: () => unawaited(_onBranch(context, controller, session)),
       ),
+      // ── 第三族：打开外部视图 ────────────────────────────────────────────
       AdaptiveMenuItem(
         key: const ValueKey('session-action-workspace'),
         label: l10n.workspace,
+        icon: CupertinoIcons.folder,
+        startsGroup: true,
         onPressed: () {
           if (context.mounted) {
             // 蓝本对应 SF Symbol: folder (CupertinoIcons.folder)
@@ -1523,6 +1546,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       AdaptiveMenuItem(
         key: const ValueKey('session-action-git'),
         label: l10n.git,
+        icon: CupertinoIcons.arrow_branch,
         onPressed: () {
           if (context.mounted) {
             // 蓝本对应 SF Symbol: arrow.triangle.branch (CupertinoIcons.arrow_branch)
@@ -1531,16 +1555,13 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           }
         },
       ),
-      if (session.archived == true)
-        AdaptiveMenuItem(
-          key: const ValueKey('session-action-unarchive'),
-          label: l10n.unarchive,
-          onPressed: () => unawaited(controller.setArchived(session, false)),
-        ),
+      // ── 第四族：破坏性动作（红色，独立成群）────────────────────────────
       AdaptiveMenuItem(
         key: const ValueKey('session-action-delete'),
         isDestructive: true,
         label: l10n.delete,
+        icon: CupertinoIcons.trash,
+        startsGroup: true,
         onPressed: () => unawaited(_confirmDelete(context, session)),
       ),
     ];
@@ -1553,7 +1574,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         title: null,
         cancelLabel: l10n.cancel,
         cancelKey: const ValueKey('session-action-cancel'),
-        preferredWidth: 220,
+        // 设计稿 §6：与聊天三点同一套语言，但**收窄 10px**（侧栏项集更少、
+        // 文案更短，210 已容下最长项「移动到项目」+ 14pt 图标列）。
+        // 窄屏走系统 ActionSheet，本值不参与其布局。
+        preferredWidth: 210,
         minWidth: 180,
       ),
     );
@@ -2457,14 +2481,26 @@ Map<String, String> _projectNameMap(WidgetRef ref) {
   };
 }
 
-/// 筛选底部弹层：显示设置 / 会话 / 渠道 / 项目 四段等宽 insetGrouped 列表。
+/// 筛选会话弹层：**窄屏底部 sheet / 宽屏居中卡片** 两态。
 ///
-/// 视觉对齐标准 iOS 底部弹层（#27 症状 B）：遮罩/动画走
-/// [showCupertinoModalPopup] 默认（`_showFilterSheet` 打开），顶部圆角 16
-/// 对齐系统 sheet；四段 uniform [CupertinoListSection.insetGrouped]、
-/// 卡片圆角 14pt 配 1px 分割线边框（对齐 adaptive_popover:383）；
-/// 分割线全宽（#28，divider 起点置 0）；
-/// 「全部/已归档」采用左侧 checkbox 单选（[_SheetCheckboxRow]），渠道与项目采用右侧 checkmark 单选。
+/// **窄屏（< [kAdaptiveBreakpoint]）**：标准 iOS 底部弹层，逐像素保留 #27/#28
+/// 的历史决策 —— 遮罩/动画走 [showCupertinoModalPopup] 默认（`_showFilterSheet`
+/// 打开）、顶部圆角 16 对齐系统 sheet、480 限宽、分区竖排、四段 uniform
+/// [CupertinoListSection.insetGrouped]、卡片圆角 14pt 配 1px 分割线边框
+/// （对齐 adaptive_popover:383）、分割线全宽（#28，divider 起点置 0）。
+///
+/// **宽屏（>= [kAdaptiveBreakpoint]）**：设计稿
+/// `sketches/dialog-family-proposal.html` §4 推荐稿 —— 不再把手机底部弹层
+/// 原样搬到宽屏居中（旧实现 `Align(bottomCenter) + maxWidth 480`，桌面端
+/// 「从底部滑出」的语义不成立，且 5 段竖排远超一屏必须滚动），改为
+/// **居中卡片 560 + 两列分区**：「设置项」（显示 / 会话）在左，「实体筛选」
+/// （工作区 / 渠道 / 项目）在右，一屏放完；卡片圆角 14 + 1px 描边，右上角
+/// 「完成」快捷关闭。两态仍由同一入口（_showFilterSheet）与同一条数据通路
+/// （onSelect）驱动，行为一致。
+///
+/// **两态一致（缺陷修复）**：选中标记统一为右侧勾（[_SheetOptionRow]）——
+/// 「全部 / 已归档」不再用左侧方框 checkbox（同一单选语义画成两种控件，
+/// 见设计稿 §4「同一屏两套选中标记」）。窄屏此处是唯一授权的像素变化。
 class _SessionFilterSheet extends ConsumerWidget {
   const _SessionFilterSheet({required this.state, required this.onSelect});
 
@@ -2472,6 +2508,28 @@ class _SessionFilterSheet extends ConsumerWidget {
 
   /// 选择回调（调用方负责 setFilter 并关闭弹层）。
   final void Function(SessionListFilterMode mode, String? value) onSelect;
+
+  /// 窄屏首段外边距（#27/#28 既有口径：上 8、两侧 16）。
+  static const EdgeInsets _narrowFirstSectionMargin = EdgeInsets.fromLTRB(
+    16,
+    8,
+    16,
+    0,
+  );
+
+  /// 窄屏其余各段外边距（段间纵向 16、两侧 16）。
+  static const EdgeInsets _narrowSectionMargin = EdgeInsets.fromLTRB(
+    16,
+    16,
+    16,
+    0,
+  );
+
+  /// 宽屏分区外边距：左右留白交给卡片内边距统一给，段间只留纵向间距。
+  static const EdgeInsets _wideSectionMargin = EdgeInsets.only(bottom: 12);
+
+  /// 宽屏卡片宽度（设计稿 D1 已有的 560 档，不新造宽度）。
+  static const double _wideCardWidth = 560;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2490,8 +2548,10 @@ class _SessionFilterSheet extends ConsumerWidget {
       dark: LightSurfaces.darkPage,
     );
     final screenHeight = MediaQuery.sizeOf(context).height;
-    // 顶部圆角对齐系统 sheet（16pt），内容随圆角裁切干净；
-    // 宽屏居中盒与窄屏全宽两条路径均在 ConstrainedBox 内部裁切，确保不掉角。
+    // 宽窄分流判据与外壳一致（kAdaptiveBreakpoint = 900）：>= 900 走宽屏居中
+    // 卡片，< 900 保持底部 sheet 逐像素不变。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
+    // 窄屏顶部圆角对齐系统 sheet（16pt），内容随圆角裁切干净。
     const sheetRadius = BorderRadius.vertical(top: Radius.circular(16));
     final headerStyle = TextStyle(
       fontSize: kFontCaption,
@@ -2503,7 +2563,9 @@ class _SessionFilterSheet extends ConsumerWidget {
       ),
       letterSpacing: 0.3,
     );
-    // 卡片装饰：14pt 圆角对齐 adaptive_popover:383，补 1px separator 边框清晰区分层次。
+    // 卡片装饰：14pt 圆角对齐 adaptive_popover:383，补 1px separator 边框清晰
+    // 区分层次。宽屏卡片根与内部各段共用同一装饰（设计稿 §4：白卡上叠白段，
+    // 靠描边分层），故两态共用一个 cardDecoration。
     final cardDecoration = BoxDecoration(
       color: LightSurfaces.resolve(
         context,
@@ -2521,10 +2583,232 @@ class _SessionFilterSheet extends ConsumerWidget {
       ),
     );
 
+    // ── 分区构建（宽窄两态共用，只有外边距与宿主容器不同）──────────────────
+    // 之所以做成局部函数而不是复制两套：宽屏两列与窄屏竖排必须是**同一批**
+    // 分区（同 key / 同文案 / 同回调），复制即会漂移。
+
+    /// 「显示」段：subagent 会话开关（即时生效，不关弹层）。
+    Widget displaySection(EdgeInsets margin) {
+      return CupertinoListSection.insetGrouped(
+        key: const ValueKey('filter-section-display'),
+        hasLeading: false,
+        header: Text(l10n.displaySectionHeader, style: headerStyle),
+        backgroundColor: CupertinoColors.transparent,
+        separatorColor: LightSurfaces.resolve(
+          context,
+          LightSurfaces.divider,
+          dark: CupertinoColors.separator,
+        ),
+        margin: margin,
+        // #28 分割线全宽：divider 起点 = dividerMargin +
+        // additionalDividerMargin，置 0 使分割线从容器左缘起笔。
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+        decoration: cardDecoration,
+        children: [
+          CupertinoListTile(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            title: Text(
+              l10n.showSubagentSessions,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: kFontItemTitle),
+            ),
+            trailing: SettingsSurfaces.toggle(
+              context,
+              CupertinoSwitch(
+                key: const ValueKey('session-filter-subagent-switch'),
+                value: current.showSubagent,
+                onChanged: (value) => unawaited(
+                  ref
+                      .read(sessionListControllerProvider.notifier)
+                      .setShowSubagent(value),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    /// 「会话」段：全部 / 已归档（+ 已筛选时的清除项）。
+    ///
+    /// 选中标记与其余段一致走右侧勾（[_SheetOptionRow]），不再用左侧方框。
+    Widget sessionsSection(EdgeInsets margin) {
+      return CupertinoListSection.insetGrouped(
+        key: const ValueKey('filter-section-sessions'),
+        // 方框 checkbox 移除后本段已无 leading；因 additionalDividerMargin
+        // 显式传 0，此参数不再参与布局（分割线仍全宽）。
+        hasLeading: false,
+        header: Text(l10n.sessions, style: headerStyle),
+        backgroundColor: CupertinoColors.transparent,
+        separatorColor: LightSurfaces.resolve(
+          context,
+          LightSurfaces.divider,
+          dark: CupertinoColors.separator,
+        ),
+        margin: margin,
+        // #28 分割线全宽
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+        decoration: cardDecoration,
+        children: [
+          _SheetOptionRow(
+            key: const ValueKey('sheet-filter-all'),
+            label: l10n.all,
+            selected: mode == SessionListFilterMode.all,
+            onTap: () => onSelect(SessionListFilterMode.all, null),
+          ),
+          _SheetOptionRow(
+            key: const ValueKey('sheet-filter-archived'),
+            label: '${l10n.archived}${_archivedCountLabelFor(current)}',
+            selected: mode == SessionListFilterMode.archived,
+            onTap: () => onSelect(SessionListFilterMode.archived, null),
+          ),
+          if (mode != SessionListFilterMode.all &&
+              mode != SessionListFilterMode.archived)
+            _SheetOptionRow(
+              key: const ValueKey('sheet-filter-clear'),
+              label: l10n.clearFilter,
+              selected: false,
+              onTap: () => onSelect(SessionListFilterMode.all, null),
+            ),
+        ],
+      );
+    }
+
+    /// 「渠道」段（有渠道标签才出现）。
+    Widget channelsSection(EdgeInsets margin) {
+      return CupertinoListSection.insetGrouped(
+        key: const ValueKey('filter-section-channels'),
+        hasLeading: false,
+        header: Text(l10n.channels, style: headerStyle),
+        backgroundColor: CupertinoColors.transparent,
+        separatorColor: LightSurfaces.resolve(
+          context,
+          LightSurfaces.divider,
+          dark: CupertinoColors.separator,
+        ),
+        margin: margin,
+        // #28 分割线全宽
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+        decoration: cardDecoration,
+        children: [
+          for (final label in current.sourceLabels)
+            _SheetOptionRow(
+              key: ValueKey('filter-chip-$label'),
+              label: label,
+              selected:
+                  mode == SessionListFilterMode.source &&
+                  current.filterValue == label,
+              onTap: () => onSelect(SessionListFilterMode.source, label),
+            ),
+        ],
+      );
+    }
+
+    /// 「项目」段（有项目才出现）。
+    Widget projectsSection(EdgeInsets margin) {
+      return CupertinoListSection.insetGrouped(
+        key: const ValueKey('filter-section-projects'),
+        hasLeading: false,
+        header: Text(l10n.projects, style: headerStyle),
+        backgroundColor: CupertinoColors.transparent,
+        separatorColor: LightSurfaces.resolve(
+          context,
+          LightSurfaces.divider,
+          dark: CupertinoColors.separator,
+        ),
+        margin: margin,
+        // #28 分割线全宽
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+        decoration: cardDecoration,
+        children: [
+          for (final project in projects)
+            _SheetOptionRow(
+              key: ValueKey('project-chip-${project.id}'),
+              label: project.name ?? l10n.untitledProject,
+              selected:
+                  mode == SessionListFilterMode.project &&
+                  current.filterValue == project.id,
+              onTap: () => onSelect(SessionListFilterMode.project, project.id),
+            ),
+        ],
+      );
+    }
+
+    /// 「工作区」段（有工作区根才出现）。
+    Widget workspacesSection(EdgeInsets margin) {
+      return CupertinoListSection.insetGrouped(
+        key: const ValueKey('filter-section-workspaces'),
+        hasLeading: false,
+        header: Text(l10n.workspacesTitle, style: headerStyle),
+        backgroundColor: CupertinoColors.transparent,
+        separatorColor: LightSurfaces.resolve(
+          context,
+          LightSurfaces.divider,
+          dark: CupertinoColors.separator,
+        ),
+        margin: margin,
+        // #28 分割线全宽
+        dividerMargin: 0,
+        additionalDividerMargin: 0,
+        decoration: cardDecoration,
+        children: [
+          _SheetOptionRow(
+            key: const ValueKey('workspace-chip-all'),
+            label: l10n.allWorkspaces,
+            selected:
+                mode == SessionListFilterMode.all ||
+                (mode == SessionListFilterMode.workspace &&
+                    (current.filterValue == null ||
+                        current.filterValue!.isEmpty)),
+            onTap: () => onSelect(SessionListFilterMode.all, null),
+          ),
+          for (final ws in workspaces)
+            _SheetOptionRow(
+              key: ValueKey('workspace-chip-${ws.path}'),
+              label: (ws.name != null && ws.name!.trim().isNotEmpty)
+                  ? ws.name!.trim()
+                  : (ws.path?.trim() ?? ''),
+              selected:
+                  mode == SessionListFilterMode.workspace &&
+                  matchesWorkspace(current.filterValue, ws.path),
+              onTap: () => onSelect(SessionListFilterMode.workspace, ws.path),
+            ),
+        ],
+      );
+    }
+
+    if (isWide) {
+      return SafeArea(
+        child: _buildWideCard(
+          context: context,
+          l10n: l10n,
+          cardDecoration: cardDecoration,
+          screenHeight: screenHeight,
+          // 左列＝「设置项」，右列＝「实体筛选」（设计稿 §4 两列分工；
+          // 右列顺序照推荐稿：工作区在前，渠道/项目继之）。
+          settingsColumn: [
+            displaySection(_wideSectionMargin),
+            sessionsSection(_wideSectionMargin),
+          ],
+          facetColumn: [
+            if (workspaces.isNotEmpty) workspacesSection(_wideSectionMargin),
+            if (current.sourceLabels.isNotEmpty)
+              channelsSection(_wideSectionMargin),
+            if (projects.isNotEmpty) projectsSection(_wideSectionMargin),
+          ],
+        ),
+      );
+    }
+
     return SafeArea(
       top: false,
-      // 宽屏（桌面双栏）下收窄为居中的 iOS 风格底部弹层，保持纵向可读。
-      // Align 负责居中但不扩容背景盒：DecoratedBox 尺寸跟随内容（min）。
+      // 窄屏：底部弹层。Align 负责贴底但不扩容背景盒：DecoratedBox 尺寸跟随
+      // 内容（min）。
       child: Align(
         alignment: Alignment.bottomCenter,
         child: ConstrainedBox(
@@ -2582,218 +2866,14 @@ class _SessionFilterSheet extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          CupertinoListSection.insetGrouped(
-                            key: const ValueKey('filter-section-display'),
-                            hasLeading: false,
-                            header: Text(
-                              l10n.displaySectionHeader,
-                              style: headerStyle,
-                            ),
-                            backgroundColor: CupertinoColors.transparent,
-                            separatorColor: LightSurfaces.resolve(
-                              context,
-                              LightSurfaces.divider,
-                              dark: CupertinoColors.separator,
-                            ),
-                            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                            // #28 分割线全宽：divider 起点 = dividerMargin +
-                            // additionalDividerMargin，置 0 使分割线从容器左缘起笔。
-                            dividerMargin: 0,
-                            additionalDividerMargin: 0,
-                            decoration: cardDecoration,
-                            children: [
-                              CupertinoListTile(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 4,
-                                ),
-                                title: Text(
-                                  l10n.showSubagentSessions,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: kFontItemTitle),
-                                ),
-                                trailing: SettingsSurfaces.toggle(
-                                  context,
-                                  CupertinoSwitch(
-                                    key: const ValueKey(
-                                      'session-filter-subagent-switch',
-                                    ),
-                                    value: current.showSubagent,
-                                    onChanged: (value) => unawaited(
-                                      ref
-                                          .read(
-                                            sessionListControllerProvider
-                                                .notifier,
-                                          )
-                                          .setShowSubagent(value),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          CupertinoListSection.insetGrouped(
-                            key: const ValueKey('filter-section-sessions'),
-                            hasLeading: true,
-                            header: Text(l10n.sessions, style: headerStyle),
-                            backgroundColor: CupertinoColors.transparent,
-                            separatorColor: LightSurfaces.resolve(
-                              context,
-                              LightSurfaces.divider,
-                              dark: CupertinoColors.separator,
-                            ),
-                            margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                            // #28 分割线全宽
-                            dividerMargin: 0,
-                            additionalDividerMargin: 0,
-                            decoration: cardDecoration,
-                            children: [
-                              _SheetCheckboxRow(
-                                key: const ValueKey('sheet-filter-all'),
-                                label: l10n.all,
-                                selected: mode == SessionListFilterMode.all,
-                                onTap: () =>
-                                    onSelect(SessionListFilterMode.all, null),
-                              ),
-                              _SheetCheckboxRow(
-                                key: const ValueKey('sheet-filter-archived'),
-                                label:
-                                    '${l10n.archived}${_archivedCountLabelFor(current)}',
-                                selected:
-                                    mode == SessionListFilterMode.archived,
-                                onTap: () => onSelect(
-                                  SessionListFilterMode.archived,
-                                  null,
-                                ),
-                              ),
-                              if (mode != SessionListFilterMode.all &&
-                                  mode != SessionListFilterMode.archived)
-                                _SheetOptionRow(
-                                  key: const ValueKey('sheet-filter-clear'),
-                                  label: l10n.clearFilter,
-                                  selected: false,
-                                  onTap: () =>
-                                      onSelect(SessionListFilterMode.all, null),
-                                ),
-                            ],
-                          ),
+                          displaySection(_narrowFirstSectionMargin),
+                          sessionsSection(_narrowSectionMargin),
                           if (current.sourceLabels.isNotEmpty)
-                            CupertinoListSection.insetGrouped(
-                              key: const ValueKey('filter-section-channels'),
-                              hasLeading: false,
-                              header: Text(l10n.channels, style: headerStyle),
-                              backgroundColor: CupertinoColors.transparent,
-                              separatorColor: LightSurfaces.resolve(
-                                context,
-                                LightSurfaces.divider,
-                                dark: CupertinoColors.separator,
-                              ),
-                              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                              // #28 分割线全宽
-                              dividerMargin: 0,
-                              additionalDividerMargin: 0,
-                              decoration: cardDecoration,
-                              children: [
-                                for (final label in current.sourceLabels)
-                                  _SheetOptionRow(
-                                    key: ValueKey('filter-chip-$label'),
-                                    label: label,
-                                    selected:
-                                        mode == SessionListFilterMode.source &&
-                                        current.filterValue == label,
-                                    onTap: () => onSelect(
-                                      SessionListFilterMode.source,
-                                      label,
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            channelsSection(_narrowSectionMargin),
                           if (projects.isNotEmpty)
-                            CupertinoListSection.insetGrouped(
-                              key: const ValueKey('filter-section-projects'),
-                              hasLeading: false,
-                              header: Text(l10n.projects, style: headerStyle),
-                              backgroundColor: CupertinoColors.transparent,
-                              separatorColor: LightSurfaces.resolve(
-                                context,
-                                LightSurfaces.divider,
-                                dark: CupertinoColors.separator,
-                              ),
-                              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                              // #28 分割线全宽
-                              dividerMargin: 0,
-                              additionalDividerMargin: 0,
-                              decoration: cardDecoration,
-                              children: [
-                                for (final project in projects)
-                                  _SheetOptionRow(
-                                    key: ValueKey('project-chip-${project.id}'),
-                                    label: project.name ?? l10n.untitledProject,
-                                    selected:
-                                        mode == SessionListFilterMode.project &&
-                                        current.filterValue == project.id,
-                                    onTap: () => onSelect(
-                                      SessionListFilterMode.project,
-                                      project.id,
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            projectsSection(_narrowSectionMargin),
                           if (workspaces.isNotEmpty)
-                            CupertinoListSection.insetGrouped(
-                              key: const ValueKey('filter-section-workspaces'),
-                              hasLeading: false,
-                              header: Text(
-                                l10n.workspacesTitle,
-                                style: headerStyle,
-                              ),
-                              backgroundColor: CupertinoColors.transparent,
-                              separatorColor: LightSurfaces.resolve(
-                                context,
-                                LightSurfaces.divider,
-                                dark: CupertinoColors.separator,
-                              ),
-                              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                              // #28 分割线全宽
-                              dividerMargin: 0,
-                              additionalDividerMargin: 0,
-                              decoration: cardDecoration,
-                              children: [
-                                _SheetOptionRow(
-                                  key: const ValueKey('workspace-chip-all'),
-                                  label: l10n.allWorkspaces,
-                                  selected:
-                                      mode == SessionListFilterMode.all ||
-                                      (mode ==
-                                              SessionListFilterMode.workspace &&
-                                          (current.filterValue == null ||
-                                              current.filterValue!.isEmpty)),
-                                  onTap: () =>
-                                      onSelect(SessionListFilterMode.all, null),
-                                ),
-                                for (final ws in workspaces)
-                                  _SheetOptionRow(
-                                    key: ValueKey('workspace-chip-${ws.path}'),
-                                    label:
-                                        (ws.name != null &&
-                                            ws.name!.trim().isNotEmpty)
-                                        ? ws.name!.trim()
-                                        : (ws.path?.trim() ?? ''),
-                                    selected:
-                                        mode ==
-                                            SessionListFilterMode.workspace &&
-                                        matchesWorkspace(
-                                          current.filterValue,
-                                          ws.path,
-                                        ),
-                                    onTap: () => onSelect(
-                                      SessionListFilterMode.workspace,
-                                      ws.path,
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            workspacesSection(_narrowSectionMargin),
                           const SizedBox(height: 8),
                         ],
                       ),
@@ -2808,17 +2888,125 @@ class _SessionFilterSheet extends ConsumerWidget {
     );
   }
 
+  /// 宽屏筛选卡片（设计稿 §4 推荐稿）：560 定宽居中、圆角 14 + 1px 描边、
+  /// 标题行右侧「完成」快捷关闭、内容两列（设置项 / 实体筛选）。
+  ///
+  /// 仍由 `showCupertinoModalPopup` 承载（点遮罩即关），与窄屏同一入口、
+  /// 同一条 data 通路（onSelect）。
+  Widget _buildWideCard({
+    required BuildContext context,
+    required AppLocalizations l10n,
+    required BoxDecoration cardDecoration,
+    required List<Widget> settingsColumn,
+    required List<Widget> facetColumn,
+    required double screenHeight,
+  }) {
+    return Align(
+      alignment: Alignment.center,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: _wideCardWidth,
+          maxHeight: screenHeight * 0.85,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: DecoratedBox(
+            key: const ValueKey('session-filter-card'),
+            decoration: cardDecoration,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 10, 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l10n.filterSessions,
+                          style: const TextStyle(
+                            fontSize: kFontPageTitle,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      // 「完成」＝快捷关闭：与窄屏右上角 × 同一语义、同一
+                      // ValueKey（测试按 key 关闭，不依赖形态）。文案复用既有
+                      // l10n.finish（本任务文件级限制不允许新增 ARB 键）。
+                      AccessibleButton(
+                        key: const ValueKey('session-filter-sheet-close'),
+                        label: l10n.close,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(44, 30),
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          l10n.finish,
+                          style: TextStyle(
+                            fontSize: kFontButton,
+                            fontWeight: FontWeight.w500,
+                            color: LightSurfaces.resolve(
+                              context,
+                              statusBlueText.resolveFrom(context),
+                              dark: CupertinoColors.activeBlue,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            key: const ValueKey(
+                              'session-filter-column-settings',
+                            ),
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: settingsColumn,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            key: const ValueKey('session-filter-column-facets'),
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: facetColumn,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   static String _archivedCountLabelFor(SessionListState state) {
     final count = state.archivedCount ?? state.archivedSessions.length;
     return count > 0 ? ' ($count)' : '';
   }
 }
 
-/// 筛选弹层中的单选行（渠道 / 项目 及清除动作共用）。
+/// 筛选弹层中的单选行（全部 / 已归档 / 清除筛选 / 渠道 / 项目 / 工作区共用）。
 ///
-/// 选中态：右侧系统 checkmark（`CupertinoIcons.check_mark`，对齐
-/// CupertinoActionSheet/系统列表视觉），行背景与文字样式不变；去自绘
-/// activeBlue 浅底 pill 与加粗。未选中：常规 label 文字。
+/// 选中态**全弹层统一**：右侧系统 checkmark（`CupertinoIcons.check_mark`，
+/// 对齐 CupertinoActionSheet/系统列表视觉）+ 中性灰底（`selectedSurface`）；
+/// 未选中：常规 label 文字 + 卡片底。
+///
+/// 历史：本类原与 [_SheetCheckboxRow]（左侧方框 checkbox，仅「全部/已归档」
+/// 使用）并存 —— 同一单选语义在同一屏画成两种控件，即设计稿 §4 的缺陷
+/// 「同一屏两套选中标记」。现已把方框行并入本类，全弹层一种标记。
 class _SheetOptionRow extends StatelessWidget {
   const _SheetOptionRow({
     super.key,
@@ -2861,66 +3049,6 @@ class _SheetOptionRow extends StatelessWidget {
               color: CupertinoColors.activeBlue.resolveFrom(context),
             )
           : null,
-      onTap: onTap,
-    );
-  }
-}
-
-/// 筛选弹层中的 checkbox 样式单选行（「全部」「已归档」专用）。
-///
-/// 视觉：左侧方框图标（选中为 `CupertinoIcons.checkmark_square_fill` + activeBlue，
-/// 未选中为 `CupertinoIcons.checkmark_square` + secondaryLabel），右侧无 checkmark。
-/// 语义：单选互斥（filterMode 单值）。
-class _SheetCheckboxRow extends StatelessWidget {
-  const _SheetCheckboxRow({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final activeColor = CupertinoColors.activeBlue.resolveFrom(context);
-    final inactiveColor = LightSurfaces.resolve(
-      context,
-      LightSurfaces.textSecondary,
-      dark: CupertinoColors.secondaryLabel,
-    );
-
-    return CupertinoListTile(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      backgroundColor: LightSurfaces.resolve(
-        context,
-        // L2：筛选弹层的选中行底同步换中性灰 .16（同类选中态全局一致）。
-        selected ? LightSurfaces.selectedSurface : LightSurfaces.card,
-        dark: CupertinoColors.secondarySystemGroupedBackground,
-      ),
-      backgroundColorActivated:
-          CupertinoTheme.brightnessOf(context) == Brightness.light
-          ? LightSurfaces.pressed
-          : null,
-      leading: Icon(
-        selected
-            ? CupertinoIcons.checkmark_square_fill
-            : CupertinoIcons.checkmark_square,
-        size: 20,
-        color: selected ? activeColor : inactiveColor,
-      ),
-      leadingSize: 20,
-      title: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: kFontItemTitle,
-          color: CupertinoColors.label.resolveFrom(context),
-        ),
-      ),
       onTap: onTap,
     );
   }

@@ -5,6 +5,7 @@ import 'package:hermes_ui/app/theme/typography_tokens.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/layout_tokens.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/popover_dropdown.dart';
@@ -19,10 +20,30 @@ import '../../../l10n/app_localizations.dart';
 import '../../settings/settings_providers.dart';
 import '../chat_providers.dart';
 
+/// 窄屏弹层宽度（现状值，逐像素不变）。
+const double _kPopoverNarrowWidth = 260;
+
+/// 宽屏弹层宽度（设计稿 `dialog-family-proposal.html` §3 推荐①：260 → 300）。
+const double _kPopoverWideWidth = 300;
+
+/// 窄屏内容左右内边距（现状值）。
+const double _kPopoverNarrowHPad = 16;
+
+/// 宽屏内容左右内边距（设计稿 §3：14）。
+const double _kPopoverWideHPad = 14;
+
 /// 上下文详情弹层（Swift: ContextWindowPopover，对齐 WebUI _syncCtxIndicator 阈值提示）。
 ///
-/// 宽 260、圆角 18、背景 secondarySystemBackground + separator 边框。
-/// 内容：标题行（tokensLabel + 压缩 icon） / InfoRows / 模型切换 / 工作区切换 / 关闭。
+/// 圆角 18、背景 secondarySystemBackground + separator 边框。内容：头部（窄屏
+/// `tokensLabel` + 压缩 icon／宽屏大数字 + 「已用 · 上限」副行 + 进度条） /
+/// InfoRows / 模型切换 / 工作区切换 / 关闭（仅窄屏）。
+///
+/// 宽窄分流（阈值见 `layout_tokens.isWideLayout`，= 900）：
+/// - **窄屏（<900）逐像素维持原排版**：宽 260、头部 tokensLabel 行、四项数值 12pt、
+///   底部「关闭」行。唯一变化是无数据文案走 l10n（缺陷修复，两态共用）。
+/// - **宽屏（>=900）按设计稿 §3 重排**：宽 300、大数字（窗口上限 21pt）+ 副行
+///   「已用 X · 上限 Y」、占用进度条、「输入/输出/阈值/费用」数值 13pt 右对齐
+///   （等宽数字、无数据退为次级色），去掉底部「关闭」行（点外部即关）。
 class ContextWindowPopover extends ConsumerStatefulWidget {
   const ContextWindowPopover({
     super.key,
@@ -517,13 +538,32 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final snapshot = widget.snapshot;
+    // 宽窄分流（阈值 900，唯一判据走 layout_tokens）：宽屏按设计稿 §3 重排，
+    // 窄屏维持原排版逐像素不变。
+    final isWide = isWideLayout(context);
+    final hPad = isWide ? _kPopoverWideHPad : _kPopoverNarrowHPad;
+    final unavailable = l10n.unavailable;
     final pct = snapshot.percentage;
     final pctInt = pct == null ? null : (pct * 100).round().clamp(0, 100);
-    final tokensLabel = ContextWindowFormatter.tokensLabel(snapshot);
-    final inputLabel = ContextWindowFormatter.inputTokensLabel(snapshot);
-    final outputLabel = ContextWindowFormatter.outputTokensLabel(snapshot);
-    final thresholdLabel = ContextWindowFormatter.thresholdLabel(snapshot);
-    final costLabel = ContextWindowFormatter.costLabel(snapshot);
+    final tokensLabel =
+        ContextWindowFormatter.tokensLabel(snapshot) ?? unavailable;
+    // 四项数值：formatter 无数据返回 null（不再硬编码 'Unavailable'），
+    // 文案在 UI 层兜底 l10n.unavailable —— 中文界面不再出现英文残留。
+    final inputValue = ContextWindowFormatter.inputTokensLabel(snapshot);
+    final outputValue = ContextWindowFormatter.outputTokensLabel(snapshot);
+    final thresholdValue = ContextWindowFormatter.thresholdLabel(snapshot);
+    final costValue = ContextWindowFormatter.costLabel(snapshot);
+    // 宽屏头部：大数字（窗口上限）+ 副行「已用 X · 上限 Y」（设计稿 §3）。
+    final windowLabel =
+        ContextWindowFormatter.windowLabel(snapshot) ?? unavailable;
+    final usedTokens = snapshot.tokensUsed;
+    final totalTokens = snapshot.contextLength;
+    final usageSubLabel = (usedTokens != null && totalTokens != null)
+        ? l10n.contextWindowUsageSummary(
+            ContextWindowFormatter.formatTokens(usedTokens),
+            ContextWindowFormatter.formatTokens(totalTokens),
+          )
+        : null;
 
     final isHigh = pctInt != null && pctInt >= 75;
     final isMid = pctInt != null && pctInt >= 50 && pctInt < 75;
@@ -584,81 +624,168 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       }
     }
 
+    // 压缩入口：宽窄两个头部各挂一次，构建一次复用。
+    final compressButton = _CompressIconButton(
+      key: const ValueKey('context-popover-compress'),
+      isHigh: isHigh,
+      isMid: isMid,
+      compressing: _compressing || isCompressing,
+      enabled: pctInt != null && pctInt > 0,
+      onPressed: (_compressing || isCompressing)
+          ? null
+          : () async {
+              setState(() => _compressing = true);
+              try {
+                // #156：异步启动（立刻返回），随后由 controller 轮询，
+                // 进度落到会话状态里 —— 所以可以放心关掉弹窗。
+                final started = await ref
+                    .read(chatControllerProvider(widget.sessionId).notifier)
+                    .startCompression();
+                if (!mounted) return;
+                if (started) widget.onClose();
+              } finally {
+                if (mounted) {
+                  setState(() => _compressing = false);
+                }
+              }
+            },
+    );
+
     return SizedBox(
-      width: 260,
+      width: isWide ? _kPopoverWideWidth : _kPopoverNarrowWidth,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header：tokensLabel + 压缩 IconButton
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    tokensLabel,
-                    style: const TextStyle(
-                      fontSize: kFontBody,
-                      fontWeight: FontWeight.w600,
+          // Header：窄屏 tokensLabel 行／宽屏大数字 + 「已用 · 上限」副行
+          if (isWide)
+            Padding(
+              padding: EdgeInsets.fromLTRB(hPad, 13, hPad, 11),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          windowLabel,
+                          key: const ValueKey('context-popover-window-label'),
+                          style: const TextStyle(
+                            fontSize: kFontMetric,
+                            fontWeight: FontWeight.w500,
+                            height: 1.1,
+                          ),
+                        ),
+                        if (usageSubLabel != null) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            usageSubLabel,
+                            key: const ValueKey(
+                              'context-popover-usage-summary',
+                            ),
+                            style: TextStyle(
+                              fontSize: kFontCaption,
+                              color: secondary,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ),
-                _CompressIconButton(
-                  key: const ValueKey('context-popover-compress'),
-                  isHigh: isHigh,
-                  isMid: isMid,
-                  compressing: _compressing || isCompressing,
-                  enabled: pctInt != null && pctInt > 0,
-                  onPressed: (_compressing || isCompressing)
-                      ? null
-                      : () async {
-                          setState(() => _compressing = true);
-                          try {
-                            // #156：异步启动（立刻返回），随后由 controller 轮询，
-                            // 进度落到会话状态里 —— 所以可以放心关掉弹窗。
-                            final started = await ref
-                                .read(
-                                  chatControllerProvider(widget.sessionId)
-                                      .notifier,
-                                )
-                                .startCompression();
-                            if (!mounted) return;
-                            if (started) widget.onClose();
-                          } finally {
-                            if (mounted) {
-                              setState(() => _compressing = false);
-                            }
-                          }
-                        },
-                ),
-              ],
+                  compressButton,
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: EdgeInsets.fromLTRB(hPad, 14, 8, 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      tokensLabel,
+                      style: const TextStyle(
+                        fontSize: kFontBody,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  compressButton,
+                ],
+              ),
             ),
-          ),
-          Container(height: 0.5, color: separator),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _InfoRow(label: l10n.contextWindowInput, value: inputLabel),
-                const SizedBox(height: 6),
-                _InfoRow(label: l10n.contextWindowOutput, value: outputLabel),
-                const SizedBox(height: 6),
-                _InfoRow(
-                  label: l10n.contextWindowThreshold,
-                  value: thresholdLabel,
-                ),
-                const SizedBox(height: 6),
-                _InfoRow(label: l10n.contextWindowCost, value: costLabel),
-              ],
+          // 宽屏：占用进度条（替代窄屏头部下的分隔线）
+          if (isWide)
+            _ContextUsageBar(
+              key: const ValueKey('context-popover-usage-bar'),
+              percentage: pct,
+            )
+          else
+            Container(height: 0.5, color: separator),
+          // 四项读数：窄屏 12pt 现值行／宽屏 13pt 右对齐 + 无数据退次级色
+          if (isWide)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: hPad),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _KeyValueRow(
+                    label: l10n.contextWindowInput,
+                    value: inputValue,
+                    unavailableLabel: unavailable,
+                  ),
+                  _KeyValueRow(
+                    label: l10n.contextWindowOutput,
+                    value: outputValue,
+                    unavailableLabel: unavailable,
+                  ),
+                  _KeyValueRow(
+                    label: l10n.contextWindowThreshold,
+                    value: thresholdValue,
+                    unavailableLabel: unavailable,
+                  ),
+                  _KeyValueRow(
+                    label: l10n.contextWindowCost,
+                    value: costValue,
+                    unavailableLabel: unavailable,
+                  ),
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _InfoRow(
+                    label: l10n.contextWindowInput,
+                    value: inputValue ?? unavailable,
+                  ),
+                  const SizedBox(height: 6),
+                  _InfoRow(
+                    label: l10n.contextWindowOutput,
+                    value: outputValue ?? unavailable,
+                  ),
+                  const SizedBox(height: 6),
+                  _InfoRow(
+                    label: l10n.contextWindowThreshold,
+                    value: thresholdValue ?? unavailable,
+                  ),
+                  const SizedBox(height: 6),
+                  _InfoRow(
+                    label: l10n.contextWindowCost,
+                    value: costValue ?? unavailable,
+                  ),
+                ],
+              ),
             ),
-          ),
           Container(height: 0.5, color: separator),
           // 模型切换区
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+            padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -807,7 +934,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
           Container(height: 0.5, color: separator),
           // 工作区切换区
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -952,13 +1079,17 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
               ],
             ),
           ),
-          Container(height: 0.5, color: separator),
-          CupertinoButton(
-            key: const ValueKey('context-popover-close'),
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            onPressed: widget.onClose,
-            child: Text(l10n.contextWindowClose),
-          ),
+          // 窄屏保留底部「关闭」行（逐像素不变）；宽屏去掉（点外部即关，
+          // 设计稿 §3 待裁决项 D）。
+          if (!isWide) ...[
+            Container(height: 0.5, color: separator),
+            CupertinoButton(
+              key: const ValueKey('context-popover-close'),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              onPressed: widget.onClose,
+              child: Text(l10n.contextWindowClose),
+            ),
+          ],
         ],
       ),
     );
@@ -992,6 +1123,119 @@ class _InfoRow extends StatelessWidget {
           style: const TextStyle(fontSize: kFontCaption, fontWeight: FontWeight.w500),
         ),
       ],
+    );
+  }
+}
+
+/// 宽屏键值行（设计稿 §3 `.kv`）：标签在左（12pt 次级色），数值在右
+/// （13pt、w500、等宽数字、基线对齐）；[value] 为 null（无数据）时数值退为
+/// 次级色且不加粗，文案取 [unavailableLabel]（= `l10n.unavailable`，中文界面
+/// 不再出现英文 'Unavailable'）。
+class _KeyValueRow extends StatelessWidget {
+  const _KeyValueRow({
+    required this.label,
+    required this.value,
+    required this.unavailableLabel,
+  });
+
+  final String label;
+  final String? value;
+  final String unavailableLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMuted = value == null;
+    // 降级色取次级文字：设计稿 --l-key #8A8A8F 无对应令牌，而
+    // CupertinoColors.tertiaryLabel 合成后对比度仅 ~1.7:1（不可用于可读文字）。
+    final labelColor = LightSurfaces.resolve(
+      context,
+      LightSurfaces.textSecondary,
+      dark: CupertinoColors.secondaryLabel,
+    );
+    final valueColor = isMuted
+        ? labelColor
+        : CupertinoColors.label.resolveFrom(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: _kPopoverWideHPad,
+        vertical: 4,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: kFontCaption, color: labelColor),
+          ),
+          const Spacer(),
+          Text(
+            value ?? unavailableLabel,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: kFontLabel,
+              fontWeight: isMuted ? FontWeight.w400 : FontWeight.w500,
+              color: valueColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 宽屏头部下方的上下文占用进度条（设计稿 §3 `.bar`）：高 4、圆角 2、轨道灰、
+/// 填充品牌蓝；[percentage] 为 null 时只留空轨道。
+///
+/// 只做可视化，不承载文字 —— 百分比读数由 `ContextWindowIndicator` 与头部副行
+/// 承担（不伪造百分比文案）。
+class _ContextUsageBar extends StatelessWidget {
+  const _ContextUsageBar({super.key, required this.percentage});
+
+  final double? percentage;
+
+  @override
+  Widget build(BuildContext context) {
+    final fraction = (percentage ?? 0).clamp(0.0, 1.0);
+    // 轨道：浅色 systemGrey5 #E5E5EA / 深色 systemGrey4 #3A3A3C（设计稿
+    // --l-track / --d-track）；填充：品牌蓝 #007AFF / #0A84FF（--l-blue / --d-blue）。
+    final track = LightSurfaces.resolve(
+      context,
+      CupertinoColors.systemGrey5,
+      dark: CupertinoColors.systemGrey4,
+    );
+    final fill = LightSurfaces.resolve(
+      context,
+      CupertinoColors.activeBlue,
+      dark: CupertinoColors.activeBlue,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        _kPopoverWideHPad,
+        0,
+        _kPopoverWideHPad,
+        12,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: SizedBox(
+          height: 4,
+          child: Stack(
+            children: [
+              Positioned.fill(child: ColoredBox(color: track)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: fraction,
+                  heightFactor: 1,
+                  child: ColoredBox(color: fill),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

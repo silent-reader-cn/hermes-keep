@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show FileSystemEntity, Platform;
+
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
@@ -509,6 +510,22 @@ Future<void> openSessionProjectFolder(
   }
 }
 
+/// 聊天页「⋯」菜单的 13 项：**每项都带图标，并按用户意图分五族**。
+///
+/// 分组依据是「用户意图」而非「实现模块」（设计稿 `dialog-family-proposal.html` §5）：
+///
+/// | 族 | 项 | 图标 |
+/// |---|---|---|
+/// | 会话 | 重命名 / 置顶 / 归档 | pencil_outline / pin / archivebox |
+/// | 上下文 | 压缩会话 / 撤销上一轮 / 重试上一轮 / 开启 YOLO | arrow_down_doc / arrow_uturn_left / arrow_clockwise / bolt |
+/// | 打开 | 工作区文件 / 打开项目文件夹 / Git 工作区 | folder / folder_open / arrow_branch |
+/// | 派生 | 创建分支 / 导出 | square_stack / square_arrow_up |
+/// | 危险 | 删除 | trash（`isDestructive` 已是红色，与图标同色） |
+///
+/// 图标与分组线**只在宽屏密排行渲染**（`AdaptiveActionMenu` 的既有行为）：
+/// 窄屏走 `CupertinoActionSheet`，系统 Action 不支持图标也不画分组线 ——
+/// 即窄屏视觉逐像素不变（`test/features/chat/chat_actions_menu_icons_test.dart`
+/// 有断言钉住这一条）。
 Future<void> _showSessionActions(
   BuildContext context,
   WidgetRef ref,
@@ -522,34 +539,42 @@ Future<void> _showSessionActions(
   final controller = ref.read(chatControllerProvider(sessionId).notifier);
   final items = [
     if (!isReadOnly) ...[
+      // 族①「会话」：我在管这个会话本身（首项不画分组线）。
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-rename'),
         label: l10n.rename,
+        icon: CupertinoIcons.pencil_outline,
         onPressed: () =>
             unawaited(_renameSession(context, controller, state.displayTitle)),
       ),
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-pin'),
         label: l10n.pin,
+        icon: CupertinoIcons.pin,
         onPressed: () => unawaited(controller.setPinned(true)),
       ),
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-archive'),
         label: l10n.archive,
+        icon: CupertinoIcons.archivebox,
         onPressed: () async {
           if (await controller.setArchived(true)) {
             if (context.mounted) leaveToRoot(context);
           }
         },
       ),
+      // 族②「上下文」：改写这一轮的内容（压缩 / 回退 / 重跑 / 放权）。
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-compress'),
         label: l10n.compressSession,
+        icon: CupertinoIcons.arrow_down_doc,
+        startsGroup: true,
         onPressed: () => unawaited(_compressSession(context, controller)),
       ),
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-undo'),
         label: l10n.undoLastTurn,
+        icon: CupertinoIcons.arrow_uturn_left,
         onPressed: () async {
           final confirmed = await _confirmSessionUndo(context);
           if (confirmed) await controller.undoLastTurn();
@@ -558,17 +583,22 @@ Future<void> _showSessionActions(
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-retry'),
         label: l10n.retryLastTurn,
+        icon: CupertinoIcons.arrow_clockwise,
         onPressed: () => unawaited(controller.retryLastTurn()),
       ),
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-yolo'),
         label: state.yoloEnabled ? l10n.disableYolo : l10n.enableYolo,
+        icon: CupertinoIcons.bolt,
         onPressed: () => unawaited(controller.toggleYolo(!state.yoloEnabled)),
       ),
     ],
+    // 族③「打开」：跳去看某个东西（文件 / 目录 / Git），不改会话内容。
     AdaptiveMenuItem(
       key: const ValueKey('chat-action-workspace'),
       label: l10n.workspaceFilesTitle,
+      icon: CupertinoIcons.folder,
+      startsGroup: true,
       onPressed: () => unawaited(context.push('/workspace/$sessionId')),
     ),
     // Windows 桌面：三点菜单同样提供「打开项目文件夹」。
@@ -576,6 +606,7 @@ Future<void> _showSessionActions(
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-open-project-folder'),
         label: l10n.openProjectFolder,
+        icon: CupertinoIcons.folder_open,
         onPressed: () => unawaited(
           openSessionProjectFolder(context, ref, sessionId, state.workspace!),
         ),
@@ -583,11 +614,15 @@ Future<void> _showSessionActions(
     AdaptiveMenuItem(
       key: const ValueKey('chat-action-git'),
       label: l10n.gitWorkspaceTitle,
+      icon: CupertinoIcons.arrow_branch,
       onPressed: () => unawaited(context.push('/git/$sessionId')),
     ),
+    // 族④「派生」：从当前会话长出新的东西（分支 / 导出文件）。
     AdaptiveMenuItem(
       key: const ValueKey('chat-action-branch'),
       label: l10n.createBranch,
+      icon: CupertinoIcons.square_stack,
+      startsGroup: true,
       onPressed: () async {
         final newId = await controller.branchSession();
         if (newId != null && context.mounted) {
@@ -598,13 +633,17 @@ Future<void> _showSessionActions(
     AdaptiveMenuItem(
       key: const ValueKey('chat-action-export'),
       label: l10n.export,
+      icon: CupertinoIcons.square_arrow_up,
       onPressed: () => unawaited(_exportSession(context, ref, sessionId)),
     ),
+    // 族⑤「危险」：不可逆（红色 + 独立成组，避免误触贴在上面的「导出」旁）。
     if (!isReadOnly)
       AdaptiveMenuItem(
         key: const ValueKey('chat-action-delete'),
         isDestructive: true,
         label: l10n.delete,
+        icon: CupertinoIcons.trash,
+        startsGroup: true,
         onPressed: () async {
           final confirmed = await _confirmSessionDelete(
             context,
@@ -1333,7 +1372,10 @@ class _PendingPromptCardState extends ConsumerState<_PendingPromptCard> {
         onPressed: onPressed,
         child: Text(
           choice,
-          style: const TextStyle(fontSize: kFontButton, fontWeight: FontWeight.w500),
+          style: const TextStyle(
+            fontSize: kFontButton,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );

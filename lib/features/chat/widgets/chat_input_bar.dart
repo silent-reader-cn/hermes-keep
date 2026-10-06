@@ -701,10 +701,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final currentModel = ref
         .read(chatControllerProvider(widget.sessionId))
         .model;
+    // 设计稿 §3：宽屏弹层 260 → 300（容纳大数字行与右对齐数值）；
+    // 窄屏维持 260，逐像素不变。
+    final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     await showCupertinoPopover(
       context: context,
       anchorKey: _contextIndicatorKey,
-      preferredWidth: 260,
+      preferredWidth: isWide ? 300 : 260,
       maxHeight: 520,
       preferredHeight: 520,
       builder: (popoverContext, close) => ContextWindowPopover(
