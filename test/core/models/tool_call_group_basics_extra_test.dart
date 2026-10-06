@@ -1129,11 +1129,39 @@ void main() {
           messageOffset: 1,
         );
 
-        // offset=0 → 载入索引 2 → m2；offset=1 → 载入索引 1 → m1。
+        // offset=0：相对解与绝对解同为 2 → m2（行为不变）。
         expect(offset0.single.anchorMessageID, 'm2');
         expect(offset0.single.id, 'persisted-tools-m2');
-        expect(offset1.single.anchorMessageID, 'm1');
-        expect(offset1.single.id, 'persisted-tools-m1');
+        // offset=1、idx=2：相对解 2 与绝对解 1 **都在窗口内**（坐标口径歧义）。
+        // 窗口消息未声明工具 id → 无法自证 → 回落「相对」（新版服务端 rebase 口径）→ m2。
+        expect(offset1.single.anchorMessageID, 'm2');
+        expect(offset1.single.id, 'persisted-tools-m2');
+
+        // 同入参但窗口消息声明了该 tid → 按 tid 自证选「绝对解」→ m1（旧版口径仍可判定）。
+        final selfProven = ToolCallGroup.groups(
+          persistedToolCalls: persisted,
+          messages: const [
+            ChatMessage(role: 'user', content: 'q', messageId: 'u1'),
+            ChatMessage(
+              role: 'assistant',
+              content: 'a',
+              messageId: 'm1',
+              toolCalls: [
+                JsonObject({
+                  'id': JsonString('call_1'),
+                  'function': JsonObject({
+                    'name': JsonString('bash'),
+                    'arguments': JsonString('{}'),
+                  }),
+                }),
+              ],
+            ),
+            ChatMessage(role: 'assistant', content: 'b', messageId: 'm2'),
+          ],
+          messageOffset: 1,
+        );
+        expect(selfProven.single.anchorMessageID, 'm1');
+        expect(selfProven.single.id, 'persisted-tools-m1');
       });
 
       test('hideThinking=false：reasoning 转思考行，与工具行同组且钉在首段正文上方', () {

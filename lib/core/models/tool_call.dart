@@ -1026,12 +1026,14 @@ class ToolCallGroup {
     ) {
       final persistedToolCall = persistedToolCalls[toolIndex];
       final assistantMsgIdx = persistedToolCall.assistantMsgIdx;
-      if (assistantMsgIdx == null) continue;
 
-      final loadedMessageIndex = assistantMsgIdx - offset;
-      if (loadedMessageIndex < 0 || loadedMessageIndex >= messages.length) {
-        continue;
-      }
+      final loadedMessageIndex = _resolveLoadedMessageIndex(
+        assistantMsgIdx: assistantMsgIdx,
+        messageOffset: offset,
+        messages: messages,
+        tid: persistedToolCall.tid,
+      );
+      if (loadedMessageIndex == null) continue;
 
       final anchorMessageID = TranscriptTurnClassifier.assistantAnchorID(
         loadedMessageIndex,
@@ -1061,6 +1063,88 @@ class ToolCallGroup {
       }
     }
     return groups;
+  }
+
+  /// 把一条 persisted tool call 的 `assistant_msg_idx` 解析成**当前窗口内的消息下标**。
+  ///
+  /// 服务端口径随版本分叉（两种都真实存在，客户端必须同时认）：
+  /// - 新版服务端（分页窗口，hermes-webui `_tool_calls_for_message_window()`）：
+  ///   `assistant_msg_idx` 已在服务端 rebase 成**窗口相对**下标
+  ///   （`assistant_idx - start_idx`），故直接用 `assistantMsgIdx`；
+  /// - 旧版服务端 / 全量响应：`assistant_msg_idx` 是**全转写坐标**，需减去 `messageOffset`。
+  ///
+  /// 判定顺序（保守优先，解析路径永不抛异常）：
+  /// ① 形成两个候选：`相对 = assistantMsgIdx`、`绝对 = assistantMsgIdx - messageOffset`；
+  /// ② 只保留落在 `[0, messages.length)` 的候选并去重；
+  /// ③ 候选为空 → 返回 null（沿用既有「越界丢弃」语义，不抛异常）；
+  /// ④ 只剩一个候选 → 直接采用；
+  /// ⑤ 两个候选都有效（窗口比全转写下标前缀更大时出现的重叠）→ **先用 `tid` 自证**：
+  ///    候选下标对应的 assistant 消息里声明的工具 id 含该 `tid` ⇒ 选它；
+  ///    两个候选都对不上（或没有 tid）→ 取「相对」（新版服务端口径）；
+  /// ⑥ 任何 null / 非法值（负数、越界、非 assistant 角色）一律保守回落，绝不抛异常。
+  static int? _resolveLoadedMessageIndex({
+    required int? assistantMsgIdx,
+    required int messageOffset,
+    required List<ChatMessage> messages,
+    required String? tid,
+  }) {
+    final rawIndex = assistantMsgIdx;
+    if (rawIndex == null || messages.isEmpty) return null;
+
+    bool inWindow(int index) => index >= 0 && index < messages.length;
+
+    // ① 两解候选：相对（新版口径）在前，绝对（旧版口径）在后。
+    final candidates = <int>[];
+    if (inWindow(rawIndex)) candidates.add(rawIndex);
+    final absoluteIndex = rawIndex - messageOffset;
+    if (inWindow(absoluteIndex) && !candidates.contains(absoluteIndex)) {
+      candidates.add(absoluteIndex);
+    }
+
+    // ③ 两解都越界 → 丢弃该条（既有语义，不抛）。
+    if (candidates.isEmpty) return null;
+    // ④ 唯一解直接采用。
+    if (candidates.length == 1) return candidates.first;
+
+    // ⑤ 重叠歧义：先按 tid 自证，认不出则回落新版口径（相对）。
+    if (tid != null && tid.trim().isNotEmpty) {
+      for (final candidate in candidates) {
+        if (_messageDeclaresToolID(messages[candidate], candidate, tid)) {
+          return candidate;
+        }
+      }
+    }
+    return candidates.first;
+  }
+
+  /// 该消息（仅认 `role == 'assistant'`）是否声明了工具 id [tid]。
+  ///
+  /// id 取自同文件的 `_openAIToolCalls` / `_anthropicToolCalls`（即服务端下发的
+  /// `id` / `tool_use.id`，与 persisted 载荷的 `tid` 同源）。用于窗口下标重叠时的自证。
+  static bool _messageDeclaresToolID(
+    ChatMessage message,
+    int messageIndex,
+    String tid,
+  ) {
+    if (message.role != 'assistant') return false;
+    final target = tid.trim();
+    if (target.isEmpty) return false;
+    const noResults = <String, String>{};
+    final toolCalls =
+        _openAIToolCalls(
+          message,
+          messageIndex: messageIndex,
+          resultsByToolID: noResults,
+        ) +
+        _anthropicToolCalls(
+          message,
+          messageIndex: messageIndex,
+          resultsByToolID: noResults,
+        );
+    for (final toolCall in toolCalls) {
+      if (toolCall.id == target) return true;
+    }
+    return false;
   }
 
   static List<ToolCallGroup> _groupsFromMessageMetadata(
