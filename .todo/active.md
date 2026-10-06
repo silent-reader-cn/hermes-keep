@@ -2307,3 +2307,38 @@ return MediaQuery(
 **环境事实（本轮发现）**：① **`flutter build` 之间有「启动锁」** —— 两个构建同时起会**串行**（后一个 `Waiting for another flutter command to release the startup lock`），不是真并行；② **会话时间跨度很大**（09-29 开工 → 10-06 交付），凡时间戳判断都要先 `date` 校准，别拿记忆里的日期当事实；③ **`process_manage` 工具在本会话后段不可用**，改用「轮询查文件大小/时间戳」的方式跟进后台进程（文件大小稳定即写入完成）。
 
 **遗留**：`hermex-flutter-codebase` skill 本体已达 **101K / 100K 上限**（patch 被拒才改写进 references）⇒ 需要瘦身（拆分/搬移 references）。
+
+
+### 宽屏分栏线**全局同类体检** + 会话分组间距（2026-10-06 主人报 · 0.1.67 交付）
+
+主人两条：「**技能、任务、git 页面的分栏线也改到底**」「宽屏每个工作区分类中的**最后一个会话项下方的空间太大**需要缩小点」。
+
+**① 分栏线：四页逐一核过，只有两页有根因**
+
+| 页面 | 分栏线实现 | 判定 | 处置 |
+|---|---|---|---|
+| 技能 | `Row(start)` + 外层 `SliverToBoxAdapter` | 同款根因 | ✅ 改为 `_buildWideHostSliver` |
+| 任务 | 同上 | 同款根因 | ✅ 同上 |
+| **Git** | `_buildWideHostSliver`（`SliverLayoutBuilder` + `remainingPaintExtent` 显式定高） | **本来就对** | 未改 |
+| **工作区** | 同上 | **本来就对** | 未改 |
+
+**关键发现（可复用）**：`_buildWideHostSliver` 是**比 `SliverFillRemaining(hasScrollBody: false)` 更稳的宿主写法** —— 后者在**子级含 viewport 时**会抛 `RenderViewport does not support returning intrinsic dimensions`（Git/工作区的注释里记着这条，所以它们当时刻意没用）。技能/任务这两页**复用**了它，没有另造轮子。
+> **遗留改进点**：设置页/记忆页目前用的是 `SliverFillRemaining(hasScrollBody: false)` —— 它们右侧是 `Column`（非 viewport）所以**当前正常**，但为一致性可改为同一套 `_buildWideHostSliver`。（工作正常、未擅动，记此待定。）
+
+**② 会话分组间距：先量化再改**
+
+| 位置 | 构成 | 合计 |
+|---|---|---|
+| 组内（项与项） | 仅行高 | ~44 |
+| 组末 → 下一组头 | 行高 + `SliverPadding` bottom **6** + 组头 padding top **14** | ~64 |
+
+即**组末比组内多 20px 额外空隙** ⇒ 收紧为 bottom `6→2`、组头上 `14→10` / 下 `6→5` ⇒ **额外空隙 12px**。窄屏 padding 不动（那是卡片容器节奏）。
+
+**提交** `d4929a2`；金照重拍 `session_list` 亮暗两张（组间距属有意改值）；全量 **5415 通过 / 150 skipped / 0 失败**。
+
+**发布 `0.1.67`**（`0.1.67+73`）：
+- APK `HermesUI-0.1.67-arm64.apk` **92,067,385 B**（sha256 `1db1b6d5…`，验包 9 个原生库齐全）
+- Windows `HermesUI-0.1.67-x64-setup.exe` **45,490,056 B**（sha256 `0223e21a…`，exe 冒烟 PASS 存活 12s）
+- **本机已升级**（sha256 逐字节一致 + 已拉起 PID 3684）
+
+**流程教训**：本轮把「build → 复查补丁 → 丢了就重跑 + 重编」写进**同一条命令**，两次构建（0.1.66/0.1.67）都一次过；而单独跑复查容易被漏。
