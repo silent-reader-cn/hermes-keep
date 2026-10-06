@@ -1701,6 +1701,8 @@ class AppLocalizations {
   String get surfaceRestoreDefault =>
       isEnglish ? 'Restore Default' : '恢复默认';
   String get surfacePreviewLabel => isEnglish ? 'Preview' : '预览';
+  String get surfaceHue => isEnglish ? 'Hue' : '色相';
+  String get surfaceLightness => isEnglish ? 'Lightness' : '明度';
 
   // 浅色预设档名
   String get surfacePresetIosGrouped =>

@@ -1689,6 +1689,55 @@ void main() {
     );
   });
 
+  // 设置 · 页面底色选择器 · 自定义档（主人 2026-10-06 追加色相/明度滑杆）：
+  // 只有切到「自定义」才会展开 HEX 输入 + 两条滑杆，故单独出一条目检图。
+  shotPair('设置 · 页面底色选择器 · 自定义', (tester, brightness) async {
+    final settingsApi = FakeSettingsApi();
+    await capturePage(
+      tester,
+      name: 'settings-page-surface-custom',
+      location: '/settings',
+      brightness: brightness,
+      interact: (t) async {
+        await t.tap(find.byKey(const ValueKey('settings-page-surface')));
+        await t.pumpAndSettle();
+        await t.tap(find.byKey(const ValueKey('surface-light-custom')));
+        await t.pumpAndSettle();
+      },
+      overrides: [
+        settingsApiFactoryProvider.overrideWithValue((_) => settingsApi),
+        appVersionProvider.overrideWith((ref) async => '0.1.51+57'),
+        updateCheckerServiceProvider.overrideWithValue(_DemoUpdateChecker()),
+      ],
+    );
+  });
+
+  // 设置 · 手机宽 × 自定义档：色相/明度滑杆在真机窄宽下的排布（标签 + 轨道）。
+  for (final brightness in [Brightness.light, Brightness.dark]) {
+    final suffix = brightness == Brightness.dark ? '暗色' : '浅色';
+    testWidgets('手机$suffix · 设置 · 自定义滑杆', (tester) async {
+      final settingsApi = FakeSettingsApi();
+      await capturePage(
+        tester,
+        name: 'settings-page-surface-custom-phone',
+        location: '/settings',
+        brightness: brightness,
+        size: const Size(800, 1680),
+        interact: (t) async {
+          await t.tap(find.byKey(const ValueKey('settings-page-surface')));
+          await t.pumpAndSettle();
+          await t.tap(find.byKey(const ValueKey('surface-light-custom')));
+          await t.pumpAndSettle();
+        },
+        overrides: [
+          settingsApiFactoryProvider.overrideWithValue((_) => settingsApi),
+          appVersionProvider.overrideWith((ref) async => '0.1.51+57'),
+          updateCheckerServiceProvider.overrideWithValue(_DemoUpdateChecker()),
+        ],
+      );
+    }, skip: !_capture);
+  }
+
   // 设置 · 窄屏（<900 单列）：页面底色行在窄屏下的排布 —— trailing 与标题同处
   // 一行，是本轮唯一可能挤爆的地方，必须逐像素目检。
   narrowShotPair('设置', (tester, brightness) async {

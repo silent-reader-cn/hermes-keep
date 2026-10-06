@@ -174,6 +174,13 @@ class _PageSurfaceSheetState extends ConsumerState<_PageSurfaceSheet> {
               invalid: parseHexColor(_lightCtrl.text) == null,
               l10n: l10n,
             ),
+            const SizedBox(height: 6),
+            _hslSliders(
+              key: const ValueKey('surface-light-sliders'),
+              controller: _lightCtrl,
+              l10n: l10n,
+              onChanged: () => setState(() {}),
+            ),
           ],
           const SizedBox(height: 18),
           _groupTitle(l10n.surfaceGroupDark),
@@ -216,6 +223,13 @@ class _PageSurfaceSheetState extends ConsumerState<_PageSurfaceSheet> {
               controller: _darkCtrl,
               invalid: parseHexColor(_darkCtrl.text) == null,
               l10n: l10n,
+            ),
+            const SizedBox(height: 6),
+            _hslSliders(
+              key: const ValueKey('surface-dark-sliders'),
+              controller: _darkCtrl,
+              l10n: l10n,
+              onChanged: () => setState(() {}),
             ),
           ],
           const SizedBox(height: 20),
@@ -356,6 +370,172 @@ class _PageSurfaceSheetState extends ConsumerState<_PageSurfaceSheet> {
       ],
     ],
   );
+
+  /// 自定义色的**色相 / 明度**滑杆（主人 2026-10-06 追加的易用入口）。
+  ///
+  /// 只调 H 与 L，饱和度沿用当前值。明度给 **0.60–1.00** 区间 —— 页面底色
+  /// 本质是浅色面，更暗的取值在界面上必然读不了字；需要极暗色仍可用 HEX
+  /// 精确输入（输入框不设限，滑杆只是"顺手"的入口，不是门禁）。
+  ///
+  /// 滑杆是自绘的：CupertinoSlider 的轨道（activeColor + tertiarySystemFill）
+  /// 会盖住渐变轨，用它就画不出「彩虹条 / 灰阶条」这种带语义的轨道。
+  Widget _hslSliders({
+    required Key key,
+    required TextEditingController controller,
+    required AppLocalizations l10n,
+    required VoidCallback onChanged,
+  }) {
+    final current =
+        parseHexColor(controller.text) ?? PageSurfacePreset.neutral.color!;
+    final hsl = HSLColor.fromColor(current);
+    void apply(double hue, double lightness) {
+      controller.text = hexFromColor(
+        HSLColor.fromAHSL(1, hue, hsl.saturation, lightness).toColor(),
+      );
+      onChanged();
+    }
+
+    // 色相轨用固定中高饱和绘制（当前色可能是灰的，但轨道要表达"能选到什么色"）。
+    const hueSat = 0.55;
+    const hueLight = 0.72;
+    Widget labelled(String label, Widget slider) => Row(
+      children: [
+        SizedBox(
+          width: 38,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: kFontCaption,
+              color: LightSurfaces.textSecondary,
+            ),
+          ),
+        ),
+        Expanded(child: slider),
+      ],
+    );
+
+    return Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        labelled(
+          l10n.surfaceHue,
+          _gradientSlider(
+            key: const ValueKey('surface-hue-slider'),
+            value: hsl.hue,
+            min: 0,
+            max: 360,
+            gradient: LinearGradient(
+            colors: [
+              for (final stop in const [0, 60, 120, 180, 240, 300, 360])
+                HSLColor.fromAHSL(
+                  1,
+                  stop.toDouble(),
+                  hueSat,
+                  hueLight,
+                ).toColor(),
+            ],
+          ),
+            onChanged: (v) => apply(v, hsl.lightness.clamp(0.60, 1.0)),
+          ),
+        ),
+        const SizedBox(height: 2),
+        labelled(
+          l10n.surfaceLightness,
+          _gradientSlider(
+            key: const ValueKey('surface-lightness-slider'),
+            value: hsl.lightness.clamp(0.60, 1.0),
+            min: 0.60,
+            max: 1.0,
+            gradient: LinearGradient(
+            colors: [
+              HSLColor.fromAHSL(1, hsl.hue, hsl.saturation, 0.60).toColor(),
+              HSLColor.fromAHSL(1, hsl.hue, hsl.saturation, 1.0).toColor(),
+            ],
+          ),
+            onChanged: (v) => apply(hsl.hue, v),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 自绘渐变轨滑杆：渐变条铺满、白色圆滑块浮在其上。
+  Widget _gradientSlider({
+    required Key key,
+    required double value,
+    required double min,
+    required double max,
+    required Gradient gradient,
+    required ValueChanged<double> onChanged,
+  }) {
+    final ratio = ((value.clamp(min, max) - min) / (max - min)).clamp(0.0, 1.0);
+    return LayoutBuilder(
+      key: key,
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        void seek(Offset local) {
+          final r = (local.dx / width).clamp(0.0, 1.0);
+          onChanged(min + r * (max - min));
+        }
+
+        const thumb = 22.0;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) => seek(d.localPosition),
+          onHorizontalDragStart: (d) => seek(d.localPosition),
+          onHorizontalDragUpdate: (d) => seek(d.localPosition),
+          child: SizedBox(
+            height: 34,
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.center,
+                  child: Container(
+                    height: 14,
+                    decoration: BoxDecoration(
+                      gradient: gradient,
+                      borderRadius: const BorderRadius.all(Radius.circular(7)),
+                      border: Border.all(
+                        color: CupertinoColors.separator.resolveFrom(context),
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+                // 滑块位置 = 比例 × 可用宽（两端各留半个滑块，避免溢出）。
+                Positioned(
+                  left: (ratio * (width - thumb)).clamp(0.0, width - thumb),
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: thumb,
+                      height: thumb,
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: CupertinoColors.separator.resolveFrom(context),
+                          width: 0.5,
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 3,
+                            offset: Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// 单个色块；[isCustomEntry] 为「自定义」入口位。
