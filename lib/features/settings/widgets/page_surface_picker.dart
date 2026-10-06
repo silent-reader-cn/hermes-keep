@@ -139,23 +139,29 @@ class _PageSurfaceSheetState extends ConsumerState<_PageSurfaceSheet> {
           const SizedBox(height: 18),
           _groupTitle(l10n.surfaceGroupLight),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final preset in PageSurfacePreset.values)
-                _Swatch(
-                  key: ValueKey('surface-light-${preset.name}'),
-                  color: preset.isCustom
-                      ? (parseHexColor(_lightCtrl.text) ??
-                          PageSurfacePreset.neutral.color!)
-                      : preset.color!,
-                  selected: _lightPreset == preset,
-                  isCustomEntry: preset.isCustom,
-                  customEntryActive: _lightPreset.isCustom,
-                  onTap: () => setState(() => _lightPreset = preset),
-                ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final preset in PageSurfacePreset.values)
+                  _Swatch(
+                    size: _swatchSizeFor(
+                      constraints.maxWidth,
+                      PageSurfacePreset.values.length,
+                    ),
+                    key: ValueKey('surface-light-${preset.name}'),
+                    color: preset.isCustom
+                        ? (parseHexColor(_lightCtrl.text) ??
+                              PageSurfacePreset.neutral.color!)
+                        : preset.color!,
+                    selected: _lightPreset == preset,
+                    isCustomEntry: preset.isCustom,
+                    customEntryActive: _lightPreset.isCustom,
+                    onTap: () => setState(() => _lightPreset = preset),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           _currentLine(l10n, lightPresetLabel(l10n, _lightPreset),
@@ -172,27 +178,33 @@ class _PageSurfaceSheetState extends ConsumerState<_PageSurfaceSheet> {
           const SizedBox(height: 18),
           _groupTitle(l10n.surfaceGroupDark),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final preset in DarkSurfacePreset.values)
-                _Swatch(
-                  key: ValueKey('surface-dark-${preset.name}'),
-                  color: preset.followsSystem
-                      ? CupertinoColors.systemGroupedBackground.resolveFrom(
-                          context,
-                        )
-                      : preset.isCustom
-                      ? (parseHexColor(_darkCtrl.text) ??
-                            const Color(0xFF1C1C1E))
-                      : preset.color!,
-                  selected: _darkPreset == preset,
-                  isCustomEntry: preset.isCustom,
-                  customEntryActive: _darkPreset.isCustom,
-                  onTap: () => setState(() => _darkPreset = preset),
-                ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final preset in DarkSurfacePreset.values)
+                  _Swatch(
+                    size: _swatchSizeFor(
+                      constraints.maxWidth,
+                      DarkSurfacePreset.values.length,
+                    ),
+                    key: ValueKey('surface-dark-${preset.name}'),
+                    color: preset.followsSystem
+                        ? CupertinoColors.systemGroupedBackground.resolveFrom(
+                            context,
+                          )
+                        : preset.isCustom
+                        ? (parseHexColor(_darkCtrl.text) ??
+                              const Color(0xFF1C1C1E))
+                        : preset.color!,
+                    selected: _darkPreset == preset,
+                    isCustomEntry: preset.isCustom,
+                    customEntryActive: _darkPreset.isCustom,
+                    onTap: () => setState(() => _darkPreset = preset),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           _currentLine(l10n, darkPresetLabel(l10n, _darkPreset),
@@ -353,6 +365,7 @@ class _Swatch extends StatelessWidget {
     required this.color,
     required this.selected,
     required this.onTap,
+    required this.size,
     this.isCustomEntry = false,
     this.customEntryActive = false,
   });
@@ -360,6 +373,9 @@ class _Swatch extends StatelessWidget {
   final Color color;
   final bool selected;
   final VoidCallback onTap;
+
+  /// 边长（由调用方按可用宽自适应，见 [_swatchSizeFor]）。
+  final double size;
   final bool isCustomEntry;
   final bool customEntryActive;
 
@@ -373,8 +389,9 @@ class _Swatch extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 44,
-        height: 44,
+        // 40×40 + 8 间距：400 逻辑 pt（真机档）下 7 个色块仍能一行放下。
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
           color: color,
           borderRadius: const BorderRadius.all(Radius.circular(11)),
@@ -387,11 +404,15 @@ class _Swatch extends StatelessWidget {
         ),
         child: Center(
           child: selected
-              ? Icon(CupertinoIcons.check_mark, size: 17, color: checkColor)
+              ? Icon(
+                  CupertinoIcons.check_mark,
+                  size: size * 0.42,
+                  color: checkColor,
+                )
               : (isCustomEntry && !customEntryActive
                     ? Icon(
                         CupertinoIcons.add,
-                        size: 15,
+                        size: size * 0.38,
                         color: checkColor,
                       )
                     : null),
@@ -399,4 +420,16 @@ class _Swatch extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 一组色块的自适应边长：按可用宽与格数反算，clamp 到 32–44。
+///
+/// 目的 = **任何屏宽下一组都排在一行不折行** —— 固定 44+10 间距在 400 逻辑 pt
+/// （真机档）时 7×44+6×10=368 > 可用 360，会折成 6+1 两行。窄到排不下时
+/// 由 [Wrap] 兜底换行，不会溢出。
+double _swatchSizeFor(double maxWidth, int count) {
+  const gap = 8.0;
+  if (count <= 1) return 44;
+  final raw = (maxWidth - gap * (count - 1)) / count;
+  return raw.clamp(32.0, 44.0);
 }
