@@ -20,6 +20,10 @@ void main() {
       customPrefs: prefs,
       database: database,
       maxCapacity: 5,
+      // 本用例只验「最老优先淘汰」机制本身：把库预算钉成与内存一致。
+      // （库与内存的预算已解耦，默认 kDiagnosticsDatabaseMaxRows，见
+      //  diagnostics_service_db_wiring_test.dart 的策略用例。）
+      maxDatabaseRows: 5,
     );
     await service.init(prefs: prefs, database: database);
   });

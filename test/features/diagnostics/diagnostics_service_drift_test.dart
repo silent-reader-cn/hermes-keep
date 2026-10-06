@@ -64,7 +64,13 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      final service = DiagnosticsService(customPrefs: prefs, database: db);
+      final service = DiagnosticsService(
+        customPrefs: prefs,
+        database: db,
+        // 本用例只验淘汰机制：把库预算钉成与内存一致（默认已解耦为
+        // kDiagnosticsDatabaseMaxRows）。
+        maxDatabaseRows: 10000,
+      );
       await service.init(prefs: prefs, database: db);
       await service.setEnabled(true, prefs: prefs);
 

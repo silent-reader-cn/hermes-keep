@@ -18,6 +18,14 @@ const String kDiagnosticsLogsStorageKey = 'diagnostics_logs_v1';
 /// 诊断日志内存环形缓冲默认最大容量（#33：1500 → 10000）。
 const int kDiagnosticsMaxCapacity = 10000;
 
+/// 诊断日志「数据库」行数上限（#33 修订）。
+///
+/// 内存环形缓冲仍按 [kDiagnosticsMaxCapacity] 裁（UI 热路径轻量），但数据库预算
+/// 放宽到 5 万行：此前库也沿用 10000 上限，密集 SSE 日志（≈10000 条/10 分钟）
+/// 会把更早的行挤掉 —— 事后追溯现场（例如界面静默冻结）时，触发时刻的日志往往
+/// 已不在导出里。30 天保留期不变；开启诊断时最多占用约 10–20MB。
+const int kDiagnosticsDatabaseMaxRows = 50000;
+
 /// 诊断服务（内存环形缓冲热路径 + drift 持久化 + 脱敏纪律）。
 ///
 /// 存储架构（#33 方案 A）：
@@ -32,6 +40,7 @@ class DiagnosticsService {
     SharedPreferences? customPrefs,
     this._database,
     this.maxCapacity = kDiagnosticsMaxCapacity,
+    this.maxDatabaseRows = kDiagnosticsDatabaseMaxRows,
   }) : _prefs = customPrefs;
 
   /// 单例实例。
@@ -40,10 +49,17 @@ class DiagnosticsService {
   final SharedPreferences? _prefs;
 
   /// drift 数据库（复用 `appDatabaseProvider` 单例，避免双库）。
-  final AppDatabase? _database;
+  ///
+  /// 非 final：构造器未传时由 [init] 的 `database:` 入参在运行期接上
+  /// （此前是 final，而 init 的入参只用于读回缓冲、不落字段 ⇒ 生产环境里恒为
+  /// null，落库与导出都静默退化成「仅内存缓冲」）。
+  AppDatabase? _database;
 
   /// 内存环形缓冲最大容量（#33：10000 条）。
   final int maxCapacity;
+
+  /// 数据库行数预算（见 [kDiagnosticsDatabaseMaxRows]；与内存上限解耦）。
+  final int maxDatabaseRows;
 
   /// 30 天持久化超期保留阈值（#33：7 天 → 30 天）。
   static const Duration retentionDuration = Duration(days: 30);
@@ -82,6 +98,12 @@ class DiagnosticsService {
       await p.remove(kDiagnosticsLogsStorageKey);
 
       final db = database ?? _database;
+      // #apply-fix：补上字段赋值。此前 `_database` 是 final、只有构造器能赋值，
+      // `init(database:)` 的入参仅用于「读回缓冲」，没落到字段上 —— 而生产入口
+      // （main.dart）走的正是 `DiagnosticsService.instance.init(database: ...)`，
+      // 于是 _database 恒 null：落库与导出静默退化为内存缓冲（导出只能看到最近
+      // 约 10 分钟的密集日志，事后追溯现场时关键行往往已被挤掉）。
+      _database = db;
       if (db != null) {
         final cutoff = DateTime.now()
             .subtract(retentionDuration)
@@ -175,10 +197,13 @@ class DiagnosticsService {
     } catch (_) {}
   }
 
-  /// 导出当前 drift 库内全部日志（最新在前，与页面列表顺序一致）。
+  /// 导出当前 drift 库内全部日志（**按时间正序**：旧 → 新）。
   ///
   /// 与 [logs]（内存缓冲快照）不同，导出以 drift 全量查询为源，不受
   /// 内存缓冲淘汰/未落库条目影响（#33 规格 4）。
+  ///
+  /// 顺序取**正序**：无库时 [logs] 回退本身就是正序，导出文件保持一致，人眼可
+  /// 按时间线阅读、并可与服务端 run journal / 服务端日志逐条对齐。
   Future<List<DiagnosticsLogEntry>> exportAllLogs() async {
     final db = _database;
     if (db == null) return logs;
@@ -187,7 +212,7 @@ class DiagnosticsService {
           await (db.select(db.diagnosticsLogs)..orderBy([
                 (t) => drift.OrderingTerm(
                   expression: t.timestamp,
-                  mode: drift.OrderingMode.desc,
+                  mode: drift.OrderingMode.asc,
                 ),
               ]))
               .get();
@@ -244,8 +269,8 @@ class DiagnosticsService {
     )..where((t) => t.timestamp.isSmallerThanValue(cutoff))).go();
 
     final count = await db.diagnosticsLogs.count().getSingle();
-    if (count > maxCapacity) {
-      final overflow = count - maxCapacity;
+    if (count > maxDatabaseRows) {
+      final overflow = count - maxDatabaseRows;
       final ids =
           (await (db.selectOnly(db.diagnosticsLogs)
                     ..addColumns([db.diagnosticsLogs.id])
@@ -291,6 +316,12 @@ class DiagnosticsService {
     sb.writeln('Hermes Diagnostics Log Export');
     sb.writeln('Exported At: ${formatLogTimestamp(dt)}');
     sb.writeln('Total Entries: ${entries.length}');
+    if (entries.isNotEmpty) {
+      // 覆盖窗口对事后追溯至关重要：与服务端日志按时间对齐时，先要知道这份
+      // 导出的起止（内存回退只有最近约 10 分钟；以库为源则可达 30 天）。
+      sb.writeln('Earliest Entry: ${formatLogTimestamp(entries.first.timestamp)}');
+      sb.writeln('Latest Entry: ${formatLogTimestamp(entries.last.timestamp)}');
+    }
     sb.writeln('=' * 60);
     sb.writeln();
 
