@@ -460,102 +460,274 @@ void main() {
     );
   }
 
+  // ───────────────────────────────────────────────────────────────────────
+  // 分区卡片结构契约（2026-10-06 本轮）
+  //
+  // **有意推翻**旧契约「深色下 migrate=true 与 native 逐像素相同」：旧实现里
+  // `section()` 对非浅色直接 `return original`，深色因此沿用 base 构造 ——
+  // margin 只有 `EdgeInsets.only(bottom: 8)`（零水平边距）、圆角为零、无前景
+  // 描边，也就是「深色通栏方角」而浅色是内缩卡片。
+  //
+  // 新契约：两个主题共用同一套 inset 结构（16/8/16/8 + 圆角 14 + 0.5pt 描边 +
+  // 0.5pt 全宽分割线 + 同一套排版令牌），**只有取色**按主题解析；深色走
+  // Cupertino 动态语义色，高对比度 / elevated 变体必须保留。
+  // ───────────────────────────────────────────────────────────────────────
   for (final contrast in [false, true]) {
     for (final elevated in [false, true]) {
-      testWidgets(
-        'dark controls match native pixels, high contrast $contrast elevated $elevated',
-        (tester) async {
-          tester.view.physicalSize = const Size(390, 700);
-          tester.view.devicePixelRatio = 1;
-          addTearDown(tester.view.reset);
-          Future<Uint8List> render(bool migrate) async {
-            await tester.pumpWidget(
-              CupertinoApp(
-                theme: buildCupertinoTheme(Brightness.dark),
-                home: MediaQuery(
-                  data: MediaQueryData(
-                    size: const Size(390, 700),
-                    highContrast: contrast,
-                  ),
-                  child: CupertinoUserInterfaceLevel(
-                    data: elevated
-                        ? CupertinoUserInterfaceLevelData.elevated
-                        : CupertinoUserInterfaceLevelData.base,
-                    child: Builder(
-                      builder: (context) {
-                        final toggle = CupertinoSwitch(
-                          value: true,
-                          onChanged: (_) {},
-                        );
-                        final section = CupertinoListSection(
-                          header: const Text('Settings'),
-                          children: [
-                            CupertinoListTile(
-                              title: const Text('Option'),
-                              subtitle: const Text('Description'),
-                              trailing: migrate
-                                  ? SettingsSurfaces.toggle(context, toggle)
-                                  : toggle,
-                            ),
-                            CupertinoListTile(
-                              title: const Text('Input'),
-                              trailing: SizedBox(
-                                width: 150,
-                                child: migrate
-                                    ? CupertinoTextField(
-                                        placeholder: 'Placeholder',
-                                        decoration:
-                                            SettingsSurfaces.fieldDecoration(
-                                              context,
-                                            ),
-                                        placeholderStyle:
-                                            SettingsSurfaces.placeholderStyle(
-                                              context,
-                                            ),
-                                      )
-                                    : const CupertinoTextField(
-                                        placeholder: 'Placeholder',
-                                      ),
-                              ),
-                            ),
-                          ],
-                        );
-                        final page = CupertinoPageScaffold(
-                          child: migrate
-                              ? SettingsSurfaces.section(context, section)
-                              : section,
-                        );
-                        return RepaintBoundary(
-                          key: const ValueKey('dark-pixels'),
-                          child: migrate
-                              ? SettingsSurfaces.page(context, page)
-                              : page,
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            );
-            await tester.pumpAndSettle();
-            final boundary = tester.renderObject<RenderRepaintBoundary>(
-              find.byKey(const ValueKey('dark-pixels')),
-            );
-            return (await tester.runAsync(() async {
-              final image = await boundary.toImage();
-              final data = await image.toByteData(
-                format: ui.ImageByteFormat.rawRgba,
-              );
-              image.dispose();
-              return data!.buffer.asUint8List();
-            }))!;
-          }
+      testWidgets('dark section adopts the inset card structure, high contrast '
+          '$contrast elevated $elevated', (tester) async {
+        await _pumpSectionHarness(
+          tester,
+          brightness: Brightness.dark,
+          migrate: true,
+          contrast: contrast,
+          elevated: elevated,
+        );
 
-          final native = await render(false);
-          final migrated = await render(true);
-          expect(migrated, orderedEquals(native));
-        },
-      );
+        final section = tester.widget<CupertinoListSection>(
+          find.byType(CupertinoListSection),
+        );
+        // 旧门在此返回 base 构造 → 这三条是「精确变红」的判据。
+        expect(section.type, CupertinoListSectionType.insetGrouped);
+        expect(section.margin, const EdgeInsets.fromLTRB(16, 8, 16, 8));
+        expect(section.dividerMargin, 0.0);
+        expect(section.additionalDividerMargin, 0.0);
+
+        final decoration = section.decoration!;
+        expect(
+          decoration.borderRadius,
+          const BorderRadius.all(Radius.circular(14)),
+        );
+        expect(
+          decoration.color!.toARGB32(),
+          _expectedDarkCard(contrast, elevated),
+        );
+
+        // 0.5pt 前景描边（深色此前完全没有）。
+        final stroke = _foregroundStroke(tester);
+        expect(stroke.top.width, 0.5);
+        expect(
+          stroke.top.color.toARGB32(),
+          _expectedDarkSeparator(contrast, elevated),
+        );
+
+        // 像素取证：卡片左缘之外仍是页底色，卡片内是卡片底 —— 深色不再通栏。
+        final card = tester.getRect(_foregroundFinder());
+        expect(card.left, 16);
+        expect(card.right, 390 - 16);
+        final pixels = await _capturePixels(tester);
+        expect(
+          _pixelAt(pixels, 390, 2, card.center.dy.round()),
+          _expectedDarkPage(contrast, elevated),
+        );
+        expect(
+          _pixelAt(pixels, 390, card.left.round() + 20, card.top.round() + 5),
+          _expectedDarkCard(contrast, elevated),
+        );
+
+        // 推翻的契约本身：迁移后的深色像素**不再**等于 native base 分区。
+        await _pumpSectionHarness(
+          tester,
+          brightness: Brightness.dark,
+          migrate: false,
+          contrast: contrast,
+          elevated: elevated,
+        );
+        expect(
+          await _capturePixels(tester),
+          isNot(orderedEquals(pixels)),
+          reason: '深色迁移后应与 base 通栏分区不同（旧契约已被有意推翻）',
+        );
+      });
     }
   }
+
+  testWidgets('light section card stays inset, rounded and bordered', (
+    tester,
+  ) async {
+    await _pumpSectionHarness(
+      tester,
+      brightness: Brightness.light,
+      migrate: true,
+    );
+
+    final section = tester.widget<CupertinoListSection>(
+      find.byType(CupertinoListSection),
+    );
+    expect(section.type, CupertinoListSectionType.insetGrouped);
+    expect(section.margin, const EdgeInsets.fromLTRB(16, 8, 16, 8));
+    final decoration = section.decoration!;
+    expect(
+      decoration.borderRadius,
+      const BorderRadius.all(Radius.circular(14)),
+    );
+    expect(decoration.color!.toARGB32(), LightSurfaces.card.toARGB32());
+    final stroke = _foregroundStroke(tester);
+    expect(stroke.top.width, 0.5);
+    expect(stroke.top.color.toARGB32(), LightSurfaces.cardBorder.toARGB32());
+
+    // 浅色像素守卫：中缩 16、圆角 14、卡片底/页底色各就各位。
+    final card = tester.getRect(_foregroundFinder());
+    expect(card.left, 16);
+    expect(card.right, 390 - 16);
+    final pixels = await _capturePixels(tester);
+    int at(int x, int y) => _pixelAt(pixels, 390, x, y);
+    final midY = card.center.dy.round();
+    expect(at(2, midY), LightSurfaces.page.toARGB32());
+    expect(
+      at(card.left.round() + 20, card.top.round() + 5),
+      LightSurfaces.card.toARGB32(),
+    );
+    // 圆角过渡：卡角内缩一格仍是页底色，再深一格才落到卡片底。
+    expect(
+      at(card.left.round() + 1, card.top.round() + 1),
+      LightSurfaces.page.toARGB32(),
+    );
+    expect(
+      at(card.left.round() + 7, card.top.round() + 7),
+      LightSurfaces.card.toARGB32(),
+    );
+  });
 }
+
+/// 分区卡片工装：`migrate` 决定是否过 [SettingsSurfaces.section]。
+///
+/// 保留「同一棵树、只切换迁移开关」的对照法（旧契约的取证方式），这样
+/// 「深色迁移后 ≠ native」这一推翻结论才有同一基线的可比性。
+Future<void> _pumpSectionHarness(
+  WidgetTester tester, {
+  required Brightness brightness,
+  required bool migrate,
+  bool contrast = false,
+  bool elevated = false,
+}) async {
+  tester.view.physicalSize = const Size(390, 700);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    CupertinoApp(
+      theme: buildCupertinoTheme(brightness),
+      home: MediaQuery(
+        data: MediaQueryData(
+          size: const Size(390, 700),
+          highContrast: contrast,
+        ),
+        child: CupertinoUserInterfaceLevel(
+          data: elevated
+              ? CupertinoUserInterfaceLevelData.elevated
+              : CupertinoUserInterfaceLevelData.base,
+          child: Builder(
+            builder: (context) {
+              final toggle = CupertinoSwitch(value: true, onChanged: (_) {});
+              final section = CupertinoListSection(
+                header: const Text('Settings'),
+                children: [
+                  CupertinoListTile(
+                    title: const Text('Option'),
+                    subtitle: const Text('Description'),
+                    trailing: migrate
+                        ? SettingsSurfaces.toggle(context, toggle)
+                        : toggle,
+                  ),
+                  CupertinoListTile(
+                    title: const Text('Input'),
+                    trailing: SizedBox(
+                      width: 150,
+                      child: migrate
+                          ? CupertinoTextField(
+                              placeholder: 'Placeholder',
+                              decoration: SettingsSurfaces.fieldDecoration(
+                                context,
+                              ),
+                              placeholderStyle:
+                                  SettingsSurfaces.placeholderStyle(context),
+                            )
+                          : const CupertinoTextField(
+                              placeholder: 'Placeholder',
+                            ),
+                    ),
+                  ),
+                ],
+              );
+              final page = CupertinoPageScaffold(
+                child: migrate
+                    ? SettingsSurfaces.section(context, section)
+                    : section,
+              );
+              return RepaintBoundary(
+                key: const ValueKey('surface-pixels'),
+                child: migrate ? SettingsSurfaces.page(context, page) : page,
+              );
+            },
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// 抓取工装整页的 raw RGBA 像素。
+Future<Uint8List> _capturePixels(WidgetTester tester) async {
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const ValueKey('surface-pixels')),
+  );
+  return (await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    image.dispose();
+    return data!.buffer.asUint8List();
+  }))!;
+}
+
+/// 卡片外框的 0.5pt 前景描边（唯一一处 `DecorationPosition.foreground`）。
+Finder _foregroundFinder() => find
+    .byWidgetPredicate(
+      (widget) =>
+          widget is DecoratedBox &&
+          widget.position == DecorationPosition.foreground,
+    )
+    .first;
+
+Border _foregroundStroke(WidgetTester tester) =>
+    (tester.widget<DecoratedBox>(_foregroundFinder()).decoration
+                as BoxDecoration)
+            .border!
+        as Border;
+
+/// raw RGBA 缓冲里 `(x, y)` 处的 ARGB 值。
+int _pixelAt(Uint8List bytes, int width, int x, int y) {
+  final i = (y * width + x) * 4;
+  return (bytes[i + 3] << 24) |
+      (bytes[i] << 16) |
+      (bytes[i + 1] << 8) |
+      bytes[i + 2];
+}
+
+/// 期望卡片底：SDK `secondarySystemGroupedBackground` 的深色四档
+/// （base × base/elevated，各含高对比度变体；取值见 Flutter `cupertino/colors.dart`）。
+int _expectedDarkCard(bool contrast, bool elevated) =>
+    switch ((contrast, elevated)) {
+      (false, false) => 0xFF1C1C1E,
+      (true, false) => 0xFF242426,
+      (false, true) => 0xFF2C2C2E,
+      (true, true) => 0xFF363638,
+    };
+
+/// 期望页底色：SDK `systemGroupedBackground` 的深色四档。
+int _expectedDarkPage(bool contrast, bool elevated) =>
+    switch ((contrast, elevated)) {
+      (false, false) => 0xFF000000,
+      (true, false) => 0xFF000000,
+      (false, true) => 0xFF1C1C1E,
+      (true, true) => 0xFF242426,
+    };
+
+/// 期望线族色：SDK `separator` 的深色四档（半透明，逐像素断言用 ARGB）。
+int _expectedDarkSeparator(bool contrast, bool elevated) =>
+    switch ((contrast, elevated)) {
+      (false, false) => 0x99545458,
+      (true, false) => 0xAD545458,
+      (false, true) => 0x99D2D2D2,
+      (true, true) => 0xAD545458,
+    };

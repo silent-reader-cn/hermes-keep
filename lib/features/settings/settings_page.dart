@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
@@ -120,16 +121,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
             // 宽屏（≥900）：左 220 分类导航 + 右内容限宽 744 居中，
             // 只渲染当前分类对应的 section。
-            if (isWide)
-              _buildWideHostSliver(_buildWideBody(context)),
+            if (isWide) _buildWideHostSliver(_buildWideBody(context)),
           ],
         ),
       ),
     );
   }
 
-  /// 宽屏主体：左 220 分类导航（常用 / 服务 / 其他 三组）+ 右内容限宽 744 居中。
-  /// 双栏宿主：把「剩余视口高度」算准后交给两栏（两栏各自内部滚动）。
+  /// 宽屏主体：左 220 分类导航（常用 / 服务 / 其他 三组）+ 右内容限宽 744 居中。  /// 双栏宿主：把「剩余视口高度」算准后交给两栏（两栏各自内部滚动）。
   ///
   /// 刻意**不用** `SliverFillRemaining`：`hasScrollBody: false` 会向子级要
   /// intrinsic 高度 —— 子级里含 viewport 时直接抛
@@ -316,59 +315,51 @@ class _AppearanceSection extends ConsumerWidget {
 
         header: Text(l10n.appearanceSection),
         children: [
-          CupertinoListTile(
+          SettingsSurfaces.segmentedRow(
+            context,
             title: Text(l10n.themeLabel),
-            trailing: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 220),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SettingsSurfaces.segmented(
-                  context,
-                  CupertinoSlidingSegmentedControl<AppThemeMode>(
-                    groupValue: mode,
-                    onValueChanged: (value) {
-                      if (value != null) {
-                        unawaited(
-                          ref.read(themeModeProvider.notifier).setMode(value),
-                        );
-                      }
-                    },
-                    children: {
-                      AppThemeMode.system: Text(l10n.themeSystem),
-                      AppThemeMode.light: Text(l10n.themeLight),
-                      AppThemeMode.dark: Text(l10n.themeDark),
-                    },
-                  ),
-                ),
+            reserveForTitle: 56,
+            control: SettingsSurfaces.segmented(
+              context,
+              CupertinoSlidingSegmentedControl<AppThemeMode>(
+                groupValue: mode,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    unawaited(
+                      ref.read(themeModeProvider.notifier).setMode(value),
+                    );
+                  }
+                },
+                children: {
+                  AppThemeMode.system: Text(l10n.themeSystem),
+                  AppThemeMode.light: Text(l10n.themeLight),
+                  AppThemeMode.dark: Text(l10n.themeDark),
+                },
               ),
             ),
           ),
           // HiDPI 界面缩放（主人 2026-09-27）：100% / 125% / 150% / 200%。
           // 150% 以上会把逻辑宽压到 900 以下 ⇒ 按 A 方案自动转窄屏单栏。
-          CupertinoListTile(
+          SettingsSurfaces.segmentedRow(
+            context,
             title: Text(l10n.settingsUiScale),
             subtitle: Text(l10n.settingsUiScaleDesc),
-            trailing: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 220),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SettingsSurfaces.segmented(
-                  context,
-                  CupertinoSlidingSegmentedControl<AppUiScale>(
-                    groupValue: uiScale,
-                    onValueChanged: (value) {
-                      if (value != null) {
-                        unawaited(
-                          ref.read(uiScaleProvider.notifier).setScale(value),
-                        );
-                      }
-                    },
-                    children: {
-                      for (final scale in AppUiScale.values)
-                        scale: Text(scale.label),
-                    },
-                  ),
-                ),
+            reserveForTitle: 76,
+            control: SettingsSurfaces.segmented(
+              context,
+              CupertinoSlidingSegmentedControl<AppUiScale>(
+                groupValue: uiScale,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    unawaited(
+                      ref.read(uiScaleProvider.notifier).setScale(value),
+                    );
+                  }
+                },
+                children: {
+                  for (final scale in AppUiScale.values)
+                    scale: Text(scale.label),
+                },
               ),
             ),
           ),
@@ -417,81 +408,70 @@ class _AppearanceSection extends ConsumerWidget {
             ),
             onTap: () => unawaited(showPageSurfacePicker(context)),
           ),
-          CupertinoListTile(
+          SettingsSurfaces.segmentedRow(
+            context,
             title: Text(l10n.languageSectionTitle),
-            trailing: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 220),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SettingsSurfaces.segmented(
-                  context,
-                  CupertinoSlidingSegmentedControl<AppLocaleMode>(
-                    key: const ValueKey('settings-locale-mode'),
-                    groupValue: localeMode,
-                    onValueChanged: (value) {
-                      if (value != null) {
-                        unawaited(
-                          ref.read(localeModeProvider.notifier).setMode(value),
-                        );
-                      }
-                    },
-                    children: {
-                      AppLocaleMode.system: Text(l10n.languageAuto),
-                      AppLocaleMode.zh: Text(l10n.languageZh),
-                      AppLocaleMode.en: Text(l10n.languageEn),
-                    },
-                  ),
-                ),
+            reserveForTitle: 64,
+            control: SettingsSurfaces.segmented(
+              context,
+              CupertinoSlidingSegmentedControl<AppLocaleMode>(
+                key: const ValueKey('settings-locale-mode'),
+                groupValue: localeMode,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    unawaited(
+                      ref.read(localeModeProvider.notifier).setMode(value),
+                    );
+                  }
+                },
+                children: {
+                  AppLocaleMode.system: Text(l10n.languageAuto),
+                  AppLocaleMode.zh: Text(l10n.languageZh),
+                  AppLocaleMode.en: Text(l10n.languageEn),
+                },
               ),
             ),
           ),
           // #159：会话列表分组方式（自动 / 按时间 / 按工作区）。
-          CupertinoListTile(
+          SettingsSurfaces.segmentedRow(
+            context,
             key: const ValueKey('settings-session-grouping'),
             title: Text(l10n.sessionGroupingSection),
             subtitle: Text(l10n.sessionGroupingDescription),
-            trailing: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 200),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SettingsSurfaces.segmented(
-                  context,
-                  CupertinoSlidingSegmentedControl<_GroupingChoice>(
-                    key: const ValueKey('settings-grouping-mode'),
-                    groupValue: switch (groupingMode) {
-                      null => _GroupingChoice.auto,
-                      SessionGroupingMode.time => _GroupingChoice.time,
-                      SessionGroupingMode.workspace =>
-                        _GroupingChoice.workspace,
-                    },
-                    onValueChanged: (value) {
-                      if (value == null) return;
-                      final controller = ref.read(
-                        sessionGroupingModeProvider.notifier,
+            reserveForTitle: 112,
+            control: SettingsSurfaces.segmented(
+              context,
+              CupertinoSlidingSegmentedControl<_GroupingChoice>(
+                key: const ValueKey('settings-grouping-mode'),
+                groupValue: switch (groupingMode) {
+                  null => _GroupingChoice.auto,
+                  SessionGroupingMode.time => _GroupingChoice.time,
+                  SessionGroupingMode.workspace => _GroupingChoice.workspace,
+                },
+                onValueChanged: (value) {
+                  if (value == null) return;
+                  final controller = ref.read(
+                    sessionGroupingModeProvider.notifier,
+                  );
+                  switch (value) {
+                    case _GroupingChoice.auto:
+                      // 「自动」→ 清除显式值，回到按屏宽（窄屏时间/桌面工作区）。
+                      unawaited(controller.clearMode());
+                    case _GroupingChoice.time:
+                      unawaited(controller.setMode(SessionGroupingMode.time));
+                    case _GroupingChoice.workspace:
+                      unawaited(
+                        controller.setMode(SessionGroupingMode.workspace),
                       );
-                      switch (value) {
-                        case _GroupingChoice.auto:
-                          // 「自动」→ 清除显式值，回到按屏宽（窄屏时间/桌面工作区）。
-                          unawaited(controller.clearMode());
-                        case _GroupingChoice.time:
-                          unawaited(
-                            controller.setMode(SessionGroupingMode.time),
-                          );
-                        case _GroupingChoice.workspace:
-                          unawaited(
-                            controller.setMode(SessionGroupingMode.workspace),
-                          );
-                      }
-                    },
-                    children: {
-                      _GroupingChoice.auto: Text(l10n.sessionGroupingAuto),
-                      _GroupingChoice.time: Text(l10n.sessionGroupingTime),
-                      _GroupingChoice.workspace: Text(
-                        l10n.sessionGroupingWorkspace,
-                      ),
-                    },
+                  }
+                },
+                children: {
+                  _GroupingChoice.auto: Text(l10n.sessionGroupingAuto),
+                  _GroupingChoice.time: Text(l10n.sessionGroupingTime),
+                  _GroupingChoice.workspace: Text(
+                    l10n.sessionGroupingWorkspace,
                   ),
-                ),
+                },
               ),
             ),
           ),
@@ -605,34 +585,30 @@ class _ChatSection extends ConsumerWidget {
 
         header: Text(l10n.chatSection),
         children: [
-          CupertinoListTile(
+          SettingsSurfaces.segmentedRow(
+            context,
             key: const ValueKey('settings-send-message-shortcut'),
             title: Text(l10n.sendMessageShortcutLabel),
-            trailing: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 240),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SettingsSurfaces.segmented(
-                  context,
-                  CupertinoSlidingSegmentedControl<ChatSendShortcutMode>(
-                    groupValue: sendShortcut,
-                    onValueChanged: (value) {
-                      if (value != null) {
-                        unawaited(
-                          ref
-                              .read(chatSendShortcutSettingsProvider.notifier)
-                              .setMode(value),
-                        );
-                      }
-                    },
-                    children: {
-                      ChatSendShortcutMode.enter: Text(l10n.sendShortcutEnter),
-                      ChatSendShortcutMode.ctrlEnter: Text(
-                        l10n.sendShortcutCtrlEnter,
-                      ),
-                    },
+            reserveForTitle: 88,
+            control: SettingsSurfaces.segmented(
+              context,
+              CupertinoSlidingSegmentedControl<ChatSendShortcutMode>(
+                groupValue: sendShortcut,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    unawaited(
+                      ref
+                          .read(chatSendShortcutSettingsProvider.notifier)
+                          .setMode(value),
+                    );
+                  }
+                },
+                children: {
+                  ChatSendShortcutMode.enter: Text(l10n.sendShortcutEnter),
+                  ChatSendShortcutMode.ctrlEnter: Text(
+                    l10n.sendShortcutCtrlEnter,
                   ),
-                ),
+                },
               ),
             ),
           ),
@@ -1363,30 +1339,23 @@ class _NotificationSectionState extends ConsumerState<_NotificationSection> {
           ),
           CupertinoListTile(
             key: const ValueKey('settings-notify-push-test'),
-            title: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 240),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: SettingsSurfaces.segmented(
-                  context,
-                  CupertinoSlidingSegmentedControl<PushTestType>(
-                    key: const ValueKey('settings-notify-push-test-type'),
-                    groupValue: _selectedType,
-                    onValueChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          _selectedType = value;
-                        });
-                      }
-                    },
-                    children: {
-                      PushTestType.turns: Text(l10n.pushTestTurns),
-                      PushTestType.clarify: Text(l10n.pushTestClarify),
-                      PushTestType.errors: Text(l10n.pushTestErrors),
-                    },
-                  ),
-                ),
+            title: SettingsSurfaces.segmented(
+              context,
+              CupertinoSlidingSegmentedControl<PushTestType>(
+                key: const ValueKey('settings-notify-push-test-type'),
+                groupValue: _selectedType,
+                onValueChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedType = value;
+                    });
+                  }
+                },
+                children: {
+                  PushTestType.turns: Text(l10n.pushTestTurns),
+                  PushTestType.clarify: Text(l10n.pushTestClarify),
+                  PushTestType.errors: Text(l10n.pushTestErrors),
+                },
               ),
             ),
             trailing: CupertinoButton.filled(

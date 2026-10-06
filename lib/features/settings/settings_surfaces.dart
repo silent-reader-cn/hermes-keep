@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
@@ -7,7 +9,8 @@ import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/utils/accessibility.dart';
 
-/// Opt-in settings presentation. Dark mode returns the original widgets.
+/// 设置页族的呈现接缝：结构（分区卡片 / 排版令牌）两主题统一，控件皮肤按
+/// 主题取舍 —— 浅色走冻结的浅色令牌，深色沿用 SDK 原生。
 abstract final class SettingsSurfaces {
   /// Whether this settings view uses the frozen light palette.
   static bool isLight(BuildContext context) =>
@@ -30,40 +33,45 @@ abstract final class SettingsSurfaces {
     );
   }
 
-  /// Inset white cards with full-width 0.5-point separators in light mode.
+  /// 分区卡片：**两个主题共用同一套 inset 结构** —— 相同的水平内缩
+  /// (`16/8/16/8`)、圆角 14、0.5pt 前景描边、0.5pt 全宽分割线，以及同一套排版
+  /// 令牌；只有**取色**按主题解析（浅色读 [LightSurfaces] 固定令牌；深色读
+  /// Cupertino 动态语义色并 `resolveFrom` 保留高对比度 / elevated 变体）。
   ///
-  /// Keeping the original section in dark mode also preserves native margins,
-  /// header typography and separator resolution.
+  /// 统一的是**结构**：深色下 base 构造的默认 `margin` 是
+  /// `EdgeInsets.only(bottom: 8)`（零水平边距、零圆角、无前景描边），那正是
+  /// 「深色通栏方角、浅色内缩卡片」这一控件级不一致的根因。
+  ///
+  /// 控件皮肤（toggle / segmented / dialog / sheet / fieldDecoration /
+  /// actionColor / selection / serverAction）仍各自 `isLight` 门控，深色继续
+  /// 走 SDK 原生，本轮**不**统一它们。
   static CupertinoListSection section(
     BuildContext context,
     CupertinoListSection original,
   ) {
-    if (!isLight(context)) return original;
     const radius = BorderRadius.all(Radius.circular(14));
+    final palette = _SectionPalette.of(context);
     final rows = original.children ?? const <Widget>[];
     return CupertinoListSection.insetGrouped(
       key: original.key,
-      backgroundColor: LightSurfaces.page,
+      backgroundColor: palette.page,
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       dividerMargin: 0,
       additionalDividerMargin: 0,
-      separatorColor: LightSurfaces.divider,
+      separatorColor: palette.divider,
       clipBehavior: Clip.none,
       header: original.header == null
           ? null
           : DefaultTextStyle.merge(
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: kFontSectionTitle,
                 fontWeight: FontWeight.w500,
-                color: LightSurfaces.textSecondary,
+                color: palette.secondaryText,
               ),
               child: original.header!,
             ),
-      footer: _secondary(original.footer),
-      decoration: const BoxDecoration(
-        color: LightSurfaces.card,
-        borderRadius: radius,
-      ),
+      footer: _secondary(original.footer, palette),
+      decoration: BoxDecoration(color: palette.card, borderRadius: radius),
       // A single native child lets separators stay at 0.5 logical pixels at
       // every device pixel ratio. The foreground border survives pressed rows.
       children: rows.isEmpty
@@ -75,10 +83,7 @@ abstract final class SettingsSurfaces {
                   position: DecorationPosition.foreground,
                   decoration: BoxDecoration(
                     borderRadius: radius,
-                    border: Border.all(
-                      color: LightSurfaces.cardBorder,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: palette.border, width: 0.5),
                   ),
                   child: Column(
                     children: [
@@ -87,10 +92,10 @@ abstract final class SettingsSurfaces {
                           SizedBox(
                             height: 0.5,
                             width: double.infinity,
-                            child: ColoredBox(color: LightSurfaces.divider),
+                            child: ColoredBox(color: palette.divider),
                           ),
                         rows[i] is CupertinoListTile
-                            ? _tile(context, rows[i] as CupertinoListTile)
+                            ? _tile(rows[i] as CupertinoListTile, palette)
                             : rows[i],
                       ],
                     ],
@@ -103,46 +108,53 @@ abstract final class SettingsSurfaces {
 
   /// 设置项名：统一到项名档 [kFontItemTitle]（不继承主题 17pt）。
   static Widget _primary(Widget child) => DefaultTextStyle.merge(
-        style: const TextStyle(fontSize: kFontItemTitle),
-        child: child,
-      );
+    style: const TextStyle(fontSize: kFontItemTitle),
+    child: child,
+  );
 
   /// 说明 / 附加信息：统一到注解档（原先继承主题 17pt，在宽屏右侧显得过大）。
-  static Widget? _secondary(Widget? child) => child == null
+  ///
+  /// 字号令牌在**两个主题**都生效（字号统一是本轮目的之一）；颜色按主题解析
+  /// —— 浅色读 [LightSurfaces.textSecondary]，深色读 `secondaryLabel`
+  /// 的动态变体，避免把「只在白卡上成立的深灰」硬搬到深色卡片上。
+  ///
+  /// [palette] 由调用方解析一次后透传，避免每行重复解一遍动态色。
+  static Widget? _secondary(Widget? child, _SectionPalette palette) =>
+      child == null
       ? null
       : DefaultTextStyle.merge(
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: kFontCaption,
-            color: LightSurfaces.textSecondary,
+            color: palette.secondaryText,
           ),
           child: child,
         );
 
   static CupertinoListTile _tile(
-    BuildContext context,
     CupertinoListTile original,
+    _SectionPalette palette,
   ) => CupertinoListTile(
     key: original.key,
     // 设置项名统一到项名档（原先继承主题 17pt —— 主人反馈宽屏右侧「太大」）。
     title: _primary(original.title),
-    subtitle: _secondary(original.subtitle),
-    additionalInfo: _secondary(original.additionalInfo),
+    subtitle: _secondary(original.subtitle, palette),
+    additionalInfo: _secondary(original.additionalInfo, palette),
     leading: original.leading,
-    trailing: _trailing(context, original.trailing),
+    trailing: _trailing(original.trailing, palette),
     onTap: original.onTap,
     padding: original.padding,
     leadingSize: original.leadingSize,
     leadingToTitle: original.leadingToTitle,
     backgroundColor: original.backgroundColor,
-    backgroundColorActivated: LightSurfaces.pressed,
+    backgroundColorActivated: palette.pressed,
   );
 
-  static Widget? _trailing(BuildContext context, Widget? original) {
+  static Widget? _trailing(Widget? original, _SectionPalette palette) {
     if (original is CupertinoListTileChevron) {
-      return const Icon(
+      return Icon(
         CupertinoIcons.right_chevron,
         size: kFontItemTitle,
-        color: LightSurfaces.textSecondary,
+        color: palette.secondaryText,
       );
     }
     if (original is Icon && original.icon == CupertinoIcons.chevron_right) {
@@ -152,10 +164,10 @@ abstract final class SettingsSurfaces {
         size: original.size,
         semanticLabel: original.semanticLabel,
         textDirection: original.textDirection,
-        color: LightSurfaces.textSecondary,
+        color: palette.secondaryText,
       );
     }
-    return _secondary(original);
+    return _secondary(original, palette);
   }
 
   /// Selection adds a surface only in light mode; checkmarks remain intact.
@@ -325,6 +337,91 @@ abstract final class SettingsSurfaces {
     );
   }
 
+  /// 行标题预留宽度下限（逻辑像素）：控件再宽也至少给标题留这么宽的横排空间。
+  static const double kMinTitleReserve = 44.0;
+
+  /// `CupertinoListTile` 默认左右内边距之和（框架 `_kPadding` /
+  /// `_kPaddingWithSubtitle` 均为 `start: 20, end: 14`，合计 34）。
+  ///
+  /// 行内真实可用宽 = 行外量到的 tile 宽 − 本值。之所以要自己减：**
+  /// `CupertinoListTile` 用 `LayoutBuilder` 量不到行内宽** —— 框架把 trailing
+  /// 摆在 `Row` 的**非弹性**槽位，而非弹性子项在横向 `Row` 里拿到的是
+  /// `BoxConstraints(maxHeight: …)`（**没有 maxWidth**，即无限宽）。实测
+  /// `trailing` 里的 `LayoutBuilder` 永远读到 `Infinity`（探针
+  /// `test/screenshots/crispness_probe_test.dart` 的 SEGTRAIL 输出）。
+  static const double kTileRowInset = 34.0;
+
+  /// 一行「名字（+ 副标题） + 分段控件」的 `CupertinoListTile`，控件**不缩放**。
+  ///
+  /// ── 它替掉了什么 ────────────────────────────────────────────────────────
+  /// 过去这些行写作
+  /// `trailing: ConstrainedBox(maxWidth: 220) > FittedBox(scaleDown)`。
+  /// `FittedBox` 会把「塞不下的整块控件」等比缩小 ⇒ **文字与图标一起被重采样**。
+  /// 探针实测（MiSans、`CRISPNESS_PROBE=1`）：
+  ///   ·「会话分组方式」行（cap 200，控件实需 219.1）⇒ scale 0.9129，
+  ///     13pt 标签被画成 11.87pt；
+  ///   · 英文界面「推送测试类型」行（cap 240，实需 378.6）⇒ scale 0.6339，
+  ///     13pt 被画成 8.24pt（比 `kFontMicro` 的 11 还小）。
+  ///
+  /// ── 怎么做到不缩放 ──────────────────────────────────────────────────────
+  /// **只限宽、不缩放**：控件交给 `BoxConstraints(maxWidth: cap)` 即可。
+  /// `CupertinoSlidingSegmentedControl` 自己会把每段宽度收敛到
+  /// `(maxWidth − 分隔线) / 段数`，而每段里还留着 2×10 逻辑像素的固定最小内边距
+  /// 可被收缩吸收 —— 因此**字形从不被重采样**，最坏也只是段变窄、文字换行。
+  ///
+  /// 宽度上限 `cap = 行内可用宽 − [reserveForTitle]`：给标题留出横排空间，避免
+  /// 控件变宽把标题挤折行。只要 `cap` 不小于控件实需宽度，控件就按原尺寸渲染，
+  /// `scale ≡ 1.0`（探针实测：中文界面 320–1600 宽全部 `issues=none`）。
+  ///
+  /// 之所以在 **tile 外**包 `LayoutBuilder`（而不是在 trailing 里）：见
+  /// [kTileRowInset] 的说明 —— trailing 槽位拿到的是无限宽约束，在那里量不到行宽。
+  static Widget segmentedRow(
+    BuildContext context, {
+    required Widget title,
+    required Widget control,
+    required double reserveForTitle,
+    Widget? subtitle,
+    Key? key,
+    VoidCallback? onTap,
+    Widget? leading,
+  }) {
+    return LayoutBuilder(
+      builder: (layoutContext, constraints) {
+        final tileWidth = constraints.maxWidth;
+        final rowWidth = tileWidth.isFinite
+            ? tileWidth - kTileRowInset
+            : double.infinity;
+        // ⚠️ 这里必须**逐项复刻** `_tile()` 的装配（`_primary` / `_secondary` /
+        // `_trailing`）：`section()` 只对「本身是 `CupertinoListTile` 的行」调用
+        // `_tile()`，而本部件在 tile 外包了 `LayoutBuilder`，`_tile()` 因此不会
+        // 再被套用。漏掉任何一项都会静默改掉字号/颜色/描边（实测踩过：漏了
+        // `_trailing` ⇒ 分段标签从 `textSecondary` 变回 `label`；漏了 `_primary`
+        // ⇒ 项名从 15pt 掉回主题 17pt）。
+        final palette = _SectionPalette.of(context);
+        return CupertinoListTile(
+          key: key,
+          leading: leading,
+          title: _primary(title),
+          subtitle: _secondary(subtitle, palette),
+          onTap: onTap,
+          backgroundColorActivated: palette.pressed,
+          trailing: _trailing(
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: math.min(
+                  rowWidth,
+                  math.max(rowWidth - reserveForTitle, kMinTitleReserve),
+                ),
+              ),
+              child: control,
+            ),
+            palette,
+          ),
+        );
+      },
+    );
+  }
+
   /// Native action-sheet surfaces with readable labels and destructive text.
   static CupertinoActionSheet sheet(
     BuildContext context,
@@ -351,8 +448,8 @@ abstract final class SettingsSurfaces {
 
     return CupertinoActionSheet(
       key: original.key,
-      title: _secondary(original.title),
-      message: _secondary(original.message),
+      title: _secondary(original.title, _SectionPalette.of(context)),
+      message: _secondary(original.message, _SectionPalette.of(context)),
       messageScrollController: original.messageScrollController,
       actionScrollController: original.actionScrollController,
       actions: original.actions?.map(action).toList(),
@@ -405,6 +502,68 @@ abstract final class SettingsSurfaces {
           else
             action,
       ],
+    );
+  }
+}
+
+/// 分区卡片的结构取色族：**浅色逐令牌固定，深色逐语义动态**。
+///
+/// 之所以单列一族：本轮把「深色 / 浅色两套分区结构」收敛成一套，取色是**唯一**
+/// 允许分叉的维度。深色一律走 [CupertinoColors] 的动态语义色并 `resolveFrom`，
+/// 因此高对比度与 elevated（`CupertinoUserInterfaceLevel`）变体都被保留；浅色
+/// 读 [LightSurfaces] 的固定令牌（含用户可调的页底色 getter），逐像素不变。
+///
+/// **不得**把深浅两边的取值写成同一条 ARGB 字面量 —— 那会在高对比度模式下丢掉
+/// 系统专属变体，等于把动态色语义抹掉。
+class _SectionPalette {
+  const _SectionPalette({
+    required this.page,
+    required this.card,
+    required this.border,
+    required this.divider,
+    required this.secondaryText,
+    required this.pressed,
+  });
+
+  /// 分区背后整页底色。
+  final Color page;
+
+  /// 卡片底。
+  final Color card;
+
+  /// 卡片轮廓 + 结构线（同值同族，浅色口径一致）。
+  final Color border;
+  final Color divider;
+
+  /// 分组标题 / 说明 / 副标题 / chevron 的颜色。
+  final Color secondaryText;
+
+  /// 行按下底。
+  final Color pressed;
+
+  static _SectionPalette of(BuildContext context) {
+    if (SettingsSurfaces.isLight(context)) {
+      return _SectionPalette(
+        page: LightSurfaces.page,
+        card: LightSurfaces.card,
+        border: LightSurfaces.cardBorder,
+        divider: LightSurfaces.divider,
+        secondaryText: LightSurfaces.textSecondary,
+        pressed: LightSurfaces.pressed,
+      );
+    }
+    // 深色：与 SDK 原生的分组语义对齐 —— 页 `systemGroupedBackground`、
+    // 卡片 `secondarySystemGroupedBackground`、线族 `separator`、次级文字
+    // `secondaryLabel`、行按下底 `systemGrey4`（即 CupertinoListTile 的默认值）。
+    return _SectionPalette(
+      page: CupertinoColors.systemGroupedBackground.resolveFrom(context),
+      card: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+        context,
+      ),
+      border: CupertinoColors.separator.resolveFrom(context),
+      divider: CupertinoColors.separator.resolveFrom(context),
+      secondaryText: CupertinoColors.secondaryLabel.resolveFrom(context),
+      pressed: CupertinoColors.systemGrey4.resolveFrom(context),
     );
   }
 }

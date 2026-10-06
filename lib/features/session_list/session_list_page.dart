@@ -1,9 +1,12 @@
 import 'dart:async';
+
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
+
 import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -81,6 +84,51 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   final ScrollController _scrollController = ScrollController();
   Timer? _searchDebounce;
 
+  // ---------------------------------------------------------------------------
+  // 无感刷新（主人 2026-10-06）：视口锚点保持 + 滚动期内容挂起
+  // ---------------------------------------------------------------------------
+  //
+  // 缺陷：自动刷新换掉列表内容后，即便 `pixels` 不变，屏上内容也被重新排布
+  // （新会话插到上方 / 组内重排），用户看到的就是「列表自己滚了一下」。修法：
+  // 刷新前记住**顶部可见行**的 renderId 与其视口 dy，重建后按几何 delta
+  // `jumpTo` 精确归位（同仓 #93 的几何锚定口径，不用估算 extent）。
+  // 手势语义（要求 C）：用户正在拖动/惯性滚动时不换内容 —— 新内容挂起到
+  // 滚动 settle 再应用，避免手指底下内容被替换。
+
+  /// 视口锚点快照（顶部可见行的 renderId + 其视口 dy）。
+  ///
+  /// 由每个 build 的 post-frame 刷新，另在滚动 settle 的 post-frame 刷新一次。
+  /// **不滚动时 `pixels` 恒定 ⇒ 任何一次 post-frame 快照都与「此刻屏上几何」
+  /// 完全等价**，所以内容换新时可以直接拿它当基准。
+  ({String renderId, double dy})? _anchorSnapshot;
+
+  /// 内容换新时暂存的锚点（下一帧按几何 delta 归位）。
+  ({String renderId, double dy})? _pendingAnchorRestore;
+
+  /// 锚点还原的帧预算（逐帧实测，收敛即收工）。
+  int _anchorRestoreFrames = 0;
+
+  /// 当前**实际渲染**的 sections（滚动期可能是上一版内容，见 [_deferredSections]）。
+  List<SessionListSection>? _displayedSections;
+
+  /// 滚动期被挂起的新 sections（settle 后应用）。
+  List<SessionListSection>? _deferredSections;
+
+  /// 滚动 settle 的「下一帧 post-frame 处理」是否已排。
+  bool _scrollSettleScheduled = false;
+
+  /// 用户拖动/惯性滚动中（由 ScrollStart/ScrollEnd 通知维护）。
+  bool _scrollInProgress = false;
+
+  /// 锚点还原的收敛阈值：小于它不动视口（避免无意义滚动）。
+  static const double _anchorSettleEpsilon = 0.5;
+
+  /// 锚点还原的最多跳转帧数。
+  static const int _anchorRestoreMaxFrames = 2;
+
+  /// 会话行的 key 前缀（行 key 形如 `session-row-<id>`）。
+  static const String _sessionRowKeyPrefix = 'session-row-';
+
   /// #151：当前悬停的工作区组 key —— 组头右侧的「+」（为该工作区新建会话）
   /// 只在被悬停的那一组上出现。
   String? _hoveredSectionKey;
@@ -127,7 +175,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   Widget build(BuildContext context) {
     final async = ref.watch(sessionListControllerProvider);
     final state = async.valueOrNull;
-    final sections = ref.watch(sessionListSectionsProvider);
+    final liveSections = ref.watch(sessionListSectionsProvider);
     // #149：顶部品牌行的筛选按钮不直接持有筛选弹层（弹层依赖本页私有状态/
     // 方法，搬迁成本高），改为 bump 信号；这里监听并复用本页既有实现打开。
     ref.listen<int>(sessionListFilterRequestProvider, (previous, next) {
@@ -138,7 +186,20 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
     // #158：桌面侧栏（宽屏 + 非工具行模式）用「朴素行」；手机窄屏保留白卡。
 
+    // 无感刷新：列表内容变化的处理（锚点捕获 / 滚动期挂起）必须在 **build 之外**
+    // 进行 —— 一来看锚点要遍历已布局的子树（build 期遍历会被框架断言拦下），
+    // 二来此刻屏上仍是旧布局，几何才是「用户真正看到的位置」。
+    ref.listen<List<SessionListSection>>(sessionListSectionsProvider, (
+      previous,
+      next,
+    ) {
+      if (previous == next) return;
+      _onSectionsChanged(next);
+    });
+
     final isSearchMode = state?.searchQuery?.trim().isNotEmpty == true;
+    // 无感刷新：渲染「已生效内容」（滚动期可能是上一版，见 [_deferredSections]）。
+    final sections = _displayedSections ?? liveSections;
     // 会话行副标题显示开关（设置页配置）+ projectId→名称映射（同屏一次解析）。
     final subtitleSettings = ref.watch(sessionRowSubtitleSettingsProvider);
     final projectNames = _projectNameMap(ref);
@@ -154,13 +215,29 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     });
 
     ref.listen<String?>(selectedWorkspaceFilterProvider, (previous, next) {
-      if (previous != next && _scrollController.hasClients) {
+      if (previous == next) return;
+      // 无感刷新：切换工作区筛选是**显式重置语义**（换筛选即回顶）——
+      // 撤销待还原锚点，回顶后 `pixels == 0`，锚点归位自然让位；
+      // 挂起内容不在此处丢弃（挂起的是「最新一次 provider 值」，随后到达的
+      // 筛选结果会覆盖它并照常落地）。
+      _pendingAnchorRestore = null;
+      if (_scrollController.hasClients) {
         _scrollController.jumpTo(0);
       }
     });
 
     // 首帧后自动补充分页窗口，直到填满视口或耗尽（内容不足一屏时也能翻页）。
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeLoadMore());
+
+    // 无感刷新：本帧布局已落地 —— 有待还原锚点就按几何 delta 精确归位，
+    // 否则刷新一次「当前视口锚点」快照（内容下次换新时用它做基准）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_pendingAnchorRestore != null) {
+        _stepAnchorRestore();
+      } else {
+        _refreshAnchorSnapshot();
+      }
+    });
 
     final l10n = AppLocalizations.of(context);
     final isDesktop = isDesktopPlatform();
@@ -173,71 +250,75 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
         backgroundColor: isLight ? LightSurfaces.page : null,
         child: Stack(
           children: [
-            CustomScrollView(
-              key: const ValueKey('session-list-scroll'),
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                // #149 修正：侧栏场景（宽屏 + showUtilityRows=false）下头部四个
-                // action 的渲染条件全部不成立（筛选/设置/新建/刷新都已由品牌行与
-                // 工具列表承担）⇒ 该 SliverPersistentHeader 只剩一个 50px 的空架子，
-                // 表现为「工具列表下方一大块空白」。侧栏场景直接不渲染它；
-                // 窄屏单栈（!isWide）仍然需要它承载大标题与新建入口。
-                if (widget.showUtilityRows || !isWide)
-                  SliverPersistentHeader(
-                    pinned: true,
-                    delegate: SessionListHeaderDelegate(
-                      title: l10n.sessions,
-                      topPadding: MediaQuery.paddingOf(context).top,
-                      brightness:
-                          CupertinoTheme.of(context).brightness ??
-                          Brightness.light,
-                      // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不渲染「会话」
-                      // 大标题，搜索框与操作按钮（筛选/加号）整合为单行 pinned 头部；
-                      // 手机端单栈 → 宽敞大标题头部（49pt）。
-                      compactHeader: !widget.showUtilityRows,
-                      // #149：侧栏场景的搜索框改由顶部品牌行（SidebarBrandBar）
-                      // 承担（其搜索图标展开），列表内不再重复出一条搜索行。
-                      searchField: null,
-                      titleTrailing: !isWide && !isSearchMode
-                          ? _buildNarrowNavigationAction()
-                          : null,
-                      // #128：窄屏点击「会话」大标题（及收起态中标题）= 点击 ▾；
-                      // 条件与 titleTrailing 完全一致（无 ▾ 则不接线、点击无效）。
-                      onTitleTap: !isWide && !isSearchMode
-                          ? _requestNarrowNavMenu
-                          : null,
-                      actions: [
-                        // #149：筛选/新建/刷新在侧栏场景由品牌行与工具列表承担，
-                        // 列表头部只在非侧栏（窄屏单栈）时保留这些入口，避免双入口。
-                        if (!isSearchMode && widget.showUtilityRows)
-                          _buildFilterAction(state),
-                        if (widget.showSettingsTrailing)
-                          _buildSettingsOrDoneAction(state),
-                        if (!widget.showUtilityRows && !isWide)
-                          _buildNewSessionAction(),
-                        if (showDesktopRefresh && widget.showUtilityRows)
-                          _buildDesktopRefreshAction(refreshing),
-                      ],
+            // 无感刷新：拖动/惯性滚动中不换内容（新内容挂起到 settle 再应用）。
+            NotificationListener<ScrollNotification>(
+              onNotification: _onListScrollNotification,
+              child: CustomScrollView(
+                key: const ValueKey('session-list-scroll'),
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  // #149 修正：侧栏场景（宽屏 + showUtilityRows=false）下头部四个
+                  // action 的渲染条件全部不成立（筛选/设置/新建/刷新都已由品牌行与
+                  // 工具列表承担）⇒ 该 SliverPersistentHeader 只剩一个 50px 的空架子，
+                  // 表现为「工具列表下方一大块空白」。侧栏场景直接不渲染它；
+                  // 窄屏单栈（!isWide）仍然需要它承载大标题与新建入口。
+                  if (widget.showUtilityRows || !isWide)
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: SessionListHeaderDelegate(
+                        title: l10n.sessions,
+                        topPadding: MediaQuery.paddingOf(context).top,
+                        brightness:
+                            CupertinoTheme.of(context).brightness ??
+                            Brightness.light,
+                        // 侧栏复用（showUtilityRows=false）→ 紧凑头部：不渲染「会话」
+                        // 大标题，搜索框与操作按钮（筛选/加号）整合为单行 pinned 头部；
+                        // 手机端单栈 → 宽敞大标题头部（49pt）。
+                        compactHeader: !widget.showUtilityRows,
+                        // #149：侧栏场景的搜索框改由顶部品牌行（SidebarBrandBar）
+                        // 承担（其搜索图标展开），列表内不再重复出一条搜索行。
+                        searchField: null,
+                        titleTrailing: !isWide && !isSearchMode
+                            ? _buildNarrowNavigationAction()
+                            : null,
+                        // #128：窄屏点击「会话」大标题（及收起态中标题）= 点击 ▾；
+                        // 条件与 titleTrailing 完全一致（无 ▾ 则不接线、点击无效）。
+                        onTitleTap: !isWide && !isSearchMode
+                            ? _requestNarrowNavMenu
+                            : null,
+                        actions: [
+                          // #149：筛选/新建/刷新在侧栏场景由品牌行与工具列表承担，
+                          // 列表头部只在非侧栏（窄屏单栈）时保留这些入口，避免双入口。
+                          if (!isSearchMode && widget.showUtilityRows)
+                            _buildFilterAction(state),
+                          if (widget.showSettingsTrailing)
+                            _buildSettingsOrDoneAction(state),
+                          if (!widget.showUtilityRows && !isWide)
+                            _buildNewSessionAction(),
+                          if (showDesktopRefresh && widget.showUtilityRows)
+                            _buildDesktopRefreshAction(refreshing),
+                        ],
+                      ),
                     ),
+                  // 注意：刷新指示器必须排在所有 SliverToBoxAdapter 之前
+                  // （视口会把 overscroll 逐级分给前面的 box sliver，导致
+                  // 指示器拿不到负 overlap 而无法触发）。
+                  AppRefreshControl(onRefresh: _onRefresh),
+                  if (widget.showUtilityRows)
+                    SliverToBoxAdapter(child: _buildSearchBar()),
+                  if (widget.showUtilityRows && !isSearchMode && isWide)
+                    const SliverToBoxAdapter(child: SessionListUtilityRows()),
+                  ..._buildContentSlivers(
+                    async,
+                    state,
+                    sections,
+                    isSearchMode,
+                    subtitleSettings,
+                    projectNames,
                   ),
-                // 注意：刷新指示器必须排在所有 SliverToBoxAdapter 之前
-                // （视口会把 overscroll 逐级分给前面的 box sliver，导致
-                // 指示器拿不到负 overlap 而无法触发）。
-                AppRefreshControl(onRefresh: _onRefresh),
-                if (widget.showUtilityRows)
-                  SliverToBoxAdapter(child: _buildSearchBar()),
-                if (widget.showUtilityRows && !isSearchMode && isWide)
-                  const SliverToBoxAdapter(child: SessionListUtilityRows()),
-                ..._buildContentSlivers(
-                  async,
-                  state,
-                  sections,
-                  isSearchMode,
-                  subtitleSettings,
-                  projectNames,
-                ),
-              ],
+                ],
+              ),
             ),
             if (state?.isSelectionMode == true)
               Positioned(
@@ -577,7 +658,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
       key: const ValueKey('batch-select-all'),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       onPressed: busy ? null : controller.selectAllInSection,
-      child: Text(l10n.selectAll, style: const TextStyle(fontSize: kFontSidebarTitle)),
+      child: Text(
+        l10n.selectAll,
+        style: const TextStyle(fontSize: kFontSidebarTitle),
+      ),
     );
     final archive = slot(
       key: const ValueKey('batch-archive'),
@@ -1110,7 +1194,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: kFontItemTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
@@ -1225,7 +1312,272 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     );
   }
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 无感刷新：视口锚点保持（几何归位）+ 滚动/换新期内容挂起
+  // ---------------------------------------------------------------------------
+  //
+  // 缺陷：自动刷新换掉列表内容后，即便 `pixels` 不变，屏上内容也被重新排布
+  // （新会话插到上方 / 组内重排），用户看到的就是「列表自己滚了一下」。修法：
+  // 内容换新**前**记住视口顶缘可见行的 renderId 与其视口 dy，换新后按几何
+  // delta `jumpTo` 精确归位（同仓 #93 的几何锚定口径，不用估算 extent）。
+  //
+  // 关键取舍：锚点用「post-frame 持续刷新的快照」而不是「换新那一刻才去取」。
+  // 原因：取锚点要遍历已布局的子树，而框架**禁止在 build 期遍历**
+  // （`visitChildElements` 断言），换新恰好可能落在 build 期；而不滚动时
+  // `pixels` 恒定，任何一次 post-frame 快照都与「此刻屏上几何」完全等价。
+
+  /// 列表内容变化（provider 层）：滚动期挂起 / 生效新内容并武装锚点归位。
+  ///
+  /// - 结构/顺序没变（含仅标题、时间等字段变化）→ 直接生效，无需锚定；
+  /// - 结构变了且用户正在拖动/惯性滚动 → 新内容挂起（避免手指底下内容被换
+  ///   掉），滚动 settle 后的 post-frame 再应用；纯尾部追加（分页补拉）例外
+  ///   —— 追加不动既有行位置，挂起反而会把无限滚动卡在底部，故照常立即生效；
+  /// - 其余情况立即生效：用锚点快照武装归位，下一帧按几何 delta 精确还原。
+  void _onSectionsChanged(List<SessionListSection> next) {
+    final displayed = _displayedSections;
+    if (displayed == null || identical(displayed, next)) {
+      _displayedSections = next;
+      return;
+    }
+    final oldCells = _layoutCells(displayed);
+    final newCells = _layoutCells(next);
+    if (_sameCells(oldCells, newCells)) {
+      _displayedSections = next;
+      return;
+    }
+    _syncScrollInProgress();
+    if (_scrollInProgress && !_isStrictAppend(oldCells, newCells)) {
+      _deferredSections = next;
+      return;
+    }
+    _applySections(next);
+  }
+
+  /// 让 [next] 生效：用锚点快照武装归位（屏上仍是旧布局），下一帧几何还原。
+  void _applySections(List<SessionListSection> next) {
+    _armAnchorRestore(_anchorSnapshot);
+    _displayedSections = next;
+  }
+
+  /// 滚动 settle：下一帧 post-frame 刷新锚点快照 + 应用挂起内容。
+  ///
+  /// 刻意延后一帧：settle 通知到达时渲染树可能还停在上一帧的像素上（一次连续
+  /// 拖动/惯性只在末帧才落布局），等一帧再取几何才准，也才允许遍历子树。
+  /// 注意 post-frame 回调本身不排帧 —— 显式催一帧，避免挂起内容长期不落地。
+  void _scheduleScrollSettle() {
+    if (_scrollSettleScheduled) return;
+    _scrollSettleScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollSettleScheduled = false;
+      if (!mounted) return;
+      _syncScrollInProgress();
+      if (_scrollInProgress) return; // 又滚起来了：交给下一次 settle
+      _refreshAnchorSnapshot();
+      final deferred = _deferredSections;
+      if (deferred == null) return;
+      _deferredSections = null;
+      setState(() => _applySections(deferred));
+    });
+    if (!WidgetsBinding.instance.hasScheduledFrame) {
+      WidgetsBinding.instance.scheduleFrame();
+    }
+  }
+
+  /// 列表「布局签名」：分区头 + 会话行的扁平序列（顺序敏感）。
+  ///
+  /// 行/组头位置是视口稳定性的**唯一**决定因素 —— 同一序列 ⇒ 屏上内容不动，
+  /// 不需要锚定（只有分区计数、副标题等字段变了）。
+  List<String> _layoutCells(List<SessionListSection> sections) {
+    return <String>[
+      for (final section in sections) ...<String>[
+        'h:${section.key}',
+        for (final session in section.sessions)
+          'r:${session.sessionId ?? session.id}',
+      ],
+    ];
+  }
+
+  bool _sameCells(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// [oldCells] 是否为新序列的严格前缀（= 只在本列表尾部追加了行）。
+  bool _isStrictAppend(List<String> oldCells, List<String> newCells) {
+    if (newCells.length <= oldCells.length) return false;
+    for (var i = 0; i < oldCells.length; i++) {
+      if (oldCells[i] != newCells[i]) return false;
+    }
+    return true;
+  }
+
+  /// 是否处于「框架正在 build / layout / paint」的帧内阶段（此时禁止遍历子树）。
+  bool get _isBuildPhase =>
+      SchedulerBinding.instance.schedulerPhase ==
+      SchedulerPhase.persistentCallbacks;
+
+  /// 记录滚动通知：维护「滚动中」状态 + settle 后应用挂起内容。
+  bool _onListScrollNotification(ScrollNotification notification) {
+    // depth != 0 = 行内嵌套滚动（如横向滚动），与本列表内容换新无关。
+    if (notification.depth != 0) return false;
+    if (notification is ScrollStartNotification) {
+      _scrollInProgress = true;
+    } else if (notification is ScrollEndNotification) {
+      _scrollInProgress = false;
+      _scheduleScrollSettle();
+    }
+    return false;
+  }
+
+  /// 以 [ScrollPosition] 的真实活动态校准 `_scrollInProgress`。
+  ///
+  /// 兜底：万一漏掉 `ScrollEndNotification`，不至于把新内容永久挂起
+  /// （下一次内容变化时自动结算）。
+  void _syncScrollInProgress() {
+    if (!_scrollInProgress) return;
+    if (!_scrollController.hasClients ||
+        !_scrollController.position.isScrollingNotifier.value) {
+      _scrollInProgress = false;
+    }
+  }
+
+  /// 刷新视口锚点快照（只能在 post-frame / 非 build 期调用）。
+  void _refreshAnchorSnapshot() {
+    if (!mounted || _pendingAnchorRestore != null) return;
+    _anchorSnapshot = _captureTopVisibleAnchor();
+  }
+
+  /// 武装锚点还原（[anchor] = 内容换新**前**的视口锚点快照）。
+  ///
+  /// 只在「列表已滚动进内容里」时武装（`pixels > 0`）：
+  /// - 在顶部（`pixels == 0`）时新内容只能把行往下推，任何补偿都会被 clamp 成
+  ///   0 —— 属无意义滚动，且「回顶」本就是用户期望；
+  /// - 下拉刷新/回弹的 overscroll 态同样落在 `pixels <= 0`（clamping 物理下
+  ///   指示器区由 sliver 撑开、`pixels` 恒为 0），此时期望行为也是「回到顶部」。
+  void _armAnchorRestore(({String renderId, double dy})? anchor) {
+    if (_pendingAnchorRestore != null || anchor == null) return;
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels <= 0) return;
+    _pendingAnchorRestore = anchor;
+    _anchorRestoreFrames = 0;
+  }
+
+  /// 按几何 delta 精确归位（同仓 #93 口径：实测 dy，delta = 新 − 旧，jumpTo 补偿）。
+  ///
+  /// 只在「锚点行仍存在」且「偏移真的变了」时动视口；收敛即收工，不做无意义滚动。
+  void _stepAnchorRestore() {
+    final anchor = _pendingAnchorRestore;
+    if (anchor == null || !mounted) return;
+    if (!_scrollController.hasClients) {
+      _pendingAnchorRestore = null;
+      return;
+    }
+    final measured = _measureRowDy(anchor.renderId);
+    if (measured == null) {
+      // 锚点行已不在列表（被删/被筛掉/未构建）⇒ 放弃归位。
+      _pendingAnchorRestore = null;
+      return;
+    }
+    final delta = measured - anchor.dy;
+    if (delta.abs() <= _anchorSettleEpsilon) {
+      _pendingAnchorRestore = null;
+      _refreshAnchorSnapshot();
+      return;
+    }
+    final position = _scrollController.position;
+    _scrollController.jumpTo(
+      (position.pixels + delta).clamp(0.0, position.maxScrollExtent),
+    );
+    _anchorRestoreFrames++;
+    if (_anchorRestoreFrames <= _anchorRestoreMaxFrames) {
+      // jumpTo 已排新帧 ⇒ 下一帧末再实测一次（lazy sliver 逐帧精修）。
+      WidgetsBinding.instance.addPostFrameCallback((_) => _stepAnchorRestore());
+    } else {
+      _pendingAnchorRestore = null;
+      _refreshAnchorSnapshot();
+    }
+  }
+
+  /// 视口顶缘可见行的 renderId + 其相对滚动视图的 dy；无可见行返回 null。
+  ({String renderId, double dy})? _captureTopVisibleAnchor() {
+    // 兜底护栏：框架禁止在 build 期遍历子树（调用方已避开，这里再挡一层）。
+    if (_isBuildPhase) return null;
+    final anchorBox = _scrollableBox;
+    if (anchorBox == null) return null;
+    ({String renderId, double dy})? best;
+    void visit(Element element) {
+      final renderId = _rowRenderIdOf(element);
+      if (renderId != null) {
+        final box = element.renderObject;
+        if (box is RenderBox &&
+            box.attached &&
+            box.hasSize &&
+            box.size.height > 0) {
+          final dy = box.localToGlobal(Offset.zero, ancestor: anchorBox).dy;
+          // 完全在视口上方（含被 pinned 头部盖住）不算；否则取最靠上的一条。
+          if (dy + box.size.height > 0 && (best == null || dy < best!.dy)) {
+            best = (renderId: renderId, dy: dy);
+          }
+        }
+      }
+      element.visitChildElements(visit);
+    }
+
+    _scrollableElement?.visitChildElements(visit);
+    return best;
+  }
+
+  /// 实测某会话行当前相对滚动视图的 dy（行未构建/已不在列表 → null）。
+  double? _measureRowDy(String renderId) {
+    if (_isBuildPhase) return null;
+    final anchorBox = _scrollableBox;
+    if (anchorBox == null) return null;
+    double? found;
+    void visit(Element element) {
+      if (found != null) return;
+      if (_rowRenderIdOf(element) == renderId) {
+        final box = element.renderObject;
+        if (box is RenderBox &&
+            box.attached &&
+            box.hasSize &&
+            box.size.height > 0) {
+          found = box.localToGlobal(Offset.zero, ancestor: anchorBox).dy;
+          return;
+        }
+      }
+      element.visitChildElements(visit);
+    }
+
+    _scrollableElement?.visitChildElements(visit);
+    return found;
+  }
+
+  /// 行 key 形如 `ValueKey('session-row-<id>')` → 返回 `<id>`。
+  String? _rowRenderIdOf(Element element) {
+    final key = element.widget.key;
+    if (key is! ValueKey<String>) return null;
+    final value = key.value;
+    if (!value.startsWith(_sessionRowKeyPrefix)) return null;
+    return value.substring(_sessionRowKeyPrefix.length);
+  }
+
+  /// 滚动视图自身的 element（行几何以它为参照系，与 #93 同口径）。
+  Element? get _scrollableElement {
+    if (!_scrollController.hasClients) return null;
+    final context = _scrollController.position.context.storageContext;
+    return context is Element ? context : null;
+  }
+
+  RenderBox? get _scrollableBox {
+    final renderObject = _scrollableElement?.renderObject;
+    return renderObject is RenderBox && renderObject.attached
+        ? renderObject
+        : null;
+  }
+
   // 交互：刷新 / 分页 / 搜索 / 新建 / 打开 / 行操作
   // -------------------------------------------------------------------------
 
@@ -1834,8 +2186,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     final l10n = AppLocalizations.of(context);
     final message = switch (kind) {
       BatchOperationKind.archive => l10n.batchResultArchive(result.succeeded),
-      BatchOperationKind.unarchive =>
-        l10n.batchResultUnarchive(result.succeeded),
+      BatchOperationKind.unarchive => l10n.batchResultUnarchive(
+        result.succeeded,
+      ),
       BatchOperationKind.delete => l10n.batchResultDelete(result.succeeded),
       BatchOperationKind.move => l10n.batchResultMove(result.succeeded),
     };
@@ -2090,8 +2443,9 @@ class _SessionRowState extends State<_SessionRow> {
     // —— 那套语言（灰底 + 蓝字）留给「当前正在查看」独占，否则两者同框时无从分辨
     // （当前会话恰好也被勾选时，两种意思长得一模一样）；多选语义由左侧勾选框独立承担。
     // 窄屏（!compact）保持旧行为，逐像素不变。
-    final highlighted =
-        widget.compact ? widget.isCurrent : (widget.selected || widget.isCurrent);
+    final highlighted = widget.compact
+        ? widget.isCurrent
+        : (widget.selected || widget.isCurrent);
     // 明暗两态共用同一套逻辑（中性底 + 蓝前景）：浅色 #005FB8 / 暗色 #0A84FF。
     final l2Selection = widget.compact && highlighted;
     final l2Current = isLight && widget.compact && widget.isCurrent;
@@ -3458,12 +3812,11 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
   }
 }
 
-
 /// L2 选中前景色：浅色 #005FB8 / 暗色 #0A84FF（明暗同一套逻辑）。
 ///
 /// 刻意放在**顶层**（而非某个 State 的方法）：页面级与 [_SessionRowState]
 /// 两处都要用，跨类调用会各自找不到。
 Color _l2Foreground(BuildContext context) =>
     CupertinoTheme.brightnessOf(context) == Brightness.light
-        ? LightSurfaces.selectionForeground
-        : CupertinoColors.activeBlue.resolveFrom(context);
+    ? LightSurfaces.selectionForeground
+    : CupertinoColors.activeBlue.resolveFrom(context);

@@ -58,10 +58,29 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage>
     with WidgetsBindingObserver {
-  final GlobalKey _actionsKey = GlobalKey();
+  /// 顶栏「⋯」（会话操作）与标题的锚点 key。
+  ///
+  /// **刻意不用 GlobalKey**：路由转场时 Cupertino nav bar 走 Hero 飞行，
+  /// `_NavigationBarComponentsTransition` 会直接重建用户传入的 middle / trailing
+  /// （取的是 `trailingKey.currentWidget.child`），同一个 widget 实例因此在
+  /// 同一帧里被「静态顶栏」与「飞行穿梭层」两处 build：
+  /// - debug：撞 `BuildOwner._debugVerifyGlobalKeyReservation` →
+  ///   「Multiple widgets used the same GlobalKey」；
+  /// - release：`Element._retakeInactiveElement` 会把该元素从静态顶栏
+  ///   `forgetChild + deactivateChild` 抽走交给穿梭层，飞行结束穿梭层销毁 ⇒
+  ///   **「⋯」按钮随之从顶栏消失**（它左边的文件夹按钮没有 GlobalKey，元素不被
+  ///   抽走，所以主人看到「只剩左侧的打开项目文件夹按钮」）。
+  ///
+  /// 锚点改为按 ValueKey 查 RenderBox（见 [_resolveKeyedRect]），同帧重持键的
+  /// 来源从根上不可能再让按钮丢元素。
+  static const ValueKey<String> _actionsAnchorKey = ValueKey(
+    'chat-session-actions',
+  );
 
-  /// 标题栏 middle Widget 锚点 GlobalKey（供大纲面板定位用）。
-  final GlobalKey _titleAnchorKey = GlobalKey();
+  /// 标题栏 middle 锚点 key（点击标题开大纲面板的定位用）。
+  static const ValueKey<String> _titleAnchorKey = ValueKey(
+    'chat-title-outline-trigger',
+  );
 
   /// ChatMessageList 的 GlobalKey，用于调用 outlineJumpTo。
   final GlobalKey<ChatMessageListState> _listKey =
@@ -168,7 +187,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     // 计算锚点矩形（标题 middle widget 在 overlay 坐标系中的位置）
     final overlay = Overlay.of(context);
-    final anchorRect = _resolveAnchorRect(_titleAnchorKey, overlay);
+    final anchorRect = _resolveKeyedRect(context, overlay, _titleAnchorKey);
     if (anchorRect == null) return;
 
     _outlineEntry = ChatOutlineSheet.insert(
@@ -188,11 +207,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (mounted) setState(() {});
   }
 
-  /// 换算 widget 在 overlay 坐标系中的全局矩形（复用 context_window_popover 的方式）。
-  Rect? _resolveAnchorRect(GlobalKey key, OverlayState overlay) {
+  /// 换算 widget 在 overlay 坐标系中的全局矩形。
+  ///
+  /// **按 [key] 查元素**（不是 GlobalKey）：见 `_actionsAnchorKey` 的注释 ——
+  /// 顶栏 middle/trailing 在路由转场时会被 Hero 穿梭层重复 build，挂 GlobalKey
+  /// 会被框架抽走元素。ValueKey 不参与 GlobalKey 的登记/抢占，天然免疫。
+  Rect? _resolveKeyedRect(BuildContext context, OverlayState overlay, Key key) {
     final overlayBox = overlay.context.findRenderObject() as RenderBox?;
-    final box = key.currentContext?.findRenderObject() as RenderBox?;
-    if (overlayBox == null || box == null || !box.attached) return null;
+    if (overlayBox == null) return null;
+    final root = context;
+    if (root is! Element) return null;
+    Element? target;
+    void visit(Element element) {
+      if (target != null) return;
+      if (element.widget.key == key) {
+        target = element;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    visit(root);
+    final box = target?.renderObject as RenderBox?;
+    if (box == null || !box.attached) return null;
     final topLeft = box.localToGlobal(Offset.zero, ancestor: overlayBox);
     return Rect.fromLTWH(
       topLeft.dx,
@@ -264,7 +301,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
           onTap: _toggleOutline,
           behavior: HitTestBehavior.opaque,
           child: SizedBox(
-            key: _titleAnchorKey,
+            // 注意：这里**不能**挂 GlobalKey（转场 Hero 穿梭层会重复 build
+            // middle，GlobalKey 元素会被抽走）。锚点用上层 GestureDetector 的
+            // `chat-title-outline-trigger` ValueKey 现场查 RenderBox，矩形同源。
             // #163：宽屏撑满 middle 槽后按 start 排列 = 标题左对齐（长中文标题
             // 不再被居中挤成省略号）；窄屏保持居中，逐像素不变。
             width: isWide ? double.infinity : null,
@@ -342,21 +381,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
               ),
               SizedBox(width: isWide ? 12 : 14),
             ],
-            KeyedSubtree(
-              key: _actionsKey,
-              child: AccessibleButton(
-                key: const ValueKey('chat-session-actions'),
-                label: l10n.sessionActions,
-                padding: EdgeInsets.zero,
-                onPressed: () => _showSessionActions(
+            // 注意：这里**不能**再套 GlobalKey（KeyedSubtree 也不行）——
+            // 路由转场时 Hero 穿梭层会重建本 trailing，GlobalKey 元素会被框架
+            // 从静态顶栏抽走 ⇒ 「⋯」消失。锚点用 ValueKey 现场查 RenderBox。
+            AccessibleButton(
+              key: _actionsAnchorKey,
+              label: l10n.sessionActions,
+              padding: EdgeInsets.zero,
+              onPressed: () => _showSessionActions(
+                context,
+                ref,
+                widget.sessionId,
+                state,
+                _resolveKeyedRect(
                   context,
-                  ref,
-                  widget.sessionId,
-                  state,
-                  _actionsKey,
+                  Overlay.of(context),
+                  _actionsAnchorKey,
                 ),
-                child: Icon(CupertinoIcons.ellipsis, size: isWide ? 18 : null),
               ),
+              child: Icon(CupertinoIcons.ellipsis, size: isWide ? 18 : null),
             ),
           ],
         ),
@@ -531,9 +574,10 @@ Future<void> _showSessionActions(
   WidgetRef ref,
   String sessionId,
   ChatState state,
-  GlobalKey actionsKey,
+  Rect? anchorRect,
 ) async {
   if (sessionId.isEmpty) return;
+  if (anchorRect == null) return;
   final l10n = AppLocalizations.of(context);
   final isReadOnly = state.isReadOnly;
   final controller = ref.read(chatControllerProvider(sessionId).notifier);
@@ -660,7 +704,7 @@ Future<void> _showSessionActions(
 
   await AdaptiveActionMenu.show(
     context,
-    anchorKey: actionsKey,
+    anchorRect: anchorRect,
     items: items,
     cancelLabel: l10n.cancel,
     cancelKey: const ValueKey('chat-action-cancel'),

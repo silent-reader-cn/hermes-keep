@@ -27,7 +27,7 @@ void main() {
       expect(renderParagraph.text.style!.color!.toARGB32(), 0x99EBEBF5);
     });
 
-    testWidgets('light: Text widget secondaryText resolveFrom painted color == 0x993C3C43', (
+    testWidgets('light: Text widget secondaryText resolveFrom painted color == 0xBD3C3C43', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -46,7 +46,12 @@ void main() {
       final renderParagraph = tester.renderObject<RenderParagraph>(
         find.text('x'),
       );
-      expect(renderParagraph.text.style!.color!.toARGB32(), 0x993C3C43);
+      // 清晰度批次（2026-10-06）：浅色档由 0x99（α=60%）提到 0xBD（α=74.1%）。
+      // 原因：半透明色必须先合成再算对比度，0x99 合成到白卡只有 3.439:1、
+      // 到页底 3.283:1，**低于 WCAG AA 正文 4.5:1**；0xBD 为 4.998 / 4.734。
+      // 详见 `test/screenshots/crispness_contrast_test.dart` 与
+      // `.shots/crispness/before-after.md` §3。
+      expect(renderParagraph.text.style!.color!.toARGB32(), 0xBD3C3C43);
     });
 
     test('secondaryText darkColor and darkHighContrastColor 对齐 secondaryLabel', () {

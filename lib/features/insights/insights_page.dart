@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
+import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
@@ -580,7 +580,10 @@ class InsightsPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 2),
                 // TODO(type): 未进梯子（10.5 是侧栏徽标专档值，内容区活动行数值）。
-                Text(value, style: TextStyle(fontSize: kFontCaption, color: secondary)),
+                Text(
+                  value,
+                  style: TextStyle(fontSize: kFontCaption, color: secondary),
+                ),
               ],
             ),
           ),
@@ -612,15 +615,16 @@ class InsightsPage extends ConsumerWidget {
           children: {
             for (final t in InsightsTimeframe.values)
               t: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                // 窄屏下每段宽度被均分（390pt ≈ 85pt/段），英文标签
-                // （Last 30 Days）比中文长，裸 Text 会折成两行并溢出选中
-                // 胶囊；scaleDown 保证单行自适应缩小，宽屏不加尺寸，中英文
-                // 与既有基线像素一致。
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(_insightsTimeframeTitle(context, t)),
-                ),
+                // 段内左右内边距收到 2：分段控件按「最宽标签 + 2×2 + 20」定段宽，
+                // 收窄内边距即可在不**缩小字形**的前提下让最宽的英文标签
+                // 「Last 30 Days」（13pt ≈ 73.1pt 宽）在 ≥360 宽视口里单行放下。
+                //
+                // 这里**不再用 `FittedBox(scaleDown)`**：它会把标签整体等比缩小
+                // （实测英文 360 宽下 `Last 30 Days` 被压到 0.8723 ⇒ 13pt 画成
+                // 11.34pt），是「文字发虚」的一条真实路径。清晰度优先：宁可让整条
+                // 控件窄一点，也不重采样字形。
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(_insightsTimeframeTitle(context, t)),
               ),
           },
         ),
@@ -676,7 +680,10 @@ class InsightsPage extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               l10n.loadFailed,
-              style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: kFontItemTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
@@ -726,7 +733,10 @@ class InsightsPage extends ConsumerWidget {
             const SizedBox(height: 12),
             Text(
               l10n.noInsights,
-              style: const TextStyle(fontSize: kFontPageTitle, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: kFontPageTitle,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
@@ -866,7 +876,10 @@ class _MetricTile extends StatelessWidget {
       title: Text(title),
       trailing: Text(
         value,
-        style: const TextStyle(fontSize: kFontItemTitle, fontWeight: FontWeight.w600),
+        style: const TextStyle(
+          fontSize: kFontItemTitle,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -1181,8 +1194,8 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
           HermesDialogAction(
             builder: (dialogContext) => Text(
               l10n.ok,
-              style: CupertinoTheme.brightnessOf(dialogContext) ==
-                      Brightness.light
+              style:
+                  CupertinoTheme.brightnessOf(dialogContext) == Brightness.light
                   ? const TextStyle(color: LightSurfaces.menuAction)
                   : null,
             ),
@@ -1202,7 +1215,10 @@ class _DailyTokensBarChartState extends State<_DailyTokensBarChart> {
           Text(label, style: const TextStyle(fontSize: kFontLabel)),
           Text(
             value,
-            style: const TextStyle(fontSize: kFontLabel, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              fontSize: kFontLabel,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),

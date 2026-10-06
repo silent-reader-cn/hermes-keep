@@ -328,9 +328,16 @@ class AdaptiveActionMenu {
   ///
   /// [title] 仅在有值时作为 popover 标题 / sheet title 展示；
   /// [cancelLabel] 仅 sheet 生效（popover 点击外部即关闭，无需取消按钮）。
+  ///
+  /// 锚点二选一：[anchorKey]（GlobalKey，传统路径）或 [anchorRect]
+  /// （overlay 坐标系矩形 —— 供**不能挂 GlobalKey 的锚点**使用，例如顶栏
+  /// trailing：它在路由转场时会被 Cupertino nav bar 的 Hero 穿梭层重复 build，
+  /// GlobalKey 会被框架从静态顶栏抽走导致按钮丢元素）。窄屏 ActionSheet 不需要
+  /// 锚点，两者都可空。
   static Future<void> show(
     BuildContext context, {
-    required GlobalKey anchorKey,
+    GlobalKey? anchorKey,
+    Rect? anchorRect,
     required List<AdaptiveMenuItem> items,
     String? title,
     String cancelLabel = '取消',
@@ -339,12 +346,17 @@ class AdaptiveActionMenu {
     double minWidth = 180,
     double? maxWidth,
   }) async {
+    assert(
+      anchorKey != null || anchorRect != null,
+      'AdaptiveActionMenu.show 需要 anchorKey 或 anchorRect 之一',
+    );
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     if (isWide) {
       await showCupertinoPopover(
         context: context,
         anchorKey: anchorKey,
+        anchorRect: anchorRect,
         preferredWidth: preferredWidth,
         minWidth: minWidth,
         // §D3：宽 ≤260。调用方就算传了更大的 preferredWidth 也被压回来。

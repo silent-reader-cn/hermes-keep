@@ -2239,26 +2239,64 @@ final sessionListNowProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
 );
 
-/// 内部辅助：工作区构建项。
+/// 工作区组构建项。
 class _WorkspaceSectionBuilder {
   _WorkspaceSectionBuilder({required this.workspacePath, required this.title});
 
   final String workspacePath;
   final String title;
   final List<SessionSummary> sessions = [];
-
-  double get latestActivity =>
-      sessions.isEmpty ? 0.0 : _sortTimestamp(sessions.first);
 }
 
-/// 按置顶与工作区分组会话，组间及组内按时间倒序；空组剔除。
+/// 分区标题的**稳定**比较器（工作区分组的组间顺序用）。
 ///
-/// 分组契约（#146 · A 案）：
+/// 契约：**同一输入永远产出同一顺序**，与时间、活动量、会话数完全无关
+/// （主人 2026-10-06：「类别顺序不要乱动」—— 发一条消息就把整个工作区组顶到
+/// 最上面，是用户视角的「类别乱序 + 组里会话跟着位移」）。
+///
+/// 口径（刻意保持极简，只求稳定可预期）：
+/// - 大小写不敏感（仅折叠 ASCII `A-Z`，非 ASCII 原样，避免平台/语言差异）；
+/// - 纯字典序，不做数值解析 ⇒ `ws10` 排在 `ws2` 之前（稳定优先于「自然序」）；
+/// - CJK 与拉丁混排走 Unicode 码位（CJK 统一表意文字基本按部首/笔画排布），
+///   不引入 ICU collator —— 本仓未直接依赖 `intl`，且此处只要求「稳定」；
+/// - 折叠键完全相同（仅大小写差异）时用原始串兜底，保证全序（`sort` 需要
+///   比较器满足传递性与一致性）。
+int compareSectionTitles(String a, String b) {
+  final byKey = _sectionTitleSortKey(a).compareTo(_sectionTitleSortKey(b));
+  if (byKey != 0) return byKey;
+  return a.compareTo(b);
+}
+
+/// [compareSectionTitles] 的排序键：trim + ASCII 大写折叠。
+String _sectionTitleSortKey(String title) {
+  final buffer = StringBuffer();
+  for (final unit in title.trim().codeUnits) {
+    buffer.writeCharCode(unit >= 0x41 && unit <= 0x5A ? unit + 0x20 : unit);
+  }
+  return buffer.toString();
+}
+
+/// 工作区组在「已注册工作区」中的序号；未注册（任意目录跑的）排在已注册之后。
+int _workspaceRootRank(
+  String workspacePath,
+  List<WorkspaceRoot> workspaceRoots,
+) {
+  for (var i = 0; i < workspaceRoots.length; i++) {
+    if (matchesWorkspace(workspacePath, workspaceRoots[i].path)) return i;
+  }
+  return workspaceRoots.length;
+}
+
+/// 按置顶与工作区分组会话：**组间顺序固定**、组内时间倒序；空组剔除。
+///
+/// 分组契约（#146 · A 案；组顺序按 2026-10-06 主人反馈改为确定性）：
 /// 1. 置顶区：保持现有逻辑（`pinned == true` 且非 cron）→ 独立分区置于主列表最上方，跨工作区、不参与分组。
 /// 2. 工作区组：其余会话按 `session.workspace` 分组：
 ///    - 比对必须复用既有 [matchesWorkspace]（容错斜杠/反斜杠/空格差异），禁止另写字符串比对；
 ///    - 组名：优先匹配 [workspaceRoots] 中对应工作区的 `name`；匹配不到 → 取 workspace 路径最后一段；
-///    - 组顺序：按组内最近活动时间倒序；
+///    - 组顺序（**确定性，与时间/活动量/会话数无关**）：
+///      能匹配 [workspaceRoots] 的组按根目录声明顺序 → 其余组按标题走
+///      [compareSectionTitles] → 同名再按路径兜底；
 ///    - 组内：时间倒序（沿用现有）。
 /// 3. 「其他」组：仅收纳 `workspace` 为空的会话，固定最后、默认折叠。
 ///    - workspace 有值但不在 [workspaceRoots] 列表里的（任意目录跑的）→ 按路径最后一段独立成组，不要塞进「其他」。
@@ -2331,7 +2369,25 @@ List<SessionListSection> buildSessionSections(
     }
   }
 
-  groups.sort((a, b) => b.latestActivity.compareTo(a.latestActivity));
+  // 组顺序**确定性化**（主人 2026-10-06）：
+  // 置顶恒最前 → 能匹配 workspaceRoots 的组按根目录**声明顺序** → 其余组按
+  // 组标题的稳定比较 → 「其他」恒最后。
+  //
+  // 严禁任何由 latestActivity / 时间戳 / 会话数派生的排序：那会让「在某会话
+  // 发一条消息」把它所属工作区组顶到最上方，整组会话随之位移（用户视角 =
+  // 类别顺序乱动 + 类别里会话跟着动）。组内仍按时间倒序（[sorted] 保证）。
+  final rootRank = <_WorkspaceSectionBuilder, int>{
+    for (final g in groups)
+      g: _workspaceRootRank(g.workspacePath, workspaceRoots),
+  };
+  groups.sort((a, b) {
+    final byRoot = rootRank[a]!.compareTo(rootRank[b]!);
+    if (byRoot != 0) return byRoot;
+    final byTitle = compareSectionTitles(a.title, b.title);
+    if (byTitle != 0) return byTitle;
+    // 同名组（不同路径末段相同）按路径兜底，保证「同一输入永远同一输出」。
+    return a.workspacePath.compareTo(b.workspacePath);
+  });
 
   return [
     if (pinned.isNotEmpty)

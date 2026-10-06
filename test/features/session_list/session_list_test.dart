@@ -19,6 +19,7 @@ import 'package:hermes_ui/features/onboarding/onboarding_providers.dart';
 
 import '../../helpers/fake_onboarding_login_api.dart';
 import '../../helpers/fake_session_list_api.dart';
+
 import 'package:hermes_ui/app/shell/session_sidebar.dart';
 
 /// 秒级时间戳辅助（会话模型时间字段为 epoch 秒）。
@@ -95,9 +96,15 @@ class _StubActiveConnection extends ActiveConnectionController {
 
 void main() {
   group('buildSessionSections 分区', () {
-    test('按工作区分组：置顶独立在最前，各工作区按最近活动时间倒序，空工作区归入「其他」，组内时间倒序', () {
+    test('按工作区分组：置顶独立在最前、其他固定在最后，工作区组顺序确定性（不随活动时间变化），组内时间倒序', () {
       final now = DateTime(2026, 8, 16, 12);
-      final pinned = buildSession('p1', '置顶会话', pinned: true, at: now, workspace: '/ws/alpha');
+      final pinned = buildSession(
+        'p1',
+        '置顶会话',
+        pinned: true,
+        at: now,
+        workspace: '/ws/alpha',
+      );
       final alpha1 = buildSession(
         'a1',
         'Alpha 较早',
@@ -131,10 +138,15 @@ void main() {
         pinned,
       ], now: now);
 
-      expect(sections.map((s) => s.title).toList(), ['置顶', 'beta', 'alpha', '其他']);
+      expect(sections.map((s) => s.title).toList(), [
+        '置顶',
+        'alpha',
+        'beta',
+        '其他',
+      ], reason: '组顺序确定性：与「谁最近活动」无关（这里 beta 活动更新，仍排 alpha 之后）');
       expect(sections[0].sessions.map((s) => s.sessionId), ['p1']);
-      expect(sections[1].sessions.map((s) => s.sessionId), ['b1']);
-      expect(sections[2].sessions.map((s) => s.sessionId), ['a1']);
+      expect(sections[1].sessions.map((s) => s.sessionId), ['a1']);
+      expect(sections[2].sessions.map((s) => s.sessionId), ['b1']);
       expect(sections[3].sessions.map((s) => s.sessionId), ['n1', 'n2']);
     });
 
@@ -461,8 +473,7 @@ void main() {
       expect(sessions.first.title, '分支副本');
     });
 
-    test('分支无返回标题：本地兜底 "原标题 (fork)"，即时插入且时间戳兜底',
-        () async {
+    test('分支无返回标题：本地兜底 "原标题 (fork)"，即时插入且时间戳兜底', () async {
       final api = FakeSessionListApi(sessions: [buildSession('s1', 'A')]);
       api.branchResponse = const SessionBranchResponse(sessionId: 'b1');
       final container = makeContainer(api);
@@ -607,7 +618,13 @@ void main() {
       final noon = DateTime(now.year, now.month, now.day, 12);
       final api = FakeSessionListApi(
         sessions: [
-          buildSession('p1', '置顶会话', pinned: true, at: noon, workspace: '/ws/proj_a'),
+          buildSession(
+            'p1',
+            '置顶会话',
+            pinned: true,
+            at: noon,
+            workspace: '/ws/proj_a',
+          ),
           buildSession(
             't1',
             '今天会话',
@@ -883,10 +900,7 @@ void main() {
           find.byKey(const ValueKey('sidebar-tool-new_session')),
           findsOneWidget,
         );
-        expect(
-          find.byKey(const ValueKey('session-list-search')),
-          findsNothing,
-        );
+        expect(find.byKey(const ValueKey('session-list-search')), findsNothing);
 
         // 3. 品牌行图标同行（垂直中心对齐）+ 水平顺序 搜索 → 筛选。
         //    刻意不含刷新：刷新按钮是「桌面平台专属」（isDesktopPlatform），
@@ -908,9 +922,7 @@ void main() {
         expect(searchRect.right, lessThanOrEqualTo(filterRect.left));
 
         // 4. 筛选按钮可正常触发筛选弹层
-        await tester.tap(
-          find.byKey(const ValueKey('sidebar-brand-filter')),
-        );
+        await tester.tap(find.byKey(const ValueKey('sidebar-brand-filter')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('session-filter-sheet')),
@@ -924,7 +936,9 @@ void main() {
           sessionId: 'desktop-new-1',
           title: '桌面新建',
         );
-        await tester.tap(find.byKey(const ValueKey('sidebar-tool-new_session')));
+        await tester.tap(
+          find.byKey(const ValueKey('sidebar-tool-new_session')),
+        );
         await tester.pumpAndSettle();
         expect(api.createCount, 1);
         expect(find.text('chat-desktop-new-1'), findsOneWidget);
@@ -935,11 +949,7 @@ void main() {
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
 
-        final api = FakeSessionListApi(
-          sessions: [
-            buildSession('s1', '会话 1'),
-          ],
-        );
+        final api = FakeSessionListApi(sessions: [buildSession('s1', '会话 1')]);
 
         await pumpSessionList(tester, api);
         await tester.pumpAndSettle();
@@ -1056,9 +1066,7 @@ void main() {
                     ],
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: SizedBox(height: 1000),
-                ),
+                SliverToBoxAdapter(child: SizedBox(height: 1000)),
               ],
             ),
           ),

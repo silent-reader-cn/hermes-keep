@@ -367,7 +367,10 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
         Text(
           l10n.onboardingBuiltinTitle,
           // TODO(type): 未进梯子（Tab 页标题，宜 kFontPageTitle 17）
-          style: const TextStyle(fontSize: kFontPageTitleMd, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontSize: kFontPageTitleMd,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
@@ -481,16 +484,14 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                   ),
                   borderRadius: BorderRadius.circular(8),
                   onPressed: () => unawaited(_openInstallGuide()),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      l10n.agentGateViewInstallGuide,
-                      style: const TextStyle(
-                        // TODO(type): 按钮文字用了正文档 14，应 kFontButton 13；本批保持原值
-                        fontSize: kFontButton,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.white,
-                      ),
+                  child: Text(
+                    l10n.agentGateViewInstallGuide,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      // TODO(type): 按钮文字用了正文档 14，应 kFontButton 13；本批保持原值
+                      fontSize: kFontButton,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.white,
                     ),
                   ),
                 ),
@@ -510,16 +511,14 @@ class _BuiltinTabState extends ConsumerState<BuiltinTab> {
                   ),
                   borderRadius: BorderRadius.circular(8),
                   onPressed: () => unawaited(_recheckAgent()),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      l10n.agentGateRecheckDone,
-                      style: TextStyle(
-                        // TODO(type): 按钮文字用了正文档 14，应 kFontButton 13；本批保持原值
-                        fontSize: kFontButton,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label.resolveFrom(context),
-                      ),
+                  child: Text(
+                    l10n.agentGateRecheckDone,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      // TODO(type): 按钮文字用了正文档 14，应 kFontButton 13；本批保持原值
+                      fontSize: kFontButton,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.label.resolveFrom(context),
                     ),
                   ),
                 ),
