@@ -5,8 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/app/theme/status_colors.dart';
 import 'package:hermes_ui/core/models/chat_message.dart';
+import 'package:hermes_ui/core/models/tool_call.dart';
 import 'package:hermes_ui/core/utils/injected_message.dart';
 import 'package:hermes_ui/features/chat/widgets/injected_notice_card.dart';
+import 'package:hermes_ui/features/chat/widgets/tool_call_card.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
 
 /// 覆盖率补强：`InjectedNoticeCard`（此前 0%）。
@@ -56,7 +58,7 @@ void main() {
   const backgroundSummaryUpper = '后台进程 PROC_ABC · 已完成';
 
   group('InjectedNoticeCard 折叠/展开', () {
-    testWidgets('折叠态：渲染大写摘要 + 「展开」按钮，正文不落地', (tester) async {
+    testWidgets('折叠态：渲染大写摘要 + 尾随 chevron，正文不落地', (tester) async {
       await _pumpCard(
         tester,
         message: _msg(backgroundContent),
@@ -64,21 +66,25 @@ void main() {
       );
 
       expect(find.text(backgroundSummaryUpper), findsOneWidget);
-      expect(find.text('展开'), findsOneWidget);
+      // 2026-10-06 主人拍板：尾随控件从带框「展开」胶囊改为聚合卡同款 chevron。
+      expect(find.byIcon(CupertinoIcons.chevron_down), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.chevron_up), findsNothing);
+      expect(find.text('展开'), findsNothing);
       expect(find.text('收起'), findsNothing);
       // 折叠时正文（SelectableText）根本不构建
       expect(find.byType(SelectableText), findsNothing);
       expect(find.text(backgroundContent), findsNothing);
     });
 
-    testWidgets('展开态：正文进 SelectableText（挂 #81 右键菜单抑制器）+ 400 上限 + 「收起」', (
+    testWidgets('展开态：正文进 SelectableText（挂 #81 右键菜单抑制器）+ 400 上限 + chevron 上翻', (
       tester,
     ) async {
       await _pumpCard(tester, message: _msg(backgroundContent), expanded: true);
 
       expect(find.text(backgroundSummaryUpper), findsOneWidget);
-      expect(find.text('收起'), findsOneWidget);
-      expect(find.text('展开'), findsNothing);
+      expect(find.byIcon(CupertinoIcons.chevron_up), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.chevron_down), findsNothing);
+      expect(find.text('收起'), findsNothing);
 
       final selectable = tester.widget<SelectableText>(
         find.byType(SelectableText),
@@ -112,10 +118,10 @@ void main() {
         find.descendant(of: find.byType(Row), matching: find.byType(Text)),
       );
       expect(headerTexts.first.data, '');
-      expect(find.text('收起'), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.chevron_up), findsOneWidget);
     });
 
-    testWidgets('点击切换按钮把回调透传到 onToggle（折叠态与展开态各一次）', (tester) async {
+    testWidgets('点击尾随 chevron / 标题文字都把回调透传到 onToggle（整行可点）', (tester) async {
       var toggles = 0;
       await _pumpCard(
         tester,
@@ -124,9 +130,14 @@ void main() {
         onToggle: () => toggles++,
       );
 
-      await tester.tap(find.text('展开'));
+      await tester.tap(find.byIcon(CupertinoIcons.chevron_down));
       await tester.pump();
       expect(toggles, 1);
+
+      // 命中区对齐聚合卡：点标题文字同样切换（旧实现只有那个「展开」胶囊可点）。
+      await tester.tap(find.text(backgroundSummaryUpper));
+      await tester.pump();
+      expect(toggles, 2);
 
       await _pumpCard(
         tester,
@@ -134,9 +145,9 @@ void main() {
         expanded: true,
         onToggle: () => toggles++,
       );
-      await tester.tap(find.text('收起'));
+      await tester.tap(find.byIcon(CupertinoIcons.chevron_up));
       await tester.pump();
-      expect(toggles, 2);
+      expect(toggles, 3);
     });
 
     testWidgets('摘要同时挂到外层 Semantics.label（无障碍读屏用原文非大写）', (tester) async {
@@ -382,7 +393,7 @@ void main() {
         LightSurfaces.textSecondary,
         dark: CupertinoColors.secondaryLabel,
       );
-      expect(tester.widget<Icon>(find.byType(Icon)).color, neutral);
+      expect(tester.widget<Icon>(find.byType(Icon).first).color, neutral);
     });
 
     testWidgets('展开态正文 = 原始报文（Task/Status/Error/Transcript 四段原样可读）', (
@@ -394,7 +405,7 @@ void main() {
         find.byType(SelectableText),
       );
       expect(selectable.data, failedFull);
-      expect(find.text('收起'), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.chevron_up), findsOneWidget);
     });
 
     testWidgets('深色模式失败态同样解析到红（动态色不写死）', (tester) async {
@@ -458,6 +469,69 @@ void main() {
       );
       // 宽度撑满槽位（与工具卡一致：整宽卡片）
       expect(collapsed.width, 390);
+    });
+
+    // 尺寸对齐护栏（2026-10-06，主人真机反馈）：注入通知卡与工具聚合卡在聊天
+    // 时间线里上下相邻，折叠态高度必须同档 —— 旧实现被尾随「展开」胶囊把头部行
+    // 撑到 27，整卡比聚合卡高 7px，一眼可见。
+    // 比的是**边框盒**：通知卡把外层 12/5 留白包在自身 widget 内部，聚合卡的留白
+    // 由调用方给，故不能直接比两个 widget 的高度。
+    testWidgets('折叠态边框盒与工具聚合卡同高（高度差 ≤ 1px）', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final group = ToolCallGroup(
+        id: 'grp-size-guard',
+        anchorMessageID: 'm1',
+        toolCalls: [
+          ToolCall(id: 'c1', name: 'terminal', isCompleted: true, startedAt: 1),
+        ],
+      );
+
+      await tester.pumpWidget(
+        CupertinoApp(
+          locale: const Locale('zh'),
+          supportedLocales: const [Locale('zh'), Locale('en')],
+          localizationsDelegates: _delegates,
+          home: CupertinoPageScaffold(
+            child: ListView(
+              children: [
+                InjectedNoticeCard(
+                  message: _msg(backgroundContent),
+                  expanded: false,
+                  onToggle: () {},
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  child: ToolCallGroupCard(group: group),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final noticeBorderBox = tester.getSize(
+        find
+            .descendant(
+              of: find.byType(InjectedNoticeCard),
+              matching: find.byType(Container),
+            )
+            .first,
+      );
+      final toolCardBox = tester.getSize(find.byType(ToolCallGroupCard));
+
+      expect(
+        (noticeBorderBox.height - toolCardBox.height).abs(),
+        lessThanOrEqualTo(1.0),
+        reason:
+            '注入通知卡 ${noticeBorderBox.height} vs 工具聚合卡 '
+            '${toolCardBox.height}',
+      );
     });
   });
 }

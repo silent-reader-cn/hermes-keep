@@ -76,49 +76,66 @@ class InjectedNoticeCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         child: Container(
-          padding: const EdgeInsets.all(8),
+          // 内距 / 圆角对齐工具聚合卡（`tool_call_card.dart:441-449`）
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: bg,
             border: Border.all(color: separator),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Semantics(
                 header: true,
-                child: Row(
-                  children: [
-                    Icon(_iconForKind(kind), size: 13, color: accent),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        summary.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: kFontMicro,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.04 * 11,
-                          color: accent,
+                child: GestureDetector(
+                  // 命中区对齐工具聚合卡（`tool_call_card.dart:461-463`）：整行可点，
+                  // 而非只有尾随那枚 12px chevron 可点。
+                  // 语义层由外层 `Semantics(button:/label:)` 统一提供，这里排除自身
+                  // 节点，避免读屏把同一张卡读成两个可点节点。
+                  behavior: HitTestBehavior.opaque,
+                  excludeFromSemantics: true,
+                  onTap: onToggle,
+                  child: Row(
+                    children: [
+                      // 图标 / 字号 / 字重 / 尾随 chevron 逐项对齐工具聚合卡
+                      // （`tool_call_card.dart:480-496 / 511-516 / 545-549`）。
+                      Icon(_iconForKind(kind), size: 14, color: accent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        // 标题是外层 `Semantics.label` 的大写副本；排除自身语义节点，
+                        // 否则读屏会把同一句话读两遍（实测合并成 `原大小写\n大写`）。
+                        child: ExcludeSemantics(
+                          child: Text(
+                            // 大写是这一族（系统注入通知）的刻意残留差异：
+                            // 与工具卡的句式标题区分开，但字级/字重已同档。
+                            summary.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: kFontCaption,
+                              fontWeight: FontWeight.w600,
+                              color: accent,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    _ToggleButton(
-                      label: expanded
-                          ? l10n.injectedNoticeHideOutput
-                          : l10n.injectedNoticeShowOutput,
-                      onPressed: onToggle,
-                      separator: separator,
-                      textColor: secondaryLabel,
-                    ),
-                  ],
+                      const SizedBox(width: 6),
+                      Icon(
+                        expanded
+                            ? CupertinoIcons.chevron_up
+                            : CupertinoIcons.chevron_down,
+                        size: 12,
+                        color: secondaryLabel,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (expanded)
                 Padding(
-                  padding: const EdgeInsets.only(top: 6),
+                  // 展开体与头部的间距对齐聚合卡展开体（`tool_call_card.dart:560`）。
+                  padding: const EdgeInsets.only(top: 8),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -127,7 +144,8 @@ class InjectedNoticeCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: codeBg,
                       border: Border.all(color: separator),
-                      borderRadius: BorderRadius.circular(6),
+                      // 内层子块圆角对齐工具卡内层子卡（`tool_call_card.dart:141`）。
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 400),
@@ -201,36 +219,5 @@ class InjectedNoticeCard extends StatelessWidget {
       case InjectedNoticeKind.none:
         return CupertinoIcons.command;
     }
-  }
-}
-
-class _ToggleButton extends StatelessWidget {
-  const _ToggleButton({
-    required this.label,
-    required this.onPressed,
-    required this.separator,
-    required this.textColor,
-  });
-
-  final String label;
-  final VoidCallback onPressed;
-  final Color separator;
-  final Color textColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      minimumSize: Size.zero,
-      onPressed: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          border: Border.all(color: separator),
-          borderRadius: BorderRadius.circular(5),
-        ),
-        child: Text(label, style: TextStyle(fontSize: kFontButton, color: textColor)),
-      ),
-    );
   }
 }
