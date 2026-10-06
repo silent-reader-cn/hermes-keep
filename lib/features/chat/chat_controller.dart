@@ -5720,6 +5720,15 @@ class ChatController extends FamilyNotifier<ChatState, String> {
         }
       }
 
+      // 死锚自证（跨回合携带根因）：`raw:` 锚是**上一次窗口**的绝对下标，窗口一滑
+      // 即失效；此时用窗口下标做算术必然落空，旧兜底（`live-tools-*` → 本回合首条
+      // 带正文 assistant；其余 → 末条 assistant）只是「猜一个位置」，会把**上一回合**
+      // 的整组工具钉到当前回合的行上 —— 主人现象「上一回合的工具记录被渲染进下一
+      // 回合的过程卡」（回合 2 过程区一张 90+1 的大卡，收尾刷新后消失）。
+      // 组内工具都带 stable id，用它们在当前窗口里**自证**位置：哪条 assistant
+      // 声明了本组的工具 id，就锚到它。自证不到才回落原兜底。
+      newAnchor ??= _anchorByDeclaredToolID(g.toolCalls, messages, offset);
+
       if (newAnchor == null && anchor != null && anchor.startsWith('raw:')) {
         final rawNum = int.tryParse(anchor.substring(4));
         if (rawNum != null) {
@@ -5766,6 +5775,44 @@ class ChatController extends FamilyNotifier<ChatState, String> {
 
       return g;
     }).toList();
+  }
+
+  /// 死锚自证：用组内工具的 stable id 在当前窗口里定位声明它的 assistant 消息。
+  ///
+  /// 用于 [`_reanchorGroupsToMessages`] 的「锚失效」修复：`raw:` 锚随分页窗口滑动
+  /// 失效后，唯一可靠的位置线索是工具自身的 stable id（窗口消息的 `tool_calls`
+  /// 自带同一批 id）。认不出（窗口未含本组工具 / id 是生成式）→ 返回 null，
+  /// 调用方回落既有兜底，行为不变。
+  String? _anchorByDeclaredToolID(
+    List<ToolCall> calls,
+    List<ChatMessage> messages,
+    int offset,
+  ) {
+    final wanted = <String>{
+      for (final call in calls)
+        if (!call.isThinking && call.id.trim().isNotEmpty) call.id.trim(),
+    };
+    if (wanted.isEmpty || messages.isEmpty) return null;
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message.role != 'assistant') continue;
+      for (final raw in message.toolCalls ?? const <JsonValue>[]) {
+        final object = raw.objectValue;
+        if (object == null) continue;
+        final id =
+            object['id']?.stringValue ??
+            object['call_id']?.stringValue ??
+            object['tool_call_id']?.stringValue;
+        if (id != null && wanted.contains(id.trim())) {
+          return TranscriptTurnClassifier.anchorID(
+            message,
+            at: i,
+            messageOffset: offset,
+          );
+        }
+      }
+    }
+    return null;
   }
 
   List<ReasoningGroup> _reanchorReasoningToMessages(
