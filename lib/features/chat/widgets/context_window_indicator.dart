@@ -3,6 +3,7 @@ import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 
+import '../../../app/theme/layout_tokens.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../core/models/context_window_snapshot.dart';
@@ -13,7 +14,10 @@ import '../../../l10n/app_localizations.dart';
 /// WebUI 原型：width 34 / ring 24 / r 9.75 / stroke 3 / center 15 / font 8 w600，
 /// 阈值 ctx-mid>50 ctx-high>75 变色（muted → warning 橙 → error 红）。
 /// Flutter 对齐：
-/// - ringSize 22（与输入栏 send 图标 22 视觉统一），stroke 2.5、start -90° 不变。
+/// - ringSize 随布局分档：窄屏 22 / 宽屏 18 —— 始终与输入栏同一行的兄弟图标
+///   等大（#163 把宽屏图标由 22 收到 18，环若仍固定 22 会比它们大一圈；
+///   真机实测 22 环 vs 18 图标，环墨迹 22px、图标墨迹约 16px，一眼大小不一）。
+///   stroke 2.5、start -90° 不变，描边/压缩记号随环径等比缩放。
 /// - <=50 中性（白92%/黑82%）、50-75 warning 橙、>75 error 红（systemOrange/Red 装饰可直用）。
 /// - 中心 7pt w600，'·' 与百分比一致色（互动时 label、不可用时 secondaryLabel）。
 /// - track 白 0.12 / 黑 0.12（WebUI dark 0.12），对齐静止轨迹透明度。
@@ -31,6 +35,7 @@ class ContextWindowIndicator extends StatelessWidget {
     required this.snapshot,
     required this.onTap,
     this.isCompressing = false,
+    this.size,
   });
 
   final ContextWindowSnapshot? snapshot;
@@ -39,7 +44,22 @@ class ContextWindowIndicator extends StatelessWidget {
   /// 压缩上下文进行中（#156）：渲染为 loading 记号。
   final bool isCompressing;
 
+  /// 环径覆写；null 时按布局宽度自动分档（宽屏 [wideRingSize] / 窄屏 [ringSize]）。
+  /// 描边宽度、压缩中记号半径均按环径等比缩放，故调用方只需给尺寸意图。
+  final double? size;
+
+  /// 窄屏基准环径 22（与窄屏输入栏图标 22 等大）。
   static const double ringSize = 22;
+
+  /// 宽屏环径 18（与 #163 之后的宽屏输入栏图标 18 等大）。
+  static const double wideRingSize = 18;
+
+  /// 基准环径（[ringSize]）下的描边宽度；其余档按环径等比缩放。
+  static const double _baseStrokeWidth = 2.5;
+
+  /// 基准环径下压缩中记号的半径（同样等比缩放）。
+  static const double _baseSpinnerRadius = 10;
+
   static const double tapTargetSize = 44;
 
   @override
@@ -93,23 +113,31 @@ class ContextWindowIndicator extends StatelessWidget {
           );
     final l10n = AppLocalizations.of(context);
 
+    // 环径分档：与同一行的兄弟图标同口径（宽屏 18 / 窄屏 22），保持等大。
+    final effectiveSize =
+        size ?? (isWideLayout(context) ? wideRingSize : ringSize);
+
     // #156 压缩中：换成 loading 记号（同尺寸、同命中区，切换不跳位）。
     final Widget glyph;
     if (isCompressing) {
-      glyph = const SizedBox(
-        width: ringSize,
-        height: ringSize,
-        child: Center(child: CupertinoActivityIndicator(radius: 10)),
+      glyph = SizedBox(
+        width: effectiveSize,
+        height: effectiveSize,
+        child: Center(
+          child: CupertinoActivityIndicator(
+            radius: _baseSpinnerRadius * effectiveSize / ringSize,
+          ),
+        ),
       );
     } else {
       glyph = SizedBox(
-        width: ringSize,
-        height: ringSize,
+        width: effectiveSize,
+        height: effectiveSize,
         child: Stack(
           alignment: Alignment.center,
           children: [
             CustomPaint(
-              size: const Size(ringSize, ringSize),
+              size: Size(effectiveSize, effectiveSize),
               painter: _RingPainter(
                 percentage: percentage?.clamp(0.0, 1.0),
                 trackColor: trackColor,
@@ -171,7 +199,11 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const strokeWidth = 2.5;
+    // 描边随环径等比缩放：18 档下仍是 22 档那一圈的分量感，不会显粗。
+    final strokeWidth =
+        ContextWindowIndicator._baseStrokeWidth *
+        size.width /
+        ContextWindowIndicator.ringSize;
     final radius = (size.width - strokeWidth) / 2;
     final center = Offset(size.width / 2, size.height / 2);
     final trackPaint = Paint()

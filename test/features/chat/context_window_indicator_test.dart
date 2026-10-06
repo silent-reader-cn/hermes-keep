@@ -99,4 +99,109 @@ void main() {
       expect(button.minimumSize, const Size(44.0, 44.0));
     });
   });
+
+
+  group('环径分档：与同一行兄弟图标等大（宽屏 18 / 窄屏 22）', () {
+    final snap = ContextWindowSnapshot.fromJson({
+      'context_length': 200000,
+      'last_prompt_tokens': 84000,
+    });
+
+    Future<void> pumpAt(
+      WidgetTester tester,
+      double width, {
+      bool compressing = false,
+      double? size,
+    }) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        wrap(
+          ContextWindowIndicator(
+            snapshot: snap,
+            onTap: () {},
+            isCompressing: compressing,
+            size: size,
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    /// 承载记号的那个内层 SizedBox 的边长 = 实际环径。
+    /// [find.ancestor] 由近及远返回，故 `.first` 即紧邻的记号盒（外层命中区不算）。
+    double glyphSide(WidgetTester tester, Finder inner) => tester
+        .widget<SizedBox>(
+          find.ancestor(of: inner, matching: find.byType(SizedBox)).first,
+        )
+        .width!;
+
+    Finder ringInk() => find.byType(CustomPaint);
+
+    testWidgets('常量口径：窄屏基准 22、宽屏 18', (tester) async {
+      expect(ContextWindowIndicator.ringSize, 22.0);
+      expect(ContextWindowIndicator.wideRingSize, 18.0);
+    });
+
+    testWidgets('窄屏（<900）保持 22，逐像素不变', (tester) async {
+      await pumpAt(tester, 800);
+      expect(glyphSide(tester, ringInk()), 22.0);
+    });
+
+    testWidgets('宽屏（>=900）收到 18', (tester) async {
+      await pumpAt(tester, 1280);
+      expect(glyphSide(tester, ringInk()), 18.0);
+    });
+
+    testWidgets('断点边界：899 仍窄屏 / 900 起宽屏', (tester) async {
+      await pumpAt(tester, 899);
+      expect(glyphSide(tester, ringInk()), 22.0);
+      await pumpAt(tester, 900);
+      expect(glyphSide(tester, ringInk()), 18.0);
+    });
+
+    testWidgets('显式 size 优先于布局分档', (tester) async {
+      await pumpAt(tester, 1280, size: 26);
+      expect(glyphSide(tester, ringInk()), 26.0);
+    });
+
+    testWidgets('压缩中记号同步分档且半径等比缩放（切换不跳位）', (tester) async {
+      await pumpAt(tester, 1280, compressing: true);
+      expect(
+        glyphSide(tester, find.byType(CupertinoActivityIndicator)),
+        18.0,
+      );
+      expect(
+        tester
+            .widget<CupertinoActivityIndicator>(
+              find.byType(CupertinoActivityIndicator),
+            )
+            .radius,
+        closeTo(10 * 18 / 22, 0.001),
+      );
+
+      await pumpAt(tester, 800, compressing: true);
+      expect(
+        glyphSide(tester, find.byType(CupertinoActivityIndicator)),
+        22.0,
+      );
+      expect(
+        tester
+            .widget<CupertinoActivityIndicator>(
+              find.byType(CupertinoActivityIndicator),
+            )
+            .radius,
+        10.0,
+      );
+    });
+
+    testWidgets('命中区不随环径缩水（a11y 44 恒定）', (tester) async {
+      await pumpAt(tester, 1280);
+      final button = tester.widget<CupertinoButton>(
+        find.byKey(const ValueKey('chat-context-indicator-button')),
+      );
+      expect(button.minimumSize, const Size(44.0, 44.0));
+    });
+  });
 }
