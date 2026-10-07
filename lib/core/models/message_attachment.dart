@@ -88,7 +88,7 @@ class MessageAttachment {
 
     String? inferredDirectory;
     for (final reference in marker.references) {
-      if (reference.contains('/')) {
+      if (_hasDirectorySeparator(reference)) {
         inferredDirectory = _parentDirectory(reference);
         break;
       }
@@ -255,22 +255,48 @@ class MessageAttachment {
     return last.isEmpty ? reference : last;
   }
 
+  /// 是否为「带目录的引用」——`/` 与 Windows 的 `\` 都算目录分隔符。
+  ///
+  /// 历史实现只认 `/`，于是 `[Attached files: C:\Users\…\a.png]` 被当成
+  /// 裸文件名：`path` 解析为 null ⇒ 用户气泡里的图片只剩文件名条、
+  /// 内联缩略图永不出现（Windows 专属观感缺陷）。
+  static bool _hasDirectorySeparator(String reference) =>
+      _lastSeparatorIndex(reference) != -1;
+
+  /// 最后一个目录分隔符下标（`/` 与 `\` 取更靠后者）；无则 -1。
+  static int _lastSeparatorIndex(String value) {
+    final forwardSlash = value.lastIndexOf('/');
+    final backSlash = value.lastIndexOf(r'\');
+    return forwardSlash > backSlash ? forwardSlash : backSlash;
+  }
+
   static String? _parentDirectory(String reference) {
     var s = reference;
-    while (s.endsWith('/')) {
+    while (s.endsWith('/') || s.endsWith(r'\')) {
       s = s.substring(0, s.length - 1);
     }
-    final idx = s.lastIndexOf('/');
+    final idx = _lastSeparatorIndex(s);
     if (idx == -1) return null;
     return s.substring(0, idx);
   }
 
+  /// 用与 [directory] 相同的分隔符风格拼接（Windows 目录下不要掺 `/`）。
+  static String _joinPath(String directory, String name) {
+    if (directory.endsWith('/') || directory.endsWith(r'\')) {
+      return '$directory$name';
+    }
+    final separator = directory.contains(r'\') && !directory.contains('/')
+        ? r'\'
+        : '/';
+    return '$directory$separator$name';
+  }
+
   static String? _inferredPath(String reference, String? fallbackDirectory) {
-    if (reference.contains('/')) return reference;
+    if (_hasDirectorySeparator(reference)) return reference;
     if (isImageReference(reference) &&
         fallbackDirectory != null &&
         fallbackDirectory.isNotEmpty) {
-      return '$fallbackDirectory/$reference';
+      return _joinPath(fallbackDirectory, reference);
     }
     return null;
   }

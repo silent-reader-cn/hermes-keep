@@ -70,6 +70,8 @@ class ChatInlineMediaWidget extends ConsumerStatefulWidget {
     this.maxWidth = 360,
     this.maxHeight = 320,
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
+    this.fit = BoxFit.contain,
+    this.padding = const EdgeInsets.symmetric(vertical: 4),
   });
 
   final String rawUri;
@@ -84,6 +86,13 @@ class ChatInlineMediaWidget extends ConsumerStatefulWidget {
   final double maxWidth;
   final double maxHeight;
   final BorderRadius borderRadius;
+
+  /// 图片填充方式。宫格瓦片用 [BoxFit.cover]（裁切成方），单图预览保持 contain。
+  final BoxFit fit;
+
+  /// 组件自带的外边距（默认上下各 4）。宫格排布时传 [EdgeInsets.zero]，
+  /// 间距统一交给宫格的 spacing / runSpacing。
+  final EdgeInsetsGeometry padding;
 
   @override
   ConsumerState<ChatInlineMediaWidget> createState() =>
@@ -120,7 +129,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
     if (shouldGate) {
       final displayName = widget.alt ?? widget.title;
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: widget.padding,
         child: Container(
           constraints: BoxConstraints(
             minWidth: 32,
@@ -234,7 +243,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
           memoryBytes = base64Decode(payload);
           imageWidget = Image.memory(
             memoryBytes,
-            fit: BoxFit.contain,
+            fit: widget.fit,
             errorBuilder: (context, error, stackTrace) {
               DiagnosticsService.instance.log(
                 level: DiagnosticsLogLevel.error,
@@ -274,7 +283,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
       imageWidget = fileAsync.when(
         data: (file) => Image.file(
           file,
-          fit: BoxFit.contain,
+          fit: widget.fit,
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (wasSynchronouslyLoaded || frame != null) {
@@ -328,7 +337,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
     } else if (!kIsWeb && File(resolvedUrl).existsSync()) {
       imageWidget = Image.file(
         File(resolvedUrl),
-        fit: BoxFit.contain,
+        fit: widget.fit,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded || frame != null) {
@@ -368,7 +377,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: widget.padding,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _openImageLightbox(
@@ -1517,13 +1526,15 @@ class ChatAttachmentChipView extends StatelessWidget {
             dark: CupertinoColors.secondaryLabel,
           );
 
-    // 用户消息中的图片附件：若有具体路径则展示内联预览与芯片
+    // 用户消息中的图片附件：若有具体路径则展示内联预览与芯片。
+    // 注意 `r'\\'` 是**两个**反斜杠字符（历史笔误），Windows 单反斜杠路径
+    // 永远匹配不上 ⇒ 图片附件只剩文件名条、内联预览永不出现。
     final hasImagePath =
         isImage &&
         attachment.path != null &&
         attachment.path!.isNotEmpty &&
         (attachment.path!.contains('/') ||
-            attachment.path!.contains(r'\\') ||
+            attachment.path!.contains(r'\') ||
             attachment.path!.startsWith('data:'));
     final resolvedUrl = pathOrName.isNotEmpty
         ? ChatMediaResolver.resolveMediaUrl(

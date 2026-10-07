@@ -22,6 +22,7 @@ import 'injected_notice_card.dart';
 import 'markdown_styles.dart';
 import 'selected_context_card.dart';
 import 'tool_call_card.dart';
+import 'user_attachment_block.dart';
 
 /// 消息内区块统一间距（思考卡 / 工具卡 / 正文 / 选中上下文卡之间固定间隔）。
 const double kMessageSectionGap = 8.0;
@@ -325,13 +326,11 @@ class _UserContent extends StatelessWidget {
         if (message.attachments?.isNotEmpty == true) ...[
           if (blocks.isNotEmpty || parsedDisplay.isNotEmpty)
             const SizedBox(height: 6),
-          for (final attachment in message.attachments!)
-            _AttachmentChip(
-              attachment: attachment,
-              baseUrl: baseUrl,
-              sessionId: sessionId,
-              customHeaders: customHeaders,
-            ),
+          UserAttachmentBlock(
+            attachments: message.attachments!,
+            baseUrl: baseUrl,
+            sessionId: sessionId,
+          ),
         ],
       ],
     );
@@ -529,32 +528,6 @@ class _AssistantContent extends StatelessWidget {
       if (seen.add(key)) out.add(g);
     }
     return out;
-  }
-}
-
-/// 附件条（图片/文件芯片）。
-class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip({
-    required this.attachment,
-    this.baseUrl,
-    this.sessionId,
-    this.customHeaders,
-  });
-
-  final MessageAttachment attachment;
-  final String? baseUrl;
-  final String? sessionId;
-  final Map<String, String>? customHeaders;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChatAttachmentChipView(
-      attachment: attachment,
-      baseUrl: baseUrl,
-      sessionId: sessionId,
-      customHeaders: customHeaders,
-      isUserMessage: true,
-    );
   }
 }
 

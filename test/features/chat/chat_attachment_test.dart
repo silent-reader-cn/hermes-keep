@@ -15,7 +15,6 @@ import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/settings/perf_monitor_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:hermes_ui/features/chat/widgets/chat_media_view.dart';
 
 import '../../helpers/fake_chat_api.dart';
 
@@ -94,7 +93,11 @@ void main() {
         find.byKey(const ValueKey('attachment-pending-list')),
         findsNothing,
       );
-      expect(find.byType(ChatAttachmentChipView), findsOneWidget);
+      // 用户气泡附件区改为「宫格 + 文件行条」，用稳定 key 断言。
+      expect(
+        find.byKey(const ValueKey('user-attachment-file-report.pdf')),
+        findsOneWidget,
+      );
 
       await _unmount(tester);
     });

@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/core/models/chat_message.dart';
 import 'package:hermes_ui/core/models/message_attachment.dart';
@@ -25,7 +26,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     final Widget chatArea = ChatMessageBubble(message: message);
     await tester.pumpWidget(
-      MediaQuery(
+      // 用户气泡附件区含 Consumer（图片瓦片走 mediaFileProvider），
+      // 生产环境始终有 ProviderScope —— 测试工装补齐同一前提。
+      ProviderScope(
+        child: MediaQuery(
         data: MediaQueryData(size: Size(windowWidth, 800)),
         child: CupertinoTheme(
           data: const CupertinoThemeData(),
@@ -42,6 +46,7 @@ void main() {
             ),
           ),
         ),
+      ),
       ),
     );
   }

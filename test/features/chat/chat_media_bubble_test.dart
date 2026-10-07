@@ -236,7 +236,7 @@ void main() {
       expect(find.textContaining('📎 spec.pdf'), findsOneWidget);
     });
 
-    testWidgets('用户消息附件展示 ChatAttachmentChipView 与图标', (tester) async {
+    testWidgets('用户消息附件：图片成瓦片、文件成行条（图标 + 文件名）', (tester) async {
       final rig = buildFakeMediaCache();
       addTearDown(rig.dispose);
       const message = ChatMessage(
@@ -253,9 +253,16 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('photo.jpg'), findsOneWidget);
+      // 图片 → 缩略瓦片（不再挂文件名芯片）；文件 → 整行条（图标 + 文件名）。
+      expect(
+        find.byKey(const ValueKey('user-attachment-image-photo.jpg')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('user-attachment-file-report.pdf')),
+        findsOneWidget,
+      );
       expect(find.text('report.pdf'), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.photo), findsOneWidget);
       expect(find.byIcon(CupertinoIcons.doc_text), findsOneWidget);
     });
 
@@ -736,13 +743,13 @@ void main() {
 
       // 验证芯片与内联图均渲染
       expect(
-        find.byKey(const ValueKey('attachment-chip-preview-diagram.png')),
+        find.byKey(const ValueKey('user-attachment-image-diagram.png')),
         findsOneWidget,
       );
 
       // 点击芯片进入 Lightbox
       await tester.tap(
-        find.byKey(const ValueKey('attachment-chip-preview-diagram.png')),
+        find.byKey(const ValueKey('user-attachment-image-diagram.png')),
       );
       await tester.pumpAndSettle();
 
@@ -799,13 +806,13 @@ void main() {
       await tester.pump();
 
       expect(
-        find.byKey(const ValueKey('attachment-chip-preview-spec.zip')),
+        find.byKey(const ValueKey('user-attachment-file-spec.zip')),
         findsOneWidget,
       );
 
       // 点击芯片
       await tester.tap(
-        find.byKey(const ValueKey('attachment-chip-preview-spec.zip')),
+        find.byKey(const ValueKey('user-attachment-file-spec.zip')),
       );
       await tester.pumpAndSettle();
 
@@ -882,7 +889,7 @@ void main() {
       await tester.pump();
 
       await tester.tap(
-        find.byKey(const ValueKey('attachment-chip-preview-corrupted.zip')),
+        find.byKey(const ValueKey('user-attachment-file-corrupted.zip')),
       );
       await tester.pumpAndSettle();
 
@@ -948,7 +955,7 @@ void main() {
 
       // 点击附件芯片打开 Lightbox
       await tester.tap(
-        find.byKey(const ValueKey('attachment-chip-preview-photo.png')),
+        find.byKey(const ValueKey('user-attachment-image-photo.png')),
       );
       await tester.pumpAndSettle();
 
@@ -1056,7 +1063,7 @@ void main() {
       await tester.pump();
 
       await tester.tap(
-        find.byKey(const ValueKey('attachment-chip-preview-bad_file.bin')),
+        find.byKey(const ValueKey('user-attachment-file-bad_file.bin')),
       );
       await tester.pumpAndSettle();
 

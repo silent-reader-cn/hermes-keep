@@ -180,6 +180,24 @@ class ChatMediaResolver {
       return '$normalizedBase$sep$path';
     }
 
+    // 裸文件名（无目录分隔符）+ 有会话 id：走 `/api/file/raw`。
+    //
+    // 服务端口径（与 WebUI 前端一致）：`/api/file/raw` 先把 path 当会话
+    // 工作区内的相对路径解析，找不到再落到**该会话的上传收件箱**
+    // （`_session_attachment_dir(sid)`）；而 `/api/media` 只认绝对路径，
+    // 收到裸文件名必然 404。历史消息里 `[Attached files:]` 常只留文件名
+    // （或服务端只回 name），此时只有 file/raw 能取到字节。
+    final hasSeparator = path.contains('/') || path.contains(r'\');
+    if (!hasSeparator) {
+      if (sessionId != null && sessionId.isNotEmpty) {
+        return '$normalizedBase/api/file/raw'
+            '?session_id=${Uri.encodeComponent(sessionId)}'
+            '&path=${Uri.encodeComponent(path)}';
+      }
+      // 无会话 id 时退回旧行为（绝对根路径下的同名文件仍可能命中）。
+      return '$normalizedBase/api/media?path=${Uri.encodeComponent(path)}';
+    }
+
     // 本地文件路径或服务器相对路径 -> 拼接 /api/media
     final encodedPath = Uri.encodeComponent(path);
     var apiUrl = '$normalizedBase/api/media?path=$encodedPath';
