@@ -35,3 +35,18 @@ double fitMenuHeight({
   if (height == chrome) return math.min(available, chrome + rowHeights.first);
   return height;
 }
+
+/// 卡片内**滚动列表**的可见高度：等于 [fitMenuHeight] 减去卡片自身边框开销。
+///
+/// 之所以单列一个入口、而不是让调用方各写 `fitMenuHeight(...) - 2`：
+/// [fitMenuHeight] 的口径是**卡片高**（含边框），把它直接当作列表上限会让
+/// 卡片比可用高度高出 2pt，被外层夹回后**下一行露出 2pt**（实测两处各踩一次）。
+/// 凡「卡片（有边框）+ 可滚动列表」的结构，列表上限一律取本函数。
+double fitMenuListHeight({
+  required List<double> rowHeights,
+  required double available,
+}) => math.max(
+  0,
+  fitMenuHeight(rowHeights: rowHeights, available: available) -
+      kPopoverMenuCardChrome,
+);

@@ -1,14 +1,58 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
+import 'package:hermes_ui/app/widgets/menu_metrics.dart';
+import 'package:hermes_ui/app/widgets/popover_dropdown.dart';
+import 'package:hermes_ui/core/api/api_client.dart';
+import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/models/context_window_snapshot.dart';
+import 'package:hermes_ui/core/models/server_catalog.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/context_window_popover.dart';
+import 'package:hermes_ui/features/settings/settings_providers.dart';
 import 'package:hermes_ui/l10n/app_localizations.dart';
 
 import '../../helpers/fake_chat_api.dart';
+import '../../helpers/fake_settings_api.dart';
+
+/// 工作区列表用假 ApiClient（`_fetchWorkspaces` 直读 apiClient，不走 chatApi）。
+ApiClient _workspacesClient(List<Map<String, Object?>> workspaces) {
+  final dio = Dio(
+    BaseOptions(validateStatus: (_) => true, followRedirects: false),
+  );
+  dio.httpClientAdapter = _JsonAdapter((options) {
+    if (options.path.contains('/api/workspaces')) {
+      return jsonEncode({'workspaces': workspaces, 'last': null});
+    }
+    return '{}';
+  });
+  return ApiClient(baseUrl: 'http://test.local:30002', dio: dio);
+}
+
+class _JsonAdapter implements HttpClientAdapter {
+  _JsonAdapter(this.body);
+  final String Function(RequestOptions) body;
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(
+    body(options),
+    200,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
+  @override
+  void close({bool force = false}) {}
+}
 
 /// 上下文弹层宽窄分流验收（设计稿 `dialog-family-proposal.html` §3 推荐①）：
 ///
@@ -31,18 +75,46 @@ void main() {
   });
   final emptySnapshot = ContextWindowSnapshot.fromJson(const {});
 
-  Widget host({required Widget child, Locale locale = const Locale('zh')}) {
+  Widget host({
+    required Widget child,
+    Locale locale = const Locale('zh'),
+    Brightness? brightness,
+    List<String> models = const ['gpt-4o'],
+    List<Map<String, Object?>>? workspaces,
+    List<String> efforts = const [],
+    String? reasoningEffort,
+  }) {
     final fakeChat = FakeChatApi();
     fakeChat.sessionResult = {
       'session': {'session_id': 's1', 'workspace': null},
     };
+    final overrides = <Override>[
+      chatApiProvider.overrideWithValue(fakeChat),
+      chatAvailableModelsProvider.overrideWithValue(models),
+    ];
+    if (workspaces != null) {
+      overrides.add(
+        apiClientProvider.overrideWithValue(_workspacesClient(workspaces)),
+      );
+    }
+    if (efforts.isNotEmpty) {
+      final fakeSettings = FakeSettingsApi();
+      fakeSettings.reasoningResponse = ReasoningStatusResponse(
+        supportsReasoningEffort: true,
+        supportedEfforts: efforts,
+        reasoningEffort: reasoningEffort,
+      );
+      overrides.add(
+        settingsApiFactoryProvider.overrideWithValue((_) => fakeSettings),
+      );
+    }
     return ProviderScope(
-      overrides: [
-        chatApiProvider.overrideWithValue(fakeChat),
-        chatAvailableModelsProvider.overrideWithValue(const ['gpt-4o']),
-      ],
+      overrides: overrides,
       child: CupertinoApp(
         locale: locale,
+        theme: brightness == null
+            ? null
+            : CupertinoThemeData(brightness: brightness),
         localizationsDelegates: const [
           AppLocalizationsDelegate(),
           DefaultCupertinoLocalizations.delegate,
@@ -75,9 +147,7 @@ void main() {
   }
 
   group('宽屏（>=900）重排', () {
-    testWidgets('宽 300：大数字 + 已用/上限副行 + 进度条 + 数值 13pt + 去「关闭」行', (
-      tester,
-    ) async {
+    testWidgets('宽 300：大数字 + 已用/上限副行 + 进度条 + 数值 13pt + 去「关闭」行', (tester) async {
       useViewport(tester, const Size(1200, 800));
       await tester.pumpWidget(host(child: popover(fullSnapshot)));
       await settle(tester);
@@ -192,6 +262,218 @@ void main() {
       expect(find.text('Unavailable'), findsNothing);
       // tokensLabel 行 + 四项数值
       expect(find.text('暂无数据'), findsNWidgets(5));
+    });
+  });
+
+  group('三个下拉：内容放得下就全放（不再硬编码 200 裁切）', () {
+    // 6 个模型 + 「跟随服务器默认」= 7 行（旧实现 200 上限下第 5 行起被裁）。
+    const sixModels = [
+      'gpt-5.2',
+      'grok-4.5',
+      'grok-4.6',
+      'claude-4.7',
+      'gemini-3',
+      'deepseek-v4',
+    ];
+    // 6 个工作区 + 「跟随会话默认」= 7 行（同理）。
+    final sixWorkspaces = <Map<String, Object?>>[
+      for (var i = 0; i < 6; i++)
+        {'path': '/home/user/project-$i', 'name': 'Project $i'},
+    ];
+    const fiveEfforts = ['minimal', 'low', 'medium', 'high', 'ultra'];
+
+    Future<void> openMenu(WidgetTester tester, String trigger) async {
+      await tester.tap(find.byKey(ValueKey(trigger)));
+      await tester.pumpAndSettle();
+    }
+
+    /// 每一行都必须**完整**落在卡片内（`row.bottom <= 卡片底`）——历史实现把列表
+    /// 封顶 200，第 5 行起被切断；行高固定 44（浅/深两态一致）。
+    void expectAllRowsFullyVisible(WidgetTester tester, List<Key> rowKeys) {
+      final card = tester.getRect(find.byType(PopoverDropdownCard));
+      for (final key in rowKeys) {
+        final row = tester.getRect(find.byKey(key));
+        expect(
+          row.top,
+          greaterThanOrEqualTo(card.top - 0.5),
+          reason: '$key 上缘被裁',
+        );
+        expect(
+          row.bottom,
+          lessThanOrEqualTo(card.bottom + 0.5),
+          reason: '$key 下缘被裁（行底 ${row.bottom} > 卡片底 ${card.bottom}）',
+        );
+        expect(row.height, 44, reason: '$key 行高应恒为 44');
+      }
+    }
+
+    testWidgets('宽屏模型下拉：7 行（6 模型 + 跟随默认）全部完整可见', (tester) async {
+      useViewport(tester, const Size(1280, 800));
+      await tester.pumpWidget(
+        host(child: popover(fullSnapshot), models: sixModels),
+      );
+      await tester.pumpAndSettle();
+
+      await openMenu(tester, 'context-popover-model-trigger');
+
+      final rowKeys = <Key>[
+        for (final m in sixModels) ValueKey('context-popover-model-$m'),
+        const ValueKey('context-popover-model-default'),
+      ];
+      for (final key in rowKeys) {
+        expect(find.byKey(key), findsOneWidget);
+      }
+      expectAllRowsFullyVisible(tester, rowKeys);
+      // 卡片按内容摊开（7 × 44 + 边框 2），而不是旧实现的 200 + 2
+      expect(
+        tester.getRect(find.byType(PopoverDropdownCard)).height,
+        7 * 44 + 2,
+      );
+      // 末行（此前整项不可见）文案可读
+      expect(find.text('deepseek-v4'), findsOneWidget);
+    });
+
+    testWidgets('宽屏工作区下拉：7 行（6 工作区 + 跟随默认）全部完整可见', (tester) async {
+      useViewport(tester, const Size(1280, 800));
+      await tester.pumpWidget(
+        host(child: popover(fullSnapshot), workspaces: sixWorkspaces),
+      );
+      await tester.pumpAndSettle();
+
+      await openMenu(tester, 'context-popover-workspace-trigger');
+
+      final rowKeys = <Key>[
+        for (var i = 0; i < 6; i++)
+          ValueKey('workspace-item-/home/user/project-$i'),
+        const ValueKey('workspace-item-default'),
+      ];
+      for (final key in rowKeys) {
+        expect(find.byKey(key), findsOneWidget);
+      }
+      expectAllRowsFullyVisible(tester, rowKeys);
+      expect(
+        tester.getRect(find.byType(PopoverDropdownCard)).height,
+        7 * 44 + 2,
+      );
+    });
+
+    testWidgets('宽屏推理强度下拉：5 档全部可见 + 宽 140 且右缘对齐触发器', (tester) async {
+      useViewport(tester, const Size(1280, 800));
+      await tester.pumpWidget(
+        host(
+          child: popover(fullSnapshot),
+          workspaces: sixWorkspaces,
+          efforts: fiveEfforts,
+          reasoningEffort: 'medium',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await openMenu(tester, 'context-popover-reasoning-trigger');
+
+      expectAllRowsFullyVisible(tester, [
+        for (final e in fiveEfforts) ValueKey('context-popover-reasoning-$e'),
+      ]);
+      final card = tester.getRect(find.byType(PopoverDropdownCard));
+      expect(card.width, 140);
+      expect(card.height, 5 * 44 + 2);
+      final trigger = tester.getRect(
+        find.byKey(const ValueKey('context-popover-reasoning-trigger')),
+      );
+      expect((card.right - trigger.right).abs(), lessThanOrEqualTo(0.5));
+    });
+
+    testWidgets('回落向下：菜单顶边 = 触发器底边 + 8；高度按行边界 + 上限 420 收紧', (tester) async {
+      // 800×900 + 弹层贴顶：上方 / 下方都放不下 21 行（926），取较大的一侧 = 下方；
+      // 可用高度被上限 420 收住 → fitMenuHeight 取整行最大前缀（不切行、不盖触发器）。
+      useViewport(tester, const Size(800, 900));
+
+      await tester.pumpWidget(
+        host(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: popover(fullSnapshot),
+          ),
+          models: [for (var i = 0; i < 20; i++) 'model-v$i'],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final trigger = tester.getRect(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+      );
+      await openMenu(tester, 'context-popover-model-trigger');
+
+      final card = tester.getRect(find.byType(PopoverDropdownCard));
+      // 统一口径：向下 = 触发器**底边** + 8。旧副本是「触发器顶部 + 38」——触发器实测
+      // 高 44，故旧口径 = 底边 − 6（会盖住触发器 6pt）；新口径顶边比旧实现低 14pt。
+      expect((card.top - (trigger.bottom + 8)).abs(), lessThanOrEqualTo(0.5));
+      expect(card.top, greaterThan(trigger.bottom));
+      // 可见行区 = 卡片高 − 卡片边框（1px × 2）= 9 整行（上限 420 内取最大整行前缀，
+      // 绝不切半行）。
+      expect(card.height - kPopoverMenuCardChrome, 9 * 44);
+      expect(card.height, lessThanOrEqualTo(420));
+      // 更强判据：**没有任何一行跨过卡片内容区底边**。
+      // （把「卡片高」当列表上限时，第 10 行会露出 2px —— 半行感正是要消灭的东西，
+      // 而只比对总高度是看不出来的。）
+      final contentBottom = card.bottom - 1;
+      for (var i = 0; i < 20; i++) {
+        final row = tester.getRect(
+          find.byKey(ValueKey('context-popover-model-model-v$i')),
+        );
+        expect(
+          row.bottom <= contentBottom + 0.5 || row.top >= contentBottom - 0.5,
+          isTrue,
+          reason:
+              '第 $i 行跨了内容区底边（${row.top}..${row.bottom} vs $contentBottom）',
+        );
+      }
+      expect(card.bottom, lessThanOrEqualTo(900));
+      // 被裁部分仍可滚动访问
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('context-popover-model-default')),
+        -50.0,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-model-default')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('浅/深两态：模型下拉的行矩形与卡片矩形逐像素一致', (tester) async {
+      useViewport(tester, const Size(1280, 800));
+
+      Future<Map<String, Rect>> measure(Brightness brightness) async {
+        await tester.pumpWidget(
+          host(
+            child: popover(fullSnapshot),
+            models: sixModels,
+            brightness: brightness,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await openMenu(tester, 'context-popover-model-trigger');
+
+        final rects = <String, Rect>{
+          'card': tester.getRect(find.byType(PopoverDropdownCard)),
+          for (final m in sixModels)
+            'model-$m': tester.getRect(
+              find.byKey(ValueKey('context-popover-model-$m')),
+            ),
+          'default': tester.getRect(
+            find.byKey(const ValueKey('context-popover-model-default')),
+          ),
+        };
+        // 收起本态的菜单：旧 OverlayEntry 的 barrier 会跨越重 pump 残留并拦截点击
+        await tester.tapAt(const Offset(20, 780));
+        await tester.pumpAndSettle();
+        return rects;
+      }
+
+      final light = await measure(Brightness.light);
+      final dark = await measure(Brightness.dark);
+      expect(dark, light);
     });
   });
 }

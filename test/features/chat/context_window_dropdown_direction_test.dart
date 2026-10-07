@@ -115,8 +115,10 @@ void main() {
       await openModelMenu(tester);
 
       final card = cardRect(tester);
-      // 向下展开 = 老 offset(0,38) 行为：卡片顶部 = 触发器顶部 + 38
-      expect((card.top - (trigger.top + 38)).abs(), lessThan(2.0));
+      // 向下展开 = 统一口径：卡片顶边 = 触发器**底边** + 8。
+      // （旧实现 `trigger.top + 38` 在触发器实高 44 时等价于「底边 − 6」，
+      // 菜单会压住触发器 6pt；统一为上下各 8 后不再重叠。）
+      expect((card.top - (trigger.bottom + 8)).abs(), lessThan(2.0));
       expect(card.top, greaterThanOrEqualTo(trigger.top));
       // 底部不越界（滚动兜底）
       expect(card.bottom, lessThanOrEqualTo(600));
@@ -179,7 +181,7 @@ void main() {
       );
       await openModelMenu(tester);
       final cardDown = cardRect(tester);
-      expect((cardDown.top - (triggerWithPad.top + 38)).abs(), lessThan(2.0));
+      expect((cardDown.top - (triggerWithPad.bottom + 8)).abs(), lessThan(2.0));
     });
 
     testWidgets('向下空间也不足：收紧菜单高度（保底 ≥ 一行，滚动兜底）', (tester) async {
@@ -201,12 +203,14 @@ void main() {
       await openModelMenu(tester);
 
       final card = cardRect(tester);
-      // 回落向下
-      expect((card.top - (trigger.top + 38)).abs(), lessThan(2.0));
-      // 高度收紧为底部可用空间 − 8，且不低于一行保底 46
-      final expectedHeight = 410 - (trigger.top + 38) - 8;
-      expect((card.height - expectedHeight).abs(), lessThan(2.0));
-      expect(card.height, greaterThanOrEqualTo(46));
+      // 回落向下（统一口径）：卡片顶边 = 触发器底边 + 8
+      expect((card.top - (trigger.bottom + 8)).abs(), lessThan(2.0));
+      // 高度收紧：取该侧可用高度与上限的较小者，且**裁在行边界**上
+      // （行高 44 的整数倍 + 卡片边框 2）—— 绝不出现半行。
+      final availableBelow = 410 - (trigger.bottom + 8) - 8;
+      expect(card.height, lessThanOrEqualTo(availableBelow));
+      expect(card.height, greaterThanOrEqualTo(2 + 44));
+      expect((card.height - 2) % 44, 0, reason: '切口必须落在行边界上');
       expect(card.bottom, lessThanOrEqualTo(410));
       // 内容仍可滚动访问（滚动兜底）
       await tester.scrollUntilVisible(

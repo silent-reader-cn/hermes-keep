@@ -3,6 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 
 import '../theme/light_surfaces.dart';
+import 'menu_metrics.dart';
+
+/// 卡片高度的下限（44 = 触屏一行）：再挤也不低于「一行」。
+///
+/// 低于一行就没有意义 —— 用户一行完整内容都看不到。宁可让尾部内容交由
+/// `SingleChildScrollView` 滚动兜底，也不把卡片塌成一条缝。
+const double kPopoverMinCardHeight = 44.0;
 
 /// 弹层弹出方向。
 enum PopoverPlacement {
@@ -63,7 +70,10 @@ class AdaptivePopover {
 /// - 自动翻转：当 [flipOnOverflow] 为 true 且首选方向空间不足时，自动切换到另一侧。
 /// - 横向 clamp：弹层始终在 `safeLeft..safeRight` 内（默认左右 8px 边距），双栏
 ///   1200px 视口下右缘贴近锚点也不会溢出屏幕外。
-/// - 纵向 maxHeight 约束 + 单轴滚动，避免内容过高溢出。
+/// - 纵向高度收敛：卡片上限先按「该侧真实可用高度」（安全边距 + [maxHeight]）
+///   收紧，不越出屏幕；再挤也不低于 [kPopoverMinCardHeight]（一行）。
+/// - 行边界对齐（[rowHeights] 非空时）：按整行取最大前缀算出最终高度，可用高度
+///   成为约束时切口落在**两行之间**（不会切出半行），见 [fitMenuHeight]。
 /// - 点击屏障关闭（[barrierDismissible]），屏障颜色 [barrierColor] 默认为透明。
 Future<void> showAdaptivePopover({
   required BuildContext context,
@@ -83,6 +93,11 @@ Future<void> showAdaptivePopover({
   Color? barrierColor,
   double maxHeight = 420,
   double gap = 8,
+
+  /// 内容各段的真实高度（标题块 / 每行 / 每条分隔线）。非空时卡片高度按
+  /// **整行边界**收敛（[fitMenuHeight]），可用高度不够也绝不切出半行；
+  /// null = 按 [maxHeight] 硬截断（旧行为）。
+  List<double>? rowHeights,
   VoidCallback? onClosed,
 }) async {
   final overlay = Overlay.of(context);
@@ -219,6 +234,7 @@ Future<void> showAdaptivePopover({
       gap: gap,
       verticalOffset: verticalOffset,
       maxHeight: maxHeight,
+      rowHeights: rowHeights,
       barrierDismissible: barrierDismissible,
       barrierColor: barrierColor,
       close: close,
@@ -260,6 +276,7 @@ class _AdaptivePopoverHost extends StatefulWidget {
     required this.gap,
     required this.verticalOffset,
     required this.maxHeight,
+    required this.rowHeights,
     required this.barrierDismissible,
     required this.barrierColor,
     required this.close,
@@ -279,6 +296,7 @@ class _AdaptivePopoverHost extends StatefulWidget {
   final double gap;
   final double verticalOffset;
   final double maxHeight;
+  final List<double>? rowHeights;
   final bool barrierDismissible;
   final Color? barrierColor;
   final VoidCallback close;
@@ -309,6 +327,39 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
               widget.verticalOffset
         : null;
 
+    // 卡片高度必须收敛到「该侧真实可用高度」。
+    //
+    // `Stack` 对只给一个纵向偏移的 `Positioned` 子节点下发的是**宽松**高度约束，
+    // 于是卡片原先生多高就多高 —— 实测 13 项菜单在 1280×800、锚点在屏幕中部时
+    // 卡片 top ≈ -24.5（顶部越出屏幕，首行不可达）。这里按安全边距把可用高度
+    // 算出来，再与调用方的 [widget.maxHeight] 一起收紧。
+    final media = MediaQuery.of(context);
+    final safeTop = media.padding.top + safeMargin;
+    final safeBottom = media.padding.bottom + safeMargin;
+    final sideAvailable = isTop
+        ? widget.anchorRect.top - widget.gap - safeTop
+        : widget.screenHeight -
+              widget.anchorRect.bottom -
+              widget.gap -
+              safeBottom;
+    // 再挤也不低于一行（低于一行就没有意义，尾部交给滚动兜底）。
+    final capped = math.min(
+      widget.maxHeight,
+      math.max(kPopoverMinCardHeight, sideAvailable),
+    );
+    // 防御性行边界收敛：给了行高序列就按整行取最大前缀，切口落在两行之间。
+    //
+    // chrome 用 [kPopoverMenuCardChrome]（卡片 1px 边框 ×2）而不是 0：外层
+    // `ConstrainedBox` 的 maxHeight 由卡片自身（含边框）消费，边框再吃掉内容
+    // 视口 2pt —— 传 0 会正好让最后一行被切掉 2pt（半行感的另一种形态）。
+    final cardMaxHeight = widget.rowHeights == null
+        ? capped
+        : fitMenuHeight(
+            rowHeights: widget.rowHeights!,
+            available: capped,
+            chrome: kPopoverMenuCardChrome,
+          );
+
     Widget positioned;
     if (widget.minWidth != null) {
       if (widget.align == PopoverAlign.end) {
@@ -325,7 +376,7 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
           right: right,
           top: top,
           bottom: bottom,
-          child: _constrainedCard(),
+          child: _constrainedCard(cardMaxHeight),
         );
       } else if (widget.align == PopoverAlign.start) {
         final minW = widget.minWidth!;
@@ -340,7 +391,7 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
           left: left,
           top: top,
           bottom: bottom,
-          child: _constrainedCard(),
+          child: _constrainedCard(cardMaxHeight),
         );
       } else {
         positioned = Positioned(
@@ -348,7 +399,7 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
           top: top,
           bottom: bottom,
           width: widget.effectiveWidth,
-          child: _constrainedCard(),
+          child: _constrainedCard(cardMaxHeight),
         );
       }
     } else {
@@ -357,7 +408,7 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
         top: top,
         bottom: bottom,
         width: widget.effectiveWidth,
-        child: _constrainedCard(),
+        child: _constrainedCard(cardMaxHeight),
       );
     }
 
@@ -377,12 +428,16 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
     );
   }
 
-  Widget _constrainedCard() {
+  /// 卡片：宽度照旧，高度收敛到调用方算好的 [maxHeight]。
+  ///
+  /// [maxHeight] = 「该侧真实可用高度」与调用方上限收紧后的值（可能再按
+  /// [Widget.rowHeights] 取整到行边界），因此卡片不会越出屏幕。
+  Widget _constrainedCard(double maxHeight) {
     return ConstrainedBox(
       constraints: BoxConstraints(
         minWidth: widget.minWidth ?? 0.0,
         maxWidth: widget.maxWidth ?? widget.effectiveWidth,
-        maxHeight: widget.maxHeight,
+        maxHeight: maxHeight,
       ),
       child: _PopoverCard(
         child: SingleChildScrollView(

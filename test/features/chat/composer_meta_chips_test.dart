@@ -851,4 +851,397 @@ void main() {
       );
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 选择器弹层二期（#175 续）：内容不裁切 + 宽屏搜索框 + 行统一走 MenuRow
+  //
+  // 背景（已取证，见 HERMES.md #175）：
+  //   ① 两个选择器的内容各被 `ConstrainedBox(maxHeight: 200)` 硬裁 —— 宽屏 5 个
+  //      工作区实际要 268.5（46×5 + 分组线 0.5 + 元操作 36 + 边框 2），实测第 5 行
+  //      整项不可见、元操作行完全看不见；
+  //   ② 宽屏行内容浅色比行中心高 8~16pt（浅色走 `CupertinoListTile`、暗色走
+  //      `CupertinoButton`，两者内部布局不同）；
+  //   ③ 设计稿两个选择器都有搜索框，本轮补齐（仅宽屏）。
+  // ─────────────────────────────────────────────────────────────────────────
+  group('选择器弹层：内容不裁切 + 宽屏搜索框 + 行统一 MenuRow', () {
+    /// 搜索框整块高（= lib 侧 `_kPickerSearchBarBlockHeight`，私有常量，此处按
+    /// 实测口径钉住：margin 6 + 控件自然高 27 + margin 6）。
+    const double searchBlockHeight = 39.0;
+
+    void useViewport(WidgetTester tester, Size size) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+    }
+
+    Widget appWith({
+      required FakeChatApi fakeApi,
+      required List<WorkspaceRoot> roots,
+      required List<String> models,
+      String? workspace = 'D:/p/ws0',
+      Brightness brightness = Brightness.light,
+    }) {
+      fakeApi.sessionResult = {
+        'session': {
+          'session_id': 's1',
+          'workspace': workspace,
+          'model': models.isEmpty ? null : models.first,
+          'messages': const [],
+        },
+      };
+      return buildTestApp(
+        brightness: brightness,
+        overrides: [
+          chatApiProvider.overrideWithValue(fakeApi),
+          workspaceRootsProvider.overrideWith((ref) => roots),
+          availableModelIdsProvider.overrideWith((ref) => models),
+        ],
+        child: const ChatPage(sessionId: 's1'),
+      );
+    }
+
+    List<WorkspaceRoot> rootsOf(int n) => [
+      for (var i = 0; i < n; i++) WorkspaceRoot(path: 'D:/p/ws$i', name: 'W$i'),
+    ];
+
+    Finder wsRow(int i) =>
+        find.byKey(ValueKey('composer-workspace-item-D:/p/ws$i'));
+    Finder modelRow(String m) => find.byKey(ValueKey('composer-model-item-$m'));
+    final Finder wsDefault = find.byKey(
+      const ValueKey('composer-workspace-item-default'),
+    );
+    final Finder modelDefault = find.byKey(
+      const ValueKey('composer-model-item-default'),
+    );
+    final Finder cardFinder = find.byType(PopoverDropdownCard);
+
+    /// 行必须**完整**落在卡片内（判据：`row.bottom <= 卡片底 + 0.5`）。
+    void expectFullyInside(
+      WidgetTester tester,
+      Finder row,
+      Rect card, {
+      String? reason,
+    }) {
+      final r = tester.getRect(row);
+      expect(r.top, greaterThanOrEqualTo(card.top - 0.5), reason: reason);
+      expect(r.bottom, lessThanOrEqualTo(card.bottom + 0.5), reason: reason);
+    }
+
+    testWidgets('① 宽屏 1280×800：5 个工作区**每一行**都完整可见，元操作行也完整可见', (tester) async {
+      useViewport(tester, const Size(1280, 800));
+      await tester.pumpWidget(
+        appWith(fakeApi: FakeChatApi(), roots: rootsOf(5), models: const ['m0']),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('composer-workspace-chip')));
+      await tester.pumpAndSettle();
+
+      final card = tester.getRect(cardFinder);
+      for (var i = 0; i < 5; i++) {
+        expect(wsRow(i), findsOneWidget, reason: '第 ${i + 1} 个工作区整项被裁掉了');
+        expect(
+          tester.getSize(wsRow(i)).height,
+          46.0,
+          reason: '宽屏工作区行高必须是 46（变体 A）',
+        );
+        expectFullyInside(tester, wsRow(i), card, reason: '第 ${i + 1} 个工作区被切');
+      }
+      expect(wsDefault, findsOneWidget, reason: '元操作行此前完全不可见');
+      expect(tester.getSize(wsDefault).height, 36.0);
+      expectFullyInside(tester, wsDefault, card, reason: '元操作行被切');
+
+      // 卡片高 = 边框 2 + 搜索框块 + 5×46 + 分组线 0.5 + 元操作 36（内容放得下就全放）
+      expect(card.height, 2 + searchBlockHeight + 46 * 5 + 0.5 + 36);
+    });
+
+    testWidgets('② 宽屏 1280×800：6 个模型 + 元操作行全部完整可见', (tester) async {
+      useViewport(tester, const Size(1280, 800));
+      final models = [for (var i = 0; i < 6; i++) 'model-$i'];
+      await tester.pumpWidget(
+        appWith(fakeApi: FakeChatApi(), roots: rootsOf(1), models: models),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('composer-model-chip')));
+      await tester.pumpAndSettle();
+
+      final card = tester.getRect(cardFinder);
+      for (final m in models) {
+        expect(modelRow(m), findsOneWidget, reason: '$m 整项被裁掉了');
+        expect(tester.getSize(modelRow(m)).height, 36.0);
+        expectFullyInside(tester, modelRow(m), card, reason: '$m 被切');
+      }
+      expect(modelDefault, findsOneWidget, reason: '元操作行此前完全不可见');
+      expectFullyInside(tester, modelDefault, card, reason: '元操作行被切');
+      expect(card.height, 2 + searchBlockHeight + 36 * 6 + 0.5 + 36);
+    });
+
+    testWidgets('③ 宽屏搜索框：输入即过滤（工作区匹配名称或路径），无匹配出提示且卡片自适应', (
+      tester,
+    ) async {
+      useViewport(tester, const Size(1280, 800));
+      await tester.pumpWidget(
+        appWith(
+          fakeApi: FakeChatApi(),
+          roots: const [
+            WorkspaceRoot(path: 'D:/p/alpha', name: 'Alpha'),
+            WorkspaceRoot(path: 'D:/p/beta', name: 'Beta'),
+            WorkspaceRoot(path: 'D:/p/gamma', name: 'Gamma'),
+          ],
+          models: const ['m0'],
+          workspace: 'D:/p/alpha',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('composer-workspace-chip')));
+      await tester.pumpAndSettle();
+
+      final field = find.byKey(
+        const ValueKey('composer-picker-search-workspaces'),
+      );
+      expect(field, findsOneWidget, reason: '宽屏选择器必须有搜索框');
+      expect(find.text('搜索工作区'), findsOneWidget, reason: '占位文案走 l10n');
+      expect(
+        find.byType(CupertinoSearchTextField),
+        findsOneWidget,
+        reason: '复用仓库既有的 CupertinoSearchTextField',
+      );
+
+      // 点搜索框不该收起弹层，且拿到焦点（否则根本打不了字）
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(cardFinder, findsOneWidget, reason: '点搜索框把弹层点没了');
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(of: field, matching: find.byType(EditableText)),
+            )
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+
+      // 名称匹配（大小写不敏感）
+      await tester.enterText(field, 'BETA');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('composer-workspace-item-D:/p/beta')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('composer-workspace-item-D:/p/alpha')),
+        findsNothing,
+      );
+      expect(wsDefault, findsNothing, reason: '过滤态下只留匹配行');
+      expect(tester.getRect(cardFinder).height, 2 + searchBlockHeight + 46);
+
+      // 路径匹配（宽屏项的主信息之一就是路径）
+      await tester.enterText(field, 'D:/P/GAM');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('composer-workspace-item-D:/p/gamma')),
+        findsOneWidget,
+        reason: '路径命中也要算（大小写不敏感）',
+      );
+
+      // 无匹配：出提示文案，卡片高度自适应（不留白、不裁切）
+      await tester.enterText(field, 'zzz');
+      await tester.pumpAndSettle();
+      expect(find.text('无匹配项'), findsOneWidget);
+      expect(find.byKey(const ValueKey('composer-workspace-item-D:/p/alpha')),
+          findsNothing);
+      final emptyCard = tester.getRect(cardFinder);
+      expect(emptyCard.height, 2 + searchBlockHeight + 44);
+
+      // 清空后恢复全部行（搜索框自带清空按钮的行为由控件保证，这里直接清空输入）
+      await tester.enterText(field, '');
+      await tester.pumpAndSettle();
+      expect(wsDefault, findsOneWidget);
+      expect(tester.getRect(cardFinder).height,
+          2 + searchBlockHeight + 46 * 3 + 0.5 + 36);
+    });
+
+    testWidgets('③b 宽屏模型搜索框：按模型名过滤', (tester) async {
+      useViewport(tester, const Size(1280, 800));
+      await tester.pumpWidget(
+        appWith(
+          fakeApi: FakeChatApi(),
+          roots: rootsOf(1),
+          models: const ['gpt-4o', 'claude-3-5-sonnet', 'grok-4.5'],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('composer-model-chip')));
+      await tester.pumpAndSettle();
+
+      final field = find.byKey(const ValueKey('composer-picker-search-models'));
+      expect(field, findsOneWidget);
+      expect(find.text('搜索模型'), findsOneWidget);
+
+      await tester.enterText(field, 'claude');
+      await tester.pumpAndSettle();
+      expect(modelRow('claude-3-5-sonnet'), findsOneWidget);
+      expect(modelRow('gpt-4o'), findsNothing);
+      expect(modelRow('grok-4.5'), findsNothing);
+      expect(modelDefault, findsNothing);
+
+      await tester.enterText(field, 'no-such-model');
+      await tester.pumpAndSettle();
+      expect(find.text('无匹配项'), findsOneWidget);
+    });
+
+    testWidgets('④ 窄屏 700×800：行高仍 44、内容居中、**无**搜索框（逐像素不变）', (tester) async {
+      useViewport(tester, const Size(700, 800));
+      await tester.pumpWidget(
+        appWith(fakeApi: FakeChatApi(), roots: rootsOf(3), models: const ['m0']),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('composer-workspace-chip')));
+      await tester.pumpAndSettle();
+
+      // 窄屏不许出现搜索框（搜索框仅宽屏）
+      expect(find.byType(CupertinoSearchTextField), findsNothing);
+      expect(
+        find.byKey(const ValueKey('composer-picker-search-workspaces')),
+        findsNothing,
+      );
+
+      for (var i = 0; i < 3; i++) {
+        final row = wsRow(i);
+        expect(tester.getSize(row).height, 44.0, reason: '窄屏行高必须保持 44');
+        // 既有形态：单行拼接串
+        final text = find.descendant(
+          of: row,
+          matching: find.text('W$i (D:/p/ws$i)'),
+        );
+        expect(text, findsOneWidget);
+        expect(
+          tester.getRect(text).center.dy,
+          moreOrLessEquals(tester.getRect(row).center.dy, epsilon: 0.5),
+          reason: '窄屏内容必须仍居中',
+        );
+      }
+      expect(tester.getSize(wsDefault).height, 44.0);
+
+      // 模型选择器同样无搜索框、行高 44
+      await tester.tapAt(const Offset(20, 20)); // 点弹层外收起
+      await tester.pumpAndSettle();
+      expect(cardFinder, findsNothing);
+      await tester.tap(find.byKey(const ValueKey('composer-model-chip')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CupertinoSearchTextField), findsNothing);
+      expect(tester.getSize(modelRow('m0')).height, 44.0);
+      expect(tester.getSize(modelDefault).height, 44.0);
+    });
+
+    testWidgets('⑤ 浅/深两态：行矩形与内容矩形逐像素一致（内容整体垂直居中）', (tester) async {
+      final measured = <Brightness, Map<String, Rect>>{};
+      for (final brightness in [Brightness.light, Brightness.dark]) {
+        useViewport(tester, const Size(1280, 800));
+        await tester.pumpWidget(
+          appWith(
+            fakeApi: FakeChatApi(),
+            roots: rootsOf(3),
+            models: const ['model-0', 'model-1'],
+            brightness: brightness,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('composer-workspace-chip')));
+        await tester.pumpAndSettle();
+
+        // 选中行（ws0）——名称/路径/图标三个内容矩形的相对位置必须两态一致
+        final row = wsRow(0);
+        final rowRect = tester.getRect(row);
+        final nameRect = tester.getRect(
+          find.descendant(of: row, matching: find.text('W0')),
+        );
+        final pathRect = tester.getRect(
+          find.descendant(of: row, matching: find.text('D:/p/ws0')),
+        );
+        final iconRect = tester.getRect(
+          find.descendant(of: row, matching: find.byIcon(CupertinoIcons.folder)),
+        );
+        measured[brightness] = {
+          'row': rowRect,
+          'name': nameRect,
+          'path': pathRect,
+          'icon': iconRect,
+        };
+        // 双行内容作为**整体**与行中心对齐（整体居中，而不是被顶到上沿）
+        expect(
+          (nameRect.top + pathRect.bottom) / 2,
+          moreOrLessEquals(rowRect.center.dy, epsilon: 0.5),
+          reason: '$brightness：双行内容整体必须居中（此前浅色被顶到上沿）',
+        );
+        expect(rowRect.height, 46.0);
+
+        // 宽屏单行行（模型项）的文字也必须落在行中心
+        await tester.tapAt(const Offset(20, 20)); // 点弹层外收起
+        await tester.pumpAndSettle();
+        expect(cardFinder, findsNothing);
+        await tester.tap(find.byKey(const ValueKey('composer-model-chip')));
+        await tester.pumpAndSettle();
+        final mRow = modelRow('model-1');
+        final mRowRect = tester.getRect(mRow);
+        measured[brightness]!['modelRow'] = mRowRect;
+        final mTextRect = tester.getRect(
+          find.descendant(of: mRow, matching: find.text('model-1')),
+        );
+        measured[brightness]!['modelText'] = mTextRect;
+        expect(
+          mTextRect.center.dy,
+          moreOrLessEquals(mRowRect.center.dy, epsilon: 0.5),
+          reason: '$brightness：模型行文字必须居中（此前浅色偏上 10.5pt）',
+        );
+        expect(mRowRect.height, 36.0);
+      }
+
+      final light = measured[Brightness.light]!;
+      final dark = measured[Brightness.dark]!;
+      for (final key in light.keys) {
+        expect(
+          light[key],
+          dark[key],
+          reason: '$key 在浅/深两态的矩形必须完全相同（布局不该由主题分支决定）',
+        );
+      }
+    });
+
+    testWidgets('⑥ 矮窗口 1280×300：切口落在行边界（每行要么完整可见、要么整行在视口外）', (
+      tester,
+    ) async {
+      useViewport(tester, const Size(1280, 300));
+      await tester.pumpWidget(
+        appWith(fakeApi: FakeChatApi(), roots: rootsOf(5), models: const ['m0']),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('composer-workspace-chip')));
+      await tester.pumpAndSettle();
+
+      final card = tester.getRect(cardFinder);
+      expect(card.height, isPositive);
+      expect(tester.takeException(), isNull, reason: '矮窗口下不许溢出（RenderFlex）');
+      // 列表视口（滚动区）才是「可见」的准绳：卡片还含 1px 边框与搜索框块。
+      final viewport = tester.getRect(
+        find.descendant(
+          of: cardFinder,
+          matching: find.byType(SingleChildScrollView),
+        ),
+      );
+      for (var i = 0; i < 5; i++) {
+        final r = tester.getRect(wsRow(i));
+        final fullyInside =
+            r.top >= viewport.top - 0.5 && r.bottom <= viewport.bottom + 0.5;
+        final fullyOutside = r.top >= viewport.bottom - 0.5;
+        expect(
+          fullyInside || fullyOutside,
+          isTrue,
+          reason:
+              '第 ${i + 1} 个工作区被切成了半行（top=${r.top} bottom=${r.bottom} '
+              'viewportBottom=${viewport.bottom}）',
+        );
+      }
+    });
+  });
 }

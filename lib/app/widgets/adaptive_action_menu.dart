@@ -6,7 +6,8 @@ import 'package:flutter/services.dart';
 import '../shell/adaptive_shell.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
-import 'cupertino_popover.dart';
+import 'adaptive_popover.dart';
+import 'menu_row.dart';
 
 /// 宽屏（鼠标端）菜单行高（30）。
 ///
@@ -19,6 +20,28 @@ const double kActionMenuRowHeightWide = 30.0;
 ///
 /// §D3「宽 ≤260」：再宽眼睛要横扫，再窄放不下「标签 + 快捷键列」两栏。
 const double kActionMenuMaxWidthWide = 260.0;
+
+/// 分组线高度（0.5）：与菜单标题下那条线同规格。
+///
+/// 单独成常量是为了让「按行边界收敛高度」的调用方能算出行高序列 —— 硬编码
+/// 在 [ActionMenuDivider] 里就没人能引用了。
+const double kActionMenuDividerHeight = 0.5;
+
+/// 标题行高（16）：标题文本**行盒**的高度，`kActionMenuTitleBlockHeight` 里的
+/// 「16」就是它。
+///
+/// 必须显式钉死（`TextStyle.height`）：行盒高度随字体浮动（生产 MiSans ≈16，
+/// flutter_test 的测试字体是 13）—— 让「32.5」只在某个字体下成立的话，按行边界
+/// 收敛就会差 3pt 切进下一行，正是本次要消灭的「半行」。
+const double kActionMenuTitleLineHeight = 16.0;
+
+/// 标题块高度（32.5）：`Padding(12, 10, 12, 6)` + 13pt 标题行高 16 + 标题下那条
+/// 0.5 分组线。
+///
+/// 与 [kActionMenuDividerHeight]、[kActionMenuRowHeightWide] 一起构成弹层内容
+/// 的真实高度序列（`AdaptiveActionMenu.show` 把它交给 `showAdaptivePopover` 的
+/// `rowHeights`），切口因此永远落在行与行之间，不会出现半行。
+const double kActionMenuTitleBlockHeight = 32.5;
 
 /// 主修饰键口径：Apple 平台用 `⌘/⇧/⌥`，其余平台映射 `Ctrl/Shift/Alt`。
 ///
@@ -74,10 +97,14 @@ class ActionMenuShortcut {
 
 /// 宽屏菜单行（鼠标档 [kActionMenuRowHeightWide]）：图标 + 标签 + 弹性空白 + 快捷键列。
 ///
-/// 浅色走 [CupertinoListTile]（按下底色 `LightSurfaces.pressed` 是既有视觉契约，
-/// `test/app/shell/light_surfaces_test.dart` 钉着它），深色走 [CupertinoButton]；
-/// 两态都**定死 30 高** —— [CupertinoListTile] 自带 44 的最小高，靠外层
-/// `SizedBox` 的紧约束压回 30（`BoxConstraints.enforce` 以父级为准）。
+/// 布局**委托共享原语 [MenuRow]**：一套布局、两态只差配色。此前按主题分成两支
+/// （浅色 [CupertinoListTile] / 深色 [CupertinoButton]），而 [CupertinoListTile]
+/// 把 title 装在 `Column(mainAxisAlignment: spaceBetween)` 里 —— 行高被压到 30 后
+/// 内容**顶到上沿**，同一个菜单项在明暗两态下布局不同（实测浅色内容中心比行中心
+/// 高 8.00pt，暗色 0.00pt）。行的布局不该由主题分支决定，故收敛到 [MenuRow]。
+///
+/// 几何与本类保持逐像素一致：图标 14pt + 8pt 间距（**不是**选择器那份 16/10，
+/// 消息右键菜单的标签左缘不许位移）、内容左右 12pt、行高 30。
 ///
 /// 窄屏不使用本组件：窄屏菜单仍是 `CupertinoActionSheet` 的 44 行。
 class ActionMenuRow extends StatelessWidget {
@@ -140,55 +167,35 @@ class ActionMenuRow extends StatelessWidget {
       LightSurfaces.textSecondary,
       dark: CupertinoColors.secondaryLabel,
     );
-    final Widget content = Padding(
+    return MenuRow(
+      height: kActionMenuRowHeightWide,
+      icon: icon,
+      iconSize: 14,
+      iconBoxWidth: 14,
+      iconGap: 8,
+      // 图标与标签同色（既有视觉契约）：不占用 MenuRow 的「次级色」默认值。
+      iconColor: color,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: kFontBody,
-                color: color,
-                fontWeight: isDefault ? FontWeight.w600 : FontWeight.w400,
+      enabled: enabled,
+      onTap: enabled ? onPressed : null,
+      trailing: shortcut == null
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: Text(
+                shortcut!.label,
+                style: TextStyle(fontSize: kFontMicro, color: shortcutColor),
               ),
             ),
-          ),
-          if (shortcut != null) ...[
-            const SizedBox(width: 12),
-            Text(
-              shortcut!.label,
-              style: TextStyle(fontSize: kFontMicro, color: shortcutColor),
-            ),
-          ],
-        ],
-      ),
-    );
-    if (CupertinoTheme.brightnessOf(context) == Brightness.light) {
-      return SizedBox(
-        height: kActionMenuRowHeightWide,
-        child: CupertinoListTile(
-          padding: EdgeInsets.zero,
-          backgroundColor: LightSurfaces.card,
-          backgroundColorActivated: LightSurfaces.pressed,
-          onTap: enabled ? onPressed : null,
-          title: content,
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: kFontBody,
+          color: color,
+          fontWeight: isDefault ? FontWeight.w600 : FontWeight.w400,
         ),
-      );
-    }
-    return SizedBox(
-      height: kActionMenuRowHeightWide,
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        alignment: Alignment.centerLeft,
-        onPressed: enabled ? onPressed : null,
-        child: content,
       ),
     );
   }
@@ -204,7 +211,7 @@ class ActionMenuDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 0.5,
+    height: kActionMenuDividerHeight,
     color: LightSurfaces.resolve(
       context,
       LightSurfaces.divider,
@@ -353,14 +360,26 @@ class AdaptiveActionMenu {
     final isWide = MediaQuery.sizeOf(context).width >= kAdaptiveBreakpoint;
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
     if (isWide) {
-      await showCupertinoPopover(
+      // §D3：宽 ≤260。调用方就算传了更大的 preferredWidth 也被压回来。
+      final double menuWidth = maxWidth ?? kActionMenuMaxWidthWide;
+      // 内容的真实高度序列（标题块 + 每行 30 + 每条分组线 0.5），交给弹层做
+      // **行边界**收敛：可用高度不够时切口落在两行之间，绝不切出半行。
+      // 分组线（含标题下那条）算在标题块里，故此处只补项之间的分组线。
+      final rowHeights = <double>[
+        if (title != null && title.isNotEmpty) kActionMenuTitleBlockHeight,
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0 && items[i].startsGroup) kActionMenuDividerHeight,
+          kActionMenuRowHeightWide,
+        ],
+      ];
+      await showAdaptivePopover(
         context: context,
         anchorKey: anchorKey,
         anchorRect: anchorRect,
         preferredWidth: preferredWidth,
         minWidth: minWidth,
-        // §D3：宽 ≤260。调用方就算传了更大的 preferredWidth 也被压回来。
-        maxWidth: maxWidth ?? kActionMenuMaxWidthWide,
+        maxWidth: menuWidth,
+        rowHeights: rowHeights,
         builder: (popoverContext, close) {
           final bindings = <ShortcutActivator, VoidCallback>{};
           final rows = <Widget>[];
@@ -391,7 +410,14 @@ class AdaptiveActionMenu {
           }
           return ActionMenuShortcutScope(
             bindings: bindings,
-            child: IntrinsicWidth(
+            // **显式定宽**（而不是 `IntrinsicWidth`）：行内容现在装在 `MenuRow`
+            // 的 `Stack` / `Positioned.fill` 里（为选中竖条留位），而 `Stack`
+            // 的宽度内在值只统计**非定位**子节点 ⇒ 内在宽度量到 0，卡片会塌到
+            // `minWidth`（180），带快捷键列的行随即横向溢出。
+            // 宽度本来就该由 §D3 的「宽 ≤260」（`maxWidth`）决定，直接写死；
+            // 宿主侧还会再按屏幕宽与 `minWidth` 收紧。
+            child: SizedBox(
+              width: menuWidth,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -406,6 +432,9 @@ class AdaptiveActionMenu {
                         // 深色弹层底上黑字 50% 透明几乎不可见）。
                         style: TextStyle(
                           fontSize: kFontLabel,
+                          // 行盒钉死 16：`kActionMenuTitleBlockHeight` 里的「16」
+                          // 必须与渲染一致，否则按行边界收敛会差几 pt 切进下一行。
+                          height: kActionMenuTitleLineHeight / kFontLabel,
                           fontWeight: FontWeight.w600,
                           color: LightSurfaces.resolve(
                             context,

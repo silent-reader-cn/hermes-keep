@@ -9,6 +9,7 @@ import 'package:hermes_ui/app/shell/sidebar_utility_toolbar.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/app/widgets/adaptive_action_menu.dart';
+import 'package:hermes_ui/app/widgets/menu_row.dart';
 import 'package:hermes_ui/app/widgets/narrow_navigation_dropdown.dart';
 import 'package:hermes_ui/app/widgets/popover_dropdown.dart';
 import 'package:hermes_ui/core/models/chat_message.dart';
@@ -422,13 +423,14 @@ void main() {
               greaterThanOrEqualTo(4.5),
             );
             if (isWide) {
-              final tile = tester.widget<CupertinoListTile>(
-                find.descendant(
-                  of: copy,
-                  matching: find.byType(CupertinoListTile),
-                ),
+              // 宽屏菜单行已改用共享 `MenuRow`（两态同一布局，不再按主题分
+              // `CupertinoListTile` / `CupertinoButton` 两支）。禁用态断言因此
+              // 落在 `MenuRow.enabled` 上：`ActionMenuRow` 在 enabled=false 时
+              // 传 `onTap: null`，`MenuRow` 据此不下发点击、不显按下态。
+              final row = tester.widget<MenuRow>(
+                find.descendant(of: copy, matching: find.byType(MenuRow)),
               );
-              expect(tile.onTap, isNull);
+              expect(row.enabled, isFalse);
             }
           } else if (isWide) {
             expect(

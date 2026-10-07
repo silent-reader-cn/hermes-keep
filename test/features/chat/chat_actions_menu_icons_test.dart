@@ -3,11 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 import 'package:hermes_ui/app/widgets/adaptive_action_menu.dart';
 import 'package:hermes_ui/app/widgets/adaptive_popover.dart';
+import 'package:hermes_ui/app/widgets/menu_metrics.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 
@@ -201,6 +204,74 @@ List<String?> _visualSequence(WidgetTester tester) {
   }
   entries.sort((a, b) => a.$1.compareTo(b.$1));
   return [for (final e in entries) e.$2];
+}
+
+/// 起一个最小宽屏页面（可指定主题），点按钮弹出 `AdaptiveActionMenu`。
+///
+/// 只为「行两态布局一致 / 卡片不越屏 / 切口落在行边界」三条布局性质取证用；
+/// 与聊天页真实入口解耦，尺寸与 items 由用例决定。
+Future<void> _pumpActionMenu(
+  WidgetTester tester, {
+  required Size size,
+  required Brightness brightness,
+  required List<AdaptiveMenuItem> items,
+  String? title,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+  final anchor = GlobalKey();
+  await tester.pumpWidget(
+    CupertinoApp(
+      theme: buildCupertinoTheme(brightness),
+      home: CupertinoPageScaffold(
+        child: Center(
+          child: CupertinoButton(
+            key: anchor,
+            onPressed: () => unawaited(
+              AdaptiveActionMenu.show(
+                tester.element(find.byKey(anchor)),
+                anchorKey: anchor,
+                title: title,
+                preferredWidth: kActionMenuMaxWidthWide,
+                items: items,
+              ),
+            ),
+            child: const Text('打开菜单'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.tap(find.byKey(anchor));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// 13 项菜单（与聊天三点菜单同构：3/4/3/2/1 五族 ⇒ 4 条分组线）。
+List<AdaptiveMenuItem> _thirteenItems() => [
+  for (var i = 0; i < 13; i++)
+    AdaptiveMenuItem(
+      key: ValueKey<String>('probe-item-$i'),
+      label: '动作 ${i + 1}',
+      icon: CupertinoIcons.pencil_outline,
+      startsGroup: const {3, 7, 10, 12}.contains(i),
+      onPressed: () {},
+    ),
+];
+
+/// 弹层卡片的矩形（`_PopoverCard` 是唯一带 14 圆角 `BoxDecoration` 的容器）。
+Rect _cardRect(WidgetTester tester) {
+  final card = find.byWidgetPredicate(
+    (w) =>
+        w is Container &&
+        w.decoration is BoxDecoration &&
+        (w.decoration! as BoxDecoration).borderRadius ==
+            BorderRadius.circular(14),
+  );
+  expect(card, findsOneWidget, reason: '弹层卡片应恰好一个');
+  return tester.getRect(card);
 }
 
 void main() {
@@ -431,7 +502,9 @@ void main() {
     test('adaptive_action_menu.dart 的 ActionSheet 分支里没有 item.icon / 分组线', () {
       final source = File('lib/app/widgets/adaptive_action_menu.dart')
           .readAsStringSync();
-      final wideIndex = source.indexOf('await showCupertinoPopover(');
+      // 宽屏分支直接调 `showAdaptivePopover`（为传 `rowHeights` 做行边界收敛；
+      // 旧路径经 `showCupertinoPopover` 薄转发，没有该参数）。
+      final wideIndex = source.indexOf('await showAdaptivePopover(');
       final narrowIndex = source.indexOf(
         'await showCupertinoModalPopup<void>(',
       );
@@ -455,6 +528,110 @@ void main() {
           reason: '窄屏分支不得引用 $token（否则窄屏视觉会变）',
         );
       }
+    });
+  });
+
+  // 宽屏弹层菜单的三条布局性质（与具体入口无关的几何护栏）。
+  group('宽屏弹层菜单布局护栏', () {
+    // ① 行两态布局一致：内容垂直居中。
+    // 旧实现按主题分两支（浅色 CupertinoListTile / 暗色 CupertinoButton），
+    // CupertinoListTile 把 title 装在 spaceBetween 里 → 被 30 定高压到上沿
+    // （实测内容中心比行中心高 8.00pt）。两态必须是同一套布局。
+    for (final brightness in Brightness.values) {
+      testWidgets('$brightness 菜单行内容与行垂直居中（差 ≤0.5pt）', (tester) async {
+        await _pumpActionMenu(
+          tester,
+          size: const Size(1280, 800),
+          brightness: brightness,
+          items: [
+            AdaptiveMenuItem(
+              key: const ValueKey('probe-row'),
+              label: '探测行',
+              icon: CupertinoIcons.pencil_outline,
+              shortcut: ActionMenuShortcut.primary(LogicalKeyboardKey.keyC),
+              onPressed: () {},
+            ),
+          ],
+        );
+        final row = find.byKey(const ValueKey('probe-row'));
+        expect(row, findsOneWidget);
+        final rowCenter = tester.getRect(row).center.dy;
+        final textCenter = tester
+            .getRect(find.descendant(of: row, matching: find.text('探测行')))
+            .center
+            .dy;
+        expect(
+          (textCenter - rowCenter).abs(),
+          lessThanOrEqualTo(0.5),
+          reason: '$brightness：行内文字必须与行垂直居中（两态同一布局）',
+        );
+        final iconCenter = tester
+            .getRect(
+              find.descendant(
+                of: row,
+                matching: find.byIcon(CupertinoIcons.pencil_outline),
+              ),
+            )
+            .center
+            .dy;
+        expect(
+          (iconCenter - rowCenter).abs(),
+          lessThanOrEqualTo(0.5),
+          reason: '$brightness：行内图标必须与行垂直居中',
+        );
+        await _unmount(tester);
+      });
+    }
+
+    // ② 卡片高度收敛到该侧真实可用高度，不越出屏幕。
+    // 旧实现只给一个纵向偏移（Positioned(bottom:)），Stack 给宽松约束 →
+    // 13 项菜单在锚点居中时卡片 top ≈ -24.5（首行不可达）。
+    testWidgets('13 项菜单锚点居中：卡片完全落在屏内（1280×800）', (tester) async {
+      await _pumpActionMenu(
+        tester,
+        size: const Size(1280, 800),
+        brightness: Brightness.light,
+        items: _thirteenItems(),
+      );
+      final card = _cardRect(tester);
+      expect(card.top, greaterThanOrEqualTo(0.0), reason: '卡片顶边越出屏顶');
+      expect(card.bottom, lessThanOrEqualTo(800.0), reason: '卡片底边越出屏底');
+      await _unmount(tester);
+    });
+
+    // ③ 防御性收敛：可用高度成为约束时（短窗口），切口必须落在两行之间。
+    // 逐行判「整行在卡片内 or 完全在卡片外」，不存在跨卡片底边的行。
+    testWidgets('短窗口 1280×560：13 项菜单每行不跨卡片底边', (tester) async {
+      await _pumpActionMenu(
+        tester,
+        size: const Size(1280, 560),
+        brightness: Brightness.light,
+        title: '会话操作',
+        items: _thirteenItems(),
+      );
+      expect(find.byType(ActionMenuRow), findsNWidgets(13));
+      final card = _cardRect(tester);
+      // 卡片内容视口底边 = 卡片矩形底边 - 1pt 边框：`_PopoverCard` 的 1px 边框
+      // 由 `Container` 的 decoration padding 消费，内容视口因此比卡片矩形内缩
+      // 1pt。「整行在卡片内」指的是在**内容视口**里（边框那 1pt 画在边上，不是
+      // 内容区）。用卡片外缘判会让一个「零像素可见」的下一行看起来像跨了边。
+      const cardBorder = kPopoverMenuCardChrome / 2;
+      final viewportBottom = card.bottom - cardBorder;
+      for (var i = 0; i < 13; i++) {
+        final rect = tester.getRect(
+          find.byKey(ValueKey<String>('probe-item-$i')),
+        );
+        expect(
+          rect.bottom <= viewportBottom + 0.5 ||
+              rect.top >= viewportBottom - 0.5,
+          isTrue,
+          reason:
+              '第 ${i + 1} 行（${rect.top}..${rect.bottom}）跨了内容视口底边 '
+              '$viewportBottom（卡片 ${card.top}..${card.bottom}）'
+              ' —— 切口必须落在两行之间',
+        );
+      }
+      await _unmount(tester);
     });
   });
 }
