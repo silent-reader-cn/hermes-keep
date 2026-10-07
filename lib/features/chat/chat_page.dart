@@ -15,6 +15,7 @@ import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/hermes_dialog.dart';
+import '../../app/widgets/popover_anchor.dart';
 import '../../core/api/api_client_sessions.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/connections/connection_providers.dart';
@@ -71,7 +72,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   ///   **「⋯」按钮随之从顶栏消失**（它左边的文件夹按钮没有 GlobalKey，元素不被
   ///   抽走，所以主人看到「只剩左侧的打开项目文件夹按钮」）。
   ///
-  /// 锚点改为按 ValueKey 查 RenderBox（见 [_resolveKeyedRect]），同帧重持键的
+  /// 锚点改为按 ValueKey 查 RenderBox（见 [resolvePopoverAnchorRect]），同帧重持键的
   /// 来源从根上不可能再让按钮丢元素。
   static const ValueKey<String> _actionsAnchorKey = ValueKey(
     'chat-session-actions',
@@ -187,7 +188,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     // 计算锚点矩形（标题 middle widget 在 overlay 坐标系中的位置）
     final overlay = Overlay.of(context);
-    final anchorRect = _resolveKeyedRect(context, overlay, _titleAnchorKey);
+    final anchorRect = resolvePopoverAnchorRect(context, overlay, _titleAnchorKey);
     if (anchorRect == null) return;
 
     _outlineEntry = ChatOutlineSheet.insert(
@@ -205,38 +206,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       },
     );
     if (mounted) setState(() {});
-  }
-
-  /// 换算 widget 在 overlay 坐标系中的全局矩形。
-  ///
-  /// **按 [key] 查元素**（不是 GlobalKey）：见 `_actionsAnchorKey` 的注释 ——
-  /// 顶栏 middle/trailing 在路由转场时会被 Hero 穿梭层重复 build，挂 GlobalKey
-  /// 会被框架抽走元素。ValueKey 不参与 GlobalKey 的登记/抢占，天然免疫。
-  Rect? _resolveKeyedRect(BuildContext context, OverlayState overlay, Key key) {
-    final overlayBox = overlay.context.findRenderObject() as RenderBox?;
-    if (overlayBox == null) return null;
-    final root = context;
-    if (root is! Element) return null;
-    Element? target;
-    void visit(Element element) {
-      if (target != null) return;
-      if (element.widget.key == key) {
-        target = element;
-        return;
-      }
-      element.visitChildren(visit);
-    }
-
-    visit(root);
-    final box = target?.renderObject as RenderBox?;
-    if (box == null || !box.attached) return null;
-    final topLeft = box.localToGlobal(Offset.zero, ancestor: overlayBox);
-    return Rect.fromLTWH(
-      topLeft.dx,
-      topLeft.dy,
-      box.size.width,
-      box.size.height,
-    );
   }
 
   /// Windows：在资源管理器中打开会话项目文件夹。
@@ -393,7 +362,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 ref,
                 widget.sessionId,
                 state,
-                _resolveKeyedRect(
+                resolvePopoverAnchorRect(
                   context,
                   Overlay.of(context),
                   _actionsAnchorKey,

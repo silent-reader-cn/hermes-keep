@@ -8,6 +8,7 @@ import '../../core/utils/accessibility.dart';
 import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
 import 'adaptive_action_menu.dart';
+import 'popover_anchor.dart';
 
 /// 窄屏大标题右侧的快捷导航下拉按钮（TASK W3-2 / W3）。
 ///
@@ -39,7 +40,7 @@ class NarrowNavigationDropdownButton extends ConsumerStatefulWidget {
   /// 供窄屏大标题点击使用（#128：点击标题 = 点击 ▾）：标题所在的 header
   /// delegate 触达不到本组件内部状态，改由持有方（导航栏 / 会话列表页）创建
   /// `ValueNotifier`，标题被点击即通知本组件打开同一个下拉菜单；弹层锚点仍是
-  /// 本按钮的 [_anchorKey]，位置与直接点击 ▾ 完全一致。
+  /// 本按钮（按 [buttonKey] 现算矩形），位置与直接点击 ▾ 完全一致。
   final Listenable? openSignal;
 
   @override
@@ -49,7 +50,8 @@ class NarrowNavigationDropdownButton extends ConsumerStatefulWidget {
 
 class _NarrowNavigationDropdownButtonState
     extends ConsumerState<NarrowNavigationDropdownButton> {
-  final GlobalKey _anchorKey = GlobalKey();
+  /// [NarrowNavigationDropdownButton.buttonKey] 为 null 时的兜底锚点 key。
+  static const Key _fallbackButtonKey = ValueKey('narrow-nav-dropdown');
 
   @override
   void initState() {
@@ -132,9 +134,20 @@ class _NarrowNavigationDropdownButtonState
 
     if (items.isEmpty) return;
 
+    // 锚点用「按 key 现算矩形」而不是 GlobalKey：本按钮被渲染在导航栏槽位里
+    // （`AdaptiveSliverNavigationBar` 窄屏自绘头 / 会话列表页头），槽位一旦在转场
+    // 等场景下同帧被 build 两次，GlobalKey 会让元素被框架抽走、按钮直接消失。
+    // 机制见 `lib/app/widgets/popover_anchor.dart`。
+    final anchorRect = resolvePopoverAnchorRect(
+      context,
+      Overlay.of(context),
+      widget.buttonKey ?? _fallbackButtonKey,
+    );
+    if (anchorRect == null) return;
+
     await AdaptiveActionMenu.show(
       context,
-      anchorKey: _anchorKey,
+      anchorRect: anchorRect,
       items: items,
       cancelLabel: l10n.cancel,
       cancelKey: const ValueKey('narrow-nav-cancel'),
@@ -151,16 +164,13 @@ class _NarrowNavigationDropdownButtonState
     }
 
     final l10n = AppLocalizations.of(context);
-    return KeyedSubtree(
-      key: _anchorKey,
-      child: AccessibleButton(
-        key: widget.buttonKey,
-        label: l10n.utilityNavigation,
-        padding: EdgeInsets.zero,
-        minimumSize: const Size(44, 44),
-        onPressed: () => unawaited(_openMenu(context, l10n, visibility)),
-        child: Icon(widget.icon, size: widget.iconSize),
-      ),
+    return AccessibleButton(
+      key: widget.buttonKey,
+      label: l10n.utilityNavigation,
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(44, 44),
+      onPressed: () => unawaited(_openMenu(context, l10n, visibility)),
+      child: Icon(widget.icon, size: widget.iconSize),
     );
   }
 }
