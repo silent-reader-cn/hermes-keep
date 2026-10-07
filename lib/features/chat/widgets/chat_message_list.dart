@@ -17,12 +17,10 @@ import 'package:markdown/markdown.dart' as md;
 import '../../../app/theme/layout_tokens.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
-import '../../../app/widgets/icon_hover_disk.dart';
 import '../../../core/api/sse_client.dart';
 import '../../../core/connections/connection_providers.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/tool_call.dart';
-import '../../../core/utils/accessibility.dart';
 import '../../../core/utils/selected_context.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../chat/chat_models.dart';
@@ -2706,8 +2704,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                         // 右键，配合已抑制的原生工具条 ⇒ 恒定一层自定义菜单。
                         child: _MessageRowDesktopEntry(
                           enabled: isWideLayout(context),
-                          // §D4 第二/第三入口：悬停「⋯」与键盘（Shift+F10 / Menu 键）
-                          // 与右键同一套动作 —— 三者都走 _showMessageActions。
+                          // §D4 鼠标端第二入口：键盘（Shift+F10 / Menu 键）与
+                          // 右键同一套动作 —— 两者都走 _showMessageActions。
+                          // （原「悬停 ⋯」入口已按产品指令移除。）
                           onOpenMenu: (position) => unawaited(
                             _showMessageActions(
                               entry.message,
@@ -3418,15 +3417,11 @@ class _OpenMessageMenuIntent extends Intent {
   const _OpenMessageMenuIntent();
 }
 
-/// §D4 三入口统一（鼠标端）：同一行的「右键 / 悬停 ⋯ / 键盘」打开同一个菜单。
+/// §D4 鼠标端入口（**右键 / 键盘**）—— 同一行的两者打开同一个菜单。
 ///
 /// - **右键**：由内层既有 `Listener`（`onPointerDown` + `kSecondaryMouseButton`）承担，
 ///   本组件不改它 —— #134 的结论是必须用 `Listener`（正文里 `SelectableText` 的选字
 ///   手势会在竞技场里抢赢 `GestureDetector`，快速右键外层收不到回调）；
-/// - **悬停「⋯」**：鼠标压上整行时行尾浮出一枚 28pt 圆底「⋯」（复用 G3 的
-///   [IconHoverDisk]），点它与右键同一套动作。悬停判定**必须自挂 [MouseRegion]**：
-///   [FocusableActionDetector.onShowHoverHighlight] 被 `_canShowHighlight` 门控，而
-///   鼠标移动会把 highlightMode 打回 `touch` ⇒ 拿它做悬停判定在真机上永不触发；
 /// - **键盘**：焦点落在整行时 `Shift+F10` / `Menu` 键打开同一菜单，并画
 ///   [kFocusRingWidth]（2px）蓝焦点环；环只认**键盘导航**高亮
 ///   （[FocusableActionDetector.onShowFocusHighlight] 只在 traditional 模式回调，
@@ -3434,8 +3429,12 @@ class _OpenMessageMenuIntent extends Intent {
 /// - **焦点环不挤压布局**：环画在 [Positioned.fill] + [IgnorePointer] 里，[Stack]
 ///   只按非定位子（行内容）定尺 ⇒ 行高、文字位置逐像素不变。
 ///
+/// 原「悬停行尾浮出 ⋯」这一入口已**按产品指令移除**（它浮在行尾会遮挡正文；
+/// 产品原话：「让用户右键点击就行了」）。故本组件不再自挂 [MouseRegion]、
+/// 不再画悬停按钮、不留悬停专用 key；右键与键盘两条入口逐字未动。
+///
 /// 窄屏（[enabled] 为假 —— 调用方传 `isWideLayout(context)`）**原样透传** [child]：
-/// 不挂 Focus、不挂 [MouseRegion]、无圆底、无焦点环；手机端仍只有长按，逐像素不变。
+/// 不挂 Focus、无焦点环；手机端仍只有长按，逐像素不变。
 class _MessageRowDesktopEntry extends StatefulWidget {
   const _MessageRowDesktopEntry({
     required this.enabled,
@@ -3462,60 +3461,45 @@ class _MessageRowDesktopEntryState extends State<_MessageRowDesktopEntry> {
   static const _OpenMessageMenuIntent _openMenuIntent =
       _OpenMessageMenuIntent();
 
-  /// 悬停「⋯」按钮的 key（点它时按按钮自身位置定位菜单）。
-  final GlobalKey _menuButtonKey = GlobalKey();
-
-  bool _hovered = false;
   bool _focusHighlighted = false;
 
   @override
   Widget build(BuildContext context) {
     if (!widget.enabled) return widget.child;
-    return MouseRegion(
-      onEnter: (_) => _setHovered(true),
-      onExit: (_) => _setHovered(false),
-      child: FocusableActionDetector(
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.f10, shift: true): _openMenuIntent,
-          SingleActivator(LogicalKeyboardKey.contextMenu): _openMenuIntent,
-        },
-        actions: <Type, Action<Intent>>{
-          _OpenMessageMenuIntent: CallbackAction<_OpenMessageMenuIntent>(
-            onInvoke: (_) {
-              widget.onOpenMenu(_rowBottomRight());
-              return null;
-            },
-          ),
-        },
-        onShowFocusHighlight: _setFocusHighlighted,
-        child: Stack(
-          children: [
-            widget.child,
-            if (_focusHighlighted)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: statusBlueText.resolveFrom(context),
-                        width: kFocusRingWidth,
-                      ),
-                      borderRadius: BorderRadius.circular(kRadiusInline),
+    return FocusableActionDetector(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.f10, shift: true): _openMenuIntent,
+        SingleActivator(LogicalKeyboardKey.contextMenu): _openMenuIntent,
+      },
+      actions: <Type, Action<Intent>>{
+        _OpenMessageMenuIntent: CallbackAction<_OpenMessageMenuIntent>(
+          onInvoke: (_) {
+            widget.onOpenMenu(_rowBottomRight());
+            return null;
+          },
+        ),
+      },
+      onShowFocusHighlight: _setFocusHighlighted,
+      child: Stack(
+        children: [
+          widget.child,
+          if (_focusHighlighted)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: statusBlueText.resolveFrom(context),
+                      width: kFocusRingWidth,
                     ),
+                    borderRadius: BorderRadius.circular(kRadiusInline),
                   ),
                 ),
               ),
-            if (_hovered)
-              Positioned(top: 0, right: 0, child: _menuButton(context)),
-          ],
-        ),
+            ),
+        ],
       ),
     );
-  }
-
-  void _setHovered(bool value) {
-    if (value == _hovered) return;
-    setState(() => _hovered = value);
   }
 
   void _setFocusHighlighted(bool value) {
@@ -3523,45 +3507,10 @@ class _MessageRowDesktopEntryState extends State<_MessageRowDesktopEntry> {
     setState(() => _focusHighlighted = value);
   }
 
-  /// 悬停「⋯」：28pt 圆底 + ⋯ 图标（色与侧栏会话行的行内「⋯」同源）。
-  Widget _menuButton(BuildContext context) {
-    return KeyedSubtree(
-      // 稳定 key（供测试/工装定位悬停「⋯」）：每行同一个值 —— 它与
-      // `chat-message-bubble` 同套路（重复 ValueKey 不在同一父级子表里，合法），
-      // 而同一时刻只可能有一行被悬停，故 `find.byKey` 恒为唯一。
-      key: const ValueKey('msg-row-hover-actions'),
-      child: IconHoverDisk(
-        hovered: true,
-        child: AccessibleButton(
-          key: _menuButtonKey,
-          label: AppLocalizations.of(context).messageActions,
-          minimumSize: const Size(kIconButtonHoverSize, kIconButtonHoverSize),
-          onPressed: () => widget.onOpenMenu(_buttonAnchor()),
-          child: Icon(
-            CupertinoIcons.ellipsis,
-            size: 15,
-            color: LightSurfaces.resolve(
-              context,
-              LightSurfaces.textSecondary,
-              dark: CupertinoColors.systemGrey,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   /// 键盘入口的锚点：行右下角（键盘没有指针位置，取行的尾端最贴近用户在看的那行）。
   Offset _rowBottomRight() {
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize || !box.attached) return Offset.zero;
     return box.localToGlobal(Offset(box.size.width, box.size.height));
-  }
-
-  /// 「⋯」按钮的锚点：按钮左下角（菜单落在按钮正下方）。
-  Offset _buttonAnchor() {
-    final box = _menuButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize || !box.attached) return _rowBottomRight();
-    return box.localToGlobal(Offset(0, box.size.height));
   }
 }
