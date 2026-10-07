@@ -1002,7 +1002,14 @@ class _WorkspaceRowWide extends StatelessWidget {
             path,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: kFontCaption, color: pathColor),
+            // 路径字号取 [kFontMicro]（11）而不是 [kFontCaption]（12）：
+            // 设计稿这行是 11.5px **等宽 Menlo**（`.prow .pt{font-family:ui-monospace,
+            // Menlo,monospace}`），字符窄、字面小；实现只有 MiSans（比例字体，
+            // 同 px 下字面更大、笔画更满）。实测同一串路径 `D:\projects\
+            // greenscreen-studio` 归一化到同卡片宽后：设计稿墨高 13、12px 实现墨高 16
+            // ——「路径行看着比设计稿大」的主因是字形而非字号。取 11 后渲染墨高与
+            // 设计稿对齐（≈14 vs 13~14.5），且仍落在令牌阶梯内（不改字族、不引新字体资源）。
+            style: TextStyle(fontSize: kFontMicro, color: pathColor),
           ),
         ],
       ),

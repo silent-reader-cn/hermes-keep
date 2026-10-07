@@ -833,14 +833,17 @@ void main() {
       expect(nameText.style!.color!.toARGB32(), 0xFF0A84FF);
       expect(nameText.style!.fontWeight, FontWeight.w600);
       expect(nameText.style!.fontSize, kFontBody);
-      // 路径：次级色（暗色 secondaryLabel）+ kFontCaption
+      // 路径：次级色（暗色 secondaryLabel）+ kFontMicro
+      // （设计稿这行是 11.5px 等宽 Menlo；实现无等宽字族，MiSans 同 px 字面更大，
+      //  故用 11 让**渲染后的墨高**与设计稿对齐 —— 实测见 composer_meta_chips.dart
+      //  路径 Text 处的注释。）
       expect(
         pathText.style!.color,
         CupertinoColors.secondaryLabel.resolveFrom(
           tester.element(pathFinder),
         ),
       );
-      expect(pathText.style!.fontSize, kFontCaption);
+      expect(pathText.style!.fontSize, kFontMicro);
 
       // 竖条同色 activeBlue
       final bar = find.byKey(const ValueKey('composer-menu-selected-bar'));
