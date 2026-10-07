@@ -2145,6 +2145,17 @@ extension AppLocalizationsDesktopShell145 on AppLocalizations {
   /// 会话未显式选模型时的虚线 chip 文案（跟随服务端默认）。
   String get composerDefaultModel => isEnglish ? 'Server default' : '跟随默认模型';
 
+  /// 选择器搜索框：工作区列表占位文案（设计稿 `dialog-family-proposal.html` §2 `.searchbar`）。
+  String get pickerSearchWorkspaces =>
+      isEnglish ? 'Search workspaces' : '搜索工作区';
+
+  /// 选择器搜索框：模型列表占位文案。
+  String get pickerSearchModels => isEnglish ? 'Search models' : '搜索模型';
+
+  /// 选择器搜索框：无匹配项提示。
+  String get pickerSearchNoResults =>
+      isEnglish ? 'No matches' : '无匹配项';
+
   /// 会话绑定的工作区目录已不存在 / 无权限（chip 红色异常态）。
   String get composerWorkspaceUnavailable =>
       isEnglish ? 'Workspace unavailable' : '工作区已失效';
