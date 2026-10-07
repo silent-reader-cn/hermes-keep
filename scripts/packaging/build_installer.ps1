@@ -68,9 +68,13 @@ if (-not (Test-Path $resolvedOutputDir)) {
 $isccPath = $null
 
 $candidatePaths = @(
+    # 显式覆盖口（本机/CI 安装位置特殊时用）
+    $env:ISCC_PATH,
     "iscc.exe",
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
     "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+    # 非管理员（per-user）安装：Inno Setup 6 默认装到 %LOCALAPPDATA%\Programs
+    "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe",
     "${env:ChocolateyInstall}\bin\iscc.exe",
     "${env:ChocolateyInstall}\lib\innosetup\tools\ISCC.exe",
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
