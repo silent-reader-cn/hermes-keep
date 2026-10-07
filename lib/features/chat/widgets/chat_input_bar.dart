@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/adaptive_shell.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
+import '../../../app/widgets/adaptive_popover.dart';
 import '../../../app/widgets/cupertino_popover.dart';
 import '../../../app/widgets/hermes_dialog.dart';
 import '../../../core/api/api_client_upload.dart';
@@ -707,9 +708,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     await showCupertinoPopover(
       context: context,
       anchorKey: _contextIndicatorKey,
-      preferredWidth: isWide ? 300 : 260,
+      preferredWidth: isWide
+          ? kContextPopoverWideWidth
+          : kContextPopoverNarrowWidth,
       maxHeight: 520,
       preferredHeight: 520,
+      // 紧凑档：宽屏卡圆角收到独立卡令牌 12（浮层族 14 不动），窄屏维持族值。
+      radius: isWide ? kContextPopoverWideRadius : kAdaptivePopoverRadius,
       builder: (popoverContext, close) => ContextWindowPopover(
         sessionId: widget.sessionId,
         snapshot: snapshot,

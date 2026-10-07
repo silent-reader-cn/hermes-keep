@@ -24,16 +24,43 @@ import '../../settings/settings_providers.dart';
 import '../chat_providers.dart';
 
 /// 窄屏弹层宽度（现状值，逐像素不变）。
-const double _kPopoverNarrowWidth = 260;
+const double kContextPopoverNarrowWidth = 260;
 
-/// 宽屏弹层宽度（设计稿 `dialog-family-proposal.html` §3 推荐①：260 → 300）。
-const double _kPopoverWideWidth = 300;
+/// 宽屏弹层宽度（紧凑档：300 → 248）。
+///
+/// 现状 300 出自设计稿 `dialog-family-proposal.html` §3（为「大数字 + 右对齐数值」
+/// 预留的宽度）；主人 2026-10-07 反馈「宽屏下这个弹窗显得太大 —— 大字体宽间距大圆角，
+/// 和整个界面不太兼容」后收一档，见 `sketches/context-popover-compact.html`。
+const double kContextPopoverWideWidth = 248;
 
 /// 窄屏内容左右内边距（现状值）。
 const double _kPopoverNarrowHPad = 16;
 
-/// 宽屏内容左右内边距（设计稿 §3：14）。
-const double _kPopoverWideHPad = 14;
+/// 宽屏内容左右内边距（紧凑档：14 → 12）。
+const double _kPopoverWideHPad = 12;
+
+/// 宽屏头部大数字字号（紧凑档：`kFontMetric` 21 → `kFontPageTitle` 17）。
+///
+/// 21pt 原本借的是「洞察页指标大数据字」档位，比页面标题（17）还大一档；弹层里它只是
+/// 一个读数头部，收进梯子后不再抢戏（这是主人说的「大字体」的主因）。
+const double _kPopoverWideMetricFontSize = kFontPageTitle;
+
+/// 宽屏卡圆角（紧凑档：浮层族 14 → 独立卡令牌 `kRadiusCard` 12）。
+///
+/// 浮层族令牌 `kPopoverDropdownRadius` 是 14（菜单 / 弹层共用）；这里按「独立卡片」档
+/// 收到 12，只作用于本弹层（经 `showCupertinoPopover(radius:)` 传入，不动全族）。
+const double kContextPopoverWideRadius = kRadiusCard;
+
+/// 宽屏触发器（模型 / 工作区 / 手动输入）内边距与圆角（紧凑档：v8/h10 + 8 → v5/h8 + 7）。
+const EdgeInsets _kWideFieldPadding = EdgeInsets.symmetric(
+  horizontal: 8,
+  vertical: 5,
+);
+const double _kWideFieldRadius = kRadiusInline;
+
+/// 宽屏压缩钮直径（紧凑档：32 → 26）与图标（18 → 15）。
+const double _kWideCompressSize = 26;
+const double _kWideCompressIconSize = 15;
 
 /// 三个下拉的行高：实测浅/深两态都是 44（统一由 [MenuRow] 定高，不再靠
 /// `CupertinoListTile` / `CupertinoButton` 各自的默认最小高兜底）。
@@ -649,6 +676,29 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final isHigh = pctInt != null && pctInt >= 75;
     final isMid = pctInt != null && pctInt >= 50 && pctInt < 75;
 
+    // ── 紧凑档分流 ─────────────────────────────────────────────────────────
+    // 模型 / 工作区两个分区在宽窄两态**共用同一段代码**，所以紧凑值必须在这里
+    // 按 [isWide] 分流 —— 直接把共用处改成紧凑值会连窄屏一起改掉（硬约束：
+    // 窄屏逐像素不变）。下面这组局部变量就是「窄屏取改造前的值」的唯一出口。
+    final fieldPadding = isWide
+        ? _kWideFieldPadding
+        : const EdgeInsets.symmetric(horizontal: 10, vertical: 8);
+    final fieldRadius = isWide ? _kWideFieldRadius : 8.0;
+    final fieldChevronSize = isWide ? 12.0 : 14.0;
+    final modelSectionPadding = EdgeInsets.fromLTRB(
+      hPad,
+      isWide ? 8 : 10,
+      hPad,
+      isWide ? 6 : 8,
+    );
+    final workspaceSectionPadding = EdgeInsets.fromLTRB(
+      hPad,
+      isWide ? 8 : 10,
+      hPad,
+      isWide ? 10 : 12,
+    );
+    final sectionLabelGap = isWide ? 4.0 : 6.0;
+
     final separator = LightSurfaces.resolve(
       context,
       LightSurfaces.cardBorder,
@@ -711,6 +761,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       isMid: isMid,
       compressing: _compressing || isCompressing,
       enabled: pctInt != null && pctInt > 0,
+      // 紧凑档只作用于宽屏（26 / 15 / 7）；窄屏维持 32 / 18 / 8 逐像素不变。
+      size: isWide ? _kWideCompressSize : 32,
+      iconSize: isWide ? _kWideCompressIconSize : 18,
+      radius: isWide ? _kWideFieldRadius : 8,
       onPressed: (_compressing || isCompressing)
           ? null
           : () async {
@@ -732,7 +786,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     );
 
     return SizedBox(
-      width: isWide ? _kPopoverWideWidth : _kPopoverNarrowWidth,
+      width: isWide ? kContextPopoverWideWidth : kContextPopoverNarrowWidth,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -740,7 +794,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
           // Header：窄屏 tokensLabel 行／宽屏大数字 + 「已用 · 上限」副行
           if (isWide)
             Padding(
-              padding: EdgeInsets.fromLTRB(hPad, 13, hPad, 11),
+              padding: EdgeInsets.fromLTRB(hPad, 9, hPad, 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -752,13 +806,13 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                           windowLabel,
                           key: const ValueKey('context-popover-window-label'),
                           style: const TextStyle(
-                            fontSize: kFontMetric,
+                            fontSize: _kPopoverWideMetricFontSize,
                             fontWeight: FontWeight.w500,
                             height: 1.1,
                           ),
                         ),
                         if (usageSubLabel != null) ...[
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 2),
                           Text(
                             usageSubLabel,
                             key: const ValueKey(
@@ -865,7 +919,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
           Container(height: 0.5, color: separator),
           // 模型切换区
           Padding(
-            padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 8),
+            padding: modelSectionPadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -873,7 +927,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                   l10n.contextWindowCurrentModel,
                   style: TextStyle(fontSize: kFontCaption, color: secondary),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: sectionLabelGap),
                 Row(
                   children: [
                     Expanded(
@@ -896,13 +950,12 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                   LightSurfaces.card,
                                   dark: CupertinoColors.systemBackground,
                                 ),
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(
+                                  fieldRadius,
+                                ),
                                 border: Border.all(color: separator),
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
+                              padding: fieldPadding,
                               child: Row(
                                 children: [
                                   Expanded(
@@ -926,7 +979,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                     duration: const Duration(milliseconds: 200),
                                     child: Icon(
                                       CupertinoIcons.chevron_down,
-                                      size: 14,
+                                      size: fieldChevronSize,
                                       color: secondary,
                                     ),
                                   ),
@@ -958,13 +1011,12 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                   LightSurfaces.card,
                                   dark: CupertinoColors.systemBackground,
                                 ),
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(
+                                  fieldRadius,
+                                ),
                                 border: Border.all(color: separator),
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 8,
-                              ),
+                              padding: fieldPadding,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -995,7 +1047,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                                     duration: const Duration(milliseconds: 200),
                                     child: Icon(
                                       CupertinoIcons.chevron_down,
-                                      size: 14,
+                                      size: fieldChevronSize,
                                       color: secondary,
                                     ),
                                   ),
@@ -1014,20 +1066,25 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
           Container(height: 0.5, color: separator),
           // 工作区切换区
           Padding(
-            padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 12),
+            padding: workspaceSectionPadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Text(
-                      l10n.workspace,
-                      style: TextStyle(
-                        fontSize: kFontCaption,
-                        color: secondary,
+                    // 标签可收缩（英文 `Workspace` + `Manual input` 在 248 宽下
+                    // 按自然宽度排会溢出）；空间够时与「自然宽度 + Spacer」
+                    // 逐像素一致，不够时退化为省略号。
+                    Expanded(
+                      child: Text(
+                        l10n.workspace,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: kFontCaption,
+                          color: secondary,
+                        ),
                       ),
                     ),
-                    const Spacer(),
                     if (_savingWorkspace)
                       const CupertinoActivityIndicator(radius: 8)
                     else
@@ -1052,7 +1109,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: sectionLabelGap),
                 Semantics(
                   button: true,
                   label: l10n.selectWorkspace,
@@ -1070,13 +1127,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                             LightSurfaces.card,
                             dark: CupertinoColors.systemBackground,
                           ),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(fieldRadius),
                           border: Border.all(color: separator),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
+                        padding: fieldPadding,
                         child: Row(
                           children: [
                             Expanded(
@@ -1098,7 +1152,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                               duration: const Duration(milliseconds: 200),
                               child: Icon(
                                 CupertinoIcons.chevron_down,
-                                size: 14,
+                                size: fieldChevronSize,
                                 color: secondary,
                               ),
                             ),
@@ -1119,10 +1173,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                           ),
                           controller: _workspaceController,
                           placeholder: l10n.workspaceOptionalPlaceholder,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
+                          padding: fieldPadding,
                           style: const TextStyle(fontSize: kFontLabel),
                           placeholderStyle: TextStyle(
                             fontSize: kFontLabel,
@@ -1134,7 +1185,9 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                               LightSurfaces.card,
                               dark: CupertinoColors.systemBackground,
                             ),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(
+                              fieldRadius,
+                            ),
                             border: Border.all(color: separator),
                           ),
                           onSubmitted: (_) => _saveManualWorkspace(),
@@ -1217,6 +1270,12 @@ class _InfoRow extends StatelessWidget {
 /// （13pt、w500、等宽数字、基线对齐）；[value] 为 null（无数据）时数值退为
 /// 次级色且不加粗，文案取 [unavailableLabel]（= `l10n.unavailable`，中文界面
 /// 不再出现英文 'Unavailable'）。
+///
+/// 紧凑档：上下内距 4 → 2.5（行距 24.5 → 21.5）。
+///
+/// **左右内距由父层给**（`Padding(symmetric(horizontal: hPad))`）：本行原先自带
+/// `horizontal: _kPopoverWideHPad`，与父层叠加成 28，导致四项读数比「当前模型 /
+/// 工作区」这类区块标题多缩进 14 —— 同屏两套左缘。紧凑档一并收掉（两层变一层）。
 class _KeyValueRow extends StatelessWidget {
   const _KeyValueRow({
     required this.label,
@@ -1242,10 +1301,7 @@ class _KeyValueRow extends StatelessWidget {
         ? labelColor
         : CupertinoColors.label.resolveFrom(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: _kPopoverWideHPad,
-        vertical: 4,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
@@ -1254,15 +1310,22 @@ class _KeyValueRow extends StatelessWidget {
             label,
             style: TextStyle(fontSize: kFontCaption, color: labelColor),
           ),
-          const Spacer(),
-          Text(
-            value ?? unavailableLabel,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: kFontLabel,
-              fontWeight: isMuted ? FontWeight.w400 : FontWeight.w500,
-              color: valueColor,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          const SizedBox(width: 8),
+          // 数值侧必须**可收缩**：左端标签 + 右端数值若都按自然宽度排，长文案
+          // （英文 `Threshold` + `Unavailable`、极长费用值）会直接溢出 Row。
+          // 用 `Expanded` + 右对齐 + 省略号 —— 空间够时与「Spacer + 自然宽度」
+          // 逐像素一致（数值右缘仍然贴齐），不够时退化为省略号而不是黄黑警戒条。
+          Expanded(
+            child: Text(
+              value ?? unavailableLabel,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: kFontLabel,
+                fontWeight: isMuted ? FontWeight.w400 : FontWeight.w500,
+                color: valueColor,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
         ],
@@ -1273,6 +1336,8 @@ class _KeyValueRow extends StatelessWidget {
 
 /// 宽屏头部下方的上下文占用进度条（设计稿 §3 `.bar`）：高 4、圆角 2、轨道灰、
 /// 填充品牌蓝；[percentage] 为 null 时只留空轨道。
+///
+/// 紧凑档：高 4 → 3、圆角 2 → 1.5、下方留白 12 → 8。
 ///
 /// 只做可视化，不承载文字 —— 百分比读数由 `ContextWindowIndicator` 与头部副行
 /// 承担（不伪造百分比文案）。
@@ -1301,12 +1366,12 @@ class _ContextUsageBar extends StatelessWidget {
         _kPopoverWideHPad,
         0,
         _kPopoverWideHPad,
-        12,
+        8,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(1.5),
         child: SizedBox(
-          height: 4,
+          height: 3,
           child: Stack(
             children: [
               Positioned.fill(child: ColoredBox(color: track)),
@@ -1334,6 +1399,9 @@ class _CompressIconButton extends StatelessWidget {
     required this.compressing,
     required this.enabled,
     required this.onPressed,
+    this.size = 32,
+    this.iconSize = 18,
+    this.radius = 8,
   });
 
   final bool isHigh;
@@ -1341,6 +1409,15 @@ class _CompressIconButton extends StatelessWidget {
   final bool compressing;
   final bool enabled;
   final VoidCallback? onPressed;
+
+  /// 按钮直径（现状 32；宽屏紧凑档 26）。
+  final double size;
+
+  /// 图标字号（现状 18；宽屏紧凑档 15）。
+  final double iconSize;
+
+  /// 圆角（现状 8；宽屏紧凑档 7 = `kRadiusInline`）。
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
@@ -1372,8 +1449,8 @@ class _CompressIconButton extends StatelessWidget {
     }
 
     final child = compressing
-        ? const CupertinoActivityIndicator(radius: 10)
-        : Icon(CupertinoIcons.archivebox, size: 18, color: iconColor);
+        ? CupertinoActivityIndicator(radius: size >= 32 ? 10 : 8)
+        : Icon(CupertinoIcons.archivebox, size: iconSize, color: iconColor);
 
     return Semantics(
       button: true,
@@ -1381,11 +1458,11 @@ class _CompressIconButton extends StatelessWidget {
       label: 'Compress',
       child: CupertinoButton(
         padding: EdgeInsets.zero,
-        minimumSize: const Size(32, 32),
+        minimumSize: Size(size, size),
         onPressed: enabled && !compressing ? onPressed : null,
         child: Container(
-          width: 32,
-          height: 32,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: enabled
                 ? (isHigh
@@ -1414,7 +1491,7 @@ class _CompressIconButton extends StatelessWidget {
                     LightSurfaces.page,
                     dark: CupertinoColors.systemGrey5,
                   ).withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(radius),
             border: Border.all(
               color: enabled
                   ? (isHigh

@@ -62,6 +62,13 @@ class AdaptivePopover {
   }
 }
 
+/// 浮层卡片（`_PopoverCard`）的默认圆角。
+///
+/// 与菜单族的 `kPopoverDropdownRadius`（同为 14）一致 —— 浮层是一族，圆角取同值。
+/// 单个弹层若要收一档（如上下文弹层的「紧凑档」用独立卡令牌 12），经
+/// [showAdaptivePopover] / `showCupertinoPopover` 的 `radius` 参数传入，不动全族。
+const double kAdaptivePopoverRadius = 14.0;
+
 /// 全应用可复用锚点弹层（popover）。
 ///
 /// 特性：
@@ -99,6 +106,9 @@ Future<void> showAdaptivePopover({
   /// null = 按 [maxHeight] 硬截断（旧行为）。
   List<double>? rowHeights,
   VoidCallback? onClosed,
+
+  /// 卡片圆角（默认浮层族值 [kAdaptivePopoverRadius] = 14）。
+  double radius = kAdaptivePopoverRadius,
 }) async {
   final overlay = Overlay.of(context);
   final overlayBox = overlay.context.findRenderObject() as RenderBox?;
@@ -237,6 +247,7 @@ Future<void> showAdaptivePopover({
       rowHeights: rowHeights,
       barrierDismissible: barrierDismissible,
       barrierColor: barrierColor,
+      radius: radius,
       close: close,
       builder: builder,
     ),
@@ -281,6 +292,7 @@ class _AdaptivePopoverHost extends StatefulWidget {
     required this.barrierColor,
     required this.close,
     required this.builder,
+    required this.radius,
   });
 
   final double left;
@@ -301,6 +313,9 @@ class _AdaptivePopoverHost extends StatefulWidget {
   final Color? barrierColor;
   final VoidCallback close;
   final Widget Function(BuildContext context, VoidCallback close) builder;
+
+  /// 卡片圆角（浮层族默认 14；单个弹层可收一档）。
+  final double radius;
 
   @override
   State<_AdaptivePopoverHost> createState() => _AdaptivePopoverHostState();
@@ -440,6 +455,7 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
         maxHeight: maxHeight,
       ),
       child: _PopoverCard(
+        radius: widget.radius,
         child: SingleChildScrollView(
           child: widget.builder(context, widget.close),
         ),
@@ -449,9 +465,12 @@ class _AdaptivePopoverHostState extends State<_AdaptivePopoverHost> {
 }
 
 class _PopoverCard extends StatelessWidget {
-  const _PopoverCard({required this.child});
+  const _PopoverCard({required this.child, required this.radius});
 
   final Widget child;
+
+  /// 卡片圆角（浮层族默认 14；单个弹层经 `radius` 传入覆盖）。
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
@@ -463,7 +482,7 @@ class _PopoverCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(radius),
         border: Border.all(
           color: LightSurfaces.resolve(
             context,

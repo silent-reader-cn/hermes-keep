@@ -147,12 +147,19 @@ void main() {
   }
 
   group('宽屏（>=900）重排', () {
-    testWidgets('宽 300：大数字 + 已用/上限副行 + 进度条 + 数值 13pt + 去「关闭」行', (tester) async {
+    testWidgets('宽 248（紧凑档）：大数字 + 已用/上限副行 + 进度条 + 数值 13pt + 去「关闭」行', (
+      tester,
+    ) async {
       useViewport(tester, const Size(1200, 800));
       await tester.pumpWidget(host(child: popover(fullSnapshot)));
       await settle(tester);
 
-      expect(tester.getSize(find.byType(ContextWindowPopover)).width, 300);
+      // 紧凑档契约（主人 2026-10-07 反馈「太大」后收一档）：宽 300 → 248。
+      expect(kContextPopoverWideWidth, 248);
+      expect(
+        tester.getSize(find.byType(ContextWindowPopover)).width,
+        kContextPopoverWideWidth,
+      );
       // 大数字 = 窗口上限；副行 = 已用 · 上限
       expect(
         find.byKey(const ValueKey('context-popover-window-label')),
@@ -160,6 +167,16 @@ void main() {
       );
       expect(find.text('128.0K'), findsOneWidget);
       expect(find.text('已用 1.2K · 上限 128.0K'), findsOneWidget);
+      // 大数字回到字号梯子（紧凑档：kFontMetric 21 → kFontPageTitle 17）
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('context-popover-window-label')),
+            )
+            .style
+            ?.fontSize,
+        kFontPageTitle,
+      );
       // 进度条
       expect(
         find.byKey(const ValueKey('context-popover-usage-bar')),

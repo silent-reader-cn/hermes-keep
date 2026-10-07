@@ -132,13 +132,19 @@ void main() {
       tester,
     ) async {
       // 3 模型 + 1 默认行 = 4 行 → 估算高 4×44+2 = 178
-      // 触发器贴顶约 y≈213（24 顶距 + 弹层内部偏移），
-      // 无 padding：upTop ≈ 213−178−8 = 27 ≥ 8 → 向上
-      // padding 44：safeTop = 52 → 27 < 52 → 回落向下
+      //
+      // 本用例的前提是**触发器的绝对高度**：上方要「无安全区时放得下 178，
+      // 叠上系统安全区就放不下」⇒ 触发器 y 必须落在 [194, 209)。
+      //   下界 194 = 178 + gap 8 + safeTop 8（无 padding 时的安全顶）
+      //   上界 209 = 178 + gap 8 + safeTop 22.67
+      //     （`FakeViewPadding(top: 44)` 是**物理**像素，测试 DPR = 3 ⇒ 逻辑 14.67）
+      // 顶距 28 = 目标 y 195 − 弹层内触发器偏移 167（该偏移随头部高度变化；
+      // 上下文弹层 2026-10-07 收进紧凑档后由 171 变 167，故此处 24 → 28）。
+      // 头部高度若再变，下方两处前置条件断言会先报出来（这正是它们的作用）。
       final layout = Align(
         alignment: Alignment.topCenter,
         child: Padding(
-          padding: const EdgeInsets.only(top: 24),
+          padding: const EdgeInsets.only(top: 28),
           child: popover(),
         ),
       );
