@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
@@ -38,6 +39,27 @@ export '../../downloads/download_confirm_dialog.dart';
 final mediaFileProvider = FutureProvider.family<File, String>((ref, url) {
   return ref.watch(mediaCacheServiceProvider).get(url);
 });
+
+/// 用户显式点过「点击加载」的图片 URL 集合（**进程内**，不落盘）。
+///
+/// 关闭「自动加载图片」时，闸门放行态原先只存在 `_ChatInlineMediaWidgetState`
+/// 的 `_forceLoaded` 里 —— 状态跟着 widget State 走，「返回」时瓦片卸载即丢，
+/// 再点开同消息又退回「点击加载」占位，用户看到的就是**图片消失了**。
+///
+/// 提到 provider 后：State 丢了也不会忘；只记 URL、不写磁盘、重启即清，
+/// 所以「默认不自动加载」的意图不变（同一张图不重复要用户点第二次）。
+final userLoadedMediaUrlsProvider =
+    NotifierProvider<UserLoadedMediaUrls, Set<String>>(UserLoadedMediaUrls.new);
+
+class UserLoadedMediaUrls extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const <String>{};
+
+  void markLoaded(String url) {
+    if (url.isEmpty || state.contains(url)) return;
+    state = {...state, url};
+  }
+}
 
 /// 强制刷新 [url] 的本地媒体缓存，并让所有消费它的图片组件重新解码。
 ///
@@ -102,6 +124,14 @@ class ChatInlineMediaWidget extends ConsumerStatefulWidget {
 class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
   bool _forceLoaded = false;
 
+  /// 点「点击加载」：本地置位（当帧即解闸）+ 记进进程级 URL 集合
+  /// （返回再点开同消息时 State 已重建，靠集合里的记录仍然放行 —— 否则
+  /// 用户看到的就是「图片消失了」，见 [userLoadedMediaUrlsProvider]）。
+  void _markForceLoaded(String resolvedUrl) {
+    setState(() => _forceLoaded = true);
+    ref.read(userLoadedMediaUrlsProvider.notifier).markLoaded(resolvedUrl);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -124,7 +154,11 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
         resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://');
 
     final autoLoadImages = ref.watch(autoLoadImagesProvider);
-    final shouldGate = !autoLoadImages && !_forceLoaded && isNetworkUrl;
+    final remembered = ref
+        .watch(userLoadedMediaUrlsProvider)
+        .contains(resolvedUrl);
+    final shouldGate =
+        !autoLoadImages && !_forceLoaded && !remembered && isNetworkUrl;
 
     if (shouldGate) {
       final displayName = widget.alt ?? widget.title;
@@ -155,72 +189,92 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
+          child: LayoutBuilder(
+            builder: (context, box) {
+              // 文件名单独限宽：`Flexible` 在 `MainAxisSize.min` 的 Row 里会被
+              // 分配整段剩余空间 ⇒ Row 撑到整宽、图标贴左、按钮居中，看着依旧
+              // 不齐。改成按内容收缩的 ConstrainedBox；上限再留 8px 对称余量
+              // （20 图标 + 8 间距 + 8×2），保证**超长名时 Row 也不会顶到盒子
+              // 左右边缘**，整组内容始终落在中间。
+              final maxLabelWidth = (box.maxWidth - 44).clamp(24.0, 100000.0);
+              return Column(
+                // 居中：闸门占位多数时候落在一个**固定盒子**里（单图 200×150、
+                // 宫格瓦片 96×96），盒子被撑满后 `start + min` 会把「图标 +
+                // 文件名 + 点击加载按钮」这组内容顶到左上角（主人报告：「加载
+                // 按钮和提醒不在 placeholder 的正中间」）。松约束（Markdown
+                // 行内图自带尺寸那种）下 Column 仍是内容尺寸，居中等于无操作。
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    CupertinoIcons.photo,
-                    size: 20,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        CupertinoIcons.photo,
+                        size: 20,
+                        color: LightSurfaces.resolve(
+                          context,
+                          LightSurfaces.textSecondary,
+                          dark: CupertinoColors.secondaryLabel,
+                        ),
+                      ),
+                      if (displayName != null && displayName.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: maxLabelWidth),
+                          child: Text(
+                            displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: kFontLabel,
+                              fontWeight: FontWeight.w500,
+                              color: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.textSecondary,
+                                dark: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  CupertinoButton(
+                    key: const ValueKey('chat-inline-media-tap-to-load'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     color: LightSurfaces.resolve(
                       context,
-                      LightSurfaces.textSecondary,
-                      dark: CupertinoColors.secondaryLabel,
+                      LightSurfaces.userDetail,
+                      dark: CupertinoTheme.of(context).primaryColor,
                     ),
-                  ),
-                  if (displayName != null && displayName.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Flexible(
+                    borderRadius: BorderRadius.circular(5),
+                    minimumSize: const Size(36, 26),
+                    onPressed: () => _markForceLoaded(resolvedUrl),
+                    // 96 瓦片里可用宽只有 72：中文「点击加载」四个字 + 左右
+                    // padding 正好顶格，浮点误差就让它折成两行（渲染图里
+                    // 「点击加/载」）。scaleDown 保证**永远单行**，必要时
+                    // 轻微缩字；英文 "Tap to load" 同样受益。
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
                       child: Text(
-                        displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: kFontLabel,
+                        l10n.chatAutoLoadTapToLoad,
+                        style: const TextStyle(
+                          fontSize: kFontButton,
+                          color: CupertinoColors.white,
                           fontWeight: FontWeight.w500,
-                          color: LightSurfaces.resolve(
-                            context,
-                            LightSurfaces.textSecondary,
-                            dark: CupertinoColors.secondaryLabel,
-                          ),
                         ),
                       ),
                     ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 8),
-              CupertinoButton(
-                key: const ValueKey('chat-inline-media-tap-to-load'),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                color: LightSurfaces.resolve(
-                  context,
-                  LightSurfaces.userDetail,
-                  dark: CupertinoTheme.of(context).primaryColor,
-                ),
-                borderRadius: BorderRadius.circular(5),
-                minimumSize: const Size(36, 26),
-                onPressed: () {
-                  setState(() {
-                    _forceLoaded = true;
-                  });
-                },
-                child: Text(
-                  l10n.chatAutoLoadTapToLoad,
-                  style: const TextStyle(
-                    fontSize: kFontButton,
-                    color: CupertinoColors.white,
-                    fontWeight: FontWeight.w500,
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       );
