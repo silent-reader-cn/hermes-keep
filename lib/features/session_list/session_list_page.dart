@@ -105,6 +105,14 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   /// 内容换新时暂存的锚点（下一帧按几何 delta 归位）。
   ({String renderId, double dy})? _pendingAnchorRestore;
 
+  /// 上一帧布局中**每个 cell**（会话行 / 分区头）的实测 dy（cellKey → dy）。
+  ///
+  /// cellKey：行 = `r:<sessionId>`、分区头 = `h:<sectionKey>`，与
+  /// [_layoutCells] 的序列元素同名。用途是**同帧预测**几何补偿量：内容换新与
+  /// 像素偏移必须在同一帧一起布局，否则中间会露出一帧错位（= 主人看到的
+  /// 「刷新闪一下」），而预测需要「锚点上方那些 cell 各有多高」——实测值最准。
+  Map<String, double> _lastCellDy = const <String, double>{};
+
   /// 锚点还原的帧预算（逐帧实测，收敛即收工）。
   int _anchorRestoreFrames = 0;
 
@@ -120,6 +128,10 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   /// 用户拖动/惯性滚动中（由 ScrollStart/ScrollEnd 通知维护）。
   bool _scrollInProgress = false;
 
+  /// 同帧锚点补偿（[ScrollController.jumpTo]）正在进行 —— 期间的滚动通知
+  /// 属程序化位移，不计入用户手势语义。
+  bool _compensatingAnchor = false;
+
   /// 锚点还原的收敛阈值：小于它不动视口（避免无意义滚动）。
   static const double _anchorSettleEpsilon = 0.5;
 
@@ -128,6 +140,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
 
   /// 会话行的 key 前缀（行 key 形如 `session-row-<id>`）。
   static const String _sessionRowKeyPrefix = 'session-row-';
+
+  /// 分区头 key 前缀（key 形如 `session-section-header-<sectionKey>`）。
+  static const String _sectionHeaderKeyPrefix = 'session-section-header-';
 
   /// #151：当前悬停的工作区组 key —— 组头右侧的「+」（为该工作区新建会话）
   /// 只在被悬停的那一组上出现。
@@ -1354,9 +1369,135 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   /// 让 [next] 生效：用锚点快照武装归位（屏上仍是旧布局），下一帧几何还原。
+  ///
+  /// 关键顺序：**同帧预测补偿必须在 `_displayedSections` 换新之前**。
+  /// 帧 N 里「换内容」与「改 `pixels`」若不同步落地，屏上就会露出一帧错位
+  /// （整体位移一行）——那正是主人看到的「刷新闪一下」。预测值由 [_lastCellDy]
+  /// 实测几何推出；预测若有偏差，由 [_armAnchorRestore] 的下一帧实测精修补上。
   void _applySections(List<SessionListSection> next) {
-    _armAnchorRestore(_anchorSnapshot);
+    final anchor = _anchorSnapshot;
+    _compensateAnchorSameFrame(next, anchor);
+    _armAnchorRestore(anchor);
     _displayedSections = next;
+  }
+
+  /// 内容换新**之前**先把像素偏移改好（同帧补偿）。
+  ///
+  /// 判据与 [_armAnchorRestore] 保持一致：只在「已滚进内容里」（`pixels > 0`）时
+  /// 锚定 —— 顶部时新内容把列表往下推正是用户期望（要看到最新会话），不补偿。
+  ///
+  /// 必须在 build 期就改掉 pixels（内容换新与偏移同帧落地才有意义）；`jumpTo`
+  /// 会同步通知滚动监听，故用 [_compensatingAnchor] 挡掉那一次程序化通知。
+  void _compensateAnchorSameFrame(
+    List<SessionListSection> next,
+    ({String renderId, double dy})? anchor,
+  ) {
+    if (anchor == null) return;
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels <= 0) return;
+    final delta = _predictAnchorDelta(
+      oldCells: _layoutCells(_displayedSections ?? const <SessionListSection>[]),
+      newCells: _layoutCells(next),
+      anchorRenderId: anchor.renderId,
+    );
+    if (delta == null || delta.abs() <= _anchorSettleEpsilon) return;
+    _compensatingAnchor = true;
+    try {
+      _scrollController.jumpTo(position.pixels + delta);
+    } finally {
+      _compensatingAnchor = false;
+    }
+  }
+
+  /// 预测「内容换新后锚点行的 dy 变化量」。
+  ///
+  /// 等于**新旧序列中锚点行之前**的 cell 高度和之差；共同 cell 的高度相互抵消，
+  /// 故只需求「新增 cell 高度和 − 移除 cell 高度和」。高度取自上一帧实测
+  /// （[`_lastCellDy`]）；样本不足或涉及未知 cell 时返回 null ⇒ 调用方退回
+  /// 原来的「下一帧实测归位」（最坏只是维持现状，不会更差）。
+  double? _predictAnchorDelta({
+    required List<String> oldCells,
+    required List<String> newCells,
+    required String anchorRenderId,
+  }) {
+    final key = 'r:$anchorRenderId';
+    final oldIndex = oldCells.indexOf(key);
+    final newIndex = newCells.indexOf(key);
+    if (oldIndex < 0 || newIndex < 0) return null;
+
+    final oldBefore = oldCells.sublist(0, oldIndex);
+    final newBefore = newCells.sublist(0, newIndex);
+    final oldSet = oldBefore.toSet();
+    final newSet = newBefore.toSet();
+    final added = newBefore.where((cell) => !oldSet.contains(cell)).toList();
+    final removed = oldBefore.where((cell) => !newSet.contains(cell)).toList();
+    if (added.isEmpty && removed.isEmpty) return null;
+
+    final rowStep = _estimateRowStep();
+    double? headerStep;
+    var headerStepResolved = false;
+    double? heightOf(String cell) {
+      if (!cell.startsWith('h:')) return rowStep;
+      if (!headerStepResolved) {
+        headerStep = _estimateHeaderStep();
+        headerStepResolved = true;
+      }
+      return headerStep;
+    }
+
+    var delta = 0.0;
+    for (final cell in added) {
+      final height = heightOf(cell);
+      if (height == null) return null;
+      delta += height;
+    }
+    for (final cell in removed) {
+      final height = heightOf(cell);
+      if (height == null) return null;
+      delta -= height;
+    }
+    return delta;
+  }
+
+  /// 会话行的步进高度（上一帧实测：相邻两行的 dy 差取最常见值）。
+  ///
+  /// 取众数而非最小值：跨分区相邻行之间还夹着分区头/间距，其差偏大，而同一
+  /// 分区内的相邻行对数量占优 ⇒ 众数即行高。
+  double? _estimateRowStep() {
+    final dys = <double>[
+      for (final entry in _lastCellDy.entries)
+        if (entry.key.startsWith('r:')) entry.value,
+    ];
+    if (dys.length < 2) return null;
+    dys.sort();
+    final counts = <double, int>{};
+    for (var i = 1; i < dys.length; i++) {
+      final step = ((dys[i] - dys[i - 1]) * 2).roundToDouble() / 2;
+      if (step < 8) continue; // 同一个 dy 的重复项 / 异常值
+      counts[step] = (counts[step] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return null;
+    return counts.entries.reduce((a, b) => b.value > a.value ? b : a).key;
+  }
+
+  /// 分区头的步进高度（上一帧实测：分区头 dy → 该分区首行 dy 的差，取众数）。
+  double? _estimateHeaderStep() {
+    final sections = _displayedSections;
+    if (sections == null) return null;
+    final counts = <double, int>{};
+    for (final section in sections) {
+      if (section.sessions.isEmpty) continue;
+      final headerDy = _lastCellDy['h:${section.key}'];
+      final first = section.sessions.first;
+      final rowDy = _lastCellDy['r:${first.sessionId ?? first.id}'];
+      if (headerDy == null || rowDy == null) continue;
+      final step = ((rowDy - headerDy) * 2).roundToDouble() / 2;
+      if (step <= 0) continue;
+      counts[step] = (counts[step] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return null;
+    return counts.entries.reduce((a, b) => b.value > a.value ? b : a).key;
   }
 
   /// 滚动 settle：下一帧 post-frame 刷新锚点快照 + 应用挂起内容。
@@ -1445,9 +1586,15 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   /// 刷新视口锚点快照（只能在 post-frame / 非 build 期调用）。
+  ///
+  /// 顺带刷新 [_lastCellDy]（同一次遍历，零额外开销）——同帧预测补偿要用它。
   void _refreshAnchorSnapshot() {
-    if (!mounted || _pendingAnchorRestore != null) return;
-    _anchorSnapshot = _captureTopVisibleAnchor();
+    if (!mounted || _isBuildPhase) return;
+    final cellDy = <String, double>{};
+    final anchor = _captureTopVisibleAnchor(cellDy);
+    if (cellDy.isNotEmpty) _lastCellDy = cellDy;
+    if (_pendingAnchorRestore != null) return;
+    _anchorSnapshot = anchor;
   }
 
   /// 武装锚点还原（[anchor] = 内容换新**前**的视口锚点快照）。
@@ -1502,7 +1649,12 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   /// 视口顶缘可见行的 renderId + 其相对滚动视图的 dy；无可见行返回 null。
-  ({String renderId, double dy})? _captureTopVisibleAnchor() {
+  ///
+  /// [cellDySink] 非 null 时，顺带把**每个已布局 cell** 的 dy 收集进去
+  /// （行 = `r:<id>`、分区头 = `h:<sectionKey>`），供同帧预测补偿使用。
+  ({String renderId, double dy})? _captureTopVisibleAnchor([
+    Map<String, double>? cellDySink,
+  ]) {
     // 兜底护栏：框架禁止在 build 期遍历子树（调用方已避开，这里再挡一层）。
     if (_isBuildPhase) return null;
     final anchorBox = _scrollableBox;
@@ -1510,13 +1662,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     ({String renderId, double dy})? best;
     void visit(Element element) {
       final renderId = _rowRenderIdOf(element);
-      if (renderId != null) {
-        final box = element.renderObject;
-        if (box is RenderBox &&
-            box.attached &&
-            box.hasSize &&
-            box.size.height > 0) {
-          final dy = box.localToGlobal(Offset.zero, ancestor: anchorBox).dy;
+      final cellKey = renderId == null ? _headerCellKeyOf(element) : 'r:$renderId';
+      final box = element.renderObject;
+      if (cellKey != null &&
+          box is RenderBox &&
+          box.attached &&
+          box.hasSize &&
+          box.size.height > 0) {
+        final dy = box.localToGlobal(Offset.zero, ancestor: anchorBox).dy;
+        cellDySink?[cellKey] = dy;
+        if (renderId != null) {
           // 完全在视口上方（含被 pinned 头部盖住）不算；否则取最靠上的一条。
           if (dy + box.size.height > 0 && (best == null || dy < best!.dy)) {
             best = (renderId: renderId, dy: dy);
@@ -1564,6 +1719,16 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
     return value.substring(_sessionRowKeyPrefix.length);
   }
 
+  /// 分区头 key 形如 `ValueKey('session-section-header-<sectionKey>')`
+  /// → 返回 cellKey `h:<sectionKey>`（与 [_layoutCells] 同命名）。
+  String? _headerCellKeyOf(Element element) {
+    final key = element.widget.key;
+    if (key is! ValueKey<String>) return null;
+    final value = key.value;
+    if (!value.startsWith(_sectionHeaderKeyPrefix)) return null;
+    return 'h:${value.substring(_sectionHeaderKeyPrefix.length)}';
+  }
+
   /// 滚动视图自身的 element（行几何以它为参照系，与 #93 同口径）。
   Element? get _scrollableElement {
     if (!_scrollController.hasClients) return null;
@@ -1604,6 +1769,9 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
   }
 
   void _onScroll() {
+    // 同帧锚点补偿会用 `jumpTo` 改 pixels（可能在 build 期）——那一次通知不代表
+    // 用户滚动，跳过以免在 build 期连锁写 provider（Riverpod 会直接抛错）。
+    if (_compensatingAnchor) return;
     _maybeLoadMore();
   }
 
