@@ -322,18 +322,75 @@ abstract final class SettingsSurfaces {
     BuildContext context,
     CupertinoSlidingSegmentedControl<T> original,
   ) {
-    if (!isLight(context)) return original;
+    final base = isLight(context) ? _pinnedLightSegmented(original) : original;
+    return _withSegmentLabelColors(context, base);
+  }
+
+  /// 浅色档：把 SDK 的拇指/轨道钉回 iOS 原生取值（白拇指 + `tertiarySystemFill`）。
+  static CupertinoSlidingSegmentedControl<T>
+  _pinnedLightSegmented<T extends Object>(
+    CupertinoSlidingSegmentedControl<T> original,
+  ) => CupertinoSlidingSegmentedControl<T>(
+    key: original.key,
+    children: original.children,
+    onValueChanged: original.onValueChanged,
+    disabledChildren: original.disabledChildren,
+    groupValue: original.groupValue,
+    padding: original.padding,
+    proportionalWidth: original.proportionalWidth,
+    isMomentary: original.isMomentary,
+    backgroundColor: CupertinoColors.tertiarySystemFill,
+    thumbColor: CupertinoColors.white,
+  );
+
+  /// 分段标签「选中 / 未选中」分档上色（#180，2026-10-07 主人拍板档 1）。
+  ///
+  /// ── 修的是什么 ──────────────────────────────────────────────────────────
+  /// [segmentedRow] 走的是 [`_trailing`]，而 `_trailing` 会把「非 chevron 的
+  /// trailing」交给 [`_secondary`] —— 后者给整块控件 merge 一个
+  /// `color: palette.secondaryText` 的 `DefaultTextStyle`
+  /// （深色 = `CupertinoColors.secondaryLabel`，即 `#EBEBF5` @60%）。
+  /// 而 SDK 对**启用**的段写死 `color: null`（`sliding_segmented_control.dart:212`）
+  /// ⇒ **选中段与未选中段被迫共用同一个「次级色」**。同一个色，合成到更亮的
+  /// 胶囊 `#636366` 上只剩 **2.92:1**（真机像素实测 `#B5B6BB`/`#636365`，
+  /// 低于 AA 正文 4.5:1，连 3:1 都不到），而合成到暗轨道 `#323235` 上是
+  /// 5.00:1 —— 于是**选中项成了整行对比度最弱的元素**（同行行标题是 15.7:1）。
+  ///
+  /// ── 怎么修 ──────────────────────────────────────────────────────────────
+  /// 只把**选中段**的标签色换成主标签色 [CupertinoColors.label]
+  /// （深色 `#FFFFFF` / 浅色 `#000000`），与同行行标题同一层级：
+  /// 深色 **2.92 → 5.99:1**、浅色 5.38 → **21.0:1**。
+  /// 未选中段继续读 `_SectionPalette.secondaryText`，保持"次级"的层级不抢眼
+  /// （暗轨道上 5.00:1、浅色 4.68:1，均达标）。
+  /// **胶囊本身不动**（深色仍是 SDK 原生的 `#636366`）—— 改动只落在"字色"这一处。
+  ///
+  /// 早前那条把浅色拇指改蓝的尝试（`#E0ECFF`）已被证伪并回滚，本次不再碰拇指。
+  static CupertinoSlidingSegmentedControl<T> _withSegmentLabelColors<
+    T extends Object
+  >(BuildContext context, CupertinoSlidingSegmentedControl<T> base) {
+    final selectedLabel = CupertinoColors.label.resolveFrom(context);
+    final unselectedLabel = _SectionPalette.of(context).secondaryText;
     return CupertinoSlidingSegmentedControl<T>(
-      key: original.key,
-      children: original.children,
-      onValueChanged: original.onValueChanged,
-      disabledChildren: original.disabledChildren,
-      groupValue: original.groupValue,
-      padding: original.padding,
-      proportionalWidth: original.proportionalWidth,
-      isMomentary: original.isMomentary,
-      backgroundColor: CupertinoColors.tertiarySystemFill,
-      thumbColor: CupertinoColors.white,
+      key: base.key,
+      children: {
+        for (final entry in base.children.entries)
+          entry.key: DefaultTextStyle.merge(
+            style: TextStyle(
+              color: entry.key == base.groupValue
+                  ? selectedLabel
+                  : unselectedLabel,
+            ),
+            child: entry.value,
+          ),
+      },
+      onValueChanged: base.onValueChanged,
+      disabledChildren: base.disabledChildren,
+      groupValue: base.groupValue,
+      padding: base.padding,
+      proportionalWidth: base.proportionalWidth,
+      isMomentary: base.isMomentary,
+      backgroundColor: base.backgroundColor,
+      thumbColor: base.thumbColor,
     );
   }
 
