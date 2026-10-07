@@ -9,7 +9,9 @@ import '../../../app/theme/layout_tokens.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/menu_metrics.dart';
-import '../../../app/widgets/menu_row.dart';
+import '../../../app/widgets/adaptive_action_menu.dart'
+    show ActionMenuDivider, kActionMenuDividerHeight;
+import '../../../app/widgets/picker_menu_content.dart';
 import '../../../app/widgets/popover_dropdown.dart';
 import '../../../app/widgets/popover_menu_shell.dart';
 import '../../../core/api/api_client.dart';
@@ -35,13 +37,6 @@ const double _kPopoverNarrowHPad = 16;
 /// 宽屏内容左右内边距（设计稿 §3：14）。
 const double _kPopoverWideHPad = 14;
 
-/// 三个下拉的行高：实测浅/深两态都是 44（统一由 [MenuRow] 定高，不再靠
-/// `CupertinoListTile` / `CupertinoButton` 各自的默认最小高兜底）。
-const double _kDropdownRowHeight = 44;
-
-/// 模型 / 工作区下拉宽度（现状值：定位壳与卡片同宽）。
-const double _kDropdownWidth = 228;
-
 /// 推理强度下拉宽度（现状值，紧靠弹层右侧的窄入口）。
 const double _kReasoningDropdownWidth = 140;
 
@@ -55,6 +50,31 @@ const double _kDropdownGap = 8;
 /// 工作区为空时「暂无工作区」提示块高度（`Padding(all: 4)` + `kFontMicro` 行）。
 /// 该块不是菜单行，故单列一个高度喂给 `fitMenuHeight`（按行边界裁剪不切到它）。
 const double _kEmptyWorkspaceHintHeight = 22;
+
+/// 加载态卡片（下拉候选仍在拉取时的转圈），三档下拉共用。
+const Widget _loadingCard = PopoverDropdownCard(
+  child: Center(
+    child: Padding(
+      padding: EdgeInsets.symmetric(vertical: 10),
+      child: CupertinoActivityIndicator(radius: 8),
+    ),
+  ),
+);
+
+/// 窄屏行文案：名称与路径拼成单行（与输入栏选择器同口径）。
+String _menuWorkspaceLabel(WorkspaceRoot w) =>
+    (w.name != null && w.name!.trim().isNotEmpty)
+    ? '${w.name} (${w.path})'
+    : (w.path ?? '');
+
+/// 宽屏双行首行文案：只取名称（无名回落为路径）。
+String _menuWorkspaceName(WorkspaceRoot w) =>
+    (w.name != null && w.name!.trim().isNotEmpty) ? w.name! : (w.path ?? '');
+
+/// 工作区是否命中查询（名称**或**路径，与选择器同口径）。
+bool _menuWorkspaceMatches(WorkspaceRoot w, String q) =>
+    _menuWorkspaceName(w).toLowerCase().contains(q) ||
+    (w.path ?? '').toLowerCase().contains(q);
 
 /// 上下文详情弹层（Swift: ContextWindowPopover，对齐 WebUI _syncCtxIndicator 阈值提示）。
 ///
@@ -179,13 +199,17 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final overlay = Overlay.of(context);
     final anchor = _resolveAnchorRect(_modelTriggerKey, overlay);
     if (anchor == null) return;
-    final rowHeights = _modelMenuRowHeights();
+    final rowHeights = _modelMenuRowHeights(isWideLayout(context));
     final entry = OverlayEntry(
       builder: (entryContext) => PopoverMenuShell(
         anchorRect: anchor,
         estimatedHeight: _estimatedMenuHeight(rowHeights),
-        oneRowHeight: _kDropdownRowHeight,
-        width: _kDropdownWidth,
+        oneRowHeight: isWideLayout(entryContext)
+            ? kMenuRowHeightMouse
+            : kMenuRowHeightTouch,
+        // 宽度与输入栏选择器**同源**（宽屏 300 / 窄屏 228）：内层下拉与外侧
+        // 选择器是同一套排版语言，宽度不该是两套数。
+        width: popoverDropdownWidthFor(entryContext),
         gapAbove: _kDropdownGap,
         gapBelow: _kDropdownGap,
         maxHeight: kPopoverMenuMaxHeight,
@@ -215,13 +239,15 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final overlay = Overlay.of(context);
     final anchor = _resolveAnchorRect(_workspaceTriggerKey, overlay);
     if (anchor == null) return;
-    final rowHeights = _workspaceMenuRowHeights();
+    final rowHeights = _workspaceMenuRowHeights(isWideLayout(context));
     final entry = OverlayEntry(
       builder: (entryContext) => PopoverMenuShell(
         anchorRect: anchor,
         estimatedHeight: _estimatedMenuHeight(rowHeights),
-        oneRowHeight: _kDropdownRowHeight,
-        width: _kDropdownWidth,
+        oneRowHeight: isWideLayout(entryContext)
+            ? kMenuRowHeightMouseTwoLine
+            : kMenuRowHeightTouch,
+        width: popoverDropdownWidthFor(entryContext),
         gapAbove: _kDropdownGap,
         gapBelow: _kDropdownGap,
         maxHeight: kPopoverMenuMaxHeight,
@@ -253,12 +279,18 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     if (anchor == null) return;
     final settingsState = ref.read(settingsControllerProvider).valueOrNull;
     final efforts = settingsState?.supportedEfforts ?? const <String>[];
-    final rowHeights = List<double>.filled(efforts.length, _kDropdownRowHeight);
+    final isWideReasoning = isWideLayout(context);
+    final rowHeights = List<double>.filled(
+      efforts.length,
+      isWideReasoning ? kMenuRowHeightMouse : kMenuRowHeightTouch,
+    );
     final entry = OverlayEntry(
       builder: (entryContext) => PopoverMenuShell(
         anchorRect: anchor,
         estimatedHeight: _estimatedMenuHeight(rowHeights),
-        oneRowHeight: _kDropdownRowHeight,
+        oneRowHeight: isWideLayout(entryContext)
+            ? kMenuRowHeightMouse
+            : kMenuRowHeightTouch,
         width: _kReasoningDropdownWidth,
         alignToAnchorRight: true,
         gapAbove: _kDropdownGap,
@@ -301,27 +333,54 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
   static double _estimatedMenuHeight(List<double> rowHeights) =>
       rowHeights.fold<double>(0, (sum, h) => sum + h) + kPopoverMenuCardChrome;
 
-  /// 模型下拉的行高清单：候选模型 + 「跟随服务器默认」。
-  List<double> _modelMenuRowHeights() {
+  /// 模型下拉的行高清单：候选模型 + 「跟随服务器默认」（宽屏另夹一条分组线）
+  /// + （宽屏且候选够多时的）搜索框块。
+  List<double> _modelMenuRowHeights(bool isWide) {
     final providerModels = ref.read(chatAvailableModelsProvider);
     final resolved = providerModels.isNotEmpty
         ? providerModels
         : _fetchedModels;
-    return List<double>.filled(resolved.length + 1, _kDropdownRowHeight);
+    final row = isWide ? kMenuRowHeightMouse : kMenuRowHeightTouch;
+    return <double>[
+      if (isWide && resolved.length >= kPickerSearchMinCandidates)
+        kPickerSearchBarBlockHeight,
+      ...List<double>.filled(resolved.length, row),
+      if (isWide && resolved.isNotEmpty) kActionMenuDividerHeight,
+      row,
+    ];
   }
 
   /// 工作区下拉的行高清单：候选工作区 + 「跟随会话默认」；列表为空时再加
   /// 「暂无工作区」提示块（不是菜单行，单列高度见 [_kEmptyWorkspaceHintHeight]）。
-  List<double> _workspaceMenuRowHeights() => _workspaces.isNotEmpty
-      ? List<double>.filled(_workspaces.length + 1, _kDropdownRowHeight)
-      : const [_kDropdownRowHeight, _kEmptyWorkspaceHintHeight];
+  List<double> _workspaceMenuRowHeights(bool isWide) {
+    final row = isWide ? kMenuRowHeightMouseTwoLine : kMenuRowHeightTouch;
+    if (_workspaces.isEmpty) {
+      return <double>[
+        if (isWide) kPickerSearchBarBlockHeight,
+        row,
+        _kEmptyWorkspaceHintHeight,
+      ];
+    }
+    return <double>[
+      if (isWide && _workspaces.length >= kPickerSearchMinCandidates)
+        kPickerSearchBarBlockHeight,
+      ...List<double>.filled(_workspaces.length, row),
+      if (isWide) kActionMenuDividerHeight,
+      isWide ? kMenuRowHeightMouse : kMenuRowHeightTouch,
+    ];
+  }
 
   /// 模型下拉菜单内容（悬浮卡片，展开时构建）。
   ///
+  /// 与输入栏「模型」选择器**同一套排版语言**：内容走共享 [PickerMenuContent]
+  /// （宽屏带搜索框 + 按行边界裁剪的列表），行走共享 [MenuRowSingle]
+  /// （宽屏鼠标档 36 / 窄屏 44、图标列 + 选中底色 + 蓝字 + 右勾、无左竖条）。
+  ///
   /// [available] 为该侧真实可用高度（定位壳交付），列表可见高度取
-  /// `fitMenuHeight` —— **内容放得下就全放**，放不下才滚动且裁在行边界上。
+  /// `fitMenuListHeight` —— **内容放得下就全放**，放不下才滚动且裁在行边界上。
   Widget _buildModelMenu(BuildContext menuContext, double available) {
     final l10n = AppLocalizations.of(menuContext);
+    final isWide = isWideLayout(menuContext);
     final providerModels = ref.read(chatAvailableModelsProvider);
     final resolved = providerModels.isNotEmpty
         ? providerModels
@@ -329,189 +388,231 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final currentModel = ref
         .read(chatControllerProvider(widget.sessionId))
         .model;
-    final rowHeights = _modelMenuRowHeights();
-    return PopoverDropdownCard(
-      child: _loadingModels
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 10),
-                child: CupertinoActivityIndicator(radius: 8),
-              ),
-            )
-          : ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: fitMenuListHeight(
-                  rowHeights: rowHeights,
-                  available: available,
-                ),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final m in resolved)
-                      _DropdownRow(
-                        key: ValueKey('context-popover-model-$m'),
-                        label: m,
-                        selected: m == currentModel,
-                        onTap: () {
-                          _removeEntry(_modelMenuEntry);
-                          _modelMenuEntry = null;
-                          ref
-                              .read(
-                                chatControllerProvider(widget.sessionId)
-                                    .notifier,
-                              )
-                              .selectModel(m);
-                          widget.onClose();
-                        },
-                      ),
-                    _DropdownRow(
-                      key: const ValueKey('context-popover-model-default'),
-                      label: l10n.contextWindowFollowServerDefault,
-                      selected: currentModel == null || currentModel.isEmpty,
-                      onTap: () {
-                        _removeEntry(_modelMenuEntry);
-                        _modelMenuEntry = null;
-                        ref
-                            .read(
-                              chatControllerProvider(widget.sessionId).notifier,
-                            )
-                            .selectModel(null);
-                        widget.onClose();
-                      },
-                    ),
-                  ],
-                ),
-              ),
+    final rowHeight = isWide ? kMenuRowHeightMouse : kMenuRowHeightTouch;
+    final padding = EdgeInsets.symmetric(horizontal: isWide ? 12 : 8);
+
+    void select(String? model) {
+      _removeEntry(_modelMenuEntry);
+      _modelMenuEntry = null;
+      ref
+          .read(chatControllerProvider(widget.sessionId).notifier)
+          .selectModel(model);
+      widget.onClose();
+    }
+
+    List<PickerMenuRow> rowsFor(BuildContext context, String query) {
+      final q = query.toLowerCase();
+      final matched = q.isEmpty
+          ? resolved
+          : <String>[
+              for (final m in resolved)
+                if (m.toLowerCase().contains(q)) m,
+            ];
+      return <PickerMenuRow>[
+        for (final m in matched)
+          PickerMenuRow(
+            rowHeight,
+            MenuRowSingle(
+              key: ValueKey('context-popover-model-$m'),
+              height: rowHeight,
+              padding: padding,
+              icon: CupertinoIcons.sparkles,
+              label: m,
+              fontSize: kFontLabel,
+              selected: m == currentModel,
+              onTap: () => select(m),
             ),
+          ),
+        // 元操作独立成群（搜索时整组隐去，与选择器同口径）。
+        if (q.isEmpty) ...[
+          if (isWide && matched.isNotEmpty)
+            const PickerMenuRow(kActionMenuDividerHeight, ActionMenuDivider()),
+          PickerMenuRow(
+            rowHeight,
+            MenuRowSingle(
+              key: const ValueKey('context-popover-model-default'),
+              height: rowHeight,
+              padding: padding,
+              icon: CupertinoIcons.arrow_uturn_left,
+              label: l10n.contextWindowFollowServerDefault,
+              fontSize: kFontLabel,
+              selected: currentModel == null || currentModel.isEmpty,
+              onTap: () => select(null),
+            ),
+          ),
+        ],
+        if (q.isNotEmpty && matched.isEmpty)
+          PickerMenuRow(
+            kPickerNoResultsRowHeight,
+            MenuNoResultsRow(label: l10n.pickerSearchNoResults),
+          ),
+      ];
+    }
+
+    if (_loadingModels) return _loadingCard;
+    return PickerMenuContent(
+      available: available,
+      searchPlaceholder: isWide && resolved.length >= kPickerSearchMinCandidates
+          ? l10n.pickerSearchModels
+          : null,
+      searchFieldKey: const ValueKey('context-popover-model-search'),
+      buildRows: rowsFor,
     );
   }
 
   /// 工作区下拉菜单内容（悬浮卡片，展开时构建）。
   ///
+  /// 与输入栏「工作区」选择器**同一套排版语言**：宽屏双行（名称 + 路径，行高 46）
+  /// + 图标列 + 元操作独立成群；窄屏维持单行拼接串（44 触屏档）与 228 宽。
+  ///
   /// [available] 见 [_buildModelMenu]。
   Widget _buildWorkspaceMenu(BuildContext menuContext, double available) {
     final l10n = AppLocalizations.of(menuContext);
+    final isWide = isWideLayout(menuContext);
     final currentWorkspace = ref
         .read(chatControllerProvider(widget.sessionId))
         .workspace;
+    final followSelected =
+        currentWorkspace == null || currentWorkspace.trim().isEmpty;
+    final padding = EdgeInsets.symmetric(horizontal: isWide ? 12 : 8);
     final secondary = LightSurfaces.resolve(
       menuContext,
       LightSurfaces.textSecondary,
       dark: CupertinoColors.secondaryLabel,
     );
-    final rowHeights = _workspaceMenuRowHeights();
-    return PopoverDropdownCard(
-      child: _loadingWorkspaces
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 10),
-                child: CupertinoActivityIndicator(radius: 8),
-              ),
-            )
-          : ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: fitMenuListHeight(
-                  rowHeights: rowHeights,
-                  available: available,
-                ),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_workspaces.isNotEmpty) ...[
-                      for (final w in _workspaces)
-                        _DropdownRow(
-                          key: ValueKey('workspace-item-${w.path}'),
-                          label: (w.name != null && w.name!.trim().isNotEmpty)
-                              ? '${w.name} (${w.path})'
-                              : (w.path ?? ''),
-                          selected: currentWorkspace == w.path,
-                          onTap: () => _selectWorkspace(w.path),
-                        ),
-                      _DropdownRow(
-                        key: const ValueKey('workspace-item-default'),
-                        label: l10n.followSessionDefaultWorkspace,
-                        selected:
-                            currentWorkspace == null ||
-                            currentWorkspace.trim().isEmpty,
-                        onTap: () => _selectWorkspace(null),
-                      ),
-                    ] else ...[
-                      _DropdownRow(
-                        key: const ValueKey('workspace-item-default'),
-                        label: l10n.followSessionDefaultWorkspace,
-                        selected:
-                            currentWorkspace == null ||
-                            currentWorkspace.trim().isEmpty,
-                        onTap: () => _selectWorkspace(null),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Text(
-                          l10n.noWorkspacesAvailableHint,
-                          style: TextStyle(
-                            fontSize: kFontMicro,
-                            color: secondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+
+    Widget workspaceRow(WorkspaceRoot w) => isWide
+        ? MenuRowTwoLine(
+            key: ValueKey('workspace-item-${w.path}'),
+            height: kMenuRowHeightMouseTwoLine,
+            icon: CupertinoIcons.folder,
+            name: _menuWorkspaceName(w),
+            path: w.path ?? '',
+            selected: currentWorkspace == w.path,
+            onTap: () => _selectWorkspace(w.path),
+          )
+        : MenuRowSingle(
+            key: ValueKey('workspace-item-${w.path}'),
+            height: kMenuRowHeightTouch,
+            padding: padding,
+            label: _menuWorkspaceLabel(w),
+            selected: currentWorkspace == w.path,
+            onTap: () => _selectWorkspace(w.path),
+          );
+
+    PickerMenuRow followRow() => PickerMenuRow(
+      isWide ? kMenuRowHeightMouse : kMenuRowHeightTouch,
+      MenuRowSingle(
+        key: const ValueKey('workspace-item-default'),
+        height: isWide ? kMenuRowHeightMouse : kMenuRowHeightTouch,
+        padding: padding,
+        icon: CupertinoIcons.arrow_uturn_left,
+        label: l10n.followSessionDefaultWorkspace,
+        fontSize: isWide ? kFontLabel : kFontNavItem,
+        selected: followSelected,
+        onTap: () => _selectWorkspace(null),
+      ),
+    );
+
+    List<PickerMenuRow> rowsFor(BuildContext context, String query) {
+      final q = query.toLowerCase();
+      if (_workspaces.isEmpty) {
+        return <PickerMenuRow>[
+          followRow(),
+          PickerMenuRow(
+            _kEmptyWorkspaceHintHeight,
+            Padding(
+              padding: const EdgeInsets.all(4),
+              child: Text(
+                l10n.noWorkspacesAvailableHint,
+                style: TextStyle(fontSize: kFontMicro, color: secondary),
               ),
             ),
+          ),
+        ];
+      }
+      final matched = q.isEmpty
+          ? _workspaces
+          : <WorkspaceRoot>[
+              for (final w in _workspaces)
+                if (_menuWorkspaceMatches(w, q)) w,
+            ];
+      return <PickerMenuRow>[
+        for (final w in matched)
+          PickerMenuRow(
+            isWide ? kMenuRowHeightMouseTwoLine : kMenuRowHeightTouch,
+            workspaceRow(w),
+          ),
+        if (q.isEmpty) ...[
+          if (isWide && matched.isNotEmpty)
+            const PickerMenuRow(kActionMenuDividerHeight, ActionMenuDivider()),
+          followRow(),
+        ],
+        if (q.isNotEmpty && matched.isEmpty)
+          PickerMenuRow(
+            kPickerNoResultsRowHeight,
+            MenuNoResultsRow(label: l10n.pickerSearchNoResults),
+          ),
+      ];
+    }
+
+    if (_loadingWorkspaces) return _loadingCard;
+    return PickerMenuContent(
+      available: available,
+      searchPlaceholder:
+          isWide && _workspaces.length >= kPickerSearchMinCandidates
+          ? l10n.pickerSearchWorkspaces
+          : null,
+      searchFieldKey: const ValueKey('context-popover-workspace-search'),
+      buildRows: rowsFor,
     );
   }
 
   /// 推理强度下拉菜单内容（悬浮卡片，展开时构建）。
   ///
-  /// [available] 见 [_buildModelMenu]。
+  /// [available] 见 [_buildModelMenu]。这档刻意**不出搜索框**：几档强度是短枚举
+  /// （一眼看得完），在 140 宽的窄菜单里塞搜索框纯属噪声。行仍走共享
+  /// [MenuRowSingle]，与另外两档同一套行语言。
   Widget _buildReasoningMenu(BuildContext menuContext, double available) {
+    final isWide = isWideLayout(menuContext);
     final settingsState = ref.watch(settingsControllerProvider).valueOrNull;
     final efforts = settingsState?.supportedEfforts ?? const <String>[];
     final currentEffort = settingsState?.reasoningEffort;
-    return PopoverDropdownCard(
-      width: _kReasoningDropdownWidth,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: fitMenuListHeight(
-            rowHeights: List<double>.filled(
-              efforts.length,
-              _kDropdownRowHeight,
+    final rowHeight = isWide ? kMenuRowHeightMouse : kMenuRowHeightTouch;
+    final padding = EdgeInsets.symmetric(horizontal: isWide ? 12 : 8);
+
+    List<PickerMenuRow> rowsFor(BuildContext context, String query) =>
+        <PickerMenuRow>[
+          for (final effort in efforts)
+            PickerMenuRow(
+              rowHeight,
+              MenuRowSingle(
+                key: ValueKey('context-popover-reasoning-$effort'),
+                height: rowHeight,
+                padding: padding,
+                label: effort,
+                fontSize: isWide ? kFontLabel : kFontNavItem,
+                selected: effort == currentEffort,
+                onTap: () {
+                  _removeEntry(_reasoningMenuEntry);
+                  _reasoningMenuEntry = null;
+                  unawaited(
+                    ref
+                        .read(settingsControllerProvider.notifier)
+                        .setReasoningEffort(effort),
+                  );
+                  if (mounted) setState(() {});
+                },
+              ),
             ),
-            available: available,
-          ),
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final effort in efforts)
-                _DropdownRow(
-                  key: ValueKey('context-popover-reasoning-$effort'),
-                  label: effort,
-                  selected: effort == currentEffort,
-                  onTap: () {
-                    _removeEntry(_reasoningMenuEntry);
-                    _reasoningMenuEntry = null;
-                    unawaited(
-                      ref
-                          .read(settingsControllerProvider.notifier)
-                          .setReasoningEffort(effort),
-                    );
-                    if (mounted) setState(() {});
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
+        ];
+
+    return PickerMenuContent(
+      available: available,
+      searchPlaceholder: null,
+      searchFieldKey: null,
+      width: _kReasoningDropdownWidth,
+      buildRows: rowsFor,
     );
   }
 
@@ -1449,61 +1550,3 @@ class _CompressIconButton extends StatelessWidget {
   }
 }
 
-/// 三个下拉共用的行：定高 44 + [MenuRow]（全仓菜单行的唯一实现）。
-///
-/// 旧实现按主题分叉（浅色 `CupertinoListTile` / 暗色 `CupertinoButton`），而**行高与
-/// 内容对齐本该由菜单行自己定**——两个控件的内部布局并不相同，于是同一个菜单项在
-/// 两态下并不逐像素一致（见 [MenuRow] 文档）。统一到 [MenuRow] 后两态只差配色。
-///
-/// 选中态只用「文字色 + 字重 + 右侧勾」表达；面色 / 悬停 / 按下态交给 [MenuRow]。
-class _DropdownRow extends StatelessWidget {
-  const _DropdownRow({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  /// 行文案（模型名 / 工作区「名称 (路径)」/ 推理强度）。
-  final String label;
-
-  /// 是否当前选中项。
-  final bool selected;
-
-  /// 点选落地。
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = LightSurfaces.resolve(
-      context,
-      statusBlueText.resolveFrom(context),
-      dark: CupertinoColors.activeBlue,
-    );
-    return MenuRow(
-      height: _kDropdownRowHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      selected: selected,
-      onTap: onTap,
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: kFontNavItem,
-                color: selected
-                    ? accent
-                    : CupertinoColors.label.resolveFrom(context),
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (selected)
-            Icon(CupertinoIcons.check_mark, size: 16, color: accent),
-        ],
-      ),
-    );
-  }
-}

@@ -7,7 +7,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
+import 'package:hermes_ui/app/widgets/adaptive_action_menu.dart';
 import 'package:hermes_ui/app/widgets/menu_metrics.dart';
+import 'package:hermes_ui/app/widgets/picker_menu_content.dart';
 import 'package:hermes_ui/app/widgets/popover_dropdown.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
@@ -289,7 +291,11 @@ void main() {
 
     /// 每一行都必须**完整**落在卡片内（`row.bottom <= 卡片底`）——历史实现把列表
     /// 封顶 200，第 5 行起被切断；行高固定 44（浅/深两态一致）。
-    void expectAllRowsFullyVisible(WidgetTester tester, List<Key> rowKeys) {
+    void expectAllRowsFullyVisible(
+      WidgetTester tester,
+      List<Key> rowKeys, {
+      double? rowHeight = kMenuRowHeightMouse,
+    }) {
       final card = tester.getRect(find.byType(PopoverDropdownCard));
       for (final key in rowKeys) {
         final row = tester.getRect(find.byKey(key));
@@ -303,7 +309,13 @@ void main() {
           lessThanOrEqualTo(card.bottom + 0.5),
           reason: '$key 下缘被裁（行底 ${row.bottom} > 卡片底 ${card.bottom}）',
         );
-        expect(row.height, 44, reason: '$key 行高应恒为 44');
+        if (rowHeight != null) {
+          expect(
+            row.height,
+            rowHeight,
+            reason: '$key 行高应恒为 $rowHeight（与选择器同一套行档）',
+          );
+        }
       }
     }
 
@@ -324,10 +336,14 @@ void main() {
         expect(find.byKey(key), findsOneWidget);
       }
       expectAllRowsFullyVisible(tester, rowKeys);
-      // 卡片按内容摊开（7 × 44 + 边框 2），而不是旧实现的 200 + 2
+      // 卡片按内容摊开：搜索框块 39 + 7 行（宽屏鼠标档 36）+ 分组线 0.5 + 边框 2，
+      // 而不是旧实现的 200 + 2。行高与选择器同源（`kMenuRowHeightMouse`）。
       expect(
         tester.getRect(find.byType(PopoverDropdownCard)).height,
-        7 * 44 + 2,
+        kPickerSearchBarBlockHeight +
+            7 * kMenuRowHeightMouse +
+            kActionMenuDividerHeight +
+            kPopoverMenuCardChrome,
       );
       // 末行（此前整项不可见）文案可读
       expect(find.text('deepseek-v4'), findsOneWidget);
@@ -350,10 +366,33 @@ void main() {
       for (final key in rowKeys) {
         expect(find.byKey(key), findsOneWidget);
       }
-      expectAllRowsFullyVisible(tester, rowKeys);
+      expectAllRowsFullyVisible(tester, rowKeys, rowHeight: null);
+      // 宽屏工作区项＝双行 46（与选择器同规格），元操作「跟随默认」＝单行 36
+      for (var i = 0; i < 6; i++) {
+        expect(
+          tester
+              .getRect(
+                find.byKey(ValueKey('workspace-item-/home/user/project-$i')),
+              )
+              .height,
+          kMenuRowHeightMouseTwoLine,
+        );
+      }
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('workspace-item-default')))
+            .height,
+        kMenuRowHeightMouse,
+      );
+      // 搜索框块 39 + 6 个工作区（宽屏双行 46）+ 分组线 0.5 + 跟随默认（单行 36）
+      // + 边框 2 —— 与输入栏选择器的双行工作区项同一套规格。
       expect(
         tester.getRect(find.byType(PopoverDropdownCard)).height,
-        7 * 44 + 2,
+        kPickerSearchBarBlockHeight +
+            6 * kMenuRowHeightMouseTwoLine +
+            kActionMenuDividerHeight +
+            kMenuRowHeightMouse +
+            kPopoverMenuCardChrome,
       );
     });
 
@@ -376,11 +415,66 @@ void main() {
       ]);
       final card = tester.getRect(find.byType(PopoverDropdownCard));
       expect(card.width, 140);
-      expect(card.height, 5 * 44 + 2);
+      // 短枚举行（无搜索框）：5 × 36（鼠标档）+ 边框 2
+      expect(card.height, 5 * kMenuRowHeightMouse + kPopoverMenuCardChrome);
       final trigger = tester.getRect(
         find.byKey(const ValueKey('context-popover-reasoning-trigger')),
       );
       expect((card.right - trigger.right).abs(), lessThanOrEqualTo(0.5));
+    });
+
+    testWidgets('与输入栏选择器**同档**：宽屏内层下拉也有搜索框 + 图标列；窄屏不出搜索框', (tester) async {
+      useViewport(tester, const Size(1280, 800));
+      await tester.pumpWidget(
+        host(
+          child: popover(fullSnapshot),
+          models: sixModels,
+          workspaces: sixWorkspaces,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 宽屏：模型下拉 —— 搜索框 + 每行图标列（与选择器同一套语言）
+      await openMenu(tester, 'context-popover-model-trigger');
+      expect(
+        find.byKey(const ValueKey('context-popover-model-search')),
+        findsOneWidget,
+        reason: '内层下拉应与选择器一样带搜索框',
+      );
+      expect(
+        find.byIcon(CupertinoIcons.sparkles),
+        findsWidgets,
+        reason: '内层下拉的每行应有图标列',
+      );
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+
+      // 宽屏：工作区下拉 —— 双行（名称 + 路径）两段独立文本
+      await openMenu(tester, 'context-popover-workspace-trigger');
+      expect(
+        find.byKey(const ValueKey('context-popover-workspace-search')),
+        findsOneWidget,
+      );
+      expect(find.byIcon(CupertinoIcons.folder), findsWidgets);
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+
+      // 窄屏（<900）：不出搜索框（与选择器同口径 —— 手机端逐像素不变）
+      useViewport(tester, const Size(400, 800));
+      await tester.pumpWidget(
+        // override 数量必须与上一次 pump 一致（riverpod 不允许增删 override）
+        host(
+          child: popover(fullSnapshot),
+          models: sixModels,
+          workspaces: sixWorkspaces,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openMenu(tester, 'context-popover-model-trigger');
+      expect(
+        find.byKey(const ValueKey('context-popover-model-search')),
+        findsNothing,
+      );
     });
 
     testWidgets('回落向下：菜单顶边 = 触发器底边 + 8；高度按行边界 + 上限 420 收紧', (tester) async {
@@ -409,9 +503,10 @@ void main() {
       // 高 44，故旧口径 = 底边 − 6（会盖住触发器 6pt）；新口径顶边比旧实现低 14pt。
       expect((card.top - (trigger.bottom + 8)).abs(), lessThanOrEqualTo(0.5));
       expect(card.top, greaterThan(trigger.bottom));
-      // 可见行区 = 卡片高 − 卡片边框（1px × 2）= 9 整行（上限 420 内取最大整行前缀，
-      // 绝不切半行）。
-      expect(card.height - kPopoverMenuCardChrome, 9 * 44);
+      // 本例如 800 宽（< 900）＝**窄屏档**：无搜索框、行高 44（触屏档）。
+      // 可见行区 = 卡片高 − 边框 = 整行 44 的整数倍（绝不切半行）。
+      final listArea = card.height - kPopoverMenuCardChrome;
+      expect(listArea % kMenuRowHeightTouch, lessThanOrEqualTo(0.5));
       expect(card.height, lessThanOrEqualTo(420));
       // 更强判据：**没有任何一行跨过卡片内容区底边**。
       // （把「卡片高」当列表上限时，第 10 行会露出 2px —— 半行感正是要消灭的东西，
