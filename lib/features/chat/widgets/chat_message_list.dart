@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math' as math;
+
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
@@ -312,11 +313,46 @@ class ChatMessageList extends ConsumerStatefulWidget {
 /// 消息列表状态（公开以暴露 [outlineJumpTo] 给大纲面板调用）。
 class ChatMessageListState extends ConsumerState<ChatMessageList> {
   final ScrollController _controller = ScrollController();
-  final GlobalKey<State<StatefulWidget>> _highlightKey =
-      GlobalKey<State<StatefulWidget>>();
   final Set<String> _expandedNoticeIds = <String>{};
   final Set<String> _expandedTurnKeys = <String>{};
-  final Map<String, GlobalKey> _itemKeys = <String, GlobalKey>{};
+
+  // -------------------------------------------------------------------------
+  // 列表项锚点：不带 GlobalKey 的等价机制（同类隐患根治，与 nav bar 槽位同源）。
+  //
+  // 【判据】危害不取决于「有没有 GlobalKey」，而取决于 **key 归谁持有**：
+  // 旧实现在本 State 上持有 `Map<String, GlobalKey> _itemKeys` 并挂到列表项
+  // 包装层 —— 「祖先 State 持有 + 挂到可能被框架同帧重复 build 的子树」正是
+  // 有害形状（debug 撞 `BuildOwner._debugVerifyGlobalKeyReservation`，release
+  // 走 `Element._retakeInactiveElement` 把元素从原处 `forgetChild +
+  // deactivateChild` 抽走）。此外旧写法「别名与规范 id 共用同一把键对象」还
+  // 留了第二条更险的路：任一 messageId / 工具组 id 与别人的 renderId 字符串
+  // 相同时，`putIfAbsent` 会把**同一把 GlobalKey** 交给两个条目同帧挂载。
+  //
+  // 【现机制】挂载用 [ValueKey]（不参与 GlobalKey 登记/抢占，同帧重复 build
+  // 天然无害；且同一规范 id 不可能被两个条目同时挂载），查找走下面三个解算
+  // 入口现场解算 —— 不再有跨帧存活的「键 → 元素」句柄。
+  // -------------------------------------------------------------------------
+
+  /// 条目包装层 ValueKey 前缀（规范 id = transcript 的 renderId / live 时间线
+  /// 的 renderKey）。
+  static const String _itemKeyPrefix = 'msg-item:';
+
+  /// 高亮目标专用前缀 —— 与旧实现逐位等价。
+  ///
+  /// 旧实现把高亮目标的 key 换成另一把 `_highlightKey`（键不同 ⇒ 该条目
+  /// element 重建），并由此带出一个**既有效应**：目标条目不挂在 `_itemKeys`
+  /// 里，锚点扫描 / 漂移探针 / 大纲解算都看不见它。这里保留同形语义（目标用
+  /// 独立前缀的 ValueKey），故既有效应原样保留 —— 行为零漂移，不是遗漏。
+  static const String _highlightKeyPrefix = 'msg-item-hl:';
+
+  /// 别名（messageId / 工具组 id）→ 条目**规范 id**。
+  ///
+  /// 纯字符串表即可与旧实现逐位等价：旧 `Map<String, GlobalKey>` 的键对象本身
+  /// 就是按 renderId 字符串 `putIfAbsent` 出来的（同一 renderId 恒对应同一把
+  /// 键），故「别名 → 规范 id → 现场解算」与「别名 → 键 → currentContext」
+  /// 同解；`putIfAbsent`（首见即锁定）语义也照搬。
+  final Map<String, String> _itemAliasToId = <String, String>{};
+
   final Map<String, String> _selectionByRenderId = <String, String>{};
   _ReadingAnchor? _readingAnchor;
   double? _lastBottomInset;
@@ -483,8 +519,68 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   @visibleForTesting
   String? get readingAnchorCandidateKey => _readingAnchor?.candidateKey;
 
+  /// 诊断/测试用：当前已挂载条目的**规范 id → 元素**（每次调用现场解算；
+  /// 元素只在本次调用内有效，勿跨帧持有）。
   @visibleForTesting
-  Map<String, GlobalKey> get itemKeys => _itemKeys;
+  Map<String, Element> get mountedItemElements => _resolveItemElements();
+
+  ValueKey<String> _itemKeyOf(String canonicalId) =>
+      ValueKey<String>('$_itemKeyPrefix$canonicalId');
+
+  ValueKey<String> _highlightItemKeyOf(String canonicalId) =>
+      ValueKey<String>('$_highlightKeyPrefix$canonicalId');
+
+  /// 别名 → 规范 id（未登记即视为规范 id 自身）。
+  String _canonicalItemId(String id) => _itemAliasToId[id] ?? id;
+
+  /// 登记别名，语义与旧 `_itemKeys.putIfAbsent(alias, () => entryKey)` 一致
+  /// （首见即锁定，空别名跳过）。
+  void _registerItemAlias(String alias, String canonicalId) {
+    if (alias.isEmpty) return;
+    _itemAliasToId.putIfAbsent(alias, () => canonicalId);
+  }
+
+  /// 解算列表项元素：**一次**子树遍历收集 `msg-item:<规范 id>` → [Element]，
+  /// 调用方循环内 O(1) 命中。
+  ///
+  /// ⚠️ 复杂度：O(子树元素数)，**不是** O(条目数 × 子树) —— 刻意不写成「循环
+  /// 里每项各做一次全子树搜索」（transcript 长时会 O(n × 子树) 掉帧）。也刻意
+  /// **不缓存**跨帧：Element / RenderBox 跨帧会 detached。列表惰性构建，子树
+  /// 只含视口附近的条目，遍历成本量级 = 可见元素数。
+  Map<String, Element> _resolveItemElements() {
+    final found = <String, Element>{};
+    void visit(Element element) {
+      final key = element.widget.key;
+      if (key is ValueKey<String> && key.value.startsWith(_itemKeyPrefix)) {
+        found[key.value.substring(_itemKeyPrefix.length)] = element;
+      }
+      element.visitChildren(visit);
+    }
+
+    context.visitChildElements(visit);
+    return found;
+  }
+
+  /// 单点解算：条目 id（可为别名）→ 元素；未挂载返回 null。
+  Element? _findItemElement(String id) =>
+      _findElementByKey(_itemKeyOf(_canonicalItemId(id)));
+
+  /// 单点解算：条目 id → 元素（别名 → 规范 id → 现场解算）。
+  /// 列表惰性构建时目标未挂载 ⇒ null（调用方走各自的兜底路径）。
+  Element? _findHighlightItemElement(String canonicalId) =>
+      _findElementByKey(_highlightItemKeyOf(canonicalId));
+
+  /// 带早退的工作栈遍历（只走一遍子树，命中即停）。
+  Element? _findElementByKey(ValueKey<String> target) {
+    final pending = <Element>[];
+    context.visitChildElements(pending.add);
+    while (pending.isNotEmpty) {
+      final element = pending.removeLast();
+      if (element.widget.key == target) return element;
+      element.visitChildren(pending.add);
+    }
+    return null;
+  }
 
   @visibleForTesting
   double? get readingAnchorTopOffset => _readingAnchor?.topOffset;
@@ -627,7 +723,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       _highlightPositioned = false;
       _expandedNoticeIds.clear();
       _expandedTurnKeys.clear();
-      _itemKeys.clear();
+      _itemAliasToId.clear();
       _selectionByRenderId.clear();
       _readingAnchor = null;
       _lastBottomInset = null;
@@ -861,11 +957,14 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     _ReadingAnchor? candidate;
     _ReadingAnchor? fallbackCandidate;
 
+    // 一次性解算全部已挂载条目（O(子树)），循环内 O(1) 命中。
+    final itemElements = _resolveItemElements();
+
     // 1. 优先扫描 transcript 消息
     for (final entry in transcript) {
-      final key = _itemKeys[entry.renderId];
-      if (key?.currentContext == null) continue;
-      final box = key!.currentContext!.findRenderObject() as RenderBox?;
+      final element = itemElements[_canonicalItemId(entry.renderId)];
+      if (element == null) continue;
+      final box = element.findRenderObject() as RenderBox?;
       if (box == null || !box.attached || box.size.height == 0) continue;
       final localOffset = box.localToGlobal(
         Offset.zero,
@@ -904,9 +1003,9 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     // 2. 其次扫描 live 时间线段落
     if (candidate == null && liveTimeline != null) {
       for (final entry in liveTimeline) {
-        final key = _itemKeys[entry.renderKey];
-        if (key?.currentContext == null) continue;
-        final box = key!.currentContext!.findRenderObject() as RenderBox?;
+        final element = itemElements[_canonicalItemId(entry.renderKey)];
+        if (element == null) continue;
+        final box = element.findRenderObject() as RenderBox?;
         if (box == null || !box.attached || box.size.height == 0) continue;
         final localOffset = box.localToGlobal(
           Offset.zero,
@@ -1046,11 +1145,14 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
 
     final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
 
+    // 一次性解算全部已挂载条目（O(子树)），循环内 O(1) 命中。
+    final itemElements = _resolveItemElements();
+
     String? bestId;
     double? bestDy;
     var bestDist = double.infinity;
-    void consider(String id, GlobalKey? key) {
-      final element = key?.currentContext;
+    void consider(String id) {
+      final element = itemElements[_canonicalItemId(id)];
       if (element == null) return;
       final box = element.findRenderObject() as RenderBox?;
       if (box == null || !box.attached || box.size.height == 0) return;
@@ -1072,7 +1174,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       final id = (messageId != null && messageId.isNotEmpty)
           ? messageId
           : entry.renderId;
-      consider(id, _itemKeys[id]);
+      consider(id);
     }
     // 刻意**不**把 live 时间线条目纳入候选：它自身正在随 token 增长/重排，
     // 顶边 dy 剧烈跳动（实测 base 恒定 48.7 而 now 在 +109 ~ -139 间乱跳），
@@ -1089,7 +1191,7 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
   double? _probeDy(String id) {
     final scrollableBox = context.findRenderObject() as RenderBox?;
     if (scrollableBox == null || !scrollableBox.attached) return null;
-    final element = _itemKeys[id]?.currentContext;
+    final element = _findItemElement(id);
     if (element == null) return null;
     final box = element.findRenderObject() as RenderBox?;
     if (box == null || !box.attached || box.size.height == 0) return null;
@@ -1428,8 +1530,8 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     return true;
   }
 
-  /// 定位到高亮消息：优先 GlobalKey.ensureVisible；未构建（列表懒加载）
-  /// 时先按索引比例粗跳，下一帧再 ensureVisible。
+  /// 定位到高亮消息：优先 `Scrollable.ensureVisible`（目标已挂载）；未构建
+  /// （列表懒加载）时先按索引比例粗跳，下一帧再 ensureVisible。
   void _scrollToHighlight() {
     if (_highlightTargetRenderId == null) return;
     final transcript = ref.read(transcriptMessagesProvider(widget.sessionId));
@@ -1442,13 +1544,16 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     if (mounted) setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_controller.hasClients) return;
-      final ctx = _highlightKey.currentContext;
+      final highlightId = _highlightTargetRenderId;
+      final ctx = highlightId == null
+          ? null
+          : _findHighlightItemElement(highlightId);
       if (ctx != null) {
         final renderObject = ctx.findRenderObject();
         if (renderObject == null || !renderObject.attached) {
           // detached → 尝试 fallback 粗跳。
         } else {
-          if (ctx is Element && !ctx.mounted) return;
+          if (!ctx.mounted) return;
           Scrollable.ensureVisible(
             ctx,
             duration: const Duration(milliseconds: 350),
@@ -1473,11 +1578,14 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
       // 下一帧再精确对准（此时目标多半已入视口构建）。
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_controller.hasClients) return;
-        final retryCtx = _highlightKey.currentContext;
+        final retryId = _highlightTargetRenderId;
+        final retryCtx = retryId == null
+            ? null
+            : _findHighlightItemElement(retryId);
         if (retryCtx == null) return;
         final renderObject = retryCtx.findRenderObject();
         if (renderObject == null || !renderObject.attached) return;
-        if (retryCtx is Element && !retryCtx.mounted) return;
+        if (!retryCtx.mounted) return;
         Scrollable.ensureVisible(
           retryCtx,
           duration: const Duration(milliseconds: 250),
@@ -1513,13 +1621,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     setState(() {});
 
     // 1. 尝试精跳（目标已构建）
-    final key = _itemKeys[renderId];
-    final ctx = key?.currentContext;
+    final ctx = _findItemElement(renderId);
     if (ctx != null) {
       final renderObject = ctx.findRenderObject();
-      if (renderObject != null &&
-          renderObject.attached &&
-          (ctx is! Element || ctx.mounted)) {
+      if (renderObject != null && renderObject.attached && ctx.mounted) {
         unawaited(
           // A 重构（reverse）：`alignment` 以**滚动轴起始端**为 0 点 ——
           // 正向列表起点在顶部（0.0 = 对齐视口顶部），而 reverse 的起点在
@@ -1557,13 +1662,10 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
         _isOutlineJumping = false;
         return;
       }
-      final retryKey = _itemKeys[renderId];
-      final retryCtx = retryKey?.currentContext;
+      final retryCtx = _findItemElement(renderId);
       if (retryCtx != null) {
         final renderObject = retryCtx.findRenderObject();
-        if (renderObject != null &&
-            renderObject.attached &&
-            (retryCtx is! Element || retryCtx.mounted)) {
+        if (renderObject != null && renderObject.attached && retryCtx.mounted) {
           unawaited(
             Scrollable.ensureVisible(
               retryCtx,
@@ -1644,10 +1746,12 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
     int? maxRenderedIndex;
     double? maxRenderedOffset;
 
+    // 一次性解算全部已挂载条目（O(子树)），循环内 O(1) 命中。
+    final itemElements = _resolveItemElements();
+
     for (var i = 0; i < transcript.length; i++) {
       final entry = transcript[i];
-      final itemKey = _itemKeys[entry.renderId];
-      final itemCtx = itemKey?.currentContext;
+      final itemCtx = itemElements[_canonicalItemId(entry.renderId)];
       if (itemCtx == null) continue;
       final box = itemCtx.findRenderObject() as RenderBox?;
       if (box == null || !box.attached || box.size.height == 0) continue;
@@ -2572,30 +2676,27 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                       final isHighlightTarget =
                           _highlightTargetRenderId != null &&
                           entry.renderId == _highlightTargetRenderId;
-                      final entryKey = _itemKeys.putIfAbsent(
+                      // 别名登记（messageId / 工具组 id → 规范 id），幂等；
+                      // 语义与旧 `_itemKeys.putIfAbsent(alias, () => entryKey)` 一致。
+                      _registerItemAlias(
+                        entry.message.messageId ?? '',
                         entry.renderId,
-                        () => GlobalKey(),
                       );
-                      if (entry.message.messageId != null &&
-                          entry.message.messageId!.isNotEmpty) {
-                        _itemKeys.putIfAbsent(
-                          entry.message.messageId!,
-                          () => entryKey,
-                        );
-                      }
                       for (final g in groups) {
-                        _itemKeys.putIfAbsent(g.id, () => entryKey);
+                        _registerItemAlias(g.id, entry.renderId);
                       }
 
                       if (msgItem.isHidden) {
                         return KeyedSubtree(
-                          key: entryKey,
+                          key: _itemKeyOf(entry.renderId),
                           child: const SizedBox.shrink(),
                         );
                       }
 
                       return KeyedSubtree(
-                        key: isHighlightTarget ? _highlightKey : entryKey,
+                        key: isHighlightTarget
+                            ? _highlightItemKeyOf(entry.renderId)
+                            : _itemKeyOf(entry.renderId),
                         // #134：右键触发改用原始指针监听（Listener 不参与手势
                         // 竞技场）。根因：正文里 SelectableText 的选字手势会在
                         // 竞技场中抢赢外层 GestureDetector.onSecondaryTapDown ——
@@ -2707,18 +2808,17 @@ class ChatMessageListState extends ConsumerState<ChatMessageList> {
                           renderLiveTimeline ?? const <LiveTimelineEntry>[];
                       if (tail < liveEntries.length) {
                         final liveEntry = liveEntries[tail];
-                        final liveKey = _itemKeys.putIfAbsent(
-                          liveEntry.renderKey,
-                          () => GlobalKey(),
-                        );
+                        // 别名登记（live 工具组 id → 规范 id）；规范 id 取
+                        // liveEntry.renderKey（与旧 `putIfAbsent(renderKey)`
+                        // 返回的那把键同源）。
                         if (liveEntry.toolGroup != null) {
-                          _itemKeys.putIfAbsent(
+                          _registerItemAlias(
                             liveEntry.toolGroup!.id,
-                            () => liveKey,
+                            liveEntry.renderKey,
                           );
                         }
                         return KeyedSubtree(
-                          key: liveKey,
+                          key: _itemKeyOf(liveEntry.renderKey),
                           child: _LiveTimelineItem(
                             sessionId: sessionId,
                             entry: liveEntry,

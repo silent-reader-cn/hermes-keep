@@ -71,11 +71,17 @@ void main() {
     }
 
     // 3) 工具事件在文本 reveal 中途到达（后端顺序：文本完整先到，工具执行时才发事件）
-    api.emit(const ToolStartedSseEvent(
-      ToolStreamEvent(stableId: 't1', name: 'read_file', args: {'path': 'x'}),
-    ));
+    api.emit(
+      const ToolStartedSseEvent(
+        ToolStreamEvent(stableId: 't1', name: 'read_file', args: {'path': 'x'}),
+      ),
+    );
     await tester.pump();
-    api.emit(const ToolCompletedSseEvent(ToolStreamEvent(stableId: 't1', name: 'read_file')));
+    api.emit(
+      const ToolCompletedSseEvent(
+        ToolStreamEvent(stableId: 't1', name: 'read_file'),
+      ),
+    );
     await tester.pump();
 
     // 4) reveal 完全落地
@@ -85,9 +91,20 @@ void main() {
     }
     await tester.pumpAndSettle();
 
-    // 断言 A：只有 1 个 text 时间线条目（完整一段，未被劈成两段）
+    // 断言 A：只有 1 个 text 时间线条目（完整一段，未被劈成两段）。
+    //
+    // 计数口径（2026-10-07 随「列表项锚点去 GlobalKey」一并收紧）：原写法是
+    // `w.key.toString().contains('live:text')` —— 它只在外层条目包装层的 key 是
+    // **匿名 GlobalKey**（toString 不含 renderKey）时才恰好等于段数。改为按
+    // `ValueKey<String>` 的**取值**精确匹配 `live:text:*`，即只数
+    // `_LiveTimelineItem` 自持的那把段级 key，不再被包装层/框架 `KeyedSubtree.wrap`
+    // 的键串污染（判据仍是「段数 = 1」）。
     final textKeys = find
-        .byWidgetPredicate((w) => w.key.toString().contains('live:text'))
+        .byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey<String> &&
+              (w.key! as ValueKey<String>).value.startsWith('live:text'),
+        )
         .evaluate()
         .length;
     expect(textKeys, 1, reason: '文本应是一整段，不能被工具断点劈开');
@@ -109,16 +126,26 @@ void main() {
     for (var i = 0; i < 12; i++) {
       await tester.pump(const Duration(milliseconds: 48));
     }
-    api.emit(const ToolStartedSseEvent(
-      ToolStreamEvent(stableId: 't1', name: 'read_file', args: {'path': 'x'}),
-    ));
+    api.emit(
+      const ToolStartedSseEvent(
+        ToolStreamEvent(stableId: 't1', name: 'read_file', args: {'path': 'x'}),
+      ),
+    );
     await tester.pump();
-    api.emit(const ToolCompletedSseEvent(ToolStreamEvent(stableId: 't1', name: 'read_file')));
+    api.emit(
+      const ToolCompletedSseEvent(
+        ToolStreamEvent(stableId: 't1', name: 'read_file'),
+      ),
+    );
     await tester.pump();
     await tester.pumpAndSettle();
 
     final textKeys = find
-        .byWidgetPredicate((w) => w.key.toString().contains('live:text'))
+        .byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey<String> &&
+              (w.key! as ValueKey<String>).value.startsWith('live:text'),
+        )
         .evaluate()
         .length;
     expect(textKeys, 1);
