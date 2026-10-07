@@ -1,7 +1,12 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hermes_ui/app/shell/adaptive_shell.dart'
+    show kAdaptiveBreakpoint;
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
 import 'package:hermes_ui/features/chat/chat_controller.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
@@ -130,6 +135,18 @@ Rect? _ownBarRect(Element element) {
 ///
 /// [requireHit] 为 true 时还要求该「⋯」可命中（转场中间帧里页面还在屏外滑动，
 /// 那时只钉「元素在、且在自己顶栏内」）。
+/// 「打开项目文件夹」按钮在**当前宿主**的可见性（与 `chat_page` 的生产判据同源）：
+/// `hasWorkspace && (isWide || (!kIsWeb && Platform.isWindows))`。
+///
+/// 非 Windows 上窄屏（< 900）本就不渲染该按钮 —— 断言必须跟随同一判据，否则在
+/// Linux / macOS runner 上必红（本仓 #119 家族的老坑：测试缺平台门控）。
+bool folderVisibleOnThisHost(WidgetTester tester) {
+  if (kIsWeb) return false;
+  if (Platform.isWindows) return true;
+  final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+  return width >= kAdaptiveBreakpoint;
+}
+
 void expectTrailingIntact(
   WidgetTester tester,
   String label, {
@@ -137,7 +154,7 @@ void expectTrailingIntact(
   bool requireFolder = true,
 }) {
   expect(_ellipsis, findsWidgets, reason: '$label：会话操作「⋯」必须存在');
-  if (requireFolder) {
+  if (requireFolder && folderVisibleOnThisHost(tester)) {
     expect(_folder, findsWidgets, reason: '$label：打开项目文件夹按钮必须存在');
   }
 
@@ -313,7 +330,11 @@ void main() {
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 50));
 
-          for (final entry in {'「⋯」': _ellipsis, '文件夹': _folder}.entries) {
+          final contrastTargets = <String, Finder>{
+            '「⋯」': _ellipsis,
+            if (folderVisibleOnThisHost(tester)) '文件夹': _folder,
+          };
+          for (final entry in contrastTargets.entries) {
             final iconCtx = tester.element(
               find.descendant(of: entry.value, matching: find.byType(Icon)),
             );
@@ -447,22 +468,28 @@ void main() {
           expectTrailingIntact(tester, 'w=$width ${entry.key}');
 
           final bar = tester.getRect(find.byType(CupertinoNavigationBar).first);
-          final folderRect = tester.getRect(_folder);
-          expect(
-            folderRect.right <= bar.right + 0.01 &&
-                folderRect.left >= bar.left - 0.01,
-            isTrue,
-            reason: '文件夹按钮 rect=$folderRect 必须完整落在顶栏 $bar 内',
-          );
+          final folderVisible = folderVisibleOnThisHost(tester);
+          // trailing 左缘参照：有文件夹按钮时是它，否则是「⋯」（非 Windows 窄屏）
+          final trailingRect = folderVisible
+              ? tester.getRect(_folder)
+              : tester.getRect(_ellipsis);
+          if (folderVisible) {
+            expect(
+              trailingRect.right <= bar.right + 0.01 &&
+                  trailingRect.left >= bar.left - 0.01,
+              isTrue,
+              reason: '文件夹按钮 rect=$trailingRect 必须完整落在顶栏 $bar 内',
+            );
+          }
           // middle 不得与 trailing 抢位（右边界必须让开）。
           final mid = tester.getRect(
             find.byKey(const ValueKey('chat-title-outline-trigger')),
           );
           expect(
-            mid.right <= folderRect.left + 0.01,
+            mid.right <= trailingRect.left + 0.01,
             isTrue,
             reason:
-                'middle 右边界 ${mid.right} 必须让开 trailing（folder 左边界 ${folderRect.left}）',
+                'middle 右边界 ${mid.right} 必须让开 trailing（左边界 ${trailingRect.left}）',
           );
         });
       }
