@@ -624,7 +624,7 @@ void main() {
       );
     }
 
-    testWidgets('① 宽屏工作区项：名称与路径是两个独立文本节点、分占两行且左对齐；② 当前项竖条存在', (
+    testWidgets('① 宽屏工作区项：名称与路径是两个独立文本节点、分占两行且左对齐；② 选中态不画左竖条', (
       tester,
     ) async {
       useWideViewport(tester);
@@ -669,22 +669,12 @@ void main() {
         findsOneWidget,
       );
 
-      // ② 当前项（ws-a）竖条存在且与行同高居中
-      final bar = find.byKey(const ValueKey('composer-menu-selected-bar'));
-      expect(bar, findsOneWidget);
-      final itemA = find.byKey(
-        const ValueKey('composer-workspace-item-/path/to/ws-a'),
-      );
+      // ② 选中项**不画左竖条**：主人 2026-10-07 裁定「不要左侧的那个蓝色高亮条 很丑」，
+      // 选中语言收敛为「中性灰底 + 蓝字 + 右勾」三样（MenuRow 已不再提供竖条能力）。
       expect(
-        tester.getRect(bar).center.dy,
-        closeTo(tester.getRect(itemA).center.dy, 1.0),
+        find.byKey(const ValueKey('composer-menu-selected-bar')),
+        findsNothing,
       );
-      // 竖条只属于当前项
-      expect(
-        find.descendant(of: itemA, matching: bar),
-        findsOneWidget,
-      );
-      expect(find.descendant(of: itemB, matching: bar), findsNothing);
 
       // 元操作独立成群：分组线 + uturn 图标
       expect(
@@ -800,7 +790,7 @@ void main() {
       );
     });
 
-    testWidgets('⑤ 宽屏暗色：两态各自定色（名称/竖条 activeBlue、路径 secondaryLabel），走 CupertinoButton 分支不溢出', (
+    testWidgets('⑤ 宽屏暗色：两态各自定色（名称 activeBlue、路径 secondaryLabel），行统一 MenuRow 后不溢出', (
       tester,
     ) async {
       useWideViewport(tester);
@@ -829,10 +819,10 @@ void main() {
       final nameText = tester.widget<Text>(nameFinder);
       final pathText = tester.widget<Text>(pathFinder);
 
-      // 当前项名称：暗色 activeBlue + w600 + kFontBody
+      // 当前项名称：暗色 activeBlue + w600 + kFontLabel（选择器主行统一 13）
       expect(nameText.style!.color!.toARGB32(), 0xFF0A84FF);
       expect(nameText.style!.fontWeight, FontWeight.w600);
-      expect(nameText.style!.fontSize, kFontBody);
+      expect(nameText.style!.fontSize, kFontLabel);
       // 路径：次级色（暗色 secondaryLabel）+ kFontMicro
       // （设计稿这行是 11.5px 等宽 Menlo；实现无等宽字族，MiSans 同 px 字面更大，
       //  故用 11 让**渲染后的墨高**与设计稿对齐 —— 实测见 composer_meta_chips.dart
@@ -845,12 +835,19 @@ void main() {
       );
       expect(pathText.style!.fontSize, kFontMicro);
 
-      // 竖条同色 activeBlue
-      final bar = find.byKey(const ValueKey('composer-menu-selected-bar'));
-      final barBox = tester.widget<Container>(bar);
+      // 选中行底色 = 暗色档 selectedSurface（menu_row.dart 内定值 rgba(120,120,128,.24)）
+      // —— 左竖条已按主人裁定移除，选中态只剩「底色 + 蓝字 + 右勾」。
+      final rowFill = tester
+          .widget<ColoredBox>(
+            find
+                .ancestor(of: nameFinder, matching: find.byType(ColoredBox))
+                .first,
+          )
+          .color;
+      expect(rowFill, const Color.fromRGBO(120, 120, 128, 0.24));
       expect(
-        (barBox.decoration! as BoxDecoration).color!.toARGB32(),
-        0xFF0A84FF,
+        find.byKey(const ValueKey('composer-menu-selected-bar')),
+        findsNothing,
       );
     });
   });

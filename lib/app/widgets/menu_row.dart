@@ -46,7 +46,6 @@ class MenuRow extends StatefulWidget {
     this.iconColor,
     this.trailing,
     this.selected = false,
-    this.selectionBar = false,
     this.enabled = true,
     this.padding = const EdgeInsets.symmetric(horizontal: 12),
   });
@@ -79,19 +78,18 @@ class MenuRow extends StatefulWidget {
   final Widget? trailing;
 
   /// 选中态：填 [LightSurfaces.selectedSurface] 面色。
+  ///
+  /// 选中语言 = **中性灰底 + 蓝字 + 右勾**（三样，由调用方给文字/勾的颜色）。
+  /// 曾经还有一条左侧 2px 蓝竖条（设计稿 `.prow.sel::before`），已按主人
+  /// 2026-10-07 的裁定**移除**（原话「不要左侧的那个蓝色高亮条 很丑」）——
+  /// 故本组件不再提供该能力，避免它被顺手用回来。
   final bool selected;
-
-  /// 选中态是否另画左侧竖条（设计稿 `.prow.sel::before`：左 4 / 上下内缩 7 / 宽 2）。
-  final bool selectionBar;
 
   /// 是否可点（false 时不响应、不显按下态、语义置灰）。
   final bool enabled;
 
   /// 内容左右内边距。
   final EdgeInsetsGeometry padding;
-
-  /// 选中左竖条的测试锚点（既有守卫按此 key 定位）。
-  static const Key selectionBarKey = ValueKey('composer-menu-selected-bar');
 
   @override
   State<MenuRow> createState() => _MenuRowState();
@@ -142,11 +140,6 @@ class _MenuRowState extends State<MenuRow> {
           LightSurfaces.textSecondary,
           dark: CupertinoColors.secondaryLabel,
         );
-    final accent = LightSurfaces.resolve(
-      context,
-      LightSurfaces.selectionForeground,
-      dark: CupertinoColors.activeBlue,
-    );
 
     final content = ColoredBox(
       color: _background(context),
@@ -205,28 +198,7 @@ class _MenuRowState extends State<MenuRow> {
               ? () => setState(() => _pressed = false)
               : null,
           onTap: widget.enabled ? widget.onTap : null,
-          child: SizedBox(
-            height: widget.height,
-            child: Stack(
-              children: [
-                Positioned.fill(child: content),
-                if (widget.selected && widget.selectionBar)
-                  Positioned(
-                    left: 4,
-                    top: 7,
-                    bottom: 7,
-                    child: Container(
-                      key: MenuRow.selectionBarKey,
-                      width: 2,
-                      decoration: BoxDecoration(
-                        color: accent,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          child: SizedBox(height: widget.height, child: content),
         ),
       ),
     );

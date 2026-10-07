@@ -327,8 +327,10 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
                     key: const ValueKey('composer-workspace-item-default'),
                     icon: CupertinoIcons.arrow_uturn_left,
                     label: l10n.followSessionDefaultWorkspace,
-                    // 元操作是一句话，不是「一个东西的名字」，故走正文档。
-                    fontSize: kFontBody,
+                    // 主行文字统一 13（kFontLabel）：设计稿 13.5、令牌阶梯上 14 之下
+                    // 最近的档是 13 —— 主人 2026-10-07 裁定「主行文字改小点」。
+                    // （语义档上更贴的是 kFontBody(14)「一句话」，此处按视觉裁定落档。）
+                    fontSize: kFontLabel,
                     selected: followDefaultSelected,
                     onTap: () => _selectWorkspace(null),
                   )
@@ -429,8 +431,9 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
                 key: ValueKey('composer-model-item-$m'),
                 icon: CupertinoIcons.sparkles,
                 label: m,
-                // 模型名是「一个东西的名字」⇒ 列表项名档。
-                fontSize: kFontItemTitle,
+                // 模型名与工作区名同为「选择器主行」，统一 13（kFontLabel）——
+                // 此前用 kFontItemTitle(15) 是选择器里最大的一行，主人裁定改小。
+                fontSize: kFontLabel,
                 selected: m == currentModel,
                 onTap: () => _selectModel(m),
               ),
@@ -455,7 +458,7 @@ class _ComposerMetaChipsState extends ConsumerState<ComposerMetaChips> {
                     key: const ValueKey('composer-model-item-default'),
                     icon: CupertinoIcons.arrow_uturn_left,
                     label: l10n.contextWindowFollowServerDefault,
-                    fontSize: kFontBody,
+                    fontSize: kFontLabel,
                     selected: followServerSelected,
                     onTap: () => _selectModel(null),
                   )
@@ -926,7 +929,7 @@ String _workspaceLabel(WorkspaceRoot w) =>
 String _workspaceName(WorkspaceRoot w) =>
     (w.name != null && w.name!.trim().isNotEmpty) ? w.name! : (w.path ?? '');
 
-/// 宽屏工作区项（双行）：图标 + 名称（[kFontBody]）+ 路径副行（[kFontCaption]，间距 4px）。
+/// 宽屏工作区项（双行）：图标 + 名称（[kFontLabel]）+ 路径副行（[kFontMicro]，间距 4px）。
 ///
 /// 名称与路径是**两个独立文本节点**（不再是 `名称 (路径)` 拼接串），路径因此
 /// 不会被省略号连坐吃掉；两行左对齐、各自超长省略。
@@ -973,9 +976,6 @@ class _WorkspaceRowWide extends StatelessWidget {
       iconGap: 10,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       selected: selected,
-      // 选中左竖条（设计稿 `.prow.sel::before`：左 4 / 上下各内缩 7 / 宽 2）
-      // 由 [MenuRow.selectionBar] 画，其 key 与既有守卫同源。
-      selectionBar: true,
       onTap: onTap,
       trailing: selected
           ? Padding(
@@ -992,7 +992,7 @@ class _WorkspaceRowWide extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: kFontBody,
+              fontSize: kFontLabel,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               color: nameColor,
             ),
@@ -1055,10 +1055,6 @@ class _MenuRowWide extends StatelessWidget {
       iconGap: 10,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       selected: selected,
-      // 选中左竖条：与双行工作区行同款（旧实现的共用行壳对所有宽屏行都画，
-      // #175 拍板的「当前项四重锚定」＝ 底色 + 左竖条 + 蓝字 + 右勾，
-      // 单行行少了竖条就是少了一重）。
-      selectionBar: true,
       onTap: onTap,
       trailing: selected
           ? Padding(
