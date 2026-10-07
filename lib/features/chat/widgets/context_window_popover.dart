@@ -26,16 +26,36 @@ import '../../settings/settings_providers.dart';
 import '../chat_providers.dart';
 
 /// 窄屏弹层宽度（现状值，逐像素不变）。
-const double _kPopoverNarrowWidth = 260;
+const double kContextPopoverNarrowWidth = 260;
 
-/// 宽屏弹层宽度（设计稿 `dialog-family-proposal.html` §3 推荐①：260 → 300）。
-const double _kPopoverWideWidth = 300;
+/// 宽屏弹层宽度（紧凑档：300 → 248）。
+///
+/// 现状 300 出自设计稿 `dialog-family-proposal.html` §3（为「大数字 + 右对齐数值」
+/// 预留的宽度）；主人 2026-10-07 反馈「宽屏下这个弹窗显得太大 —— 大字体宽间距大圆角，
+/// 和整个界面不太兼容」后收一档，见 `sketches/context-popover-compact.html`。
+const double kContextPopoverWideWidth = 248;
 
 /// 窄屏内容左右内边距（现状值）。
 const double _kPopoverNarrowHPad = 16;
 
-/// 宽屏内容左右内边距（设计稿 §3：14）。
-const double _kPopoverWideHPad = 14;
+/// 宽屏内容左右内边距（紧凑档：14 → 12）。
+const double _kPopoverWideHPad = 12;
+
+/// 宽屏头部大数字字号（紧凑档：`kFontMetric` 21 → `kFontPageTitle` 17）。
+///
+/// 21pt 原本借的是「洞察页指标大数据字」档位，比页面标题（17）还大一档；弹层里它只是
+/// 一个读数头部，收进梯子后不再抢戏（这是主人说的「大字体」的主因）。
+const double _kPopoverWideMetricFontSize = kFontPageTitle;
+
+/// 宽屏卡圆角（紧凑档：浮层族 14 → 独立卡令牌 `kRadiusCard` 12）。
+///
+/// 浮层族令牌 `kPopoverDropdownRadius` 是 14（菜单 / 弹层共用）；这里按「独立卡片」档
+/// 收到 12，只作用于本弹层（经 `showCupertinoPopover(radius:)` 传入，不动全族）。
+const double kContextPopoverWideRadius = kRadiusCard;
+
+/// 宽屏压缩钮直径（紧凑档：32 → 26）与图标（18 → 15）。
+const double _kWideCompressSize = 26;
+const double _kWideCompressIconSize = 15;
 
 /// 推理强度下拉宽度（现状值，紧靠弹层右侧的窄入口）。
 const double _kReasoningDropdownWidth = 140;
@@ -78,16 +98,21 @@ bool _menuWorkspaceMatches(WorkspaceRoot w, String q) =>
 
 /// 上下文详情弹层（Swift: ContextWindowPopover，对齐 WebUI _syncCtxIndicator 阈值提示）。
 ///
-/// 圆角 18、背景 secondarySystemBackground + separator 边框。内容：头部（窄屏
-/// `tokensLabel` + 压缩 icon／宽屏大数字 + 「已用 · 上限」副行 + 进度条） /
-/// InfoRows / 模型切换 / 工作区切换 / 关闭（仅窄屏）。
+/// 圆角 18、背景 secondarySystemBackground + separator 边框。内容按宽窄分流：
+/// 头部（窄屏 `tokensLabel` + 压缩 icon／宽屏大数字 + 「已用 · 上限」副行 + 进度条）
+/// / InfoRows /［仅窄屏］模型切换 + 工作区切换 + 底部「关闭」行。
 ///
 /// 宽窄分流（阈值见 `layout_tokens.isWideLayout`，= 900）：
 /// - **窄屏（<900）逐像素维持原排版**：宽 260、头部 tokensLabel 行、四项数值 12pt、
-///   底部「关闭」行。唯一变化是无数据文案走 l10n（缺陷修复，两态共用）。
-/// - **宽屏（>=900）按设计稿 §3 重排**：宽 300、大数字（窗口上限 21pt）+ 副行
-///   「已用 X · 上限 Y」、占用进度条、「输入/输出/阈值/费用」数值 13pt 右对齐
-///   （等宽数字、无数据退为次级色），去掉底部「关闭」行（点外部即关）。
+///   模型 / 工作区两个分区、底部「关闭」行 —— 一处都不动（含本轮紧凑档改造后）。
+/// - **宽屏（>=900）**：宽 248、大数字（窗口上限 17pt）+ 副行「已用 X · 上限 Y」、
+///   占用进度条、「输入/输出/阈值/费用」数值 13pt 右对齐（等宽数字、无数据退次级色），
+///   **不渲染模型 / 工作区两个分区**、也没有底部「关闭」行（点外部即关）。
+///
+/// 为什么宽屏砍掉那两个分区（主人 2026-10-07 拍板）：宽屏输入行上**本来就有**
+/// 「工作区 / 模型」两个 chip，要改直接在那儿点即可 —— 进弹层再选一次是重复入口，
+/// 白占约 170pt 高度。窄屏没有那排 chip，所以两个分区照旧保留。
+/// 相关：两个分区整段包在 `if (!isWide)` 里（内容与改造前逐行一致，只多一层条件）。
 class ContextWindowPopover extends ConsumerStatefulWidget {
   const ContextWindowPopover({
     super.key,
@@ -750,6 +775,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     final isHigh = pctInt != null && pctInt >= 75;
     final isMid = pctInt != null && pctInt >= 50 && pctInt < 75;
 
+
     final separator = LightSurfaces.resolve(
       context,
       LightSurfaces.cardBorder,
@@ -812,6 +838,10 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
       isMid: isMid,
       compressing: _compressing || isCompressing,
       enabled: pctInt != null && pctInt > 0,
+      // 紧凑档只作用于宽屏（26 / 15 / 7）；窄屏维持 32 / 18 / 8 逐像素不变。
+      size: isWide ? _kWideCompressSize : 32,
+      iconSize: isWide ? _kWideCompressIconSize : 18,
+      radius: isWide ? kRadiusInline : 8,
       onPressed: (_compressing || isCompressing)
           ? null
           : () async {
@@ -833,7 +863,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
     );
 
     return SizedBox(
-      width: isWide ? _kPopoverWideWidth : _kPopoverNarrowWidth,
+      width: isWide ? kContextPopoverWideWidth : kContextPopoverNarrowWidth,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -841,7 +871,7 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
           // Header：窄屏 tokensLabel 行／宽屏大数字 + 「已用 · 上限」副行
           if (isWide)
             Padding(
-              padding: EdgeInsets.fromLTRB(hPad, 13, hPad, 11),
+              padding: EdgeInsets.fromLTRB(hPad, 9, hPad, 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -853,13 +883,13 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                           windowLabel,
                           key: const ValueKey('context-popover-window-label'),
                           style: const TextStyle(
-                            fontSize: kFontMetric,
+                            fontSize: _kPopoverWideMetricFontSize,
                             fontWeight: FontWeight.w500,
                             height: 1.1,
                           ),
                         ),
                         if (usageSubLabel != null) ...[
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 2),
                           Text(
                             usageSubLabel,
                             key: const ValueKey(
@@ -908,7 +938,9 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
           // 四项读数：窄屏 12pt 现值行／宽屏 13pt 右对齐 + 无数据退次级色
           if (isWide)
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: hPad),
+              // 宽屏此块是本弹层的最后一块（下面不再有分区），必须自带底部内距，
+              // 否则「费用」行会贴着卡底边。
+              padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -963,272 +995,216 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                 ],
               ),
             ),
-          Container(height: 0.5, color: separator),
-          // 模型切换区
-          Padding(
-            padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.contextWindowCurrentModel,
-                  style: TextStyle(fontSize: kFontCaption, color: secondary),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Semantics(
-                        button: true,
-                        label: l10n.selectModel,
-                        child: CompositedTransformTarget(
-                          key: _modelTriggerKey,
-                          link: _modelMenuLink,
-                          child: CupertinoButton(
-                            key: const ValueKey(
-                              'context-popover-model-trigger',
-                            ),
-                            padding: EdgeInsets.zero,
-                            onPressed: _toggleModelMenu,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: LightSurfaces.resolve(
-                                  context,
-                                  LightSurfaces.card,
-                                  dark: CupertinoColors.systemBackground,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: separator),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      (currentModel == null ||
-                                              currentModel.isEmpty)
-                                          ? l10n.contextWindowFollowServerDefault
-                                          : currentModel,
-                                      style: TextStyle(
-                                        fontSize: kFontLabel,
-                                        fontWeight: FontWeight.w500,
-                                        color: CupertinoColors.label
-                                            .resolveFrom(context),
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  AnimatedRotation(
-                                    turns: _modelMenuEntry != null ? 0.5 : 0.0,
-                                    duration: const Duration(milliseconds: 200),
-                                    child: Icon(
-                                      CupertinoIcons.chevron_down,
-                                      size: 14,
-                                      color: secondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (supportsReasoning) ...[
-                      const SizedBox(width: 8),
-                      Semantics(
-                        button: true,
-                        label: l10n.reasoningEffort,
-                        child: CompositedTransformTarget(
-                          key: _reasoningTriggerKey,
-                          link: _reasoningMenuLink,
-                          child: CupertinoButton(
-                            key: const ValueKey(
-                              'context-popover-reasoning-trigger',
-                            ),
-                            padding: EdgeInsets.zero,
-                            onPressed: _toggleReasoningMenu,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: LightSurfaces.resolve(
-                                  context,
-                                  LightSurfaces.card,
-                                  dark: CupertinoColors.systemBackground,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: separator),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 60,
-                                    ),
-                                    child: Text(
-                                      (reasoningEffort == null ||
-                                              reasoningEffort.isEmpty)
-                                          ? l10n.notSet
-                                          : reasoningEffort,
-                                      style: TextStyle(
-                                        fontSize: kFontLabel,
-                                        fontWeight: FontWeight.w500,
-                                        color: CupertinoColors.label
-                                            .resolveFrom(context),
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  AnimatedRotation(
-                                    turns: _reasoningMenuEntry != null
-                                        ? 0.5
-                                        : 0.0,
-                                    duration: const Duration(milliseconds: 200),
-                                    child: Icon(
-                                      CupertinoIcons.chevron_down,
-                                      size: 14,
-                                      color: secondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Container(height: 0.5, color: separator),
-          // 工作区切换区
-          Padding(
-            padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      l10n.workspace,
-                      style: TextStyle(
-                        fontSize: kFontCaption,
-                        color: secondary,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (_savingWorkspace)
-                      const CupertinoActivityIndicator(radius: 8)
-                    else
-                      CupertinoButton(
-                        key: const ValueKey(
-                          'context-popover-workspace-manual-toggle',
-                        ),
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(36, 24),
-                        onPressed: () {
-                          _removeAllMenus();
-                          setState(() {
-                            _manualInputExpanded = !_manualInputExpanded;
-                          });
-                        },
-                        child: Text(
-                          _manualInputExpanded
-                              ? l10n.cancel
-                              : l10n.manualInputWorkspace,
-                          style: const TextStyle(fontSize: kFontButton),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Semantics(
-                  button: true,
-                  label: l10n.selectWorkspace,
-                  child: CompositedTransformTarget(
-                    key: _workspaceTriggerKey,
-                    link: _workspaceMenuLink,
-                    child: CupertinoButton(
-                      key: const ValueKey('context-popover-workspace-trigger'),
-                      padding: EdgeInsets.zero,
-                      onPressed: _toggleWorkspaceMenu,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: LightSurfaces.resolve(
-                            context,
-                            LightSurfaces.card,
-                            dark: CupertinoColors.systemBackground,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: separator),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                currentWorkspaceLabel,
-                                style: TextStyle(
-                                  fontSize: kFontLabel,
-                                  fontWeight: FontWeight.w500,
-                                  color: CupertinoColors.label.resolveFrom(
-                                    context,
-                                  ),
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            AnimatedRotation(
-                              turns: _workspaceMenuEntry != null ? 0.5 : 0.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                CupertinoIcons.chevron_down,
-                                size: 14,
-                                color: secondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+          // 宽屏不渲染「当前模型 / 工作区」两个分区 —— 宽屏的输入行上就有
+          // 「工作区 / 模型」两个 chip，直接在那儿选即可，不必进弹层再选一次
+          // （主人 2026-10-07 拍板）；窄屏没有那排 chip，两个分区原样保留
+          // 且逐像素不变。
+          if (!isWide) ...[
+            Container(height: 0.5, color: separator),
+            // 模型切换区
+            Padding(
+              padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.contextWindowCurrentModel,
+                    style: TextStyle(fontSize: kFontCaption, color: secondary),
                   ),
-                ),
-                if (_manualInputExpanded) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Expanded(
-                        child: CupertinoTextField(
-                          key: const ValueKey(
-                            'context-popover-workspace-field',
+                        child: Semantics(
+                          button: true,
+                          label: l10n.selectModel,
+                          child: CompositedTransformTarget(
+                            key: _modelTriggerKey,
+                            link: _modelMenuLink,
+                            child: CupertinoButton(
+                              key: const ValueKey(
+                                'context-popover-model-trigger',
+                              ),
+                              padding: EdgeInsets.zero,
+                              onPressed: _toggleModelMenu,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: LightSurfaces.resolve(
+                                    context,
+                                    LightSurfaces.card,
+                                    dark: CupertinoColors.systemBackground,
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    8,
+                                  ),
+                                  border: Border.all(color: separator),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        (currentModel == null ||
+                                                currentModel.isEmpty)
+                                            ? l10n.contextWindowFollowServerDefault
+                                            : currentModel,
+                                        style: TextStyle(
+                                          fontSize: kFontLabel,
+                                          fontWeight: FontWeight.w500,
+                                          color: CupertinoColors.label
+                                              .resolveFrom(context),
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    AnimatedRotation(
+                                      turns: _modelMenuEntry != null ? 0.5 : 0.0,
+                                      duration: const Duration(milliseconds: 200),
+                                      child: Icon(
+                                        CupertinoIcons.chevron_down,
+                                        size: 14,
+                                        color: secondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                          controller: _workspaceController,
-                          placeholder: l10n.workspaceOptionalPlaceholder,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
+                        ),
+                      ),
+                      if (supportsReasoning) ...[
+                        const SizedBox(width: 8),
+                        Semantics(
+                          button: true,
+                          label: l10n.reasoningEffort,
+                          child: CompositedTransformTarget(
+                            key: _reasoningTriggerKey,
+                            link: _reasoningMenuLink,
+                            child: CupertinoButton(
+                              key: const ValueKey(
+                                'context-popover-reasoning-trigger',
+                              ),
+                              padding: EdgeInsets.zero,
+                              onPressed: _toggleReasoningMenu,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: LightSurfaces.resolve(
+                                    context,
+                                    LightSurfaces.card,
+                                    dark: CupertinoColors.systemBackground,
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    8,
+                                  ),
+                                  border: Border.all(color: separator),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 60,
+                                      ),
+                                      child: Text(
+                                        (reasoningEffort == null ||
+                                                reasoningEffort.isEmpty)
+                                            ? l10n.notSet
+                                            : reasoningEffort,
+                                        style: TextStyle(
+                                          fontSize: kFontLabel,
+                                          fontWeight: FontWeight.w500,
+                                          color: CupertinoColors.label
+                                              .resolveFrom(context),
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    AnimatedRotation(
+                                      turns: _reasoningMenuEntry != null
+                                          ? 0.5
+                                          : 0.0,
+                                      duration: const Duration(milliseconds: 200),
+                                      child: Icon(
+                                        CupertinoIcons.chevron_down,
+                                        size: 14,
+                                        color: secondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                          style: const TextStyle(fontSize: kFontLabel),
-                          placeholderStyle: TextStyle(
-                            fontSize: kFontLabel,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(height: 0.5, color: separator),
+            // 工作区切换区
+            Padding(
+              padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // 标签可收缩（英文 `Workspace` + `Manual input` 在 248 宽下
+                      // 按自然宽度排会溢出）；空间够时与「自然宽度 + Spacer」
+                      // 逐像素一致，不够时退化为省略号。
+                      Expanded(
+                        child: Text(
+                          l10n.workspace,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: kFontCaption,
                             color: secondary,
                           ),
+                        ),
+                      ),
+                      if (_savingWorkspace)
+                        const CupertinoActivityIndicator(radius: 8)
+                      else
+                        CupertinoButton(
+                          key: const ValueKey(
+                            'context-popover-workspace-manual-toggle',
+                          ),
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(36, 24),
+                          onPressed: () {
+                            _removeAllMenus();
+                            setState(() {
+                              _manualInputExpanded = !_manualInputExpanded;
+                            });
+                          },
+                          child: Text(
+                            _manualInputExpanded
+                                ? l10n.cancel
+                                : l10n.manualInputWorkspace,
+                            style: const TextStyle(fontSize: kFontButton),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Semantics(
+                    button: true,
+                    label: l10n.selectWorkspace,
+                    child: CompositedTransformTarget(
+                      key: _workspaceTriggerKey,
+                      link: _workspaceMenuLink,
+                      child: CupertinoButton(
+                        key: const ValueKey('context-popover-workspace-trigger'),
+                        padding: EdgeInsets.zero,
+                        onPressed: _toggleWorkspaceMenu,
+                        child: Container(
                           decoration: BoxDecoration(
                             color: LightSurfaces.resolve(
                               context,
@@ -1238,31 +1214,92 @@ class _ContextWindowPopoverState extends ConsumerState<ContextWindowPopover> {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: separator),
                           ),
-                          onSubmitted: (_) => _saveManualWorkspace(),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  currentWorkspaceLabel,
+                                  style: TextStyle(
+                                    fontSize: kFontLabel,
+                                    fontWeight: FontWeight.w500,
+                                    color: CupertinoColors.label.resolveFrom(
+                                      context,
+                                    ),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              AnimatedRotation(
+                                turns: _workspaceMenuEntry != null ? 0.5 : 0.0,
+                                duration: const Duration(milliseconds: 200),
+                                child: Icon(
+                                  CupertinoIcons.chevron_down,
+                                  size: 14,
+                                  color: secondary,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      CupertinoButton(
-                        key: const ValueKey('context-popover-workspace-save'),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        minimumSize: const Size(44, 28),
-                        onPressed: _savingWorkspace
-                            ? null
-                            : _saveManualWorkspace,
-                        child: Text(
-                          l10n.save,
-                          style: const TextStyle(fontSize: kFontButton),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
+                  if (_manualInputExpanded) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CupertinoTextField(
+                            key: const ValueKey(
+                              'context-popover-workspace-field',
+                            ),
+                            controller: _workspaceController,
+                            placeholder: l10n.workspaceOptionalPlaceholder,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            style: const TextStyle(fontSize: kFontLabel),
+                            placeholderStyle: TextStyle(
+                              fontSize: kFontLabel,
+                              color: secondary,
+                            ),
+                            decoration: BoxDecoration(
+                              color: LightSurfaces.resolve(
+                                context,
+                                LightSurfaces.card,
+                                dark: CupertinoColors.systemBackground,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                8,
+                              ),
+                              border: Border.all(color: separator),
+                            ),
+                            onSubmitted: (_) => _saveManualWorkspace(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        CupertinoButton(
+                          key: const ValueKey('context-popover-workspace-save'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          minimumSize: const Size(44, 28),
+                          onPressed: _savingWorkspace
+                              ? null
+                              : _saveManualWorkspace,
+                          child: Text(
+                            l10n.save,
+                            style: const TextStyle(fontSize: kFontButton),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
+          ],
           // 窄屏保留底部「关闭」行（逐像素不变）；宽屏去掉（点外部即关，
           // 设计稿 §3 待裁决项 D）。
           if (!isWide) ...[
@@ -1318,6 +1355,12 @@ class _InfoRow extends StatelessWidget {
 /// （13pt、w500、等宽数字、基线对齐）；[value] 为 null（无数据）时数值退为
 /// 次级色且不加粗，文案取 [unavailableLabel]（= `l10n.unavailable`，中文界面
 /// 不再出现英文 'Unavailable'）。
+///
+/// 紧凑档：上下内距 4 → 2.5（行距 24.5 → 21.5）。
+///
+/// **左右内距由父层给**（`Padding(symmetric(horizontal: hPad))`）：本行原先自带
+/// `horizontal: _kPopoverWideHPad`，与父层叠加成 28，导致四项读数比「当前模型 /
+/// 工作区」这类区块标题多缩进 14 —— 同屏两套左缘。紧凑档一并收掉（两层变一层）。
 class _KeyValueRow extends StatelessWidget {
   const _KeyValueRow({
     required this.label,
@@ -1343,10 +1386,7 @@ class _KeyValueRow extends StatelessWidget {
         ? labelColor
         : CupertinoColors.label.resolveFrom(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: _kPopoverWideHPad,
-        vertical: 4,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
@@ -1355,15 +1395,22 @@ class _KeyValueRow extends StatelessWidget {
             label,
             style: TextStyle(fontSize: kFontCaption, color: labelColor),
           ),
-          const Spacer(),
-          Text(
-            value ?? unavailableLabel,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: kFontLabel,
-              fontWeight: isMuted ? FontWeight.w400 : FontWeight.w500,
-              color: valueColor,
-              fontFeatures: const [FontFeature.tabularFigures()],
+          const SizedBox(width: 8),
+          // 数值侧必须**可收缩**：左端标签 + 右端数值若都按自然宽度排，长文案
+          // （英文 `Threshold` + `Unavailable`、极长费用值）会直接溢出 Row。
+          // 用 `Expanded` + 右对齐 + 省略号 —— 空间够时与「Spacer + 自然宽度」
+          // 逐像素一致（数值右缘仍然贴齐），不够时退化为省略号而不是黄黑警戒条。
+          Expanded(
+            child: Text(
+              value ?? unavailableLabel,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: kFontLabel,
+                fontWeight: isMuted ? FontWeight.w400 : FontWeight.w500,
+                color: valueColor,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
         ],
@@ -1374,6 +1421,8 @@ class _KeyValueRow extends StatelessWidget {
 
 /// 宽屏头部下方的上下文占用进度条（设计稿 §3 `.bar`）：高 4、圆角 2、轨道灰、
 /// 填充品牌蓝；[percentage] 为 null 时只留空轨道。
+///
+/// 紧凑档：高 4 → 3、圆角 2 → 1.5、下方留白 12 → 8。
 ///
 /// 只做可视化，不承载文字 —— 百分比读数由 `ContextWindowIndicator` 与头部副行
 /// 承担（不伪造百分比文案）。
@@ -1402,12 +1451,12 @@ class _ContextUsageBar extends StatelessWidget {
         _kPopoverWideHPad,
         0,
         _kPopoverWideHPad,
-        12,
+        8,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(1.5),
         child: SizedBox(
-          height: 4,
+          height: 3,
           child: Stack(
             children: [
               Positioned.fill(child: ColoredBox(color: track)),
@@ -1435,6 +1484,9 @@ class _CompressIconButton extends StatelessWidget {
     required this.compressing,
     required this.enabled,
     required this.onPressed,
+    this.size = 32,
+    this.iconSize = 18,
+    this.radius = 8,
   });
 
   final bool isHigh;
@@ -1442,6 +1494,15 @@ class _CompressIconButton extends StatelessWidget {
   final bool compressing;
   final bool enabled;
   final VoidCallback? onPressed;
+
+  /// 按钮直径（现状 32；宽屏紧凑档 26）。
+  final double size;
+
+  /// 图标字号（现状 18；宽屏紧凑档 15）。
+  final double iconSize;
+
+  /// 圆角（现状 8；宽屏紧凑档 7 = `kRadiusInline`）。
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
@@ -1473,8 +1534,8 @@ class _CompressIconButton extends StatelessWidget {
     }
 
     final child = compressing
-        ? const CupertinoActivityIndicator(radius: 10)
-        : Icon(CupertinoIcons.archivebox, size: 18, color: iconColor);
+        ? CupertinoActivityIndicator(radius: size >= 32 ? 10 : 8)
+        : Icon(CupertinoIcons.archivebox, size: iconSize, color: iconColor);
 
     return Semantics(
       button: true,
@@ -1482,11 +1543,11 @@ class _CompressIconButton extends StatelessWidget {
       label: 'Compress',
       child: CupertinoButton(
         padding: EdgeInsets.zero,
-        minimumSize: const Size(32, 32),
+        minimumSize: Size(size, size),
         onPressed: enabled && !compressing ? onPressed : null,
         child: Container(
-          width: 32,
-          height: 32,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: enabled
                 ? (isHigh
@@ -1515,7 +1576,7 @@ class _CompressIconButton extends StatelessWidget {
                     LightSurfaces.page,
                     dark: CupertinoColors.systemGrey5,
                   ).withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(radius),
             border: Border.all(
               color: enabled
                   ? (isHigh

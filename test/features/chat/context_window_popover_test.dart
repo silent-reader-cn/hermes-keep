@@ -688,7 +688,7 @@ void main() {
   });
 
   group('ContextWindowPopover 宽屏与自适应外壳下的下拉锚点位置与互斥测试', () {
-    testWidgets('宽屏 1200 视口下点击上下文指示器打开 popover，模型/工作区下拉紧贴触发器不飘到屏幕左侧', (
+    testWidgets('宽屏 1200 视口下点击上下文指示器打开 popover：只剩读数，模型/工作区入口整段不渲染', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1200, 800);
@@ -761,96 +761,30 @@ void main() {
       await tester.tap(indicatorFinder);
       await tester.pumpAndSettle();
 
-      // 验证 popover 已展示
-      final modelTriggerFinder = find.byKey(
-        const ValueKey('context-popover-model-trigger'),
-      );
-      expect(modelTriggerFinder, findsOneWidget);
-      final modelTriggerTopLeft = tester.getTopLeft(modelTriggerFinder);
-
-      // 1. 点击模型触发器展开模型下拉
-      await tester.tap(modelTriggerFinder);
-      await tester.pumpAndSettle();
-
-      final modelOptionFinder = find.byKey(
-        const ValueKey('context-popover-model-gpt-4o'),
-      );
-      expect(modelOptionFinder, findsOneWidget);
-
-      final modelOptionTopLeft = tester.getTopLeft(modelOptionFinder);
-      // 验证下拉选项紧贴模型触发器水平坐标
+      // 2026-10-07 拍板：宽屏弹层**只剩读数** —— 模型 / 工作区两个入口整段不渲染
+      // （宽屏输入行上本来就有那两个 chip，进弹层再选一次是重复入口）。
+      // 「下拉紧贴触发器」那条契约由窄屏用例覆盖（触发器只在窄屏存在）。
       expect(
-        (modelOptionTopLeft.dx - modelTriggerTopLeft.dx).abs(),
-        lessThan(30.0),
-      );
-      // 验证工作区下拉处于收起状态（互斥）
-      expect(
-        find.byKey(const ValueKey('workspace-item-default')),
-        findsNothing,
-      );
-
-      // 2. 打开工作区下拉。模型菜单悬浮会盖住下方内容：先点菜单外区域
-      // （popover 内容顶部）收起模型菜单，再点工作区触发器展开工作区下拉
-      final workspaceTriggerFinder = find.byKey(
-        const ValueKey('context-popover-workspace-trigger'),
-      );
-      expect(workspaceTriggerFinder, findsOneWidget);
-      await tester.ensureVisible(workspaceTriggerFinder);
-      await tester.pumpAndSettle();
-      final workspaceTriggerTopLeft = tester.getTopLeft(workspaceTriggerFinder);
-
-      // 点悬浮菜单外的屏障区域（弹层内容顶部）→ 收起模型菜单，不关弹层
-      await tester.tapAt(const Offset(900, 300));
-      await tester.pumpAndSettle();
-
-      // 验证模型下拉已收起
-      expect(
-        find.byKey(const ValueKey('context-popover-model-gpt-4o')),
-        findsNothing,
-      );
-
-      await tester.tap(workspaceTriggerFinder);
-      await tester.pumpAndSettle();
-
-      // 验证工作区下拉项展示
-      final workspaceOptionFinder = find.byKey(
-        const ValueKey('workspace-item-/home/user/other-project'),
-      );
-      expect(workspaceOptionFinder, findsOneWidget);
-
-      final workspaceOptionTopLeft = tester.getTopLeft(workspaceOptionFinder);
-      // 验证工作区下拉选项紧贴工作区触发器水平坐标
-      expect(
-        (workspaceOptionTopLeft.dx - workspaceTriggerTopLeft.dx).abs(),
-        lessThan(30.0),
-      );
-
-      // 3. 先收起工作区下拉（点菜单外屏障区域），再打开手动输入
-      final manualToggleFinder = find.byKey(
-        const ValueKey('context-popover-workspace-manual-toggle'),
-      );
-      await tester.ensureVisible(manualToggleFinder);
-      await tester.pumpAndSettle();
-
-      // 工作区菜单悬浮盖住该区域：点菜单外收起
-      await tester.tapAt(const Offset(900, 300));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('workspace-item-/home/user/other-project')),
-        findsNothing,
-      );
-
-      await tester.tap(manualToggleFinder);
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(const ValueKey('workspace-item-/home/user/other-project')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('context-popover-workspace-field')),
+        find.byKey(const ValueKey('context-popover-window-label')),
         findsOneWidget,
       );
+      expect(
+        find.byKey(const ValueKey('context-popover-usage-bar')),
+        findsOneWidget,
+      );
+      for (final removed in const <String>[
+        'context-popover-model-trigger',
+        'context-popover-workspace-trigger',
+        'context-popover-workspace-manual-toggle',
+        'context-popover-workspace-field',
+        'context-popover-close',
+      ]) {
+        expect(
+          find.byKey(ValueKey(removed)),
+          findsNothing,
+          reason: '宽屏弹层不应出现 $removed（重复入口）',
+        );
+      }
     });
 
     testWidgets('窄屏 400 视口下点击上下文指示器打开 popover，模型/工作区下拉紧贴触发器', (tester) async {

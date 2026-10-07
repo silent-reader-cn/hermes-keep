@@ -7,7 +7,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
-import 'package:hermes_ui/app/widgets/adaptive_action_menu.dart';
 import 'package:hermes_ui/app/widgets/menu_metrics.dart';
 import 'package:hermes_ui/app/widgets/picker_menu_content.dart';
 import 'package:hermes_ui/app/widgets/popover_dropdown.dart';
@@ -149,12 +148,19 @@ void main() {
   }
 
   group('宽屏（>=900）重排', () {
-    testWidgets('宽 300：大数字 + 已用/上限副行 + 进度条 + 数值 13pt + 去「关闭」行', (tester) async {
+    testWidgets('宽 248（紧凑档）：大数字 + 已用/上限副行 + 进度条 + 数值 13pt + 去「关闭」行', (
+      tester,
+    ) async {
       useViewport(tester, const Size(1200, 800));
       await tester.pumpWidget(host(child: popover(fullSnapshot)));
       await settle(tester);
 
-      expect(tester.getSize(find.byType(ContextWindowPopover)).width, 300);
+      // 紧凑档契约（主人 2026-10-07 反馈「太大」后收一档）：宽 300 → 248。
+      expect(kContextPopoverWideWidth, 248);
+      expect(
+        tester.getSize(find.byType(ContextWindowPopover)).width,
+        kContextPopoverWideWidth,
+      );
       // 大数字 = 窗口上限；副行 = 已用 · 上限
       expect(
         find.byKey(const ValueKey('context-popover-window-label')),
@@ -162,6 +168,16 @@ void main() {
       );
       expect(find.text('128.0K'), findsOneWidget);
       expect(find.text('已用 1.2K · 上限 128.0K'), findsOneWidget);
+      // 大数字回到字号梯子（紧凑档：kFontMetric 21 → kFontPageTitle 17）
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('context-popover-window-label')),
+            )
+            .style
+            ?.fontSize,
+        kFontPageTitle,
+      );
       // 进度条
       expect(
         find.byKey(const ValueKey('context-popover-usage-bar')),
@@ -169,6 +185,18 @@ void main() {
       );
       // 去「关闭」行（点外部即关）
       expect(find.byKey(const ValueKey('context-popover-close')), findsNothing);
+      // 去模型 / 工作区两个分区（主人 2026-10-07 拍板）：宽屏输入行上就有这两个
+      // chip，进弹层再选一次是重复入口 —— 触发器与当前值都不再出现在弹层里。
+      expect(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-workspace-trigger')),
+        findsNothing,
+      );
+      expect(find.text('gpt-4o'), findsNothing);
+      expect(find.text('Current model'), findsNothing);
       // 四项数值：13pt（kFontLabel）右对齐
       final thresholdValue = tester.widget<Text>(find.text('96.0K (75%)'));
       expect(thresholdValue.style?.fontSize, kFontLabel);
@@ -234,6 +262,15 @@ void main() {
         find.byKey(const ValueKey('context-popover-close')),
         findsOneWidget,
       );
+      // 窄屏没有输入行那排 chip ⇒ 模型 / 工作区两个分区照旧在（逐像素不变的一部分）。
+      expect(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-workspace-trigger')),
+        findsOneWidget,
+      );
       final thresholdValue = tester.widget<Text>(find.text('96.0K (75%)'));
       expect(thresholdValue.style?.fontSize, kFontCaption);
       expect(thresholdValue.style?.fontWeight, FontWeight.w500);
@@ -290,11 +327,16 @@ void main() {
     }
 
     /// 每一行都必须**完整**落在卡片内（`row.bottom <= 卡片底`）——历史实现把列表
-    /// 封顶 200，第 5 行起被切断；行高固定 44（浅/深两态一致）。
+    /// 封顶 200，第 5 行起被切断。
+    ///
+    /// 默认档 = [kMenuRowHeightTouch]：**弹层内层下拉只存在于窄屏**（宽屏弹层
+    /// 2026-10-07 起不渲染模型 / 工作区入口）⇒ 永远走触屏档；宽屏鼠标档
+    /// （36 / 双行 46 / 搜索框）在弹层里当前不可达，那一档仍由输入栏选择器的
+    /// 用例守住（`composer_meta_chips_test.dart`）。
     void expectAllRowsFullyVisible(
       WidgetTester tester,
       List<Key> rowKeys, {
-      double? rowHeight = kMenuRowHeightMouse,
+      double? rowHeight = kMenuRowHeightTouch,
     }) {
       final card = tester.getRect(find.byType(PopoverDropdownCard));
       for (final key in rowKeys) {
@@ -319,8 +361,10 @@ void main() {
       }
     }
 
-    testWidgets('宽屏模型下拉：7 行（6 模型 + 跟随默认）全部完整可见', (tester) async {
-      useViewport(tester, const Size(1280, 800));
+    testWidgets('模型下拉：7 行（6 模型 + 跟随默认）全部完整可见', (tester) async {
+      // 触发器只存在于窄屏（宽屏 2026-10-07 起整段不渲染模型 / 工作区分区），
+      // 故本组用例一律在窄屏视口下跑；菜单行为本身与屏宽无关。
+      useViewport(tester, const Size(800, 900));
       await tester.pumpWidget(
         host(child: popover(fullSnapshot), models: sixModels),
       );
@@ -336,21 +380,18 @@ void main() {
         expect(find.byKey(key), findsOneWidget);
       }
       expectAllRowsFullyVisible(tester, rowKeys);
-      // 卡片按内容摊开：搜索框块 39 + 7 行（宽屏鼠标档 36）+ 分组线 0.5 + 边框 2，
-      // 而不是旧实现的 200 + 2。行高与选择器同源（`kMenuRowHeightMouse`）。
+      // 卡片按内容摊开：7 行（窄屏触屏档 44）+ 边框 2 —— 而不是旧实现的 200 + 2；
+      // 窄屏档没有搜索框块与分组线（那是宽屏鼠标档的组成）。
       expect(
         tester.getRect(find.byType(PopoverDropdownCard)).height,
-        kPickerSearchBarBlockHeight +
-            7 * kMenuRowHeightMouse +
-            kActionMenuDividerHeight +
-            kPopoverMenuCardChrome,
+        7 * kMenuRowHeightTouch + kPopoverMenuCardChrome,
       );
       // 末行（此前整项不可见）文案可读
       expect(find.text('deepseek-v4'), findsOneWidget);
     });
 
-    testWidgets('宽屏工作区下拉：7 行（6 工作区 + 跟随默认）全部完整可见', (tester) async {
-      useViewport(tester, const Size(1280, 800));
+    testWidgets('工作区下拉：7 行（6 工作区 + 跟随默认）全部完整可见', (tester) async {
+      useViewport(tester, const Size(800, 900));
       await tester.pumpWidget(
         host(child: popover(fullSnapshot), workspaces: sixWorkspaces),
       );
@@ -366,8 +407,8 @@ void main() {
       for (final key in rowKeys) {
         expect(find.byKey(key), findsOneWidget);
       }
-      expectAllRowsFullyVisible(tester, rowKeys, rowHeight: null);
-      // 宽屏工作区项＝双行 46（与选择器同规格），元操作「跟随默认」＝单行 36
+      expectAllRowsFullyVisible(tester, rowKeys);
+      // 窄屏档工作区项＝**单行 44**（双行 46 是宽屏鼠标档的规格，弹层里不可达）
       for (var i = 0; i < 6; i++) {
         expect(
           tester
@@ -375,29 +416,24 @@ void main() {
                 find.byKey(ValueKey('workspace-item-/home/user/project-$i')),
               )
               .height,
-          kMenuRowHeightMouseTwoLine,
+          kMenuRowHeightTouch,
         );
       }
       expect(
         tester
             .getRect(find.byKey(const ValueKey('workspace-item-default')))
             .height,
-        kMenuRowHeightMouse,
+        kMenuRowHeightTouch,
       );
-      // 搜索框块 39 + 6 个工作区（宽屏双行 46）+ 分组线 0.5 + 跟随默认（单行 36）
-      // + 边框 2 —— 与输入栏选择器的双行工作区项同一套规格。
+      // 7 行（6 工作区 + 跟随默认）× 44 + 边框 2 —— 窄屏档无搜索框块与分组线。
       expect(
         tester.getRect(find.byType(PopoverDropdownCard)).height,
-        kPickerSearchBarBlockHeight +
-            6 * kMenuRowHeightMouseTwoLine +
-            kActionMenuDividerHeight +
-            kMenuRowHeightMouse +
-            kPopoverMenuCardChrome,
+        7 * kMenuRowHeightTouch + kPopoverMenuCardChrome,
       );
     });
 
-    testWidgets('宽屏推理强度下拉：5 档全部可见 + 宽 140 且右缘对齐触发器', (tester) async {
-      useViewport(tester, const Size(1280, 800));
+    testWidgets('推理强度下拉：5 档全部可见 + 宽 140 且右缘对齐触发器', (tester) async {
+      useViewport(tester, const Size(800, 900));
       await tester.pumpWidget(
         host(
           child: popover(fullSnapshot),
@@ -415,54 +451,23 @@ void main() {
       ]);
       final card = tester.getRect(find.byType(PopoverDropdownCard));
       expect(card.width, 140);
-      // 短枚举行（无搜索框）：5 × 36（鼠标档）+ 边框 2
-      expect(card.height, 5 * kMenuRowHeightMouse + kPopoverMenuCardChrome);
+      // 短枚举行（窄屏档无搜索框）：5 × 44（触屏档）+ 边框 2
+      expect(card.height, 5 * kMenuRowHeightTouch + kPopoverMenuCardChrome);
       final trigger = tester.getRect(
         find.byKey(const ValueKey('context-popover-reasoning-trigger')),
       );
       expect((card.right - trigger.right).abs(), lessThanOrEqualTo(0.5));
     });
 
-    testWidgets('与输入栏选择器**同档**：宽屏内层下拉也有搜索框 + 图标列；窄屏不出搜索框', (tester) async {
-      useViewport(tester, const Size(1280, 800));
-      await tester.pumpWidget(
-        host(
-          child: popover(fullSnapshot),
-          models: sixModels,
-          workspaces: sixWorkspaces,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // 宽屏：模型下拉 —— 搜索框 + 每行图标列（与选择器同一套语言）
-      await openMenu(tester, 'context-popover-model-trigger');
-      expect(
-        find.byKey(const ValueKey('context-popover-model-search')),
-        findsOneWidget,
-        reason: '内层下拉应与选择器一样带搜索框',
-      );
-      expect(
-        find.byIcon(CupertinoIcons.sparkles),
-        findsWidgets,
-        reason: '内层下拉的每行应有图标列',
-      );
-      await tester.tapAt(const Offset(20, 20));
-      await tester.pumpAndSettle();
-
-      // 宽屏：工作区下拉 —— 双行（名称 + 路径）两段独立文本
-      await openMenu(tester, 'context-popover-workspace-trigger');
-      expect(
-        find.byKey(const ValueKey('context-popover-workspace-search')),
-        findsOneWidget,
-      );
-      expect(find.byIcon(CupertinoIcons.folder), findsWidgets);
-      await tester.tapAt(const Offset(20, 20));
-      await tester.pumpAndSettle();
-
-      // 窄屏（<900）：不出搜索框（与选择器同口径 —— 手机端逐像素不变）
+    testWidgets('与输入栏选择器**同档**：弹层内层下拉（可达档＝窄屏触屏档）无搜索框、行高 44', (
+      tester,
+    ) async {
+      // 背景：宽屏弹层 2026-10-07 起不渲染模型 / 工作区入口 ⇒ 弹层内层下拉**只可能
+      // 出现在窄屏**，永远走触屏档（44 / 无搜索框 / 无分组线）。宽屏鼠标档
+      // （36 / 双行 46 / 搜索框 + 图标列）在弹层里当前不可达，那一档由输入栏
+      // 选择器的用例守住（`composer_meta_chips_test.dart` 的①–⑥）。
       useViewport(tester, const Size(400, 800));
       await tester.pumpWidget(
-        // override 数量必须与上一次 pump 一致（riverpod 不允许增删 override）
         host(
           child: popover(fullSnapshot),
           models: sixModels,
@@ -470,13 +475,30 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+
       await openMenu(tester, 'context-popover-model-trigger');
       expect(
         find.byKey(const ValueKey('context-popover-model-search')),
         findsNothing,
+        reason: '窄屏档不出搜索框（与输入栏选择器窄屏同口径）',
       );
-    });
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('context-popover-model-gpt-5.2')))
+            .height,
+        kMenuRowHeightTouch,
+      );
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
 
+      await openMenu(tester, 'context-popover-workspace-trigger');
+      expect(
+        find.byKey(const ValueKey('context-popover-workspace-search')),
+        findsNothing,
+      );
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+    });
     testWidgets('回落向下：菜单顶边 = 触发器底边 + 8；高度按行边界 + 上限 420 收紧', (tester) async {
       // 800×900 + 弹层贴顶：上方 / 下方都放不下 21 行（926），取较大的一侧 = 下方；
       // 可用高度被上限 420 收住 → fitMenuHeight 取整行最大前缀（不切行、不盖触发器）。
@@ -537,7 +559,7 @@ void main() {
     });
 
     testWidgets('浅/深两态：模型下拉的行矩形与卡片矩形逐像素一致', (tester) async {
-      useViewport(tester, const Size(1280, 800));
+      useViewport(tester, const Size(800, 900));
 
       Future<Map<String, Rect>> measure(Brightness brightness) async {
         await tester.pumpWidget(

@@ -25,6 +25,9 @@ Future<void> showCupertinoPopover({
   double maxHeight = 420,
   double gap = 8,
   VoidCallback? onClosed,
+
+  /// 卡片圆角（默认浮层族 [kAdaptivePopoverRadius] = 14；单个弹层可收一档）。
+  double radius = kAdaptivePopoverRadius,
 }) {
   return showAdaptivePopover(
     context: context,
@@ -44,5 +47,6 @@ Future<void> showCupertinoPopover({
     maxHeight: maxHeight,
     gap: gap,
     onClosed: onClosed,
+    radius: radius,
   );
 }
