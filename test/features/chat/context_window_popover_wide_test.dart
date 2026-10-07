@@ -184,6 +184,18 @@ void main() {
       );
       // 去「关闭」行（点外部即关）
       expect(find.byKey(const ValueKey('context-popover-close')), findsNothing);
+      // 去模型 / 工作区两个分区（主人 2026-10-07 拍板）：宽屏输入行上就有这两个
+      // chip，进弹层再选一次是重复入口 —— 触发器与当前值都不再出现在弹层里。
+      expect(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-workspace-trigger')),
+        findsNothing,
+      );
+      expect(find.text('gpt-4o'), findsNothing);
+      expect(find.text('Current model'), findsNothing);
       // 四项数值：13pt（kFontLabel）右对齐
       final thresholdValue = tester.widget<Text>(find.text('96.0K (75%)'));
       expect(thresholdValue.style?.fontSize, kFontLabel);
@@ -247,6 +259,15 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('context-popover-close')),
+        findsOneWidget,
+      );
+      // 窄屏没有输入行那排 chip ⇒ 模型 / 工作区两个分区照旧在（逐像素不变的一部分）。
+      expect(
+        find.byKey(const ValueKey('context-popover-model-trigger')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('context-popover-workspace-trigger')),
         findsOneWidget,
       );
       final thresholdValue = tester.widget<Text>(find.text('96.0K (75%)'));
@@ -324,8 +345,10 @@ void main() {
       }
     }
 
-    testWidgets('宽屏模型下拉：7 行（6 模型 + 跟随默认）全部完整可见', (tester) async {
-      useViewport(tester, const Size(1280, 800));
+    testWidgets('模型下拉：7 行（6 模型 + 跟随默认）全部完整可见', (tester) async {
+      // 触发器只存在于窄屏（宽屏 2026-10-07 起整段不渲染模型 / 工作区分区），
+      // 故本组用例一律在窄屏视口下跑；菜单行为本身与屏宽无关。
+      useViewport(tester, const Size(800, 900));
       await tester.pumpWidget(
         host(child: popover(fullSnapshot), models: sixModels),
       );
@@ -350,8 +373,8 @@ void main() {
       expect(find.text('deepseek-v4'), findsOneWidget);
     });
 
-    testWidgets('宽屏工作区下拉：7 行（6 工作区 + 跟随默认）全部完整可见', (tester) async {
-      useViewport(tester, const Size(1280, 800));
+    testWidgets('工作区下拉：7 行（6 工作区 + 跟随默认）全部完整可见', (tester) async {
+      useViewport(tester, const Size(800, 900));
       await tester.pumpWidget(
         host(child: popover(fullSnapshot), workspaces: sixWorkspaces),
       );
@@ -374,8 +397,8 @@ void main() {
       );
     });
 
-    testWidgets('宽屏推理强度下拉：5 档全部可见 + 宽 140 且右缘对齐触发器', (tester) async {
-      useViewport(tester, const Size(1280, 800));
+    testWidgets('推理强度下拉：5 档全部可见 + 宽 140 且右缘对齐触发器', (tester) async {
+      useViewport(tester, const Size(800, 900));
       await tester.pumpWidget(
         host(
           child: popover(fullSnapshot),
@@ -459,7 +482,7 @@ void main() {
     });
 
     testWidgets('浅/深两态：模型下拉的行矩形与卡片矩形逐像素一致', (tester) async {
-      useViewport(tester, const Size(1280, 800));
+      useViewport(tester, const Size(800, 900));
 
       Future<Map<String, Rect>> measure(Brightness brightness) async {
         await tester.pumpWidget(
