@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/widgets/adaptive_popover.dart';
+import 'package:hermes_ui/app/widgets/icon_hover_disk.dart';
 import 'package:hermes_ui/core/connections/connection_providers.dart';
 import 'package:hermes_ui/core/connections/connection_store.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
@@ -19,7 +20,7 @@ import '../../golden/golden_helpers.dart';
 import '../../helpers/fake_chat_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
 
-/// 批次 5B · §D3（宽屏右键菜单密排）+ §D4（菜单触发三入口统一）验收护栏。
+/// 批次 5B · §D3（宽屏右键菜单密排）+ §D4（鼠标端入口统一）验收护栏。
 ///
 /// 契约（数值即规格，改坏必红）：
 /// - **§D3 密排**：宽屏菜单行高 **30**（触屏档 44 是手指档位，鼠标端不要）、
@@ -28,8 +29,11 @@ import '../../helpers/in_memory_secure_storage.dart';
 /// - **§D3 快捷键必须真的能触发**：右侧列画出的组合与点击走**同一个回调**
 ///   ⇒ 本文件用真实按键（Ctrl+C / Ctrl+Shift+C / Ctrl+Alt+C / Enter）验证
 ///   剪贴板与编辑回填，杜绝「只显示不触发」的伪造功能；
-/// - **§D4 三入口一致**：右键 / 悬停「⋯」/ 键盘（Shift+F10 或 Menu 键）打开的
-///   是**同一个菜单**（按键集合逐个相同），键盘入口的焦点行带 2px 蓝焦点环；
+/// - **§D4 双入口一致**：右键 / 键盘（Shift+F10 或 Menu 键）打开的是**同一个菜单**
+///   （按键集合逐个相同），键盘入口的焦点行带 2px 蓝焦点环；
+/// - **§D4 悬停入口已按产品指令删除**：鼠标悬停整行**不得**浮出任何「⋯」按钮
+///   （会遮挡正文；原 `msg-row-hover-actions` 稳定 key 随入口一并删除）。右键仍由
+///   #134 的 `Listener` 承担，不得回退成 `GestureDetector`。
 /// - **窄屏不变**：仍走长按 → `CupertinoActionSheet`（44 行），无密排行、无分组线、
 ///   无快捷键列、无悬停「⋯」、无焦点环。
 ///
@@ -220,7 +224,7 @@ void main() {
   const userText = '帮我写一段 Python 数据清洗脚本';
   const assistantText = '好的，这是清洗脚本的骨架。';
 
-  /// §D4「三入口打开同一个菜单」的期望内容：右键 / 悬停「⋯」/ 键盘三处逐个对齐它。
+  /// §D4「双入口打开同一个菜单」的期望内容：右键 / 键盘两处逐个对齐它。
   const expectedWideMenuKeys = {
     'msg-action-copy',
     'msg-action-copy-md',
@@ -500,7 +504,7 @@ void main() {
     });
   });
 
-  group('§D4 三入口统一（右键 / 悬停 ⋯ / 键盘）', () {
+  group('§D4 鼠标端入口统一（右键 / 键盘）', () {
     testWidgets('入口①右键 → 菜单内容 = 期望集合（见 D3 用例）', (tester) async {
       await boot(
         tester,
@@ -516,7 +520,7 @@ void main() {
       );
     });
 
-    testWidgets('入口②悬停整行 → 行尾浮出「⋯」，点它打开同一套菜单', (tester) async {
+    testWidgets('悬停整行不再浮出「⋯」（入口②已按产品指令删除）', (tester) async {
       await boot(
         tester,
         messages: [
@@ -524,29 +528,31 @@ void main() {
         ],
       );
 
-      const buttonKey = ValueKey('msg-row-hover-actions');
-      expect(
-        find.byKey(buttonKey),
-        findsNothing,
-        reason: '未悬停时不得常驻「⋯」（只有鼠标压上来才出现）',
-      );
+      // 悬停前的 ellipsis 基数：不写「全局恰好 N 个」这类脆弱判据
+      // （侧栏 / 工具栏另有同款图标），只断言「悬停不新增」。
+      final ellipsisBefore = find
+          .byIcon(CupertinoIcons.ellipsis)
+          .evaluate()
+          .length;
 
       final gesture = await hoverRow(tester, userText);
-      expect(
-        find.byKey(buttonKey),
-        findsOneWidget,
-        reason: '§D4 悬停整行必须浮出「⋯」入口',
-      );
-
-      await tester.tap(find.byKey(buttonKey));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
 
       expect(
-        visibleMenuKeys(),
-        expectedWideMenuKeys,
-        reason: '§D4 入口②（悬停「⋯」）打开的必须与右键同一个菜单',
+        find.byKey(const ValueKey('msg-row-hover-actions')),
+        findsNothing,
+        reason: '产品指令：悬停不得浮出会遮挡正文的「⋯」入口（该稳定 key 已随入口删除）',
       );
+      expect(
+        find.byType(IconHoverDisk),
+        findsNothing,
+        reason: '悬停「⋯」的载体（G3 圆底盘）不得再挂在消息行上',
+      );
+      expect(
+        find.byIcon(CupertinoIcons.ellipsis).evaluate().length,
+        ellipsisBefore,
+        reason: '悬停整行不得新增任何「⋯」图标（正文上不得有浮层遮挡）',
+      );
+
       await gesture.removePointer();
     });
 
@@ -718,11 +724,11 @@ void main() {
       ]) {
         expect(find.text(label), findsNothing, reason: '窄屏不得出现快捷键列');
       }
-      // 窄屏不给悬停/键盘入口（MouseRegion/Focus 都不挂）。
+      // 窄屏不给悬停/键盘入口（Focus 不挂）；宽屏的悬停「⋯」入口也已按产品指令删除。
       expect(
         find.byKey(const ValueKey('msg-row-hover-actions')),
         findsNothing,
-        reason: '窄屏不得常驻「⋯」入口',
+        reason: '窄屏不得有悬停「⋯」入口（该入口已全端删除）',
       );
 
       // 触屏档行高：ActionSheet 的动作行高于密排档 30。
@@ -787,5 +793,23 @@ void main() {
       find.byType(CupertinoApp),
       matchesGoldenFile('../../../.shots/narrow_message_sheet_light.png'),
     );
+  }, skip: !capture);
+
+  // 产品指令的目检图：悬停整行**不得**浮出「⋯」（改前这里有按钮、改后没有）。
+  testWidgets('目检图 · 宽屏悬停整行（浅色，核对正文无「⋯」浮层）', (tester) async {
+    Directory('.shots').createSync(recursive: true);
+    await boot(
+      tester,
+      messages: [
+        {'role': 'user', 'content': userText, 'message_id': 'm1'},
+        {'role': 'assistant', 'content': assistantText, 'message_id': 'm2'},
+      ],
+    );
+    final gesture = await hoverRow(tester, userText);
+    await expectLater(
+      find.byType(CupertinoApp),
+      matchesGoldenFile('../../../.shots/wide_row_hover_light.png'),
+    );
+    await gesture.removePointer();
   }, skip: !capture);
 }
