@@ -22,6 +22,7 @@ import 'injected_notice_card.dart';
 import 'markdown_styles.dart';
 import 'selected_context_card.dart';
 import 'tool_call_card.dart';
+import 'user_attachment_block.dart';
 
 /// 消息内区块统一间距（思考卡 / 工具卡 / 正文 / 选中上下文卡之间固定间隔）。
 const double kMessageSectionGap = 8.0;
@@ -130,9 +131,18 @@ class ChatMessageBubble extends StatelessWidget {
         //   assistant 无泡」后，深浅模式样式天然一致（正文/代码块/卡片
         //   各有自身的色块与间距承载层级）。
         if (isUser) {
+          // 带图消息：气泡收窄到「附件区宽 + 内边距」，并夹在最小宽度与
+          // `0.78 × 槽宽` 之间（下限永不超过上限，见 preferredBubbleWidth）；
+          // 无图片附件的消息维持原 0.78 逻辑不变。
+          final maxBubbleWidth =
+              UserAttachmentBlock.preferredBubbleWidth(
+                message.attachments,
+                constraints.maxWidth,
+              ) ??
+              constraints.maxWidth * 0.78;
           final bubble = Container(
             key: const ValueKey('chat-message-bubble'),
-            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.78),
+            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
               color: CupertinoColors.activeBlue.resolveFrom(context),
@@ -325,13 +335,11 @@ class _UserContent extends StatelessWidget {
         if (message.attachments?.isNotEmpty == true) ...[
           if (blocks.isNotEmpty || parsedDisplay.isNotEmpty)
             const SizedBox(height: 6),
-          for (final attachment in message.attachments!)
-            _AttachmentChip(
-              attachment: attachment,
-              baseUrl: baseUrl,
-              sessionId: sessionId,
-              customHeaders: customHeaders,
-            ),
+          UserAttachmentBlock(
+            attachments: message.attachments!,
+            baseUrl: baseUrl,
+            sessionId: sessionId,
+          ),
         ],
       ],
     );
@@ -529,32 +537,6 @@ class _AssistantContent extends StatelessWidget {
       if (seen.add(key)) out.add(g);
     }
     return out;
-  }
-}
-
-/// 附件条（图片/文件芯片）。
-class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip({
-    required this.attachment,
-    this.baseUrl,
-    this.sessionId,
-    this.customHeaders,
-  });
-
-  final MessageAttachment attachment;
-  final String? baseUrl;
-  final String? sessionId;
-  final Map<String, String>? customHeaders;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChatAttachmentChipView(
-      attachment: attachment,
-      baseUrl: baseUrl,
-      sessionId: sessionId,
-      customHeaders: customHeaders,
-      isUserMessage: true,
-    );
   }
 }
 

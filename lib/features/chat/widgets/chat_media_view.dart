@@ -70,6 +70,8 @@ class ChatInlineMediaWidget extends ConsumerStatefulWidget {
     this.maxWidth = 360,
     this.maxHeight = 320,
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
+    this.fit = BoxFit.contain,
+    this.padding = const EdgeInsets.symmetric(vertical: 4),
   });
 
   final String rawUri;
@@ -84,6 +86,13 @@ class ChatInlineMediaWidget extends ConsumerStatefulWidget {
   final double maxWidth;
   final double maxHeight;
   final BorderRadius borderRadius;
+
+  /// 图片填充方式。宫格瓦片用 [BoxFit.cover]（裁切成方），单图预览保持 contain。
+  final BoxFit fit;
+
+  /// 组件自带的外边距（默认上下各 4）。宫格排布时传 [EdgeInsets.zero]，
+  /// 间距统一交给宫格的 spacing / runSpacing。
+  final EdgeInsetsGeometry padding;
 
   @override
   ConsumerState<ChatInlineMediaWidget> createState() =>
@@ -120,7 +129,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
     if (shouldGate) {
       final displayName = widget.alt ?? widget.title;
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: widget.padding,
         child: Container(
           constraints: BoxConstraints(
             minWidth: 32,
@@ -234,7 +243,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
           memoryBytes = base64Decode(payload);
           imageWidget = Image.memory(
             memoryBytes,
-            fit: BoxFit.contain,
+            fit: widget.fit,
             errorBuilder: (context, error, stackTrace) {
               DiagnosticsService.instance.log(
                 level: DiagnosticsLogLevel.error,
@@ -274,7 +283,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
       imageWidget = fileAsync.when(
         data: (file) => Image.file(
           file,
-          fit: BoxFit.contain,
+          fit: widget.fit,
           gaplessPlayback: true,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (wasSynchronouslyLoaded || frame != null) {
@@ -328,7 +337,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
     } else if (!kIsWeb && File(resolvedUrl).existsSync()) {
       imageWidget = Image.file(
         File(resolvedUrl),
-        fit: BoxFit.contain,
+        fit: widget.fit,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded || frame != null) {
@@ -368,7 +377,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: widget.padding,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _openImageLightbox(
@@ -1450,156 +1459,6 @@ class _ImageErrorPlaceholder extends ConsumerWidget {
               ],
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-/// 附件芯片组件（图片/音频/视频/文档）。
-class ChatAttachmentChipView extends StatelessWidget {
-  const ChatAttachmentChipView({
-    super.key,
-    required this.attachment,
-    this.baseUrl,
-    this.sessionId,
-    this.customHeaders,
-    this.isUserMessage = false,
-  });
-
-  final MessageAttachment attachment;
-  final String? baseUrl;
-  final String? sessionId;
-  final Map<String, String>? customHeaders;
-  final bool isUserMessage;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final name = attachment.name ?? attachment.path ?? l10n.attachmentFallback;
-    final isImage = attachment.isImage == true;
-    final pathOrName = attachment.path ?? attachment.name ?? '';
-    final kind = MessageAttachment.mediaKindForName(pathOrName);
-
-    IconData iconData;
-    switch (kind) {
-      case MessageMediaKind.image:
-        iconData = CupertinoIcons.photo;
-      case MessageMediaKind.audio:
-        iconData = CupertinoIcons.music_note;
-      case MessageMediaKind.video:
-        iconData = CupertinoIcons.film;
-      case MessageMediaKind.document:
-        iconData = CupertinoIcons.doc_text;
-      case MessageMediaKind.file:
-        iconData = CupertinoIcons.paperclip;
-    }
-
-    final bgColor = isUserMessage
-        ? LightSurfaces.resolve(
-            context,
-            LightSurfaces.userDetail,
-            dark: CupertinoColors.white.withValues(alpha: 0.22),
-          )
-        : LightSurfaces.resolve(
-            context,
-            LightSurfaces.card,
-            dark: CupertinoColors.systemGrey5,
-          );
-    final fgColor = isUserMessage
-        ? CupertinoColors.white
-        : CupertinoColors.label.resolveFrom(context);
-    final iconColor = isUserMessage
-        ? CupertinoColors.white
-        : LightSurfaces.resolve(
-            context,
-            LightSurfaces.textSecondary,
-            dark: CupertinoColors.secondaryLabel,
-          );
-
-    // 用户消息中的图片附件：若有具体路径则展示内联预览与芯片
-    final hasImagePath =
-        isImage &&
-        attachment.path != null &&
-        attachment.path!.isNotEmpty &&
-        (attachment.path!.contains('/') ||
-            attachment.path!.contains(r'\\') ||
-            attachment.path!.startsWith('data:'));
-    final resolvedUrl = pathOrName.isNotEmpty
-        ? ChatMediaResolver.resolveMediaUrl(
-            pathOrName,
-            baseUrl: baseUrl,
-            sessionId: sessionId,
-          )
-        : '';
-
-    final identityKey =
-        attachment.identityKey ?? attachment.name ?? attachment.path ?? 'chip';
-
-    final chipWidget = Container(
-      key: ValueKey('attachment-chip-preview-$identityKey'),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        border: CupertinoTheme.brightnessOf(context) == Brightness.light
-            ? Border.all(color: LightSurfaces.cardBorder, width: 0.5)
-            : null,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(iconData, size: 13, color: iconColor),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              name,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: kFontCaption, color: fgColor),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    final interactiveChip = Semantics(
-      button: true,
-      label: 'Preview $name',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => showAttachmentPreview(
-          context,
-          resolvedUrl: resolvedUrl.isNotEmpty ? resolvedUrl : null,
-          name: name,
-          altText: name,
-          isImage: isImage || kind == MessageMediaKind.image,
-          sessionId: sessionId,
-          expectedBytes: attachment.size,
-          mimeType: attachment.mime,
-        ),
-        child: chipWidget,
-      ),
-    );
-
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      child: Column(
-        crossAxisAlignment: isUserMessage
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [
-          if (hasImagePath)
-            ChatInlineMediaWidget(
-              rawUri: pathOrName,
-              title: name,
-              alt: name,
-              baseUrl: baseUrl,
-              sessionId: sessionId,
-              customHeaders: customHeaders,
-              maxWidth: 240,
-              maxHeight: 180,
-            ),
-          interactiveChip,
         ],
       ),
     );

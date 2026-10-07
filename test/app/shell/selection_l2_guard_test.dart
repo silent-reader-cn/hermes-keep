@@ -21,12 +21,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../helpers/fake_session_list_api.dart';
 import '../../helpers/in_memory_secure_storage.dart';
 
-/// L2 选中态渲染守卫（浅色档落码；暗色档与窄屏逐像素不变）。
+/// L2 选中态渲染守卫（**2026-10-07 定稿口径**）。
 ///
-/// 契约：`sketches/selection-light-mode-proposal.html` §3/§4 ——
-/// hover 底 `rgba(120,120,128,.10)`、选中底 `rgba(120,120,128,.16)` +
-/// 前景（文字**和**图标）`#005FB8`、当前态另加内描边 `rgba(0,95,184,.28)`。
-/// 令牌取值守卫见 `test/app/theme/selection_l2_tokens_test.dart`。
+/// 契约：宽屏侧栏「当前会话」行 ——
+/// 浅色 = 纯底色 `rgba(120,120,128,.20)` + 深色字 `label` 且 `w600`，
+/// **无内描边、无左侧短杠/轨条**；暗色 = 深灰底 `#2C2C2E` + 白字（同一套
+/// 「无描边无轨条」）。hover 底仍为 `rgba(120,120,128,.10)`（浅色）。
+/// 窄屏（`!compact`）逐像素不变：仍是旧浅蓝 `#E0ECFF` / 暗色 `0xFF2C2C2E`。
 class _EmptyProjectsController extends ProjectsController {
   @override
   Future<List<ProjectSummary>> build() async => const [];
@@ -229,9 +230,9 @@ void main() {
       expect(_rowDecoration(tester, 'beta').color, LightSurfaces.hoverSurface);
     });
 
-    testWidgets('高亮行内的图标（悬停出现的「⋯」）同样转 #005FB8', (tester) async {
+    testWidgets('高亮行内的图标（悬停出现的「⋯」）用深色 label，不再转 #005FB8', (tester) async {
       // 多选模式下 onActions 为 null（无「⋯」按钮），故用「当前会话」行验证
-      // 图标转蓝路径：同一 l2Selection 判定驱动文字与图标。
+      // 图标前景路径：同一 l2Selection 判定驱动文字与图标。
       await _pumpSidebar(tester, brightness: Brightness.light, selectBeta: false);
       await _hover(tester, 'alpha');
 
@@ -240,9 +241,11 @@ void main() {
       final icon = tester.widget<Icon>(
         find.descendant(of: key, matching: find.byType(Icon)),
       );
-      expect(icon.color, LightSurfaces.selectionForeground);
+      // 定稿：浅色「当前」行前景是 label（黑），不再转品牌蓝。
+      expect(icon.color?.toARGB32(), 0xFF000000);
+      expect(icon.color, isNot(LightSurfaces.selectionForeground));
 
-      // 未高亮行的同一按钮仍是次级灰（前景不因 hover 变色）。
+      // 未高亮行的同一按钮不出现（前景不因 hover 变色）。
       final gammaAction = find.byKey(const ValueKey('session-inline-actions-gamma'));
       expect(gammaAction, findsNothing);
     });
@@ -258,25 +261,33 @@ void main() {
       expect(_rowTitleColor(tester, 'gamma', _titleGamma), isNot(LightSurfaces.selectionForeground));
     });
 
-    testWidgets('当前会话 = 选中 + 内描边 rgba(0,95,184,.28)，2px 蓝条保留', (tester) async {
+    testWidgets('当前会话 = 纯底色 rgba(120,120,128,.20) + 深色字 w600（无描边、无蓝条）', (tester) async {
       await _pumpSidebar(tester, brightness: Brightness.light);
 
-      expect(_rowDecoration(tester, 'alpha').color, LightSurfaces.selectedSurface);
-      final side = _rowShape(tester, 'alpha').side;
-      expect(side.color, LightSurfaces.currentStroke);
-      expect(side.width, 1.0);
-      expect(_rowTitleColor(tester, 'alpha', _titleAlpha), LightSurfaces.selectionForeground);
+      // 底色独立承担「当前」语义：比 hover 深一档的中性灰。
+      expect(
+        _rowDecoration(tester, 'alpha').color?.toARGB32(),
+        const Color.fromRGBO(120, 120, 128, 0.20).toARGB32(),
+      );
+      // 不再画内描边。
+      expect(_rowShape(tester, 'alpha').side, BorderSide.none);
+      // 前景是深色 label（不是品牌蓝），并用 w600 立层级。
+      expect(_rowTitleColor(tester, 'alpha', _titleAlpha)?.toARGB32(), 0xFF000000);
+      final title = tester.widget<Text>(
+        find.descendant(of: _row('alpha'), matching: find.text(_titleAlpha)),
+      );
+      expect(title.style?.fontWeight, FontWeight.w600);
 
-      // 非当前行不得有描边（K1 后已勾选行连底都没有 ⇒ 直接断言无着色面）。
+      // 非当前行不得有着色面（K1：已勾选行连底都没有）。
       expect(_rowHasSurface(tester, 'beta'), isFalse);
 
-      // 左侧 2px 蓝条（#161 既有语义）保留。
+      // 左侧短杠/轨条一律不再渲染（原先 2×10 蓝短杠已随定稿摘除）。
       final bars = tester
           .widgetList<Container>(
             find.descendant(of: _row('alpha'), matching: find.byType(Container)),
           )
           .where((c) => c.constraints?.maxWidth == 2.0);
-      expect(bars, isNotEmpty);
+      expect(bars, isEmpty);
     });
 
     testWidgets('侧栏工具行选中态 = 中性灰底 + 蓝图标（浅色）', (tester) async {
@@ -350,15 +361,20 @@ void main() {
   });
 
   group('暗色档逐字节不变', () {
-    testWidgets('已勾选行不着色（K1 与浅色一致）· 无内描边、无 hover 底；「当前」用暗色蓝前景', (tester) async {
+    testWidgets('已勾选行不着色（K1 与浅色一致）· 无内描边、无 hover 底；「当前」深灰底 + 白字', (tester) async {
       await _pumpSidebar(tester, brightness: Brightness.dark);
 
       // K1：暗色的多选行同样不着色（只靠勾选框），与浅色同一套语义。
       expect(_rowHasSurface(tester, 'beta'), isFalse);
       expect(_rowShape(tester, 'alpha').side, BorderSide.none);
       expect(_rowTitleColor(tester, 'beta', _titleBeta), isNot(LightSurfaces.selectionForeground));
-      // 明暗同一套逻辑：暗色「当前」行的前景是暗色蓝 #0A84FF（不是浅色的 #005FB8）。
-      expect(_rowTitleColor(tester, 'alpha', _titleAlpha)?.toARGB32(), 0xFF0A84FF);
+      // 定稿（暗色）：深灰底 #2C2C2E + 白字 —— 暗底上「抬起一层」的填充语义
+      // （浅色那套 rgba 叠层在纯黑页上几乎不可见）。
+      expect(
+        _rowDecoration(tester, 'alpha').color?.toARGB32(),
+        0xFF2C2C2E,
+      );
+      expect(_rowTitleColor(tester, 'alpha', _titleAlpha)?.toARGB32(), 0xFFFFFFFF);
 
       await _hover(tester, 'gamma');
       expect(_anySurface(LightSurfaces.hoverSurface), findsNothing);
