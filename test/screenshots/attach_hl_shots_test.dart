@@ -212,7 +212,7 @@ List<File> _imageFiles() {
   return files;
 }
 
-/// 按 URL 里的 `path=` 尾段挑真实图片文件（三张截图的字节）。
+/// 按 URL 里的 `path=` 参数挑真实图片文件（三张截图的字节）。
 File _imageFileForUrl(String url) {
   final dir = Directory(_imageDir);
   final files = dir
@@ -224,15 +224,18 @@ File _imageFileForUrl(String url) {
   if (files.isEmpty) {
     throw StateError('ATTACH_SHOTS_DIR 下没有 PNG：$_imageDir');
   }
-  String decoded;
+  // ⚠️ 别再退回「整条 URL endsWith(文件名)」：附件图 URL 是
+  // `/api/media?path=…&session_id=…`，文件名不在末尾 ⇒ 匹配必失败、静默落到
+  // `files.first`，同一消息里的三张不同图会渲染成同一张。
+  var probe = url;
   try {
-    decoded = Uri.decodeComponent(url);
-  } on FormatException {
-    decoded = url;
+    probe = Uri.parse(url).queryParameters['path'] ?? url;
+  } catch (_) {
+    // 非法 URL：退回原串比对
   }
   for (final file in files) {
     final base = file.uri.pathSegments.last;
-    if (decoded.endsWith(base)) return file;
+    if (probe.endsWith(base) || url.endsWith(base)) return file;
   }
   return files.first;
 }
