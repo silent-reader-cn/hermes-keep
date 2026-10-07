@@ -2414,10 +2414,12 @@ class _SessionRowState extends State<_SessionRow> {
       LightSurfaces.textSecondary,
       dark: secondaryText,
     );
-    // 当前会话行的次级前景（右侧时间 / 活动指示器）：实心蓝底档转半透明白，
-    // 其余档与普通行同色（现状不变）。
+    // 当前会话行的次级前景（右侧时间 / 活动指示器）：暗色实心蓝底档转
+    // 半透明白；浅色纯底色档与普通行同灰。
     final currentSecondaryColor =
-        (widget.compact && widget.isCurrent && kSidebarCurrentHighlight == 1)
+        (widget.compact &&
+            widget.isCurrent &&
+            _compactCurrentUsesWhiteText(context))
         ? CupertinoColors.white.withValues(alpha: 0.82)
         : secondaryColor;
     final pinned = widget.session.pinned == true;
@@ -2439,10 +2441,9 @@ class _SessionRowState extends State<_SessionRow> {
     final hasIcons = iconWidgets.isNotEmpty;
 
     final isLight = CupertinoTheme.brightnessOf(context) == Brightness.light;
-    // L2 选中态（2026-09-27 主人拍板，规格见
-    // `sketches/selection-light-mode-proposal.html` §4）：宽屏侧栏紧凑行
-    // 选中底改中性灰 .16、前景（文字与图标）转 #005FB8、当前会话加内描边；
-    // hover 底 .10 为本次新增。**窄屏（!compact）与暗色分支逐字节不变**：
+    // L2 选中态（2026-09-27 首版 → **2026-10-07 定稿**）：宽屏侧栏紧凑行的
+    // 「当前会话」= 浅色纯底色（中性 #787880@20% + 深色字 w600，无描边无轨条）
+    // / 暗色实心蓝底 + 白字；hover 底 .10 保持。**窄屏（!compact）逐像素不变**：
     // 选中底仍为旧浅蓝 [LightSurfaces.selection] / 暗色 0xFF2C2C2E，
     // 且 `_hovering` 只在 compact 置位、`isCurrent` 只在 compact 下传。
     // #175 / K1（主人 2026-09-27 拍板）：宽屏多选态**不再**用底色与蓝字表达「已勾选」
@@ -2454,7 +2455,6 @@ class _SessionRowState extends State<_SessionRow> {
         : (widget.selected || widget.isCurrent);
     // 明暗两态共用同一套逻辑（中性底 + 蓝前景）：浅色 #005FB8 / 暗色 #0A84FF。
     final l2Selection = widget.compact && highlighted;
-    final l2Current = isLight && widget.compact && widget.isCurrent;
     // #150 档 B（对齐设计稿）：侧栏紧凑模式下，元信息不再另起一行，
     // 只在用户显式开启副标题项时保留第二行；默认右侧显示极简相对时间。
     // 紧凑模式（侧栏）**永远单行**：副标题项不另起一行，而是把「最有信息量的
@@ -2533,10 +2533,10 @@ class _SessionRowState extends State<_SessionRow> {
                               color: l2Selection
                                   ? _compactCurrentForeground(context)
                                   : null,
-                              // 档 2/3：当前行靠字重承担层级（底色更淡）
+                              // 浅色纯底色档：层级靠字重（底色更淡）
                               fontWeight:
                                   l2Selection &&
-                                      kSidebarCurrentHighlight >= 2
+                                      !_compactCurrentUsesWhiteText(context)
                                   ? FontWeight.w600
                                   : null,
                             ),
@@ -2665,36 +2665,31 @@ class _SessionRowState extends State<_SessionRow> {
     final compactActions = widget.compact && widget.onActions != null
         ? () => widget.onActions!(_rowAnchorKey)
         : null;
-    // #161：宽屏侧栏「当前正在查看的会话」高亮 —— 底色 + 左侧 2px 蓝条。
-    // 窄屏恒为 false（SessionListPage 只在 isCompactSidebar 时下传），
-    // 故手机端视觉逐像素不变。
+    // #161：宽屏侧栏「当前正在查看的会话」高亮（2026-10-07 定稿：底色独立
+    // 承担，不再叠加描边/短杠）。
+    //
+    // 注意**不能**把 [_compactCurrentBackground] 塞进 `LightSurfaces.resolve`
+    // 的 light 参数位 —— 暗色下 resolve 会直接取 `dark:` 实参，把我们按亮度
+    // 分好的取值盖掉（实测暗色「当前」行仍渲染成 0xFF2C2C2E）。故此处置外：
+    // 紧凑行由 helper 自己按亮度决定；窄屏保持旧浅蓝 #E0ECFF / 暗色 0xFF2C2C2E
+    // 逐像素不变（`isCurrent` 只在 isCompactSidebar 时下传）。
     final highlightBg = highlighted
-        ? LightSurfaces.resolve(
-            context,
-            // L2：侧栏选中底；窄屏保持旧浅蓝（逐像素不变）。
-            widget.compact
-                ? _compactCurrentBackground(context)
-                : LightSurfaces.selection,
-            // 暗色下 selected 原本没有底色（旧实现仅亮色分支有 DecoratedBox）；
-            // 这里给暗色补一个对应的深色选中底，使两种模式的高亮一致。
-            dark: const Color(0xFF2C2C2E),
-          )
+        ? (widget.compact
+              ? _compactCurrentBackground(context)
+              : LightSurfaces.resolve(
+                  context,
+                  LightSurfaces.selection,
+                  dark: const Color(0xFF2C2C2E),
+                ))
         : (isLight && _pressed
               ? LightSurfaces.pressed
               // L2（新增）：浅色紧凑行的鼠标悬停底（比选中淡一档、不带色相）。
               // `_hovering` 仅 compact 的 onEnter 置位 ⇒ 窄屏永不走这里。
               : (isLight && _hovering ? LightSurfaces.hoverSurface : null));
 
-    // 左侧指示条：只在「当前会话」出现（多选高亮不加，避免与勾选框语义重复）。
-    //
-    // 档位差异：0 = 现状的 2×10 短杠（居中，实测像渲染残渣）；1 = 不要指示条
-    // （底色已经足够醒目）；2 = 整高圆角轨条（3px，上下各留 6）；3 = 不要。
-    final Widget? indicator = widget.isCurrent && widget.compact
-        ? _currentIndicator(context)
-        : null;
-    final Widget contentWithIndicator = indicator == null
-        ? rowContent
-        : Stack(children: [rowContent, indicator]);
+    // 左右指示条已全部移除（主人 2026-10-07 定稿）：宽屏「当前会话」由底色
+    // 独立表达（浅色纯底色 / 暗色实心蓝），不再叠加描边与短杠。
+    final Widget contentWithIndicator = rowContent;
 
     return MouseRegion(
       // #151：桌面悬停 —— 右侧「时间」与「⋯」按钮互换（手机无 hover，不受影响）。
@@ -2716,39 +2711,15 @@ class _SessionRowState extends State<_SessionRow> {
           decoration: ShapeDecoration(
             // highlighted 时两模式都有底色；否则亮色 pressed / 暗色 null（零副作用）。
             color: highlightBg,
-            shape: RoundedSuperellipseBorder(
+            shape: const RoundedSuperellipseBorder(
               // 设计稿 `.sess{border-radius:7px}`（行自身圆角，不含卡片容器）
-              borderRadius: const BorderRadius.all(Radius.circular(7)),
-              // L2「当前」态内描边（1px，圆角内）。其余情形 `BorderSide.none`
-              // ⇒ 不画任何像素（暗色 / 窄屏 / 非当前行逐像素不变）。
-              // 档 1/2/3 不再描边：底色（或轨条）已足够表达「当前」，
-              // 再套一圈蓝描边会读成「输入框聚焦」。
-              side: l2Current && kSidebarCurrentHighlight == 0
-                  ? const BorderSide(color: LightSurfaces.currentStroke)
-                  : BorderSide.none,
+              borderRadius: BorderRadius.all(Radius.circular(7)),
+              // 定稿不再画内描边（原先 1px 蓝内描边 + 底色 + 短杠三层同义反复，
+              // 描边观感像「输入框聚焦」）。底色独立承担「当前会话」语义。
+              side: BorderSide.none,
             ),
           ),
           child: contentWithIndicator,
-        ),
-      ),
-    );
-  }
-
-  /// 「当前会话」行的左侧指示条（档位见 [kSidebarCurrentHighlight]）。
-  Widget? _currentIndicator(BuildContext context) {
-    if (kSidebarCurrentHighlight == 1 || kSidebarCurrentHighlight == 3) {
-      return null;
-    }
-    final rail = kSidebarCurrentHighlight == 2;
-    return PositionedDirectional(
-      start: rail ? 3.0 : 0.0,
-      top: rail ? 6.0 : 9.0,
-      bottom: rail ? 6.0 : 9.0,
-      child: Container(
-        width: rail ? 3.0 : 2.0,
-        decoration: BoxDecoration(
-          color: CupertinoColors.activeBlue.resolveFrom(context),
-          borderRadius: BorderRadius.circular(rail ? 1.5 : 1.0),
         ),
       ),
     );
@@ -3836,60 +3807,27 @@ class _FabWorkspaceArcMenu extends StatelessWidget {
   }
 }
 
-/// L2 选中前景色：浅色 #005FB8 / 暗色 #0A84FF（明暗同一套逻辑）。
+/// 紧凑侧栏「当前会话」行的底色（主人 2026-10-07 拍板）。
 ///
-/// 刻意放在**顶层**（而非某个 State 的方法）：页面级与 [_SessionRowState]
-/// 两处都要用，跨类调用会各自找不到。
-Color _l2Foreground(BuildContext context) =>
-    CupertinoTheme.brightnessOf(context) == Brightness.light
-    ? LightSurfaces.selectionForeground
-    : CupertinoColors.activeBlue.resolveFrom(context);
-
-/// 宽屏侧栏「当前会话」高亮档位（**临时开关，设计稿对比用**：
-/// `--dart-define=SIDEBAR_HL=<n>`，定稿后删掉开关与本注释）。
-///
-/// - 0 = 现状：中性底 + 1px 蓝内描边 + 左侧 2×10 蓝短杠 + 蓝字；
-/// - 1 = 实心蓝底 + 白字（iOS 选中语汇，最醒目）；
-/// - 2 = 中性底加强 + 左侧整高圆角轨条 + 深色字加粗（去描边、去短杠）；
-/// - 3 = 纯底色：中性底加强 + 深色字加粗（无描边、无轨条，最静）。
-const int kSidebarCurrentHighlight = int.fromEnvironment(
-  'SIDEBAR_HL',
-  // 定稿前默认仍为「现状」档：既有的 L2 选中态守护测试钉的就是它，
-  // 主人拍板后改成胜出档并同步改写那些断言。
-  defaultValue: 0,
-);
-
-/// 紧凑侧栏「当前会话」行的底色。
+/// - 浅色：**纯底色**（中性 #787880 @20%），层级由字重承担 —— 不加描边、
+///   不加左侧轨条（原先那套「灰底 + 1px 蓝内描边 + 2×10 蓝短杠」三层同义
+///   反复，描边读成「输入框聚焦」、10px 短杠像渲染残渣）；
+/// - 暗色：**深灰底 #2C2C2E + 白字**（保持既有暗色观感，主人 2026-10-07
+///   核对设计稿后确认；暗底上深灰行比黑页「抬起一层」，白字对比 13.6:1）。
 ///
 /// 只作用于**宽屏紧凑行**：窄屏（`!compact`）仍走旧的
 /// [LightSurfaces.selection]，逐像素不变。
-Color _compactCurrentBackground(BuildContext context) {
-  switch (kSidebarCurrentHighlight) {
-    case 1:
-      return CupertinoColors.activeBlue.resolveFrom(context);
-    case 2:
-    case 3:
-      return const Color.fromRGBO(120, 120, 128, 0.20);
-    case 0:
-    default:
-      return LightSurfaces.resolve(
-        context,
-        LightSurfaces.selectedSurface,
-        dark: const Color(0xFF2C2C2E),
-      );
-  }
-}
+Color _compactCurrentBackground(BuildContext context) =>
+    CupertinoTheme.brightnessOf(context) == Brightness.light
+    ? const Color.fromRGBO(120, 120, 128, 0.20)
+    : const Color(0xFF2C2C2E);
 
-/// 紧凑侧栏「当前会话」行的前景色（标题 / 行内图标 / 活动指示器）。
-Color _compactCurrentForeground(BuildContext context) {
-  switch (kSidebarCurrentHighlight) {
-    case 1:
-      return CupertinoColors.white;
-    case 2:
-    case 3:
-      return CupertinoColors.label.resolveFrom(context);
-    case 0:
-    default:
-      return _l2Foreground(context);
-  }
-}
+/// 紧凑侧栏「当前会话」行的前景色（标题 / 行内图标）。
+Color _compactCurrentForeground(BuildContext context) =>
+    CupertinoTheme.brightnessOf(context) == Brightness.light
+    ? CupertinoColors.label.resolveFrom(context)
+    : CupertinoColors.white;
+
+/// 「当前会话」行是否用白字（暗色深灰底档）。
+bool _compactCurrentUsesWhiteText(BuildContext context) =>
+    CupertinoTheme.brightnessOf(context) != Brightness.light;

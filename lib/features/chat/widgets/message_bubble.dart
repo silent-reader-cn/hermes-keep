@@ -131,9 +131,18 @@ class ChatMessageBubble extends StatelessWidget {
         //   assistant 无泡」后，深浅模式样式天然一致（正文/代码块/卡片
         //   各有自身的色块与间距承载层级）。
         if (isUser) {
+          // 带图消息：气泡收窄到「附件区宽 + 内边距」，并夹在最小宽度与
+          // `0.78 × 槽宽` 之间（下限永不超过上限，见 preferredBubbleWidth）；
+          // 无图片附件的消息维持原 0.78 逻辑不变。
+          final maxBubbleWidth =
+              UserAttachmentBlock.preferredBubbleWidth(
+                message.attachments,
+                constraints.maxWidth,
+              ) ??
+              constraints.maxWidth * 0.78;
           final bubble = Container(
             key: const ValueKey('chat-message-bubble'),
-            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.78),
+            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
               color: CupertinoColors.activeBlue.resolveFrom(context),

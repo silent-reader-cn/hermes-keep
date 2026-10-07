@@ -146,11 +146,24 @@ void main() {
       expect(bubbleWidth(tester), closeTo(maxBubble, 1));
     });
 
-    testWidgets('含附件芯片：块级内容态保持 stretch，气泡仍撑满 0.78', (tester) async {
+    testWidgets('含图片附件：气泡贴合到「附件区宽 + 内边距」并受最小宽夹取', (tester) async {
       const msg = ChatMessage(
         role: 'user',
         content: '看这张图',
         attachments: [MessageAttachment(name: 'photo.png', path: 'photo.png')],
+      );
+      await pumpInSlot(tester, message: msg);
+      expect(tester.takeException(), isNull);
+      // 单图：contain 200 + 内边距 24 = 224 < 最小宽 300 ⇒ 取 300（仍 ≤ 0.78×960）。
+      expect(bubbleWidth(tester), closeTo(300, 1));
+      expect(bubbleWidth(tester), lessThanOrEqualTo(maxBubble + 1));
+    });
+
+    testWidgets('含非图片附件（无图）：块级内容态保持 stretch，气泡仍撑满 0.78', (tester) async {
+      const msg = ChatMessage(
+        role: 'user',
+        content: '这个 pdf 你看下',
+        attachments: [MessageAttachment(name: 'spec.pdf', path: 'spec.pdf')],
       );
       await pumpInSlot(tester, message: msg);
       expect(tester.takeException(), isNull);

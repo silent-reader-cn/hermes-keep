@@ -19,7 +19,6 @@ import 'package:hermes_ui/core/providers/catalog_providers.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
 import 'package:hermes_ui/features/chat/widgets/chat_media_view.dart';
-import 'package:hermes_ui/features/chat/widgets/user_attachment_block.dart';
 import 'package:hermes_ui/features/desktop/window_title_service.dart';
 import 'package:hermes_ui/features/projects/project_providers.dart';
 import 'package:hermes_ui/features/session_list/session_list_page.dart';
@@ -37,10 +36,13 @@ import '../helpers/in_memory_secure_storage.dart';
 //
 // 用法：
 //   ATTACH_SHOTS=1 [ATTACH_DARK=1] C:/tmp/f.bat test
-//     test/screenshots/attach_hl_shots_test.dart --update-goldens \
-//     --dart-define=ATTACH_LAYOUT=<0..3> --dart-define=SIDEBAR_HL=<0..3>
+//     test/screenshots/attach_hl_shots_test.dart --update-goldens
 //
-// 产物：`.shots/attach-hl/attach-l<n>-hl<n>[-dark].png`（仓库根，.gitignore 覆盖）
+// 产物：`.shots/attach-hl/attach-{wide,narrow,phone}[-dark].png`
+//      （仓库根，.gitignore 覆盖）
+//
+// 侧栏高亮已定稿（浅色纯底色 / 暗色深灰底 + 白字，见
+// `_compactCurrentBackground`），工装只负责把它渲染出来，不再有档位开关。
 //
 // 为什么需要它：两处待改的观感（用户气泡里的图片附件、宽屏侧栏的当前会话高亮）
 // 都必须让主人在**真界面**上对比，而不是看复刻稿。图片字节由
@@ -374,7 +376,6 @@ void main() {
       find.byType(CupertinoApp),
       matchesGoldenFile(
         '../../.shots/attach-hl/$name'
-        '-l$kUserAttachmentLayout-hl$kSidebarCurrentHighlight'
         '${_dark ? '-dark' : ''}.png',
       ),
     );
@@ -385,10 +386,16 @@ void main() {
   }, skip: !_capture);
 
   testWidgets('宽屏 · 聊天（图片附件 + 侧栏高亮）', (tester) async {
-    await capture(tester, name: 'attach-hl', physicalSize: const Size(2560, 1600));
+    await capture(tester, name: 'attach-wide', physicalSize: const Size(2560, 1600));
   }, skip: !_capture);
 
   testWidgets('宽屏 · 聊天（窄窗 1100）', (tester) async {
-    await capture(tester, name: 'attach-hl-narrow', physicalSize: const Size(2200, 1600));
+    await capture(tester, name: 'attach-narrow', physicalSize: const Size(2200, 1600));
+  }, skip: !_capture);
+
+  // 真机手机宽（400 逻辑 pt）：贴合档会按可用宽反算瓦片，必须不溢出 ——
+  // 窄窗 1100 与真机 400 是两个类，固定尺寸的横排在这两个宽度下表现不同。
+  testWidgets('窄屏 · 聊天（手机 400）', (tester) async {
+    await capture(tester, name: 'attach-phone', physicalSize: const Size(800, 1600));
   }, skip: !_capture);
 }
