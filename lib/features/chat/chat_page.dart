@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
 import '../../app/theme/light_surfaces.dart';
+import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/adaptive_action_menu.dart';
 import '../../app/widgets/hermes_dialog.dart';
@@ -265,6 +266,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
         // #163/#170：顶栏底部 0.5px 发丝线。宽屏与左侧品牌栏同高对齐；窄屏
         // 主人 2026-09-27 拍板同样显示（iOS 惯例：内容从栏下滑过时给出分界）。
         bottom: const _NavBarHairline(),
+        // ⚠️ 必须显式关掉 SDK 的默认边框（`_kDefaultNavBarBorder` = 1 物理像素
+        // 黑 30%）：它会随内容滚动从「透明」淡入，与上面那条发丝线叠在一起 ⇒
+        // 「新会话浅、有内容的会话一滚动就变深」。主人 2026-10-08 报的就是它。
+        // 全仓线族口径见 `app/theme/divider_tokens.dart`。
+        border: null,
         middle: GestureDetector(
           key: const ValueKey('chat-title-outline-trigger'),
           onTap: _toggleOutline,
@@ -1856,7 +1862,10 @@ class _SteerNoticeToast extends StatelessWidget {
   }
 }
 
-/// 顶栏底部发丝分割线（0.5px）。
+/// 顶栏底部发丝分割线（0.5px，结构线 L1）。
+///
+/// 颜色取 [Dividers.structural]（= 侧栏各栏同款）且**常驻**：为免 SDK 那条随
+/// 滚动淡入的黑 30% 边框再叠上来，导航栏须同时传 `border: null`。
 ///
 /// #163：宽屏下聊天顶栏与左侧品牌栏同高 44，但此前只有品牌栏下沿有线，
 /// 两栏顶边不在同一视觉轴。这里补上同色同高的 0.5px，`bottom` 槽会把它
@@ -1864,7 +1873,7 @@ class _SteerNoticeToast extends StatelessWidget {
 class _NavBarHairline extends StatelessWidget implements PreferredSizeWidget {
   const _NavBarHairline();
 
-  static const double hairlineHeight = 0.5;
+  static const double hairlineHeight = Dividers.hairlineWidth;
 
   @override
   Size get preferredSize => const Size.fromHeight(hairlineHeight);
@@ -1874,13 +1883,7 @@ class _NavBarHairline extends StatelessWidget implements PreferredSizeWidget {
     return SizedBox(
       height: hairlineHeight,
       width: double.infinity,
-      child: ColoredBox(
-        color: LightSurfaces.resolve(
-          context,
-          LightSurfaces.divider,
-          dark: CupertinoColors.separator,
-        ),
-      ),
+      child: ColoredBox(color: Dividers.structural(context)),
     );
   }
 }
