@@ -67,8 +67,20 @@ class PopoverMenuShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final screenWidth = media.size.width;
-    final screenHeight = media.size.height;
+    // ── 定位空间 = 宿主 Overlay 的盒子，而不是 MediaQuery 视口 ────────────────
+    //
+    // 弹层由 `OverlayEntry` 承载，`Positioned` 的坐标系就是宿主 Overlay 的 theater，
+    // 而它**不一定等于视口**：宽屏下路由挂在 ShellRoute 的嵌套 Navigator 上，那只
+    // 占右侧详情栏（比视口窄一个侧栏宽、且整体右移）。此时若用 MediaQuery 的视口宽
+    // 做横向 clamp，`maxLeft` 会多放行「一条侧栏」的宽度 ⇒ 靠近详情栏右缘的弹层
+    // 溢出详情栏、被窗口右缘裁掉（主人 2026-10-08 实机反馈「模型选择弹窗右侧到屏幕
+    // 外」；实测视口 1638.4 而宿主 Overlay 只有 1296.5，多放行 341.9 ≈ 侧栏宽）。
+    //
+    // 同族的 [showAdaptivePopover] 一直是这个口径（用 `overlayBox.size`），此处对齐。
+    final hostBox =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final screenWidth = hostBox?.size.width ?? media.size.width;
+    final screenHeight = hostBox?.size.height ?? media.size.height;
     final safeTop = media.padding.top + _safeMargin;
     final safeBottom = media.padding.bottom + _safeMargin;
 

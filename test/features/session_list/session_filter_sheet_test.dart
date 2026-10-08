@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
@@ -721,6 +725,53 @@ void main() {
         findsOneWidget,
       );
     });
+
+    /// 段卡片 1px 描边必须**真的画出来**（不被行底盖掉）。
+    ///
+    /// 回归背景（主人 2026-10-08 实机反馈「为什么只有两个全部项的外框正常？
+    /// 其他行都没边框了」）：`CupertinoListSection.insetGrouped` 把 decoration
+    /// （含描边）画在**子项之下**，而未选中行底是不透明白、又铺满整段宽度，
+    /// 于是段的描边被整段盖掉 —— 整屏只剩「显示」段（该行从未传 backgroundColor）
+    /// 与选中行（半透明灰底让描边透出）看得见外框。本用例直接取渲染像素，在
+    /// 「未选中行」高度上量段左缘 1px 描边与行内白底的亮度差。
+    testWidgets('段描边不被行底盖掉：未选中行处段左缘 1px 描边可见（像素取样）', (tester) async {
+      useWideViewport(tester);
+      final api = FakeSessionListApi(sessions: [session('s1', '会话一')]);
+      await pumpList(
+        tester,
+        api,
+        workspaces: const [
+          WorkspaceRoot(path: '/projects/alpha', name: 'Alpha'),
+        ],
+      );
+      await openFilter(tester);
+
+      final frame = await captureFrame(tester);
+      // 左列「会话」段：已归档行未选中（默认模式 = all）。
+      expectSegStrokeVisible(
+        frame,
+        sectionRect: tester.getRect(
+          find.byKey(const ValueKey('filter-section-sessions')),
+        ),
+        rowRect: tester.getRect(
+          find.byKey(const ValueKey('sheet-filter-archived')),
+        ),
+        label: '左列「会话」段',
+      );
+      // 右列「工作区」段：Alpha 行未选中（选中项是「全部工作区」）。
+      expectSegStrokeVisible(
+        frame,
+        sectionRect: tester.getRect(
+          find.byKey(const ValueKey('filter-section-workspaces')),
+        ),
+        rowRect: tester.getRect(
+          find.byKey(const ValueKey('workspace-chip-/projects/alpha')),
+        ),
+        label: '右列「工作区」段',
+      );
+    });
+
+
   });
 
   group('subagent 显示开关（默认关闭）', () {
@@ -930,4 +981,67 @@ class _FakeProjectApi implements ProjectApi {
     required String name,
     String? color,
   }) async => const ProjectMutationResponse();
+}
+
+// ---------------------------------------------------------------------------
+// 渲染像素取样（段描边守卫用）
+// ---------------------------------------------------------------------------
+
+/// 一帧画面的原始像素 + 逻辑尺寸（测试视口 1:1：物理像素 == 逻辑像素）。
+typedef CapturedFrame = ({ByteData bytes, int width, int height});
+
+/// 取当前画面（`RenderView` 根层；`pixelRatio: 1` ⇒ 1 像素 = 1 逻辑像素）。
+Future<CapturedFrame> captureFrame(WidgetTester tester) async {
+  final renderView = tester.binding.renderViews.first;
+  final layer = renderView.debugLayer! as OffsetLayer;
+  late CapturedFrame frame;
+  await tester.runAsync(() async {
+    final image = await layer.toImage(renderView.paintBounds, pixelRatio: 1.0);
+    final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+    frame = (
+      bytes: bytes,
+      width: renderView.paintBounds.width.round(),
+      height: renderView.paintBounds.height.round(),
+    );
+  });
+  return frame;
+}
+
+/// (x, y) 处亮度（0-255，Rec.601 近似；渲染为不透明色，忽略 alpha）。
+int frameLumAt(CapturedFrame frame, int x, int y) {
+  final i = (y * frame.width + x) * 4;
+  return (frame.bytes.getUint8(i) * 299 +
+          frame.bytes.getUint8(i + 1) * 587 +
+          frame.bytes.getUint8(i + 2) * 114) ~/
+      1000;
+}
+
+/// 断言「段左缘 1px 描边」在 [rowRect] 高度上可见：描边像素至少比行内底暗
+/// [minDelta]。描边被不透明白底盖掉时两者都 ≈255（差值 0）。
+void expectSegStrokeVisible(
+  CapturedFrame frame, {
+  required Rect sectionRect,
+  required Rect rowRect,
+  required String label,
+  int minDelta = 12,
+}) {
+  // 行在段内（宽屏段 margin 只有 bottom ⇒ 行左缘与段左缘同列）。
+  expect(rowRect.left, greaterThanOrEqualTo(sectionRect.left - 0.5));
+  final y = rowRect.center.dy.round();
+  final baseX = rowRect.left.round();
+  // 参考点取「行内靠左但已越过描边」的位置（+8），避开文字与勾选标记。
+  final inner = frameLumAt(frame, baseX + 8, y);
+  // 描边比行底更暗（浅色）或更亮（暗色）都算「可见」⇒ 取左缘内侧 3 列与行内底的
+  // 最大亮度差。刻意不取 x-1：那是卡片外（遮罩/页底色），会给出假通过。
+  var maxDelta = 0;
+  for (final x in [baseX, baseX + 1, baseX + 2]) {
+    if (x < 0 || x >= frame.width) continue;
+    final d = (frameLumAt(frame, x, y) - inner).abs();
+    if (d > maxDelta) maxDelta = d;
+  }
+  expect(
+    maxDelta,
+    greaterThanOrEqualTo(minDelta),
+    reason: '$label：行内底亮度 $inner，段左缘内侧最大亮度差 $maxDelta ⇒ 段描边不可见',
+  );
 }

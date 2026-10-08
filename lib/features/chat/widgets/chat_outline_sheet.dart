@@ -99,8 +99,13 @@ class _ChatOutlineOverlay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final media = MediaQuery.of(context);
-    final screenWidth = media.size.width;
-    final screenHeight = media.size.height;
+    // 定位空间 = 宿主 Overlay 的盒子，不是 MediaQuery 视口：宽屏下路由挂在
+    // ShellRoute 的嵌套 Navigator 上，那只占右侧详情栏（比视口窄一条侧栏、且整体
+    // 右移），用视口宽做 clamp 会让面板越出详情栏、被窗口右缘裁掉。
+    // 与 `popover_menu_shell.dart` / `adaptive_popover.dart` 同口径。
+    final hostBox = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final screenWidth = hostBox?.size.width ?? media.size.width;
+    final screenHeight = hostBox?.size.height ?? media.size.height;
     final safeBottom = media.padding.bottom + _safeMargin;
 
     // 水平：以锚点为中心，clamp 到屏幕内。
