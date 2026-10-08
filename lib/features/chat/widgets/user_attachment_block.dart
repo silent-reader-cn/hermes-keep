@@ -136,6 +136,11 @@ class UserAttachmentBlock extends StatefulWidget {
   /// 2. 若把下一张收进来会让 `h` 掉到 [minRowHeight] 以下 —— **收进来并就此封行**
   ///    （越线那张留在行里，避免多出一条单张矮行）；另有一行最多张数上限
   ///    `⌊available / gap⌋ + 1`（保证 `gap×(n−1) ≤ available`，行高不会算成负的）；
+  ///    **末行孤张规避**：若按此封行会让下一行只剩一张，就退掉刚收进来的那张
+  ///    （把两张留给下一行）—— 否则那张会独占一行、行高被顶到 [maxRowHeight]，
+  ///    块高反而比旧宫格还高，观感又回到「一大一小、参差」（实测 4 张混比例：
+  ///    不退 ⇒ 3 张 74.6 + 孤张 200、块高 279；退一张 ⇒ 2+2、行高 140/105、
+  ///    两行都填满、块高 249）。
   /// 3. 封行时 `h = min(自然行高, maxRowHeight)`；每张宽 = `h × 该张比例`；
   /// 4. 防溢出兜底：浮点误差或病态比例导致行宽 > available 时，按比例压回
   ///    `available − gap×(n−1)` 以内（**任何输入都不产生溢出/NaN/负宽**）。
@@ -181,7 +186,14 @@ class UserAttachmentBlock extends StatefulWidget {
         end += 1;
         sum = nextSum;
         // 越过下限：收进当前行并封行。
-        if (candidateHeight < minRowHeight) break;
+        if (candidateHeight < minRowHeight) {
+          // 末行孤张规避（见 docstep 2）：退掉刚收进来的这张，把两张留给下一行。
+          if (safe.length - (end + 1) == 1 && end - 1 >= start) {
+            sum -= safe[end];
+            end -= 1;
+          }
+          break;
+        }
       }
       final count = end - start + 1;
       final gaps = gap * (count - 1);

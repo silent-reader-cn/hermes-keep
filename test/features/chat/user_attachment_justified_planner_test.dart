@@ -68,6 +68,44 @@ void main() {
       expect(height, closeTo(74.6, 0.5));
     });
 
+    test('4 张混比例：末行不得只剩孤张（实测 2+2，两行都填满）', () {
+      const ratios = [_portrait, _landscape, _ultrawide, _square];
+      final rows = UserAttachmentBlock.justifiedRows(ratios, available: 296);
+      expect(rows, hasLength(2), reason: '4 张应分 2+2，而不是 3+1');
+      expect(
+        [for (final row in rows) row.length],
+        <int>[2, 2],
+        reason:
+            '不得出现 3+1：孤张会独占一行、行高被顶到上限，'
+            '块高反而比旧宫格还高（实测 279 vs 196）',
+      );
+      expect(_rowWidth(rows[0]), closeTo(296, 1e-6));
+      expect(_rowWidth(rows[1]), closeTo(296, 1e-6));
+      // 行内等高（同行的 width/ratio 恒等）
+      expect(rows[0][1] / _landscape, closeTo(rows[0][0] / _portrait, 1e-9));
+      expect(rows[1][1] / _square, closeTo(rows[1][0] / _ultrawide, 1e-9));
+      expect(rows[0][0] / _portrait, closeTo(140.16, 0.5));
+      expect(rows[1][0] / _ultrawide, closeTo(105.12, 0.5));
+    });
+
+    test('多行结果里不得出现「被收高的孤张行」（每行都必须填满可用宽）', () {
+      for (var count = 3; count <= 8; count++) {
+        final rows = UserAttachmentBlock.justifiedRows(
+          _mixed(count),
+          available: 296,
+        );
+        for (final row in rows) {
+          expect(
+            _rowWidth(row),
+            closeTo(296, 1e-6),
+            reason:
+                '$count 张：某一行没填满可用宽 —— 说明它是被 maxRowHeight '
+                '收高的孤张（观感＝一个大方块）',
+          );
+        }
+      }
+    });
+
     test('2 / 3 / 4 / 6 张混比例：每行等高、每行填满、总宽不溢出', () {
       for (final count in [2, 3, 4, 6]) {
         for (final available in [269.28, 276.0, 296.0]) {
