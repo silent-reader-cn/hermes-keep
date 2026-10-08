@@ -71,6 +71,29 @@ const String _attachDir =
 const String kPortrait = 'ns-portrait-3x4.png';
 const String kLandscape = 'ns-landscape-4x3.png';
 const String kUltrawide = 'ns-ultrawide-16x9.png';
+const String kSquare = 'ns-square-1x1.png';
+const String kPortraitB = 'ns-portrait-b-3x4.png';
+const String kLandscapeB = 'ns-landscape-b-4x3.png';
+
+/// 张数 2/3/4/6 用例的混比例池：竖 3:4 / 横 4:3 / 超宽 16:9 / 方 1:1
+/// （再补一张竖、一张横凑到 6 张）。
+///
+/// ⚠️ 池里**文件名必须互不相同**：附件锚点是 `user-attachment-image-<basename>`，
+/// 同名两张落在同一个 Row 里就是重复 ValueKey —— Flutter 的
+/// `MultiChildRenderObjectElement` 会直接抛 "Duplicate keys found"。
+const List<String> kMixedPool = [
+  kPortrait,
+  kLandscape,
+  kUltrawide,
+  kSquare,
+  kPortraitB,
+  kLandscapeB,
+];
+
+/// 取池里前 [count] 张（顺序：竖 → 横 → 超宽 → 方 → 竖B → 横B）。
+List<String> mixedRefs(int count) => [
+  for (var i = 0; i < count; i++) kMixedPool[i % kMixedPool.length],
+];
 
 /// 关闭自动加载图片（主人报告 ②③ 时的设置态）。
 class _GateOff extends AutoLoadImagesController {
@@ -183,6 +206,9 @@ List<File> _imageFiles() {
           .listSync()
           .whereType<File>()
           .where((f) => f.path.toLowerCase().endsWith('.png'))
+          // 只预热/匹配本工装的夹具（`ns-*`）：目录里可能还躺着历史对比图
+          // （old-*.png），没必要再去解码一遍。
+          .where((f) => f.uri.pathSegments.last.toLowerCase().startsWith('ns-'))
           .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
   if (files.isEmpty) throw StateError('BUBBLE_SHOTS_DIR 下没有 PNG：$_imageDir');
@@ -357,11 +383,13 @@ void main() {
     required String name,
     required List<ChatMessage> messages,
     double surfaceWidth = 520,
+    double surfaceHeight = 620,
+    double dpr = 3.0,
     bool gateOff = false,
   }) async {
     LocaleResolver.reset(mode: AppLocaleMode.zh);
-    tester.view.physicalSize = Size(surfaceWidth * 3, 620 * 3);
-    tester.view.devicePixelRatio = 3.0;
+    tester.view.physicalSize = Size(surfaceWidth * dpr, surfaceHeight * dpr);
+    tester.view.devicePixelRatio = dpr;
     addTearDown(tester.view.reset);
 
     await precacheAll(tester);
@@ -583,4 +611,31 @@ void main() {
 
     await shoot(tester, 'closeup-reenter');
   }, skip: !_capture);
+
+  // ------------------------------------------------- 张数 × 视口（验收口径）--
+  // 宽屏 1280 与手机 400 两档 × 张数 2/3/4/6，混比例（竖 3:4 / 横 4:3 /
+  // 超宽 16:9 / 方 1:1）。改前 / 改后各跑一遍，靠 BUBBLE_SHOT_TAG 区分文件名：
+  //   BUBBLE_SHOTS=1 BUBBLE_SHOT_TAG=before C:/tmp/f.bat test \
+  //     --no-pub test/screenshots/attach_bubble_shots_test.dart --update-goldens
+  // 用量：surfaceWidth 就是视口逻辑宽（`_message` 走真界面气泡，不是复刻稿）。
+  for (final viewport in <double>[1280, 400]) {
+    for (final count in <int>[2, 3, 4, 6]) {
+      testWidgets('$count 张混比例 · 视口 ${viewport.toInt()}', (tester) async {
+        await captureMessage(
+          tester,
+          name: 'grid$count-${viewport.toInt()}',
+          surfaceWidth: viewport,
+          surfaceHeight: 520,
+          // 1280 宽视口用 dpr 2：清晰度足够，图不至于大到难贴。
+          dpr: viewport >= 1000 ? 2.0 : 3.0,
+          messages: [
+            _message(
+              id: 'u-grid$count-${viewport.toInt()}',
+              refs: mixedRefs(count),
+            ),
+          ],
+        );
+      }, skip: !_capture);
+    }
+  }
 }
