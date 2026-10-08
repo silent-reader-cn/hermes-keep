@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/layout_tokens.dart';
+import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/typography_tokens.dart';
@@ -1361,11 +1362,7 @@ class _TasksEditPageState extends ConsumerState<TasksEditPage> {
       backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
-        border: isLight
-            ? Border(
-                bottom: BorderSide(color: LightSurfaces.divider, width: 0.0),
-              )
-            : const CupertinoNavigationBar().border,
+        border: Dividers.navBarBorder(context),
         middle: Text(_isEdit ? l10n.editTask : l10n.newTask),
         trailing: CupertinoButton(
           key: const ValueKey('tasks-form-save'),

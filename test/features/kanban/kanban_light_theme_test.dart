@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
+import 'package:hermes_ui/app/theme/divider_tokens.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/app/theme/status_colors.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
@@ -455,13 +456,10 @@ void main() {
       final nav = tester.widget<CupertinoNavigationBar>(
         find.byType(CupertinoNavigationBar),
       );
+      // 导航栏底边统一走线族令牌（主人 2026-10-08 拍板；深色不再是 SDK 黑 30%）。
       expect(
         nav.border,
-        light
-            ? Border(
-                bottom: BorderSide(color: LightSurfaces.divider, width: 0),
-              )
-            : const CupertinoNavigationBar().border,
+        Dividers.navBarBorder(tester.element(find.byType(CupertinoNavigationBar))),
       );
       final control = tester.widget<CupertinoSlidingSegmentedControl<String>>(
         find.byType(CupertinoSlidingSegmentedControl<String>),

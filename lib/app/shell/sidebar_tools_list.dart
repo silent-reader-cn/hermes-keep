@@ -11,6 +11,7 @@ import '../../features/tasks/tasks_providers.dart';
 import '../../features/settings/settings_providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/layout_tokens.dart';
+import '../theme/divider_tokens.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
 import '../widgets/icon_hover_disk.dart';
@@ -57,11 +58,7 @@ class SidebarToolsList extends ConsumerWidget {
     final activeBg = isLight
         ? LightSurfaces.selectedSurface
         : activeFg.withValues(alpha: 0.12);
-    final divider = LightSurfaces.resolve(
-      context,
-      LightSurfaces.divider,
-      dark: CupertinoColors.separator,
-    );
+    final divider = Dividers.structural(context);
 
     final navOrder = ref.watch(sidebarNavOrderProvider);
     // #161：「定时任务」行的待办计数徽标。**在顶部无条件下 watch 一次** ——

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hermes_ui/app/theme/divider_tokens.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/app/theme/status_colors.dart';
 import 'package:hermes_ui/core/api/api_client.dart';
@@ -411,19 +412,15 @@ void main() {
         );
         expect(scaffold.backgroundColor, LightSurfaces.page);
 
-        // 验证浅色 CupertinoNavigationBar 使用 LightSurfaces.divider 底部线且保留 width: 0.0
+        // 验证浅色 CupertinoNavigationBar 底部线走线族令牌（宽度统一 0.5 逻辑像素）
         final navBar = tester.widget<CupertinoNavigationBar>(
           find.byType(CupertinoNavigationBar),
         );
         expect(navBar.backgroundColor, LightSurfaces.page);
-        expect(
-          navBar.border,
-          Border(
-            bottom: BorderSide(color: LightSurfaces.divider, width: 0.0),
-          ),
-        );
+        final navContext = tester.element(find.byType(CupertinoNavigationBar));
+        expect(navBar.border, Dividers.navBarBorder(navContext));
         expect(navBar.border?.bottom.color, LightSurfaces.divider);
-        expect(navBar.border?.bottom.width, 0.0);
+        expect(navBar.border?.bottom.width, Dividers.hairlineWidth);
 
         // 验证输入框装饰与占位文本样式
         final fields = tester.widgetList<CupertinoTextField>(
@@ -787,7 +784,7 @@ void main() {
     });
 
     testWidgets(
-      '暗色表单保持 CupertinoTextField 默认 decoration 与 placeholderStyle 及默认 border',
+      '暗色表单保持 CupertinoTextField 默认 decoration 与 placeholderStyle 及线族令牌 border',
       (tester) async {
         await _pumpTasksEditPage(
           tester,
@@ -800,12 +797,17 @@ void main() {
         );
         expect(scaffold.backgroundColor, isNull);
 
-        // 验证暗色 CupertinoNavigationBar 使用构造函数原始默认 border
+        // 验证暗色 CupertinoNavigationBar 底边走线族令牌（不再是 SDK 默认黑 30%）
         final navBar = tester.widget<CupertinoNavigationBar>(
           find.byType(CupertinoNavigationBar),
         );
         expect(navBar.backgroundColor, isNull);
-        expect(navBar.border, const CupertinoNavigationBar().border);
+        expect(
+          navBar.border,
+          Dividers.navBarBorder(
+            tester.element(find.byType(CupertinoNavigationBar)),
+          ),
+        );
 
         const defaultField = CupertinoTextField();
         final fields = tester.widgetList<CupertinoTextField>(

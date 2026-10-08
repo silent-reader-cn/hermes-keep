@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/session_list/session_entry_visibility.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/layout_tokens.dart';
+import '../theme/divider_tokens.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
 import '../widgets/icon_hover_disk.dart';
@@ -117,11 +118,7 @@ class SidebarUtilityToolbar extends ConsumerWidget {
         Container(
           height: 0.5,
           // Decorative structural line; the icons carry the navigation semantics.
-          color: LightSurfaces.resolve(
-            context,
-            LightSurfaces.divider,
-            dark: CupertinoColors.separator,
-          ),
+          color: Dividers.structural(context),
         ),
       ],
     );

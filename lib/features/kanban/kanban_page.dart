@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
+import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/typography_tokens.dart';
@@ -1520,10 +1521,9 @@ Widget _withKanbanLightTheme(BuildContext context, Widget child) {
   );
 }
 
-Border? _kanbanNavigationBorder(BuildContext context) =>
-    _usesLightSurfaces(context)
-    ? Border(bottom: BorderSide(color: LightSurfaces.divider, width: 0))
-    : const CupertinoNavigationBar().border;
+/// 导航栏底部结构线（L1）—— 统一走线族令牌；深色不再沿用 SDK 默认的黑 30% 边框。
+Border _kanbanNavigationBorder(BuildContext context) =>
+    Dividers.navBarBorder(context);
 
 BoxDecoration? _kanbanSectionDecoration(BuildContext context) =>
     _usesLightSurfaces(context)

@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
+import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../l10n/app_localizations.dart';
@@ -27,13 +28,7 @@ class BackgroundKeepalivePage extends StatelessWidget {
       backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
-        border: isLight
-            ? Border(
-                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
-              )
-            : const Border(
-                bottom: BorderSide(color: Color(0x4D000000), width: 0.0),
-              ),
+        border: Dividers.navBarBorder(context),
         leading: const PopBackButton(),
         middle: Text(l10n.bgKeepAliveSection),
       ),

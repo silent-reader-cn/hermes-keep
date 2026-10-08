@@ -10,6 +10,7 @@ import '../../features/session_list/session_list_shell_requests.dart';
 import '../../features/desktop/window_title_service.dart';
 import '../../features/desktop/desktop_settings.dart';
 import '../../l10n/app_localizations.dart';
+import '../theme/divider_tokens.dart';
 import '../theme/light_surfaces.dart';
 import '../theme/status_colors.dart';
 
@@ -72,11 +73,7 @@ class _SidebarBrandBarState extends ConsumerState<SidebarBrandBar> {
       LightSurfaces.textSecondary,
       dark: CupertinoColors.secondaryLabel,
     );
-    final divider = LightSurfaces.resolve(
-      context,
-      LightSurfaces.divider,
-      dark: CupertinoColors.separator,
-    );
+    final divider = Dividers.structural(context);
 
     final content = Column(
       mainAxisSize: MainAxisSize.min,

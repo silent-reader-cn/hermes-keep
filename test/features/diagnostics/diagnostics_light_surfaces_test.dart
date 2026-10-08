@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
+import 'package:hermes_ui/app/theme/divider_tokens.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/core/utils/safe_clipboard.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_detail_sheet.dart';
@@ -152,13 +153,15 @@ void main() {
       );
       expect(chevron.color, const Color(0xFFC7C7CC));
 
-      // 导航栏边框深色保留 SDK 默认
+      // 导航栏底边：深色不再沿用 SDK 默认的 1px 黑 30%，统一走线族令牌
+      // （主人 2026-10-08 拍板「全应用分割线统一语义色」）。
       final darkNavBar = tester.widget<CupertinoNavigationBar>(
         find.byType(CupertinoNavigationBar),
       );
-      final darkNavBorder = darkNavBar.border!;
-      expect(darkNavBorder.bottom.color, const Color(0x4D000000));
-      expect(darkNavBorder.bottom.width, 0.0);
+      expect(
+        darkNavBar.border,
+        Dividers.navBarBorder(tester.element(find.byType(CupertinoNavigationBar))),
+      );
 
       // 3. 窄屏（<900）：顶部 chips 行的同一契约原样保留
       // （批 4C 只改宽屏；这条口径就是改动前的原断言）。

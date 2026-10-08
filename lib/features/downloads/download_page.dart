@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
+import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/typography_tokens.dart';
@@ -401,13 +402,7 @@ class DownloadPage extends ConsumerWidget {
       ),
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
-        border: isLight
-            ? Border(
-                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
-              )
-            : const Border(
-                bottom: BorderSide(color: Color(0x4D000000), width: 0.0),
-              ),
+        border: Dividers.navBarBorder(context),
         leading: const AppBackButton(),
         middle: Text(l10n.downloadsTitle),
         trailing: hasTerminalTasks

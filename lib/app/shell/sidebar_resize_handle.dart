@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
-import '../theme/light_surfaces.dart';
+import '../theme/divider_tokens.dart';
 
 /// 宽屏双栏外壳中侧栏与内容区之间的可拖拽调整宽度手柄。
 ///
@@ -48,11 +48,7 @@ class SidebarResizeHandle extends StatelessWidget {
               width: lineWidth,
               // Structural divider; the unchanged hit area and resize cursor
               // identify the drag control independently of this decorative line.
-              color: LightSurfaces.resolve(
-                context,
-                LightSurfaces.divider,
-                dark: CupertinoColors.separator,
-              ),
+              color: Dividers.structural(context),
             ),
           ),
         ),

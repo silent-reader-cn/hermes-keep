@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
+import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/hermes_dialog.dart';
@@ -282,13 +283,7 @@ class DiagnosticsDetailSheet extends StatelessWidget {
       backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
-        border: isLight
-            ? Border(
-                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
-              )
-            : const Border(
-                bottom: BorderSide(color: Color(0x4D000000), width: 0.0),
-              ),
+        border: Dividers.navBarBorder(context),
         middle: Text(l10n.diagnosticsDetailsTitle),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,

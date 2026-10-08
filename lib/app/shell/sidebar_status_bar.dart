@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/connections/connection_providers.dart';
 import '../../core/connections/server_connection.dart';
 import '../../l10n/app_localizations.dart';
+import '../theme/divider_tokens.dart';
 import '../theme/light_surfaces.dart';
 import 'sidebar_hover_tip.dart';
 
@@ -65,11 +66,9 @@ class SidebarStatusBar extends ConsumerWidget {
       LightSurfaces.page,
       dark: const Color(0xFF1C1C1E),
     );
-    final borderColor = LightSurfaces.resolve(
-      context,
-      LightSurfaces.divider,
-      dark: const Color(0xFF3A3A3C),
-    );
+    // 结构线 L1（全仓唯一出口）。原深色在此单点写死 #3A3A3C，与侧栏其它三栏的
+    // system separator 分家 —— 统一到令牌后四条栏线同源。
+    final borderColor = Dividers.structural(context);
 
     String? portText;
     String? serviceTypeText;

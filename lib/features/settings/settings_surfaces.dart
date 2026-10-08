@@ -5,6 +5,7 @@ import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
 import 'package:flutter/cupertino.dart';
 
+import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/utils/accessibility.dart';
@@ -255,17 +256,13 @@ abstract final class SettingsSurfaces {
     );
   }
 
-  /// Native navigation hairline, using the unified structure token in light.
-  static Border navigationBorder(BuildContext context) => Border(
-    bottom: BorderSide(
-      color: LightSurfaces.resolve(
-        context,
-        LightSurfaces.divider,
-        dark: const Color(0x4D000000),
-      ),
-      width: 0,
-    ),
-  );
+  /// Native navigation hairline —— 全仓线族唯一出口 [Dividers.navBarBorder]
+  /// （结构线 L1，0.5 逻辑像素）。
+  ///
+  /// 原实现深色落到 `Color(0x4D000000)`（即 SDK 默认那条 1px 黑 30% 边框），
+  /// 与线族其它线分家，故统一到令牌。
+  static Border navigationBorder(BuildContext context) =>
+      Dividers.navBarBorder(context);
 
   /// Native switch interaction with iOS system colours in light mode.
   ///

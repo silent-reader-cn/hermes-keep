@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
+import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../core/connections/connection_providers.dart';
@@ -347,11 +348,7 @@ class _InstallGuidePageState extends ConsumerState<InstallGuidePage> {
           ? LightSurfaces.page
           : null,
       navigationBar: CupertinoNavigationBar(
-        border: CupertinoTheme.brightnessOf(context) == Brightness.light
-            ? Border(
-                bottom: BorderSide(color: LightSurfaces.divider, width: 0.5),
-              )
-            : const CupertinoNavigationBar().border,
+        border: Dividers.navBarBorder(context),
         backgroundColor:
             CupertinoTheme.brightnessOf(context) == Brightness.light
             ? LightSurfaces.page
