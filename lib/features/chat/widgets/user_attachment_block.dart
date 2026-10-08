@@ -243,8 +243,26 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
     setState(() => _ratios[identity] = ratio);
   }
 
-  double _ratioOf(MessageAttachment attachment) =>
-      _ratios[_identityOf(attachment)] ?? 1.0;
+  double _ratioOf(String identity) => _ratios[identity] ?? 1.0;
+
+  /// 把附件列表映射成**互不相同**的身份串（见 [_identityOf]）。
+  ///
+  /// 同一消息里两张同名附件（`a.png` + `a.png`）会得到同一个身份串 ⇒ 同一个
+  /// [Row] 里出现重复 `ValueKey`（debug 下 Flutter 抛「Duplicate keys found」），
+  /// 比例表也会两张共用一格。这里按出现顺序给重复项加 `#n` 后缀；
+  /// **首次出现保持原锚点不变**（`user-attachment-image-<basename>` 的既有约定
+  /// 与截图工装因此完全不受影响）。
+  List<String> _uniqueIdentities(List<MessageAttachment> list) {
+    final seen = <String, int>{};
+    final result = <String>[];
+    for (final attachment in list) {
+      final base = _identityOf(attachment);
+      final count = seen[base] ?? 0;
+      seen[base] = count + 1;
+      result.add(count == 0 ? base : '$base#$count');
+    }
+    return result;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -258,6 +276,11 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
       for (final attachment in attachments)
         if (!UserAttachmentBlock._isImageAttachment(attachment)) attachment,
     ];
+    // 同一消息里可能有**同名附件** ⇒ `_identityOf` 会退化成同一个文件名：既会让
+    // 同一个 Row 出现重复 ValueKey（debug 下 Flutter 直接抛 Duplicate keys），也会
+    // 让两张共用一格比例。按出现顺序去重，**首张保持原锚点不变**。
+    final imageIds = _uniqueIdentities(images);
+    final fileIds = _uniqueIdentities(files);
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth;
@@ -267,13 +290,18 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
             if (images.isNotEmpty)
               Align(
                 alignment: AlignmentDirectional.centerEnd,
-                child: _imageGrid(context, images, available: available),
+                child: _imageGrid(
+                  context,
+                  images,
+                  identities: imageIds,
+                  available: available,
+                ),
               ),
             if (images.isNotEmpty && files.isNotEmpty)
               const SizedBox(height: 6),
             for (var index = 0; index < files.length; index++) ...[
               if (index > 0) const SizedBox(height: 4),
-              _fileRow(context, files[index]),
+              _fileRow(context, files[index], identity: fileIds[index]),
             ],
           ],
         );
@@ -284,6 +312,7 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
   Widget _imageGrid(
     BuildContext context,
     List<MessageAttachment> images, {
+    required List<String> identities,
     required double available,
   }) {
     // 单图例外：contain 大图（原行为，不动）。
@@ -291,6 +320,7 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
       return _imageTile(
         context,
         images.single,
+        identity: identities.first,
         width: UserAttachmentBlock.singleImageMaxWidth,
         height: UserAttachmentBlock.singleImageMaxHeight,
         fit: BoxFit.contain,
@@ -304,10 +334,11 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
         spacing: UserAttachmentBlock.tileGap,
         runSpacing: UserAttachmentBlock.tileGap,
         children: [
-          for (final attachment in images)
+          for (var i = 0; i < images.length; i++)
             _imageTile(
               context,
-              attachment,
+              images[i],
+              identity: identities[i],
               width: UserAttachmentBlock.tileSize,
               height: UserAttachmentBlock.tileSize,
               fit: BoxFit.cover,
@@ -316,7 +347,7 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
       );
     }
 
-    final ratios = [for (final attachment in images) _ratioOf(attachment)];
+    final ratios = [for (final id in identities) _ratioOf(id)];
     final rows = UserAttachmentBlock.justifiedRows(
       ratios,
       available: available,
@@ -326,8 +357,10 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
     var index = 0;
     for (var r = 0; r < rows.length; r++) {
       final widths = rows[r];
-      final rowImages = images.sublist(index, index + widths.length);
-      final rowRatios = ratios.sublist(index, index + widths.length);
+      final rowStart = index;
+      final rowImages = images.sublist(rowStart, rowStart + widths.length);
+      final rowRatios = ratios.sublist(rowStart, rowStart + widths.length);
+      final rowIds = identities.sublist(rowStart, rowStart + widths.length);
       index += widths.length;
       if (r > 0) {
         rowWidgets.add(const SizedBox(height: UserAttachmentBlock.tileGap));
@@ -336,6 +369,7 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
         _justifiedRow(
           context,
           rowImages,
+          identities: rowIds,
           widths: widths,
           ratios: rowRatios,
           available: available,
@@ -360,6 +394,7 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
   Widget _justifiedRow(
     BuildContext context,
     List<MessageAttachment> rowImages, {
+    required List<String> identities,
     required List<double> widths,
     required List<double> ratios,
     required double available,
@@ -374,6 +409,7 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
         _imageTile(
           context,
           rowImages[i],
+          identity: identities[i],
           width: widths[i],
           height: height,
           fit: BoxFit.cover,
@@ -394,11 +430,11 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
   Widget _imageTile(
     BuildContext context,
     MessageAttachment attachment, {
+    required String identity,
     required double width,
     required double height,
     required BoxFit fit,
   }) {
-    final identity = _identityOf(attachment);
     return SizedBox(
       // 稳定测试锚点：点它 = 打开大图预览。
       key: ValueKey('user-attachment-image-$identity'),
@@ -422,12 +458,16 @@ class _UserAttachmentBlockState extends State<UserAttachmentBlock> {
   }
 
   /// 文件行条：图标 + 文件名 + 大小（整行铺满，避免气泡再留一条空蓝）。
-  Widget _fileRow(BuildContext context, MessageAttachment attachment) {
+  Widget _fileRow(
+    BuildContext context,
+    MessageAttachment attachment, {
+    required String identity,
+  }) {
     final name = _displayName(context, attachment);
     final size = _sizeLabel(attachment.size);
     return GestureDetector(
       // 稳定测试锚点：点它 = 打开附件预览页（含下载入口）。
-      key: ValueKey('user-attachment-file-${_identityOf(attachment)}'),
+      key: ValueKey('user-attachment-file-$identity'),
       behavior: HitTestBehavior.opaque,
       onTap: () => _openPreview(context, attachment),
       child: Container(

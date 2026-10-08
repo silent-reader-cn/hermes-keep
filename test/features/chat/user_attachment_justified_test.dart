@@ -336,6 +336,31 @@ void main() {
     expect(_rowsOf(rects, names), hasLength(1));
   }, timeout: _timeout);
 
+  testWidgets('同一消息两张同名附件：不得抛 Duplicate keys，两张都出瓦片', (tester) async {
+    final container = _container();
+    addTearDown(container.dispose);
+    // 同名 ⇒ `_identityOf` 退化成同一个文件名；旧实现会在同一 Row 里放两个相同
+    // ValueKey，debug 下 Flutter 直接抛「Duplicate keys found」。
+    final names = ['ls.png', 'ls.png'];
+    await warmCache(tester);
+    await pumpBlock(tester, container, names, width: _wideAvailable);
+
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: '同名附件撞 ValueKey 会被 Flutter 直接抛出来',
+    );
+    // 首张保持原锚点，第二张带 `#1` 去重后缀 —— 既有工装/测试的锚点约定不受影响。
+    expect(
+      find.byKey(const ValueKey('user-attachment-image-ls.png')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('user-attachment-image-ls.png#1')),
+      findsOneWidget,
+    );
+  }, timeout: _timeout);
+
   testWidgets('2 / 3 / 4 / 6 张混比例 · 两档可用宽：逐行等高、逐行填满、无溢出', (tester) async {
     await warmCache(tester);
     for (final available in [_wideAvailable, _phoneAvailable]) {
