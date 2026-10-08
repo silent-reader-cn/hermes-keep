@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
+import 'package:hermes_ui/app/widgets/nav_bar_hairline.dart';
 import 'package:hermes_ui/app/theme/divider_tokens.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
@@ -73,6 +74,11 @@ void main() {
         isNull,
         reason: 'SDK 默认边框（1 物理像素黑 30%）会随滚动淡入并与发丝线叠加'
             ' ⇒ 必须显式传 border: null',
+      );
+      expect(
+        navBar.bottom,
+        isA<NavBarHairline>(),
+        reason: '顶栏底线由常驻发丝线部件提供（全应用同一件）',
       );
 
       // 取「高 0.5 逻辑像素」的那条线（避免与导航栏内部其它 ColoredBox 混淆）。
