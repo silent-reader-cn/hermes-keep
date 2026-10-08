@@ -94,6 +94,7 @@ class ChatInlineMediaWidget extends ConsumerStatefulWidget {
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
     this.fit = BoxFit.contain,
     this.padding = const EdgeInsets.symmetric(vertical: 4),
+    this.onIntrinsicSize,
   });
 
   final String rawUri;
@@ -116,6 +117,12 @@ class ChatInlineMediaWidget extends ConsumerStatefulWidget {
   /// 间距统一交给宫格的 spacing / runSpacing。
   final EdgeInsetsGeometry padding;
 
+  /// 可选：图片**固有尺寸**（解码后的像素宽×高）首次就绪时回调一次。
+  ///
+  /// justified 宫格靠它拿真实宽高比来分行（回调是异步的：图没解码完拿不到固有
+  /// 尺寸）。默认 `null` ⇒ 不挂任何监听、不做额外 IO，行为与旧版逐字节一致。
+  final ValueChanged<Size>? onIntrinsicSize;
+
   @override
   ConsumerState<ChatInlineMediaWidget> createState() =>
       _ChatInlineMediaWidgetState();
@@ -123,6 +130,75 @@ class ChatInlineMediaWidget extends ConsumerStatefulWidget {
 
 class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
   bool _forceLoaded = false;
+
+  /// 固有尺寸是否已回报（只回报一次；失败/换图可重试）。
+  bool _reportedIntrinsic = false;
+  ImageStream? _intrinsicStream;
+  ImageStreamListener? _intrinsicListener;
+
+  @override
+  void didUpdateWidget(ChatInlineMediaWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rawUri != widget.rawUri) {
+      _detachIntrinsic();
+      _reportedIntrinsic = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _detachIntrinsic();
+    super.dispose();
+  }
+
+  void _detachIntrinsic() {
+    final stream = _intrinsicStream;
+    final listener = _intrinsicListener;
+    if (stream != null && listener != null) {
+      stream.removeListener(listener);
+    }
+    _intrinsicStream = null;
+    _intrinsicListener = null;
+  }
+
+  /// 解析同一个 [ImageProvider]（与 `Image` 内部同 key ⇒ 命中同一份
+  /// ImageCache），拿到固有尺寸后回调一次。
+  ///
+  /// ⚠️ 命中缓存时监听器会**同步**回调 —— 直接在 build 期调父级 `setState` 会撞
+  /// 「build 期间 markNeedsBuild」，故同步分支推到帧后；异步分支（真解码完成）
+  /// 在 build 之外，直接回调。
+  void _reportIntrinsicSize(ImageProvider<Object> provider) {
+    final callback = widget.onIntrinsicSize;
+    if (callback == null || _reportedIntrinsic) return;
+    _reportedIntrinsic = true;
+    final stream = provider.resolve(createLocalImageConfiguration(context));
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (info, synchronousCall) {
+        _detachIntrinsic();
+        if (!mounted) return;
+        final size = Size(
+          info.image.width.toDouble(),
+          info.image.height.toDouble(),
+        );
+        if (synchronousCall) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) callback(size);
+          });
+        } else {
+          callback(size);
+        }
+      },
+      onError: (Object error, StackTrace? stackTrace) {
+        _detachIntrinsic();
+        // 允许后续重试（例如网络图下载完成后重建 provider）。
+        _reportedIntrinsic = false;
+      },
+    );
+    _intrinsicStream = stream;
+    _intrinsicListener = listener;
+    stream.addListener(listener);
+  }
 
   /// 点「点击加载」：本地置位（当帧即解闸）+ 记进进程级 URL 集合
   /// （返回再点开同消息时 State 已重建，靠集合里的记录仍然放行 —— 否则
@@ -288,6 +364,8 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
 
     Widget imageWidget;
     Uint8List? memoryBytes;
+    // 与 `Image` 内部同 key 的 provider：用于回报固有尺寸（justified 宫格排序用）。
+    ImageProvider<Object>? intrinsicProvider;
 
     if (isDataUri) {
       try {
@@ -295,6 +373,7 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
         if (commaIdx != -1) {
           final payload = resolvedUrl.substring(commaIdx + 1);
           memoryBytes = base64Decode(payload);
+          intrinsicProvider = MemoryImage(memoryBytes);
           imageWidget = Image.memory(
             memoryBytes,
             fit: widget.fit,
@@ -334,6 +413,8 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
       }
     } else if (isNetworkUrl) {
       final fileAsync = ref.watch(mediaFileProvider(resolvedUrl));
+      final cachedFile = fileAsync.valueOrNull;
+      if (cachedFile != null) intrinsicProvider = FileImage(cachedFile);
       imageWidget = fileAsync.when(
         data: (file) => Image.file(
           file,
@@ -389,8 +470,10 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
         },
       );
     } else if (!kIsWeb && File(resolvedUrl).existsSync()) {
+      final localFile = File(resolvedUrl);
+      intrinsicProvider = FileImage(localFile);
       imageWidget = Image.file(
-        File(resolvedUrl),
+        localFile,
         fit: widget.fit,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -428,6 +511,11 @@ class _ChatInlineMediaWidgetState extends ConsumerState<ChatInlineMediaWidget> {
         sessionId: widget.sessionId,
         maxWidth: widget.maxWidth,
       );
+    }
+
+    // 固有尺寸回报（justified 宫格重排用）；provider 为空或回调为空时是 no-op。
+    if (intrinsicProvider != null) {
+      _reportIntrinsicSize(intrinsicProvider);
     }
 
     return Padding(
