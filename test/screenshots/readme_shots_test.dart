@@ -20,6 +20,7 @@ import 'package:hermes_ui/core/models/workspace.dart';
 import 'package:hermes_ui/core/providers/catalog_providers.dart';
 import 'package:hermes_ui/features/chat/chat_page.dart';
 import 'package:hermes_ui/features/chat/chat_providers.dart';
+import 'package:hermes_ui/features/desktop/window_title_service.dart';
 import 'package:hermes_ui/features/insights/insights_api.dart';
 import 'package:hermes_ui/features/insights/insights_page.dart';
 import 'package:hermes_ui/features/kanban/kanban_page.dart';
@@ -452,6 +453,12 @@ void main() {
       physicalSize: const Size(2560, 1600),
       overrides: [
         chatApiProvider.overrideWithValue(api),
+        // #161：宽屏侧栏「当前会话高亮」由 activeChatSessionIdProvider 驱动。
+        // 真机里这个值是桌面生命周期观察者随 /chat 路由写入的；本工装自建
+        // GoRouter、不挂观察者，故须显式喂上，否则侧栏整列与「无当前会话」
+        // 逐像素相同——hero 图会漏掉这条语义（同族工装 attach_bubble /
+        // ctx_popover 也是这么做的）。
+        activeChatSessionIdProvider.overrideWith((ref) => 's-demo-1'),
         sessionListApiFactoryProvider.overrideWithValue(
           (_) => demoSessionApi(),
         ),

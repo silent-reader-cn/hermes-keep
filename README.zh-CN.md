@@ -45,7 +45,7 @@
 
 </div>
 
-> 全部截图由 App 自身的 golden 截图工装生成（`test/screenshots/`，演示数据），与每次发布逐像素一致；英文版 README 用的是同一工装出的英文套件（界面语言与演示数据同为英文）。
+> 全部截图由 App 自身的截图工装生成（`test/screenshots/readme_shots_test.dart`，演示数据），渲染的是真实 App 外壳而非效果图；中英两套出自同一工装，按语言各跑一次（界面语言与演示数据同语言）。
 
 ## 为什么选它
 
@@ -58,21 +58,25 @@
 - **内置 WebUI Sidecar（Windows）** —— 安装包自带完整 WebUI 后端与嵌入式 Python 3.11 运行时：无需预装 Python、Git 或任何编译环境，一键启动并连接（Clash Verge 式体验）。
 - **智能解释器复用** —— 启动时自动检测本机已有的 Hermes Agent 安装，优先借用其虚拟环境（自带全套 Agent 依赖，开箱即可聊天）；未检测到时回退到内置嵌入式 Python，仍可浏览只读会话历史。
 - **流式聊天** —— SSE 流式渲染、Markdown + 代码块、思考与工具调用卡片、回合中途 steer / 停止、模型选择器、会话级草稿。
-- **会话管理** —— 防抖搜索、置顶 / 归档 / 分支 / 删除、分区列表（置顶 / 今天 / 更早）、离线缓存。
+- **附件** —— 多图消息按「单行等高」宫格排布（行内等高、不裁切、不留白）；其余文件按整行文件条展示；图片加载可改为「点击后才加载」（**设置 → 自动加载图片**）。
+- **下载** —— 下载队列：实时进度（同步到常驻通知）、断点续传、取消。
+- **会话管理** —— 防抖搜索、置顶 / 归档 / 分支 / 删除、分区列表（置顶 / 今天 / 更早）、离线缓存；宽屏侧栏直接高亮「当前正在看的会话」。
 - **任务（Cron）** —— 创建 / 编辑 / 启停 / 手动触发 / 查看输出，运行状态徽标。
 - **技能与记忆** —— 技能浏览与筛选；记忆面板支持编辑与写回。
 - **工作区与 Git** —— 工作区文件浏览 / 上传 / 下载；分支切换、status、diff、提交、fetch / pull / push。
 - **看板（Kanban）** —— 看板与卡片跨列长按拖拽。
-- **统计（Insights）** —— 会话 / 消息 / 令牌 / 费用指标、模型拆分、近 14 天令牌图表。
+- **统计（Insights）** —— 今天 / 近 7 天 / 近 30 天 / 全部四档周期；会话、消息、令牌与费用指标，含模型拆分与令牌图表。
 - **通知** —— Android 后台回合完成通知，点击直达对应会话。
-- **桌面体验** —— 托盘图标、全局快捷键、窗口状态记忆、开机自启（Windows）。
+- **宽屏布局** —— 桌面端多页双栏（技能 / 任务 / 工作区 / Git / 诊断 / 下载 / 设置），不再是一根拉长的单列。
+- **桌面体验** —— 托盘图标、全局快捷键、窗口状态记忆、开机自启，以及 HiDPI 界面缩放 100–200%（Windows）。
+- **外观** —— 浅色 / 深色 / 跟随系统；页面底色可调（六档预设或自定义色相与明度）。
 - **多语言** —— English / 简体中文 / 跟随系统。
 
 ## 安装
 
 ### Windows
 
-1. 从 [Releases](https://github.com/silent-reader-cn/hermes-keep/releases) 页面下载最新安装包（`*.exe`）并运行。
+1. 从 [Releases](https://github.com/silent-reader-cn/hermes-keep/releases) 页面下载最新安装包 `HermesUI-<版本号>-x64-setup.exe` 并运行。
 2. 启动 **Hermes UI**，在引导页选择 **内置服务** → **启动并连接**，完成——WebUI 后端自动拉起。
 
 聊天功能需要本机安装 [Hermes Agent](https://hermes-agent.nousresearch.com/docs)。未检测到时引导页会出现提示卡并附安装指南链接；此时 App 仍可用（会话历史只读），尝试聊天会明确提示缺少的内容。
@@ -85,7 +89,7 @@
 
 ```bash
 git clone https://github.com/silent-reader-cn/hermes-keep.git
-cd hermes-ui
+cd hermes-keep
 flutter pub get
 
 # Windows 桌面
@@ -128,7 +132,7 @@ API 契约对齐 **[nesquena/hermes-webui](https://github.com/nesquena/hermes-we
 
 ## 项目状态
 
-活跃开发中：4,800+ 自动化测试全绿、`flutter analyze` 零告警。发布产物为 CI 构建的 Windows 安装包（内置 WebUI sidecar）与 Android arm64 APK。变更详情见 [更新日志](CHANGELOG.md)。
+活跃开发中：5,600+ 自动化测试全绿、`flutter analyze` 零告警。发布产物为 CI 构建的 Windows 安装包（内置 WebUI sidecar）与 Android arm64 APK。变更详情见 [更新日志](CHANGELOG.md)。
 
 ## 开源协议
 

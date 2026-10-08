@@ -13,7 +13,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// ①当前会话高亮 的渲染由 `_SessionRow.isCurrent` 承载（私有 widget），
 /// 本文件以「provider → 徽标/文案」的可观测契约为主；高亮的像素回归由
-/// `docs/screenshots/wide-sessions.png` 与 session_list 域用例共同守卫。
+/// `docs/screenshots/wide-chat.png`（宽屏侧栏 + 当前会话）与 session_list
+/// 域用例共同守卫 —— 注意会话列表页（`wide-sessions.png`）没有当前会话，
+/// 那张图守不到高亮。
 class _EmptyTasksController extends TasksController {
   @override
   Future<TasksState> build() async {

@@ -45,7 +45,7 @@ Dark and light themes ship side by side, and each language gets its own set so t
 
 </div>
 
-> All screenshots are captured from the app's own golden-screenshot harness with demo data (`test/screenshots/`), so they match every release byte-for-byte. Both the English and [简体中文](README.zh-CN.md) sets are generated from the same harness, one run per language.
+> All screenshots come from the app's own screenshot harness with demo data (`test/screenshots/readme_shots_test.dart`), rendered inside the real app shell — not mockups. The English and [简体中文](README.zh-CN.md) sets are produced by the same harness, one run per language.
 
 ## Why this one
 
@@ -61,21 +61,25 @@ behaves the same everywhere it runs.
 - **Bundled WebUI Sidecar (Windows)** — the installer ships a self-contained WebUI backend with an embedded Python 3.11 runtime: no pre-installed Python, Git, or compilers required. One click to start & connect, Clash-Verge style.
 - **Smart interpreter reuse** — on startup the app detects an existing Hermes Agent installation and reuses its virtualenv (full agent dependencies, chat works out of the box). Without one, the bundled embedded Python still serves read-only session history.
 - **Streaming chat** — SSE streaming with Markdown + code blocks, reasoning and tool-call cards, steer and stop mid-turn, model picker, per-session drafts.
-- **Sessions** — debounced search, pin / archive / branch / delete, sectioned list (pinned / today / earlier), offline cache.
+- **Attachments** — multi-image messages lay out as one justified row each (equal height, no cropping, no gaps); other files render as compact file rows; image loading can be gated to a tap via **Settings → Auto-load Images**.
+- **Downloads** — a download queue with live progress (mirrored to a notification), resume from a partial file, and cancel.
+- **Sessions** — debounced search, pin / archive / branch / delete, sectioned list (pinned / today / earlier), offline cache, and the session you are reading highlighted in the sidebar.
 - **Tasks (cron)** — create, edit, enable/disable, trigger manually, inspect output, run-status badges.
 - **Skills & Memory** — browse and filter skills; memory panel with editing and write-back.
 - **Workspace & Git** — browse/upload/download workspace files; branch switching, status, diffs, commit, fetch / pull / push.
 - **Kanban** — boards and cards with cross-column drag & drop.
-- **Insights** — session / message / token / cost metrics, per-model breakdown, 14-day token chart.
+- **Insights** — today / 7 days / 30 days / all-time selector; session, message, token and cost metrics with a per-model breakdown and token chart.
 - **Notifications** — Android background turn-completion notifications with deep-link back to the conversation.
-- **Desktop polish** — tray icon, global hotkeys, window-state memory, launch-on-login (Windows).
+- **Wide screens** — two-pane layouts on desktop (skills, tasks, workspace, Git, diagnostics, downloads, settings) instead of one stretched column.
+- **Desktop polish** — tray icon, global hotkeys, window-state memory, launch-on-login, and 100–200% UI scaling for HiDPI displays (Windows).
+- **Appearance** — light / dark / follow system, plus an adjustable page background (six presets or your own hue and lightness).
 - **Bilingual UI** — English / 简体中文 / follow system.
 
 ## Installation
 
 ### Windows
 
-1. Grab the latest installer (`*.exe`) from the [Releases](https://github.com/silent-reader-cn/hermes-keep/releases) page and run it.
+1. Grab the latest installer `HermesUI-<version>-x64-setup.exe` from the [Releases](https://github.com/silent-reader-cn/hermes-keep/releases) page and run it.
 2. Launch **Hermes UI**. On the onboarding screen pick **Built-in service** → **Start & Connect**. That's it — the WebUI backend starts automatically.
 
 Chat requires a [Hermes Agent](https://hermes-agent.nousresearch.com/docs) installation. If none is detected, the onboarding screen shows a card linking to the install guide; without it the app still works in read-only mode (session history), and attempting to chat will tell you what's missing.
@@ -88,7 +92,7 @@ Download `app-release.apk` from the [Releases](https://github.com/silent-reader-
 
 ```bash
 git clone https://github.com/silent-reader-cn/hermes-keep.git
-cd hermes-ui
+cd hermes-keep
 flutter pub get
 
 # Windows desktop
@@ -131,7 +135,7 @@ The API contract is aligned with **[nesquena/hermes-webui](https://github.com/ne
 
 ## Project status
 
-Actively developed; 4,800+ automated tests green, `flutter analyze` clean. Releases ship a signed Windows installer (CI-built, bundling the WebUI sidecar) and an Android arm64 APK. See the [changelog](CHANGELOG.md) for details.
+Actively developed; 5,600+ automated tests green, `flutter analyze` clean. Releases ship a signed Windows installer (CI-built, bundling the WebUI sidecar) and an Android arm64 APK. See the [changelog](CHANGELOG.md) for details.
 
 ## License
 
