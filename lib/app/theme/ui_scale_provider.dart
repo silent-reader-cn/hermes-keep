@@ -64,20 +64,43 @@ class UiScaleController extends Notifier<AppUiScale> {
   }
 }
 
-/// 把 [child] 按 [scale] 包一层 MediaQuery 覆写 —— 这是 HiDPI 缩放的**唯一落点**，
+/// 把 [child] 按 [scale] 缩放到真实视口 —— 这是界面缩放的**唯一落点**，
 /// 抽成独立件以便 `app.dart` 与守卫测试共用同一份逻辑（测试不必复刻 builder）。
 ///
-/// - **100% 档原样返回**（不新建 MediaQuery）：与改造前逐像素一致。
-/// - 覆写 `size`（缩小 ⇒ 组件等比放大）与 `devicePixelRatio`（保持物理像素不变）。
-/// - 语义上这是「UI 缩放」而非「改系统 dpr」：真实 dpr 不动，渲染精度不变。
+/// **两段式，缺一不可**（第一版只做了 ①，实测字体/尺寸一个像素都没动）：
+/// ① `MediaQuery` 覆写：`size / factor` ⇒ 内层按「缩小后的逻辑视口」布局
+///    （各页 `MediaQuery.sizeOf` 判定随之生效 = A 方案），`devicePixelRatio * factor`
+///    使 `1 / dpr` 之类「物理像素换算」（如会话列表发丝线）仍然精确等于 1 物理像素。
+/// ② `Transform.scale` 真放大绘制：把内层布局好的画面放大 `factor` 倍画回真实逻辑
+///    视口。**这一步才是「看得见」的缩放** —— 渲染用的逻辑像素坐标系由引擎真实
+///    dpr 决定，只改 MediaQuery 数据不会改变任何绘制尺寸（字体、间距、图标全不变）。
+///
+/// `OverflowBox` 是必需的：真实视口给下来的是紧约束，直接放子件会被撑满，
+/// 内层就再也拿不到 `size / factor` 那片小视口（① 于是形同虚设）。
+/// 它也保证了 `Transform` 自身尺寸 = 真实视口 ⇒ 放大后的整屏都能响应命中测试。
+///
+/// - **100% 档原样返回**（不新建任何 Widget）：与改造前逐像素一致。
+/// - 真实 dpr 不动（引擎侧渲染精度不变），改的只是应用层语义。
 Widget applyUiScale(BuildContext context, Widget child, AppUiScale scale) {
   if (scale == AppUiScale.x1) return child;
   final media = MediaQuery.of(context);
+  final logical = media.size / scale.factor;
   return MediaQuery(
     data: media.copyWith(
-      size: media.size / scale.factor,
+      size: logical,
       devicePixelRatio: media.devicePixelRatio * scale.factor,
     ),
-    child: child,
+    child: Transform.scale(
+      scale: scale.factor,
+      alignment: Alignment.topLeft,
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        minWidth: logical.width,
+        maxWidth: logical.width,
+        minHeight: logical.height,
+        maxHeight: logical.height,
+        child: child,
+      ),
+    ),
   );
 }

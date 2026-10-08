@@ -7,9 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// HiDPI / 界面缩放（主人 2026-09-27 需求）守卫。
 ///
-/// 覆盖三件事：① 四档位与持久化；② [applyUiScale] 的覆写语义（100% 档必须原样
+/// 覆盖四件事：① 四档位与持久化；② [applyUiScale] 的覆写语义（100% 档必须原样
 /// 返回、否则会改变既有像素）；③ **A 方案** —— 宽窄屏判定跑在**缩放后**的逻辑宽上
-/// （150% 下 1280 窗口 = 853 逻辑宽 < 900 => 转窄屏单栏）。
+/// （150% 下 1280 窗口 = 853 逻辑宽 < 900 => 转窄屏单栏）；④ **真放大** ——
+/// 第一版只覆写 MediaQuery 数据（size/dpr），渲染坐标系由引擎真实 dpr 决定，
+/// 于是字体与所有尺寸**一个像素都没变**（主人 2026-10-08 实测反馈「百分比缩放
+/// 对字体和布局无效」）。④ 用几何测量 + 命中测试把这层锁死。
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
@@ -145,6 +148,96 @@ void main() {
       expect(await wideAt(AppUiScale.x125), isTrue);
       expect(await wideAt(AppUiScale.x150), isFalse);
       expect(await wideAt(AppUiScale.x2), isFalse);
+    });
+  });
+
+  group('applyUiScale 真放大（缺了这层，缩放就是「数据改了但屏幕没变」）', () {
+    /// 在 2560×1600 @2x（逻辑 1280×800）里量三件事：
+    /// - `fill`：内层内容撑满后的**布局**尺寸（应 = 真实逻辑视口 / factor）；
+    /// - `box`：固定 100×100 的盒子在**屏幕上**的矩形（含祖先 Transform）；
+    /// - `text`：一段文字的屏幕矩形（字体是否真变大）；
+    /// - `taps`：点屏幕四角 + 中心，命中内层内容的次数。
+    Future<
+      ({Size fill, Rect box, Rect text, int taps})
+    >
+    measure(WidgetTester tester, AppUiScale scale) async {
+      tester.view.physicalSize = const Size(2560, 1600);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+      var taps = 0;
+      await tester.pumpWidget(
+        CupertinoApp(
+          builder: (context, child) =>
+              applyUiScale(context, child ?? const SizedBox.shrink(), scale),
+          home: SizedBox.expand(
+            child: GestureDetector(
+              key: const Key('fill'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => taps++,
+              child: const Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  key: Key('box'),
+                  width: 100,
+                  height: 100,
+                  child: Text(
+                    'Ab缩放',
+                    style: TextStyle(fontSize: 20),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final logicalView = tester.view.physicalSize / tester.view.devicePixelRatio;
+      for (final p in [
+        const Offset(10, 10),
+        Offset(logicalView.width - 10, 10),
+        Offset(10, logicalView.height - 10),
+        Offset(logicalView.width - 10, logicalView.height - 10),
+        Offset(logicalView.width / 2, logicalView.height / 2),
+      ]) {
+        await tester.tapAt(p);
+        await tester.pump();
+      }
+      return (
+        fill: tester.getSize(find.byKey(const Key('fill'))),
+        box: tester.getRect(find.byKey(const Key('box'))),
+        text: tester.getRect(find.text('Ab缩放')),
+        taps: taps,
+      );
+    }
+
+    testWidgets('150%：内容按 1.5 倍画到屏幕上，内层布局仍按缩小视口', (tester) async {
+      final base = await measure(tester, AppUiScale.x1);
+      final scaled = await measure(tester, AppUiScale.x150);
+
+      // ① 内层布局空间 = 真实逻辑视口 / 1.5（A 方案的判定空间就在这里）。
+      expect(scaled.fill.width, closeTo(1280 / 1.5, 0.05));
+      expect(scaled.fill.height, closeTo(800 / 1.5, 0.05));
+      // ② 屏幕上真的变大了 1.5 倍（固定尺寸盒子 + 文字，两者都查）。
+      expect(scaled.box.size.width, closeTo(150, 0.01));
+      expect(scaled.box.size.height, closeTo(150, 0.01));
+      expect(scaled.text.width / base.text.width, closeTo(1.5, 0.02));
+      expect(scaled.text.height / base.text.height, closeTo(1.5, 0.02));
+      // ③ 放大后整屏都可命中（Transform 自身尺寸 = 真实视口）。
+      expect(scaled.taps, 5);
+      expect(base.taps, 5);
+    });
+
+    testWidgets('125% / 200% 同口径（系数即倍数，文字物理大小随档位单调增）', (
+      tester,
+    ) async {
+      final base = await measure(tester, AppUiScale.x1);
+      final x125 = await measure(tester, AppUiScale.x125);
+      final x2 = await measure(tester, AppUiScale.x2);
+
+      expect(x125.box.size.width, closeTo(125, 0.01));
+      expect(x2.box.size.width, closeTo(200, 0.01));
+      expect(x125.text.height / base.text.height, closeTo(1.25, 0.02));
+      expect(x2.text.height / base.text.height, closeTo(2.0, 0.02));
+      expect([x125.taps, x2.taps], [5, 5]);
     });
   });
 }
