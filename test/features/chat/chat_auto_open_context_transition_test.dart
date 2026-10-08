@@ -23,6 +23,8 @@ import '../../helpers/fake_chat_api.dart';
 /// 根因：弹层定位（`showAdaptivePopover`）在调用瞬间一次性快照锚点 RenderBox
 /// 坐标，弹层挂在根 Overlay 且不随页面平移——抢在转场中途弹出，弹窗会永久冻结
 /// 在「半程」指示器坐标上（指示器位于输入栏左簇，位移不会被右缘 clamp 吸收）。
+///
+/// 视口取窄屏：自动打开路径现只在窄屏生效（宽屏下该设置项视为未开启）。
 
 /// 全端点回 `{}` 200：上下文弹层内部会异步拉取模型/工作区列表。
 class _CatchAllAdapter implements HttpClientAdapter {
@@ -92,10 +94,10 @@ Future<void> _teardown(WidgetTester tester, ProviderContainer container) async {
   container.dispose();
 }
 
-/// 宽屏形态的输入栏：左侧留出侧栏宽度，避免弹层右对齐被屏幕左缘 clamp 吸收
-/// （真实宽屏双栏下指示器 x ≈ 侧栏 320 + 左簇内边距）。
-Widget _wideChatInputBar() => const Padding(
-  padding: EdgeInsets.only(left: 400),
+/// 带左侧留白的输入栏：让指示器离开屏幕左缘，避免弹层右对齐被左缘 clamp 吸收
+/// （该处理与屏宽无关，窄屏下同样需要）。
+Widget _offsetChatInputBar() => const Padding(
+  padding: EdgeInsets.only(left: 240),
   child: ChatInputBar(sessionId: 's1'),
 );
 
@@ -113,15 +115,18 @@ void main() {
 
   tearDown(AdaptivePopover.debugReset);
 
-  void useWideViewport(WidgetTester tester) {
-    tester.view.physicalSize = const Size(1200, 900);
+  /// 窄屏视口（<900）：自动打开现在**只在窄屏生效** —— 宽屏的上下文弹层只剩
+  /// 读数（模型 / 工作区入口已移除），自动弹出来没有可设置项，故设置项在宽屏
+  /// 下视为未开启（见 `chat_input_bar._autoOpenContextEffective`）。
+  void useNarrowViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(800, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
-  testWidgets('自动打开上下文弹窗等入场转场播完才弹，且右缘对齐静止态指示器', (tester) async {
-    useWideViewport(tester);
+  testWidgets('自动打开上下文弹窗等入场转场播完才弹，且位置与静止后手动打开一致', (tester) async {
+    useNarrowViewport(tester);
     final container = _buildContainer();
 
     final navKey = GlobalKey<NavigatorState>();
@@ -140,7 +145,7 @@ void main() {
     unawaited(
       navKey.currentState!.push<void>(
         HermesPageRoute<void>(
-          builder: (_) => CupertinoPageScaffold(child: _wideChatInputBar()),
+          builder: (_) => CupertinoPageScaffold(child: _offsetChatInputBar()),
         ),
       ),
     );
@@ -179,14 +184,14 @@ void main() {
   });
 
   testWidgets('路由动画已完成（首屏 didAdd）时自动打开即刻弹出，不被等待逻辑拖延', (tester) async {
-    useWideViewport(tester);
+    useNarrowViewport(tester);
     final container = _buildContainer();
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
         child: CupertinoApp(
-          home: CupertinoPageScaffold(child: _wideChatInputBar()),
+          home: CupertinoPageScaffold(child: _offsetChatInputBar()),
         ),
       ),
     );

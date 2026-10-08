@@ -179,6 +179,69 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('宽屏（>=900）下开关开启也不自动弹窗 —— 该设置视为未开启', (tester) async {
+      // 宽屏的上下文弹层只剩读数（「当前模型 / 工作区」两个入口 2026-10-07 已移除）⇒
+      // 自动弹出来没有任何可设置项 ⇒ 主人在宽屏下把开关打开也**一律视为未开启**。
+      tester.view.physicalSize = const Size(1280, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final fakeChatApi = FakeChatApi();
+      fakeChatApi.sessionResult = {
+        'session': {
+          'session_id': 's-new-1',
+          'workspace': '/home/user/workspace-1',
+          'model': 'gpt-4o',
+          'context_length': 128000,
+          'context_tokens': 1000,
+        },
+      };
+
+      final client = _buildTestClient();
+      final recentController = _CustomRecentlyCreatedNotifier('s-new-1');
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatApiProvider.overrideWithValue(fakeChatApi),
+            apiClientProvider.overrideWithValue(client),
+            recentlyCreatedSessionIdProvider.overrideWith(
+              () => recentController,
+            ),
+            autoOpenContextOnNewSessionProvider.overrideWith(
+              () => _CustomAutoOpenContextNotifier(true),
+            ),
+          ],
+          child: const CupertinoApp(
+            locale: Locale('zh'),
+            supportedLocales: [Locale('zh'), Locale('en')],
+            localizationsDelegates: [
+              AppLocalizationsDelegate(),
+              DefaultCupertinoLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: CupertinoPageScaffold(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: ChatInputBar(sessionId: 's-new-1'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      // 宽屏 + 开关开启 ⇒ **不**弹窗
+      expect(find.byType(ContextWindowPopover), findsNothing);
+      // 「新建会话」标志照旧被消费（与开关无关的既有语义不受本改动影响）
+      expect(recentController.state, isNull);
+    });
+
     testWidgets('设置开关关闭时，新建会话不自动弹窗', (tester) async {
       tester.view.physicalSize = const Size(800, 1000);
       tester.view.devicePixelRatio = 1.0;
