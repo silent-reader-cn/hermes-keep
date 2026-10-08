@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/adaptive_shell.dart';
+import '../../../app/theme/layout_tokens.dart';
 import '../../../app/theme/light_surfaces.dart';
 import '../../../app/theme/status_colors.dart';
 import '../../../app/widgets/adaptive_popover.dart';
@@ -112,6 +113,21 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     });
   }
 
+  /// 「新建会话自动打开上下文弹层」的**有效**开关。
+  ///
+  /// 宽屏（>=900）恒为 false —— 宽屏的上下文弹层只剩读数（「当前模型 / 工作区」
+  /// 两个入口已按主人 2026-10-07 拍板移除，见 `context_window_popover.dart` 的类
+  /// 文档），自动弹出来**没有任何可设置项** ⇒ 该设置项在宽屏下**一律视为未开启**；
+  /// 窄屏语义不变（开关照旧生效）。
+  ///
+  /// ⚠️ 只在**挂载之后**的路径里读它：判据含 `MediaQuery`，在 `initState` 里读会
+  /// 触发「dependOnInheritedWidgetOfExactType ... called before initState completed」
+  /// 断言。故 [_checkRecentlyCreatedOnMount]（可能跑在 initState）只读设置项本身，
+  /// 宽度判据放在两个执行点（[_tryAutoOpenContextPopover] / [_autoOpenContextPopover]）。
+  bool get _autoOpenContextEffective =>
+      !isWideLayout(context) &&
+      ref.read(autoOpenContextOnNewSessionProvider);
+
   void _checkRecentlyCreatedOnMount() {
     _pendingAutoOpen = false;
     final recentlyCreated = ref.read(recentlyCreatedSessionIdProvider);
@@ -121,6 +137,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           ref.read(recentlyCreatedSessionIdProvider.notifier).clear();
         }
       });
+      // 只读设置项本身（此方法可能跑在 initState，不能读 MediaQuery）；
+      // 宽屏拦截见 [_autoOpenContextEffective] 的两个执行点。
       final autoOpenEnabled = ref.read(autoOpenContextOnNewSessionProvider);
       if (autoOpenEnabled) {
         _pendingAutoOpen = true;
@@ -176,14 +194,24 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   /// 自动打开路径：等入场转场播完后再弹（#115）。手动点按指示器不走此路径，
   /// 保持零延迟。
+  ///
+  /// 宽屏下整条路径短路：设置项视为未开启（见 [_autoOpenContextEffective]）——
+  /// 前后各查一次覆盖「挂载时窄屏、入场期间被拉宽」的情况。
   Future<void> _autoOpenContextPopover() async {
+    if (!_autoOpenContextEffective) return;
     await _awaitEntranceTransition();
-    if (!mounted) return;
+    if (!mounted || !_autoOpenContextEffective) return;
     await _showContextPopover();
   }
 
   void _tryAutoOpenContextPopover() {
     if (!_pendingAutoOpen || !mounted) return;
+    // 宽屏：设置项视为未开启 —— 丢弃这次待弹（见 [_autoOpenContextEffective]）。
+    // 本方法只从 postFrame 回调调用，读 MediaQuery 安全。
+    if (!_autoOpenContextEffective) {
+      _pendingAutoOpen = false;
+      return;
+    }
     final snapshot = ref
         .read(chatControllerProvider(widget.sessionId))
         .contextWindowSnapshot;
