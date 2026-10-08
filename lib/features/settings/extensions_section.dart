@@ -7,6 +7,7 @@ import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
+import '../../app/widgets/nav_bar_hairline.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/extensions.dart';
 import '../../l10n/app_localizations.dart';
@@ -329,7 +330,8 @@ class _ExtensionInstallPageState extends ConsumerState<ExtensionInstallPage> {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const _PopBackButton(),
           middle: Text(l10n.installExtension),
           trailing: CupertinoButton(

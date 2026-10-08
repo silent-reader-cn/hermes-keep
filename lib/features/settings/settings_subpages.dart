@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/widgets/nav_bar_hairline.dart';
 import '../../l10n/app_localizations.dart';
 import '../desktop/desktop_settings.dart';
 import '../session_list/session_entry_visibility.dart';
@@ -42,7 +43,8 @@ class AuxiliaryModelsPage extends StatelessWidget {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const PopBackButton(),
           middle: Text(l10n.auxiliaryModelsSection),
         ),
@@ -66,7 +68,8 @@ class McpPage extends StatelessWidget {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const PopBackButton(),
           middle: Text(l10n.mcpSection),
         ),
@@ -90,7 +93,8 @@ class ExtensionsPage extends StatelessWidget {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const PopBackButton(),
           middle: Text(l10n.extensionsSection),
         ),
@@ -114,7 +118,8 @@ class SessionListEntriesPage extends StatelessWidget {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const PopBackButton(),
           middle: Text(l10n.sessionListEntriesSection),
         ),
@@ -253,7 +258,8 @@ class SessionRowSubtitlePage extends StatelessWidget {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const PopBackButton(),
           middle: Text(l10n.sessionRowSubtitleSection),
         ),
@@ -372,7 +378,8 @@ class DesktopSettingsPage extends ConsumerWidget {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const PopBackButton(),
           middle: Text(l10n.desktopSection),
         ),
@@ -515,7 +522,8 @@ class SidebarNavOrderPage extends StatelessWidget {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const PopBackButton(),
           middle: Text(l10n.sidebarNavOrderSection),
         ),

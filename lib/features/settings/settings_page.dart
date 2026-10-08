@@ -16,6 +16,7 @@ import '../../app/theme/theme_provider.dart';
 import '../../app/widgets/adaptive_sliver_navigation_bar.dart';
 import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
+import '../../app/widgets/nav_bar_hairline.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_client_server_panels.dart';
 import '../../core/api/api_exception.dart';
@@ -1856,7 +1857,8 @@ class _ServerEditorPageState extends ConsumerState<_ServerEditorPage> {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const _PopBackButton(),
           middle: Text(isEditing ? l10n.editServer : l10n.addServer),
           trailing: Align(
@@ -2201,7 +2203,8 @@ class _ModelPickerPage extends ConsumerWidget {
       context,
       CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          border: SettingsSurfaces.navigationBorder(context),
+          border: null,
+          bottom: const NavBarHairline(),
           leading: const _PopBackButton(),
           middle: Text(l10n.defaultModel),
           trailing: CupertinoButton(

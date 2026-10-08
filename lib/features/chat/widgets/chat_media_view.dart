@@ -898,6 +898,9 @@ class AttachmentLightbox extends StatelessWidget {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.black,
       navigationBar: CupertinoNavigationBar(
+        // 全屏媒体查看器：栏体恒黑，结构线在其上只会变成一条亮线 ⇒ 刻意不给线，
+        // 只显式关掉 SDK 那条黑 30%（避免线族里存留异色，口径见 nav_bar_hairline.dart）。
+        border: null,
         backgroundColor: CupertinoColors.black.withValues(alpha: 0.7),
         leading: CupertinoButton(
           padding: EdgeInsets.zero,

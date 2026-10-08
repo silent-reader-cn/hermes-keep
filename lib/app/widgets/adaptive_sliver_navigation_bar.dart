@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
 import '../shell/adaptive_shell.dart';
-import '../theme/divider_tokens.dart';
 import 'large_title_sliver_header.dart';
+import 'nav_bar_hairline.dart';
 import 'narrow_navigation_dropdown.dart';
 
 /// 宽屏自动收敛的 Cupertino 导航栏（Sliver 版）。
@@ -130,12 +130,13 @@ class _AdaptiveSliverNavigationBarState
         pinned: true,
         delegate: _FixedNavBarSliverDelegate(
           navBar: CupertinoNavigationBar(
-            // 结构线 L1：不用 SDK 默认的黑 30% 边框（口径见 divider_tokens.dart）。
-            border: Dividers.navBarBorder(context),
+            // 常驻发丝线：关掉 SDK 那条随滚动淡入的黑 30% 边框，线由 bottom 槽常驻
+            // 提供（口径与用法见 app/widgets/nav_bar_hairline.dart）。
+            border: null,
             leading: effectiveLeading,
             trailing: widget.trailing,
             middle: buildTitle(widget.title),
-            bottom: widget.bottom,
+            bottom: NavBarBottom(bottom: widget.bottom),
           ),
           topPadding: MediaQuery.paddingOf(context).top,
         ),
@@ -162,7 +163,7 @@ class _AdaptiveSliverNavigationBarState
         topPadding: MediaQuery.paddingOf(context).top,
         brightness: CupertinoTheme.of(context).brightness ?? Brightness.light,
         padding: widget.padding,
-        bottom: widget.bottom,
+        bottom: NavBarBottom(bottom: widget.bottom),
         onTitleDoubleTap: widget.onTitleDoubleTap,
         portrait: MediaQuery.orientationOf(context) == Orientation.portrait,
       ),

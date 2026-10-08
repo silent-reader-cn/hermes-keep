@@ -4,10 +4,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
-import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/typography_tokens.dart';
+import '../../app/widgets/nav_bar_hairline.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/kanban.dart';
 import '../../core/utils/accessibility.dart';
@@ -869,7 +869,8 @@ class _KanbanCardDetailPageState extends ConsumerState<KanbanCardDetailPage> {
     final l10n = AppLocalizations.of(context);
     final page = CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        border: _kanbanNavigationBorder(context),
+        border: null,
+        bottom: const NavBarHairline(),
         middle: Text(
           state?.card?.title ?? l10n.cardDetail,
           maxLines: 1,
@@ -1330,7 +1331,8 @@ class _KanbanCreateCardPageState extends ConsumerState<KanbanCreateCardPage> {
 
     final page = CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
-        border: _kanbanNavigationBorder(context),
+        border: null,
+        bottom: const NavBarHairline(),
         middle: Text(l10n.newCard),
         trailing: CupertinoButton(
           key: const ValueKey('kanban-form-save'),
@@ -1520,10 +1522,6 @@ Widget _withKanbanLightTheme(BuildContext context, Widget child) {
     ),
   );
 }
-
-/// 导航栏底部结构线（L1）—— 统一走线族令牌；深色不再沿用 SDK 默认的黑 30% 边框。
-Border _kanbanNavigationBorder(BuildContext context) =>
-    Dividers.navBarBorder(context);
 
 BoxDecoration? _kanbanSectionDecoration(BuildContext context) =>
     _usesLightSurfaces(context)

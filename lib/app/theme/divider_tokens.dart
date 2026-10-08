@@ -59,15 +59,10 @@ abstract final class Dividers {
   /// 一类 SDK 分隔线插槽）。
   static Color rowSeparator(BuildContext context) => structural(context);
 
-  /// 导航栏底部结构线（L1）。
-  ///
-  /// 取代 Flutter SDK 默认的黑 30% 边框：凡「页面自带导航栏」一律显式传它，
-  /// 滚动时淡入的也是本仓线族色，而不是 SDK 那条黑线。
-  ///
-  /// 例外：**自己画了常驻发丝线**的页面（聊天页 `_NavBarHairline`，见
-  /// `chat_page.dart`）应显式传 `border: null` 彻底关掉 SDK 边框，
-  /// 否则两条线仍会叠出「一滚动就变深」。
-  static Border navBarBorder(BuildContext context) => Border(
-    bottom: BorderSide(color: structural(context), width: hairlineWidth),
-  );
+  // ⚠️ **导航栏底线不在此类**：一律用常驻发丝线部件
+  // （`app/widgets/nav_bar_hairline.dart` 的 `NavBarHairline` / `NavBarBottom`），
+  // 并给导航栏显式 `border: null` 关掉 SDK 那条随滚动淡入的黑 30%。
+  // 主人 2026-10-08 拍板：「常驻发丝线；本来叠在上面的线去掉 —— 用这条常驻的
+  // 发丝线，而不是后加的分隔线。」走 border 形态必然回到「滚动才淡入、两条
+  // 叠一起」的老问题，故此处刻意不提供 border 令牌。
 }

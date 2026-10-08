@@ -8,11 +8,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/shell/adaptive_shell.dart' show kAdaptiveBreakpoint;
-import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/theme/typography_tokens.dart';
 import '../../app/widgets/hermes_dialog.dart';
+import '../../app/widgets/nav_bar_hairline.dart';
 import '../../core/platform/external_opener.dart';
 import '../../l10n/app_localizations.dart';
 import '../diagnostics/diagnostics_models.dart';
@@ -402,7 +402,8 @@ class DownloadPage extends ConsumerWidget {
       ),
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
-        border: Dividers.navBarBorder(context),
+        border: null,
+        bottom: const NavBarHairline(),
         leading: const AppBackButton(),
         middle: Text(l10n.downloadsTitle),
         trailing: hasTerminalTasks

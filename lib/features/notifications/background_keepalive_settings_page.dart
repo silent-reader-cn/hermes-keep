@@ -4,9 +4,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hermes_ui/app/theme/typography_tokens.dart';
 
-import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
+import '../../app/widgets/nav_bar_hairline.dart';
 import '../../l10n/app_localizations.dart';
 import '../settings/settings_surfaces.dart';
 import '../settings/settings_subpages.dart';
@@ -28,7 +28,8 @@ class BackgroundKeepalivePage extends StatelessWidget {
       backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
-        border: Dividers.navBarBorder(context),
+        border: null,
+        bottom: const NavBarHairline(),
         leading: const PopBackButton(),
         middle: Text(l10n.bgKeepAliveSection),
       ),

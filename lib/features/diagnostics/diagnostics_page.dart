@@ -5,11 +5,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/layout_tokens.dart';
-import '../../app/theme/divider_tokens.dart';
 import '../../app/theme/light_surfaces.dart';
 import '../../app/theme/status_colors.dart';
 import '../../app/widgets/hermes_dialog.dart';
 import '../../app/widgets/hermes_page_route.dart';
+import '../../app/widgets/nav_bar_hairline.dart';
 import '../../core/utils/safe_clipboard.dart';
 import '../../l10n/app_localizations.dart';
 import '../settings/settings_surfaces.dart';
@@ -264,7 +264,8 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
       backgroundColor: isLight ? LightSurfaces.page : null,
       navigationBar: CupertinoNavigationBar(
         backgroundColor: isLight ? LightSurfaces.page : null,
-        border: Dividers.navBarBorder(context),
+        border: null,
+        bottom: const NavBarHairline(),
         middle: Text(
           isSelectionMode
               ? l10n.diagnosticsSelectedCount(selectedIds.length)

@@ -14,6 +14,7 @@ import 'package:hermes_ui/l10n/app_localizations.dart';
 
 import '../../helpers/contrast_utils.dart';
 import '../../helpers/fake_tasks_api.dart';
+import 'package:hermes_ui/app/widgets/nav_bar_hairline.dart';
 
 CronJob _buildJob(
   String id, {
@@ -417,10 +418,12 @@ void main() {
           find.byType(CupertinoNavigationBar),
         );
         expect(navBar.backgroundColor, LightSurfaces.page);
-        final navContext = tester.element(find.byType(CupertinoNavigationBar));
-        expect(navBar.border, Dividers.navBarBorder(navContext));
-        expect(navBar.border?.bottom.color, LightSurfaces.divider);
-        expect(navBar.border?.bottom.width, Dividers.hairlineWidth);
+        expect(navBar.border, isNull);
+        expect(navBar.bottom, isA<NavBarHairline>());
+        expect(
+          navBar.bottom!.preferredSize.height,
+          Dividers.hairlineWidth,
+        );
 
         // 验证输入框装饰与占位文本样式
         final fields = tester.widgetList<CupertinoTextField>(
@@ -802,12 +805,8 @@ void main() {
           find.byType(CupertinoNavigationBar),
         );
         expect(navBar.backgroundColor, isNull);
-        expect(
-          navBar.border,
-          Dividers.navBarBorder(
-            tester.element(find.byType(CupertinoNavigationBar)),
-          ),
-        );
+        expect(navBar.border, isNull);
+        expect(navBar.bottom, isA<NavBarHairline>());
 
         const defaultField = CupertinoTextField();
         final fields = tester.widgetList<CupertinoTextField>(

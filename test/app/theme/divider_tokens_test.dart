@@ -58,12 +58,10 @@ void main() {
           expectedL2.toARGB32(),
         );
 
-        final border = Dividers.navBarBorder(context);
-        expect(border.bottom.width, Dividers.hairlineWidth);
-        expect(border.bottom.color.toARGB32(), expectedL1.toARGB32());
-        // 起案根因：SDK 默认边框那条 1px 黑 30% 必须彻底退出线族。
-        expect(border.bottom.color.toARGB32(), isNot(0x4D000000));
-        expect(border.bottom.width, isNot(0.0));
+        // 起案根因：SDK 那条「1 物理像素黑 30%」必须彻底退出线族。导航栏底线
+        // 现由常驻发丝线部件提供（几何/配色守卫见 test/app/widgets/
+        // nav_bar_hairline_test.dart + nav_bar_hairline_guard_test.dart）。
+        expect(Dividers.structural(context).toARGB32(), isNot(0x4D000000));
       });
     });
   }
@@ -79,10 +77,7 @@ void main() {
         LightSurfaces.divider.toARGB32(),
         reason: '结构线必须跟随页底色派生，不得写死旧值',
       );
-      expect(
-        Dividers.navBarBorder(context).bottom.color.toARGB32(),
-        LightSurfaces.divider.toARGB32(),
-      );
+      // （导航栏常驻发丝线同样取 [Dividers.structural]，见上一条断言。）
     });
   });
 }

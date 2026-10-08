@@ -5,7 +5,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hermes_ui/app/theme/cupertino_theme.dart';
-import 'package:hermes_ui/app/theme/divider_tokens.dart';
 import 'package:hermes_ui/app/theme/light_surfaces.dart';
 import 'package:hermes_ui/core/utils/safe_clipboard.dart';
 import 'package:hermes_ui/features/diagnostics/diagnostics_detail_sheet.dart';
@@ -17,6 +16,8 @@ import 'package:hermes_ui/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/contrast_utils.dart';
+import 'package:hermes_ui/app/theme/divider_tokens.dart';
+import 'package:hermes_ui/app/widgets/nav_bar_hairline.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -116,13 +117,13 @@ void main() {
       final chipFg = chipText.style!.color!;
       expect(contrastRatio(chipFg, chipDeco.color!), greaterThanOrEqualTo(4.5));
 
-      // 验证导航栏边框浅色使用 divider
+      // 验证导航栏底边：关掉 SDK 默认边框 + 常驻发丝线（主人 2026-10-08 拍板）
       final navBar = tester.widget<CupertinoNavigationBar>(
         find.byType(CupertinoNavigationBar),
       );
-      final navBorder = navBar.border!;
-      expect(navBorder.bottom.color, LightSurfaces.divider);
-      expect(navBorder.bottom.width, 0.5);
+      expect(navBar.border, isNull);
+      expect(navBar.bottom, isA<NavBarHairline>());
+      expect(navBar.bottom!.preferredSize.height, Dividers.hairlineWidth);
 
       // 2. 深色主题测试
       await tester.pumpWidget(buildDiagnosticsApp(brightness: Brightness.dark));
@@ -158,10 +159,8 @@ void main() {
       final darkNavBar = tester.widget<CupertinoNavigationBar>(
         find.byType(CupertinoNavigationBar),
       );
-      expect(
-        darkNavBar.border,
-        Dividers.navBarBorder(tester.element(find.byType(CupertinoNavigationBar))),
-      );
+      expect(darkNavBar.border, isNull);
+      expect(darkNavBar.bottom, isA<NavBarHairline>());
 
       // 3. 窄屏（<900）：顶部 chips 行的同一契约原样保留
       // （批 4C 只改宽屏；这条口径就是改动前的原断言）。

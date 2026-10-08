@@ -6,8 +6,8 @@ import 'package:flutter/material.dart' show Colors;
 import 'package:mermaid_core/mermaid_core.dart' as core;
 import 'package:mermaid_flutter/mermaid_flutter.dart';
 
-import '../../../app/theme/divider_tokens.dart';
 import '../../../app/theme/light_surfaces.dart';
+import '../../../app/widgets/nav_bar_hairline.dart';
 import '../../../l10n/app_localizations.dart';
 
 /// 全屏查看 Mermaid 图表页面。
@@ -38,7 +38,8 @@ class MermaidFullscreenPage extends StatelessWidget {
     return CupertinoPageScaffold(
       backgroundColor: background,
       navigationBar: CupertinoNavigationBar(
-        border: Dividers.navBarBorder(context),
+        border: null,
+        bottom: const NavBarHairline(),
         middle: Text(title),
         backgroundColor: background.withAlpha(0xCC),
         leading: CupertinoButton(
